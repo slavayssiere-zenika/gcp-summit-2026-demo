@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'users-api'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['users_api:8000']
+
+  - job_name: 'items-api'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['items_api:8001']
+
+  - job_name: 'agent-api'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['agent-api:8002']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis_exporter:9121']
+
+  - job_name: 'frontend-nginx'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['frontend:80']

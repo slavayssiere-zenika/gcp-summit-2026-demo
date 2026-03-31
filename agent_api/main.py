@@ -1,0 +1,199 @@
+import re
+import json
+from fastapi import FastAPI, HTTPException, Request, Response
+import httpx
+from pydantic import BaseModel
+from typing import Optional
+import uvicorn
+import os
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.propagate import inject, extract
+from opentelemetry.trace import SpanKind
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from prometheus_fastapi_instrumentator import Instrumentator
+
+from agent_api.agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS
+import inspect
+
+provider = TracerProvider(
+    resource=Resource.create({
+        ResourceAttributes.SERVICE_NAME: "agent-api",
+        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+    })
+)
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer(__name__)
+
+
+app = FastAPI(
+    title="ADK Web Agent",
+    version="1.0.0",
+    docs_url="/docs",
+    openapi_url="/openapi.json"
+)
+Instrumentator().instrument(app).expose(app)
+FastAPIInstrumentor.instrument_app(app)
+
+
+@app.on_event("startup")
+async def startup_event():
+    print("Starting ADK Web Agent with Gemini...")
+
+
+@app.get("/")
+async def root():
+    return {"message": "ADK Agent API - Use /query for interactions"}
+
+@app.get("/spec")
+async def get_spec():
+    try:
+        with open("spec.md", "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/markdown")
+    except Exception:
+        return Response(content="# Specification introuvable", media_type="text/markdown")
+
+
+class QueryRequest(BaseModel):
+    query: str
+    session_id: Optional[str] = None
+
+
+from agent_api.mcp_client import auth_header_var
+from fastapi import Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+
+@app.post("/query")
+async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+    auth_header = f"{auth.scheme} {auth.credentials}"
+    
+    # Store the authorization header securely in the contextvar so mcp_client.py can read it
+    auth_header_var.set(auth_header)
+    
+    ctx = extract(http_request.headers)
+    
+    with tracer.start_as_current_span("query.process", context=ctx, kind=SpanKind.SERVER) as span:
+        trace_id = format(span.get_span_context().trace_id, '032x')
+        span.set_attribute("trace.id", trace_id)
+        span.set_attribute("query.text", request.query)
+        
+        try:
+            result = await run_agent_query(request.query, request.session_id or None)
+            span.set_attribute("agent.source", result.get("source", "unknown"))
+            return result
+            
+        except Exception as e:
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e))
+            return {"response": f"Erreur: {str(e)}", "source": "error"}
+
+
+def get_tool_metadata(tools_list):
+    metadata = []
+    for tool in tools_list:
+        # If it's a function, get its details
+        doc = inspect.getdoc(tool) or "No description available"
+        sig = inspect.signature(tool)
+        params = []
+        for name, param in sig.parameters.items():
+            params.append({
+                "name": name,
+                "type": str(param.annotation) if param.annotation != inspect.Parameter.empty else "any",
+                "default": str(param.default) if param.default != inspect.Parameter.empty else None,
+                "required": param.default == inspect.Parameter.empty
+            })
+        
+        metadata.append({
+            "name": tool.__name__,
+            "description": doc,
+            "parameters": params
+        })
+    return metadata
+
+
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+
+@app.post("/login")
+async def login(request: Request, response: Response):
+    data = await request.json()
+    async with httpx.AsyncClient() as client:
+        res = await client.post(f"{USERS_API_URL}/users/login", json=data)
+        if res.status_code != 200:
+            raise HTTPException(status_code=res.status_code, detail=res.json().get("detail", "Erreur de connexion"))
+        
+        # Forward the cookie from users_api to the client
+        for name, value in res.cookies.items():
+            response.set_cookie(key=name, value=value, httponly=True, samesite="lax")
+        
+        return res.json()
+
+@app.post("/logout")
+async def logout(response: Response):
+    async with httpx.AsyncClient() as client:
+        # res = await client.post(f"{USERS_API_URL}/users/logout")
+        response.delete_cookie("access_token")
+        return {"message": "Déconnecté"}
+
+@app.get("/me")
+async def get_me(request: Request):
+    async with httpx.AsyncClient() as client:
+        # Forward the incoming cookie to users_api
+        cookies = request.cookies
+        res = await client.get(f"{USERS_API_URL}/users/me", cookies=cookies)
+        if res.status_code != 200:
+            raise HTTPException(status_code=res.status_code, detail="Non connecté")
+        return res.json()
+
+
+@app.get("/mcp/registry")
+async def mcp_registry():
+    return {
+        "services": [
+            {
+                "id": "users",
+                "name": "Users Service",
+                "tools": get_tool_metadata(USERS_TOOLS)
+            },
+            {
+                "id": "items",
+                "name": "Items Service",
+                "tools": get_tool_metadata(ITEMS_TOOLS)
+            },
+            {
+                "id": "competencies",
+                "name": "Competencies Service",
+                "tools": get_tool_metadata(COMPETENCIES_TOOLS)
+            },
+            {
+                "id": "loki",
+                "name": "Loki Log Explorer",
+                "status": "connected",
+                "version": "1.0",
+                "tools": get_tool_metadata(LOKI_TOOLS)
+            },
+            {
+                "id": "cv",
+                "name": "CV Parsing Agent",
+                "status": "connected",
+                "version": "1.0",
+                "tools": get_tool_metadata(CV_TOOLS)
+            }
+        ]
+    }
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8002)

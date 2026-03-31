@@ -1,0 +1,320 @@
+version: '3.8'
+
+services:
+  users_api:
+    build: ./users_api
+    ports:
+      - "8000:8000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=users-api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+  users_mcp:
+    build: ./users_api
+    command: ["python", "/app/mcp_app.py"]
+    environment:
+      - USERS_API_URL=http://users_api:8000
+    depends_on:
+      - users_api
+    networks:
+      - monitoring_net
+
+  items_api:
+    build: ./items_api
+    ports:
+      - "8001:8001"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=items-api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+  items_mcp:
+    build: ./items_api
+    command: ["python", "/app/mcp_app.py"]
+    environment:
+      - USERS_API_URL=http://users_api:8000
+      - ITEMS_API_URL=http://items_api:8001
+    depends_on:
+      - items_api
+    networks:
+      - monitoring_net
+
+  competencies_api:
+    build: ./competencies_api
+    ports:
+      - "8003:8003"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=competencies-api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379/3
+      - USERS_API_URL=http://users_api:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+  competencies_mcp:
+    build: ./competencies_api
+    command: ["python", "/app/mcp_app.py"]
+    environment:
+      - USERS_API_URL=http://users_api:8000
+      - COMPETENCIES_API_URL=http://competencies_api:8003
+    depends_on:
+      - competencies_api
+    networks:
+      - monitoring_net
+  cv_api:
+    build: ./cv_api
+    ports:
+      - "8004:8004"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=cv-api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379/4
+      - USERS_API_URL=http://users_api:8000
+      - COMPETENCIES_API_URL=http://competencies_api:8003
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+  cv_mcp:
+    build: ./cv_api
+    command: ["python", "/app/mcp_app.py"]
+    environment:
+      - CV_API_URL=http://cv_api:8004
+    depends_on:
+      - cv_api
+    networks:
+      - monitoring_net
+
+  # The Intelligent Agent (renamed from web)
+  agent-api:
+    build:
+      context: .
+      dockerfile: agent_api/Dockerfile
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=gemini-2.5-flash
+      - USERS_API_URL=http://users_api:8000
+      - ITEMS_API_URL=http://items_api:8001
+      - USERS_MCP_URL=http://users_mcp:8000
+      - ITEMS_MCP_URL=http://items_mcp:8000
+      - COMPETENCIES_MCP_URL=http://competencies_mcp:8000
+      - CV_MCP_URL=http://cv_mcp:8000
+      - LOKI_MCP_URL=http://loki_mcp:8080/sse
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379/1
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=agent-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      users_api:
+        condition: service_started
+      items_api:
+        condition: service_started
+      users_mcp:
+        condition: service_started
+      items_mcp:
+        condition: service_started
+      competencies_mcp:
+        condition: service_started
+      cv_mcp:
+        condition: service_started
+      loki_mcp:
+        condition: service_started
+    networks:
+      - monitoring_net
+
+  # The New Vue.js SPA Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8002:80"
+    depends_on:
+      - agent-api
+    networks:
+      - monitoring_net
+
+  # Infrastructure
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - monitoring_net
+
+  redis_exporter:
+    image: oliver006/redis_exporter:latest
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - monitoring_net
+
+  postgres:
+    image: pgvector/pgvector:pg15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=mydb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - monitoring_net
+
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      - DATA_SOURCE_NAME=postgresql://postgres:postgres@postgres:5432/mydb?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - monitoring_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-remote-write-receiver'
+    container_name: prometheus
+    hostname: prometheus
+    depends_on:
+      - postgres_exporter
+      - redis_exporter
+      - agent-api
+    networks:
+      - monitoring_net
+
+  tempo:
+    image: grafana/tempo:2.10.3
+    container_name: tempo
+    hostname: tempo
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo API
+      - "4318:4318"   # OTLP HTTP
+    networks:
+      - monitoring_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards:/etc/grafana/dashboards
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_BASIC_ENABLED=false
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    links:
+      - tempo
+      - loki
+    networks:
+      - monitoring_net
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    hostname: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monitoring_net
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    hostname: promtail
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    depends_on:
+      - loki
+    networks:
+      - monitoring_net
+
+  loki_mcp:
+    build: https://github.com/grafana/loki-mcp.git#main
+    container_name: loki_mcp
+    hostname: loki_mcp
+    environment:
+      - LOKI_URL=http://loki:3100
+    depends_on:
+      - loki
+    networks:
+      - monitoring_net
+
+volumes:
+  postgres_data:
+  tempo_data:
+
+networks:
+  monitoring_net:
+    driver: bridge
+    name: monitoring_net
