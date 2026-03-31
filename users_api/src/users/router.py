@@ -60,6 +60,7 @@ def map_user_to_response(user: User) -> dict:
         "last_name": user.last_name,
         "full_name": user.full_name,
         "is_active": user.is_active,
+        "role": user.role,
         "allowed_category_ids": allowed_ids,
         "created_at": user.created_at.isoformat() if user.created_at else None
     }

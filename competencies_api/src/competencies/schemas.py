@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -49,3 +49,6 @@ class PaginationResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+class TreeImportRequest(BaseModel):
+    tree: Dict[str, Any]

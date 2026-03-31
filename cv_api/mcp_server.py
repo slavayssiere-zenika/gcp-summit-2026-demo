@@ -64,6 +64,7 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["query"]
+            }
         ),
         Tool(
             name="recalculate_competencies_tree",

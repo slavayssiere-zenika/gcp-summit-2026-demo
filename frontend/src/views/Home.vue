@@ -66,10 +66,12 @@ const sendQuery = async (queryOverride?: string) => {
       if (jsonObj.reply && jsonObj.display_type) {
          replyText = jsonObj.reply
          displayType = jsonObj.display_type
+         if (displayType === 'profile') displayType = 'cards'
+
          if (jsonObj.display_type === 'tree') {
            parsedData = jsonObj.data
-         } else if (jsonObj.data && Array.isArray(jsonObj.data)) {
-           parsedData = jsonObj.data
+         } else if (jsonObj.data) {
+           parsedData = Array.isArray(jsonObj.data) ? jsonObj.data : [jsonObj.data]
          }
       }
     } catch (e) {

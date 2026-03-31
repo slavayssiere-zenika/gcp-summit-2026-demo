@@ -23,6 +23,8 @@ services:
     command: ["python", "/app/mcp_app.py"]
     environment:
       - USERS_API_URL=http://users_api:8000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=users_mcp
     depends_on:
       - users_api
     networks:
@@ -51,6 +53,8 @@ services:
     environment:
       - USERS_API_URL=http://users_api:8000
       - ITEMS_API_URL=http://items_api:8001
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=items_mcp
     depends_on:
       - items_api
     networks:
@@ -80,6 +84,8 @@ services:
     environment:
       - USERS_API_URL=http://users_api:8000
       - COMPETENCIES_API_URL=http://competencies_api:8003
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=competencies_mcp
     depends_on:
       - competencies_api
     networks:
@@ -109,6 +115,8 @@ services:
     command: ["python", "/app/mcp_app.py"]
     environment:
       - CV_API_URL=http://cv_api:8004
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=cv_mcp
     depends_on:
       - cv_api
     networks:

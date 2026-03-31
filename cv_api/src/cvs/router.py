@@ -324,7 +324,7 @@ Tu NE DOIS retourner QUE cet objet JSON pur, rien d'autre. Assure-toi que c'est 
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-2.5-flash",
             contents=[instruction, combined_text],
             config=types.GenerateContentConfig(
                 temperature=0.2,

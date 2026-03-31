@@ -11,7 +11,7 @@ from cache import get_cache, set_cache, delete_cache, delete_cache_pattern
 from src.competencies.models import Competency, user_competency
 from src.competencies.schemas import (
     CompetencyCreate, CompetencyUpdate, CompetencyResponse, 
-    PaginationResponse, UserInfo
+    PaginationResponse, UserInfo, TreeImportRequest
 )
 
 from src.auth import verify_jwt
@@ -78,6 +78,63 @@ async def get_competency(competency_id: int, db: Session = Depends(get_db)):
     result = CompetencyResponse.model_validate(competency)
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
+
+
+@router.post("/bulk_tree", status_code=200)
+async def bulk_import_tree(
+    payload: TreeImportRequest,
+    db: Session = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt)
+):
+    if jwt_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+        
+    def upsert_level(nodes_dict: dict, parent_id: Optional[int] = None):
+        if not isinstance(nodes_dict, dict):
+            return
+            
+        for name, data in nodes_dict.items():
+            desc = data.get("description", "Généré par Model IA") if isinstance(data, dict) else "Catégorie"
+            
+            existing = db.query(Competency).filter(Competency.name.ilike(name)).first()
+            if existing:
+                existing.parent_id = parent_id
+                node_id = existing.id
+            else:
+                new_comp = Competency(name=name, description=desc, parent_id=parent_id)
+                db.add(new_comp)
+                db.flush()
+                node_id = new_comp.id
+            
+            if isinstance(data, dict):
+                sub = data.get("sub")
+                if isinstance(sub, dict):
+                    upsert_level(sub, node_id)
+                elif isinstance(sub, list):
+                    for item in sub:
+                        if isinstance(item, list) and len(item) > 0:
+                            sub_name = str(item[0])
+                            sub_desc = str(item[1]) if len(item) > 1 else "Compétence"
+                        else:
+                            sub_name = str(item)
+                            sub_desc = "Compétence"
+                            
+                        leaf = db.query(Competency).filter(Competency.name.ilike(sub_name)).first()
+                        if leaf:
+                            leaf.parent_id = node_id
+                        else:
+                            db.add(Competency(name=sub_name, description=sub_desc, parent_id=node_id))
+                            db.flush()
+
+    try:
+        upsert_level(payload.tree, None)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    delete_cache_pattern("competencies:*")
+    return {"message": "Taxonomie fusionnée avec succès sans corrompre les ids !"}
 
 
 @router.post("/", response_model=CompetencyResponse, status_code=201)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
-import { Settings, RefreshCw, Network, AlertTriangle, ShieldCheck } from 'lucide-vue-next'
+import { Settings, RefreshCw, Network, AlertTriangle, ShieldCheck, CheckCircle2 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
 const isLoading = ref(false)
@@ -23,6 +23,24 @@ const triggerRemapping = async () => {
     } finally {
       isLoading.value = false
     }
+  }
+}
+
+const applySuccess = ref(false)
+
+const applyRemapping = async () => {
+  isLoading.value = true
+  error.value = ''
+  applySuccess.value = false
+  
+  try {
+    await axios.post('/comp-api/competencies/bulk_tree', { tree: successResponse.value })
+    applySuccess.value = true
+    successResponse.value = null // Hide tree layout after active deploy
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || e.message || "Erreur de synchro DB PostgreSQL"
+  } finally {
+    isLoading.value = false
   }
 }
 </script>
@@ -82,6 +100,19 @@ const triggerRemapping = async () => {
       <div class="tree-content">
          <pre class="json-viewer">{{ JSON.stringify(successResponse, null, 2) }}</pre>
       </div>
+      <div class="tree-actions">
+         <button @click="applyRemapping" class="action-btn success-btn" :disabled="isLoading">
+            <CheckCircle2 size="18" /> Sauvegarder et Écraser l'Arbre en DB
+         </button>
+      </div>
+    </div>
+
+    <!-- Success Output -->
+    <div class="success-panel fade-in-up" v-if="applySuccess">
+       <CheckCircle2 size="24" />
+       <div>
+         <strong>Déploiement Terminé :</strong> La taxonomie a été appliquée sur la base et les caches backend distribués ont été vidés de manière asynchrone. Les consultants héritent instantanément de l'affichage.
+       </div>
     </div>
 
     <div class="error-panel fade-in-up" v-if="error">
@@ -295,6 +326,35 @@ const triggerRemapping = async () => {
   color: #b91c1c;
   display: flex;
   gap: 10px;
+}
+
+.success-panel {
+  margin-top: 2rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 1.5rem;
+  border-radius: 12px;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.tree-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1.5rem;
+}
+
+.success-btn {
+  background: #10b981;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+.success-btn:hover:not(:disabled) {
+  background: #059669;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
 }
 
 .fade-in {
