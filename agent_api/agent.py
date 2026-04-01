@@ -14,8 +14,8 @@ _session_service = None
 def get_session_service():
     global _session_service
     if _session_service is None:
-        from google.adk.sessions import InMemorySessionService
-        _session_service = InMemorySessionService()
+        from agent_api.session import RedisSessionService
+        _session_service = RedisSessionService()
     return _session_service
 
 
@@ -575,6 +575,20 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
                             response_parts.append(part.text)
     
     response_text = "".join(response_parts)
+    
+    try:
+        from google.adk.events.event import Event
+        final_content = types.Content(role="assistant", parts=[types.Part(text=response_text)])
+        final_event = Event(author="assistant", content=final_content, partial=False)
+        session = await session_service.get_session(
+            app_name="zenika_assistant", 
+            user_id="user_1", 
+            session_id=session_id
+        )
+        if session:
+            await session_service.append_event(session, final_event)
+    except Exception as e:
+        logger.error(f"Failed to append final response to history: {e}")
     
     return {
         "response": response_text,

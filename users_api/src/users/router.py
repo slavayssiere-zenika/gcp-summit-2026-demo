@@ -95,6 +95,11 @@ async def search_users(
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"users:search:{query}:{limit}"
+    cached = get_cache(cache_key)
+    if cached:
+        return PaginationResponse(**cached)
+
     from sqlalchemy import or_
     
     # Search in first_name, last_name, email, full_name, username
@@ -109,12 +114,14 @@ async def search_users(
     total = db.query(User).filter(search_filter).count()
     users = db.query(User).filter(search_filter).limit(limit).all()
     
-    return PaginationResponse(
+    result = PaginationResponse(
         items=[map_user_to_response(u) for u in users],
         total=total,
         skip=0,
         limit=limit
     )
+    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    return result
 
 
 @router.get("/me", dependencies=[Depends(verify_jwt)])
@@ -129,11 +136,18 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
         if username is None:
             raise HTTPException(status_code=401, detail="Token invalide")
         
+        cache_key = f"users:me:{username}"
+        cached = get_cache(cache_key)
+        if cached:
+            return cached
+
         user = db.query(User).filter(User.username == username).first()
         if user is None:
             raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
             
-        return map_user_to_response(user)
+        result = map_user_to_response(user)
+        set_cache(cache_key, result, 300) # Fast 5m UI Poll Burst
+        return result
     except JWTError:
         raise HTTPException(status_code=401, detail="Token invalide")
 
@@ -217,6 +231,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(db_user)
 
     delete_cache_pattern("users:list:*")
+    delete_cache_pattern("users:search:*")
+    delete_cache_pattern("users:me:*")
     return map_user_to_response(db_user)
 
 
@@ -239,6 +255,8 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
 
     delete_cache(f"users:{user_id}")
     delete_cache_pattern("users:list:*")
+    delete_cache_pattern("users:search:*")
+    delete_cache_pattern("users:me:*")
     return map_user_to_response(user)
 
 
@@ -253,3 +271,5 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 
     delete_cache(f"users:{user_id}")
     delete_cache_pattern("users:list:*")
+    delete_cache_pattern("users:search:*")
+    delete_cache_pattern("users:me:*")

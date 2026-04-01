@@ -109,12 +109,15 @@ async def list_items(
     db: Session = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
-    cache_key = f"items:list:{skip}:{limit}"
+    allowed_ids = auth_payload.get("allowed_category_ids", [])
+    allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
+    search_str = search or "none"
+    cache_key = f"items:list:{skip}:{limit}:search_{search_str}:auth_{allowed_ids_str}"
+    
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
-    allowed_ids = auth_payload.get("allowed_category_ids", [])
     if not allowed_ids:
         # If no rights, return empty early
         return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
@@ -209,10 +212,17 @@ async def list_user_items(
     db: Session = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
-    cache_key = f"items:user:{user_id}:{skip}:{limit}"
+    allowed_ids = auth_payload.get("allowed_category_ids", [])
+    allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
+    cache_key = f"items:user:{user_id}:{skip}:{limit}:auth_{allowed_ids_str}"
+    
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
+
+    allowed_ids = auth_payload.get("allowed_category_ids", [])
+    if not allowed_ids:
+        return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
 
     # The visible items for this user_id should be restricted by the CALLER's allowed categories
     allowed_ids = auth_payload.get("allowed_category_ids", [])

@@ -115,6 +115,21 @@ const handleSearchEvent = (event: any) => {
   handleSearch(event.detail)
 }
 
+const fetchHistory = async () => {
+  try {
+    isTyping.value = true
+    const response = await axios.get('/api/history')
+    if (response.data && response.data.history && response.data.history.length > 0) {
+      messages.value = response.data.history
+      setTimeout(() => scrollToBottom(), 100)
+    }
+  } catch(e) {
+    console.warn("Could not load agent history", e)
+  } finally {
+    isTyping.value = false
+  }
+}
+
 onMounted(() => {
   window.addEventListener('search-user', handleSearchEvent)
   
@@ -122,6 +137,9 @@ onMounted(() => {
   if (route.query.q) {
     handleSearch(route.query.q as string)
   }
+  
+  // Load persistent ADK agent thread for the logged-in user
+  fetchHistory()
 })
 
 // Also watch for query changes if already on Home page

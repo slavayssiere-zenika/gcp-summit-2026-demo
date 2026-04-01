@@ -78,15 +78,24 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
     # Store the authorization header securely in the contextvar so mcp_client.py can read it
     auth_header_var.set(auth_header)
     
+    try:
+        import base64
+        parts = auth.credentials.split('.')
+        payload = json.loads(base64.urlsafe_b64decode(parts[1] + '==').decode('utf-8'))
+        computed_session_id = payload.get("sub", "anon")
+    except Exception:
+        computed_session_id = "anon"
+        
     ctx = extract(http_request.headers)
     
     with tracer.start_as_current_span("query.process", context=ctx, kind=SpanKind.SERVER) as span:
         trace_id = format(span.get_span_context().trace_id, '032x')
         span.set_attribute("trace.id", trace_id)
         span.set_attribute("query.text", request.query)
+        span.set_attribute("session.id", computed_session_id)
         
         try:
-            result = await run_agent_query(request.query, request.session_id or None)
+            result = await run_agent_query(request.query, computed_session_id)
             span.set_attribute("agent.source", result.get("source", "unknown"))
             return result
             
@@ -94,6 +103,62 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             span.set_attribute("error", True)
             span.set_attribute("error.message", str(e))
             return {"response": f"Erreur: {str(e)}", "source": "error"}
+
+@app.get("/history")
+async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        import base64
+        parts = auth.credentials.split('.')
+        payload = json.loads(base64.urlsafe_b64decode(parts[1] + '==').decode('utf-8'))
+        session_id = payload.get("sub")
+        if not session_id:
+            raise Exception("No user")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalide")
+        
+    from agent_api.agent import get_session_service
+    session_service = get_session_service()
+    session = await session_service.get_session(
+        app_name="zenika_assistant", 
+        user_id="user_1", 
+        session_id=session_id
+    )
+    if not session:
+        return {"history": []}
+        
+    history = []
+    for event in getattr(session, "events", []):
+        author = getattr(event, "author", "unknown")
+        if author in ("user", "assistant"):
+            content = getattr(event, "content", "")
+            if hasattr(content, "parts"):
+                content_text = "".join(getattr(p, "text", "") for p in content.parts if hasattr(p, "text"))
+            else:
+                content_text = str(content)
+                
+            display_type = "text_only"
+            data = None
+            if author == "assistant":
+                try:
+                    clean_str = content_text.replace("```json", "").replace("```", "").strip()
+                    json_obj = json.loads(clean_str)
+                    if "reply" in json_obj and "display_type" in json_obj:
+                        content_text = json_obj["reply"]
+                        display_type = json_obj["display_type"]
+                        if display_type == "profile":
+                            display_type = "cards"
+                        data = json_obj.get("data")
+                except Exception:
+                    pass
+                    
+            history.append({
+                "role": author,
+                "content": content_text,
+                "displayType": display_type,
+                "data": data
+            })
+            
+    return {"history": history}
 
 
 def get_tool_metadata(tools_list):
