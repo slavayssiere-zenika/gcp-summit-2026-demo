@@ -11,6 +11,7 @@ USERS_API = "http://localhost:8000"
 ITEMS_API = "http://localhost:8001"
 COMPETENCIES_API = "http://localhost:8003"
 CV_API = "http://localhost:8004"
+PROMPTS_API = "http://localhost:8005"
 
 FIRST_NAMES = ["Alice", "Bob", "Charlie", "David", "Emma", "Frank", "Grace", "Henry", "Isabel", "Jack", "Karl", "Laura"]
 LAST_NAMES = ["Martin", "Bernard", "Thomas", "Petit", "Robert", "Richard", "Durand", "Dubois", "Moreau", "Laurent", "Simon", "Michel"]
@@ -340,6 +341,24 @@ def main():
                 print(f"{indent}- Created Leaf: {name} (ID={comp['id']})")
 
     seed_tree(COMPETENCIES_ZENIKA_TREE)
+
+    print("\n📄 Loading External AI Prompts into Gateway...")
+    prompt_files = {
+        "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
+        "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
+        "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt"
+    }
+    for key, path in prompt_files.items():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            res = httpx.put(f"{PROMPTS_API}/prompts/{key}", json={"value": content}, headers=AUTH_HEADERS)
+            if res.status_code < 400:
+                print(f"  - Successfully seeded prompt '{key}'")
+            else:
+                print(f"  ❌ Failed seeding prompt '{key}': HTTP {res.status_code} - {res.text}")
+        except Exception as e:
+            print(f"  ❌ Error reading prompt '{key}': {e}")
 
     print("\n🎯 Assigning Competencies to Users...")
     for user in users:

@@ -1,0 +1,25 @@
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+class PromptBase(BaseModel):
+    value: str
+
+class PromptCreate(PromptBase):
+    key: str
+
+class PromptUpdate(PromptBase):
+    pass
+
+class Prompt(PromptBase):
+    key: str
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+class AnalysisResponse(BaseModel):
+    original_prompt: str
+    improved_prompt: str
+    promptfoo_report: dict
+

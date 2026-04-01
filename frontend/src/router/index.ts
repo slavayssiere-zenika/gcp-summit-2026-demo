@@ -58,6 +58,12 @@ const router = createRouter({
       name: 'admin',
       component: () => import('../views/Admin.vue'),
       meta: { adminOnly: true }
+    },
+    {
+      path: '/admin/prompts',
+      name: 'prompts-admin',
+      component: () => import('../views/PromptsAdmin.vue'),
+      meta: { adminOnly: true }
     }
   ]
 })

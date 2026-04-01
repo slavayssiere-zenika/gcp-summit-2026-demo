@@ -318,6 +318,26 @@ services:
     networks:
       - monitoring_net
 
+  prompts_api:
+    build: ./prompts_api
+    container_name: prompts_api
+    hostname: prompts_api
+    ports:
+      - "8005:8000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=prompts_api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379/5
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
 volumes:
   postgres_data:
   tempo_data:

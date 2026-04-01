@@ -59,13 +59,13 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")
 
     # 3. LLM Parsing Pass (Structured Output)
-    prompt = """
-    Extract the following information from the provided Resume text:
-    1. first_name and last_name of the candidate.
-    2. a professional pseudo email (e.g. firstname.lastname@zenika.com).
-    3. A list of technical competencies. For each competency, identify its name (e.g., 'Python', 'AWS') and its parent generic category (e.g., 'Langages Backend', 'Cloud').
-    If parent is unclear, you may omit it or use a broader term.
-    """
+    try:
+        async with httpx.AsyncClient() as http_client:
+            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.extract_cv_info", timeout=5.0)
+            res_prompt.raise_for_status()
+            prompt = res_prompt.json()["value"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
     
     try:
         response = client.models.generate_content(
@@ -302,25 +302,13 @@ async def recalculate_competencies_tree(request: Request, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Aucun CV dans la base pour générer un arbre.")
 
     combined_text = "\n\n--- CV SUIVANT ---\n\n".join([p.raw_content for p in profiles])
-    instruction = """Tu es un Architecte Data spécialisé en Analyse RH. 
-Je vais te fournir le contenu complet de tous les CVs de nos collaborateurs.
-Ta tâche est d'analyser toutes leurs compétences, outils, et expériences, et d'en déduire L'ARBRE DE COMPÉTENCES parfait.
-Il doit être structuré de cette manière EXACTE (limité à 3 ou 4 catégories principales):
-{
-  "Nom de la Catégorie (ex: Cloud & DevOps)": {
-    "description": "...",
-    "sub": {
-       "Nom de la Sous-Catégorie (ex: Conteneurisation)": {
-          "description": "...",
-          "sub": [
-             ["Docker", "Runtime..."],
-             ["Kubernetes", "Orchestrateur..."]
-          ]
-       }
-    }
-  }
-}
-Tu NE DOIS retourner QUE cet objet JSON pur, rien d'autre. Assure-toi que c'est du JSON valide."""
+    try:
+        async with httpx.AsyncClient() as http_client:
+            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.generate_taxonomy_tree", timeout=5.0)
+            res_prompt.raise_for_status()
+            instruction = res_prompt.json()["value"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
 
     try:
         response = client.models.generate_content(

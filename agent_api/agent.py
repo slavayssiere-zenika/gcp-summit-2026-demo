@@ -465,30 +465,20 @@ LOKI_TOOLS = [
     loki_metric_aggregator
 ]
 
-INSTRUCTION = """Tu es un assistant IA spécialisé dans la gestion des utilisateurs, des items et des compétences.
-
-Tu as accès à trois APIs:
-1. **Users API** - Pour gérer les utilisateurs (liste, création, modification, suppression, recherche)
-2. **Items API** - Pour gérer les items (liste, création, modification, suppression, recherche)
-3. **Competencies API** - Pour gérer les compétences et les assigner aux utilisateurs
-
-**Instructions Cruciales pour l'Interface Graphique (Frontend):**
-- **Tu DOIS IMPÉRATIVEMENT formater tes réponses finales sous forme de code JSON valide**. Ne réponds plus par du texte brut classique. Le frontend s'attend à parser ta réponse visuellement.
-- La structure de ton JSON de réponse final DOIT être la suivante :
-```json
-{
-  "reply": "Ton message textuel naturel en Français et concis (ex: J'ai trouvé 3 candidats parfaits).",
-  "display_type": "table", // ou "cards", "profile", "text_only" selon ce qui est le plus adapté
-  "data": [ {} ] // Injecte ici les données brutes issues des outils MCP (les items, les profils ou les IDs)
-}
-```
-- Pour les listes ou résultats de recherche, privilégie `table` ou `cards` dans "display_type" et assure-toi que "data" contient le tableau complet des éléments trouvés.
-- Si une erreur se produit, utilise le `display_type` "error" et explique l'erreur dans "reply".
-
-Ne rajoute aucun texte avant ou après le bloc JSON. Réponds en Markdown JSON (ex: ```json ... ```) ou JSON pur."""
 
 
-def create_agent():
+
+async def create_agent():
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get("http://prompts_api:8000/prompts/agent_api.assistant_system_instruction", timeout=5.0)
+            res.raise_for_status()
+            instruction_text = res.json()["value"]
+    except Exception as e:
+        print(f"Error fetching system prompt from prompts_api: {e}")
+        instruction_text = "Tu es un assistant IA. Réponds brièvement."
+        
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     agent = Agent(
@@ -499,7 +489,7 @@ def create_agent():
                 retry_options=types.HttpRetryOptions(initial_delay=1, attempts=2),
             )
         ),
-        instruction=INSTRUCTION,
+        instruction=instruction_text,
         description="Assistant IA pour la gestion des utilisateurs, items et compétences. Et analyse des logs via Loki.",
         tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *LOKI_TOOLS]
     )
@@ -514,7 +504,7 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     session_id = session_id or str(uuid.uuid4())
     
     session_service = get_session_service()
-    agent = create_agent()
+    agent = await create_agent()
     runner = Runner(app_name="zenika_assistant", agent=agent, session_service=session_service)
     
     # Explicitly create the session if it doesn't exist

@@ -12,6 +12,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/prompts-api': {
+        target: 'http://localhost:8005',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/prompts-api/, ''),
+      },
       '/api': {
         target: 'http://localhost:8002',
         changeOrigin: true,

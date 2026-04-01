@@ -38,9 +38,15 @@ const handleLogout = async () => {
           </RouterLink>
 
           <!-- Administration Panel (Protected) -->
-          <RouterLink to="/admin" class="nav-pill admin-pill" active-class="active" v-if="authService.state.user?.role === 'admin'">
-            <Settings size="16" /> Administration
-          </RouterLink>
+          <div class="dropdown" v-if="authService.state.user?.role === 'admin'">
+            <button class="nav-pill admin-pill dropdown-btn" :class="{ active: router.currentRoute.value.path.startsWith('/admin') }">
+              <Settings size="16" /> Administration <ChevronDown size="14" />
+            </button>
+            <div class="dropdown-content">
+              <RouterLink to="/admin" active-class="dropdown-active">Tableau de Bord</RouterLink>
+              <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
+            </div>
+          </div>
 
           <!-- Dropdown: Outils -->
           <div class="dropdown">
@@ -81,6 +87,9 @@ const handleLogout = async () => {
               </a>
               <a href="http://localhost:8004/docs" target="_blank" class="nav-pill swagger-link" title="CV API Swagger">
                 <BookOpen size="14" /> Swagger CV
+              </a>
+              <a href="http://localhost:8005/docs" target="_blank" class="nav-pill swagger-link" title="Prompts API Swagger">
+                <BookOpen size="14" /> Swagger Instructions IA
               </a>
               <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">
                 <BookOpen size="14" /> Swagger Agent
