@@ -257,3 +257,8 @@ resource "google_dns_record_set" "api_a" {
     prevent_destroy = true
   }
 }
+
+import {
+  to = google_compute_managed_ssl_certificate.default
+  id = "projects/${var.project_id}/global/sslCertificates/ssl-${terraform.workspace}"
+}

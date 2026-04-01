@@ -33,4 +33,4 @@ COPY . .
 ENV PYTHONPATH=/app
 
 ENV PORT=8000
-CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "exec uvicorn src.main:app --host 0.0.0.0 --port $PORT"]

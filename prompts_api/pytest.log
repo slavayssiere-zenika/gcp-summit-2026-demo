@@ -17,6 +17,7 @@ src/prompts/schemas.py:14
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 21 passed, 1 warning in 1.82s =========================
-Transient error StatusCode.UNAVAILABLE encountered while exporting traces to tempo:4317, retrying in 1.08s.
+======================== 21 passed, 1 warning in 2.40s =========================
+Transient error StatusCode.UNAVAILABLE encountered while exporting traces to tempo:4317, retrying in 1.17s.
+Transient error StatusCode.UNAVAILABLE encountered while exporting traces to tempo:4317, retrying in 4.67s.
 Failed to export traces to tempo:4317, error code: StatusCode.UNAVAILABLE

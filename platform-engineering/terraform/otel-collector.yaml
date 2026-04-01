@@ -2,51 +2,35 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: "0.0.0.0:4317"
+        endpoint: 0.0.0.0:4317
       http:
-        endpoint: "0.0.0.0:4318"
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: 'cloudrun-api'
-          scrape_interval: 10s
-          static_configs:
-            - targets: ['localhost:8080']
-          relabel_configs:
-            - action: labeldrop
-              regex: "(instance|job)"
-          metric_relabel_configs:
-            - source_labels: [__name__]
-              regex: "(up|scrape_duration_seconds|scrape_samples_scraped|scrape_samples_post_metric_relabeling|scrape_series_added)"
-              action: drop
+        endpoint: 0.0.0.0:4318
 
 processors:
   batch:
-    send_batch_size: 100
+    send_batch_size: 200
     timeout: 5s
-  resourcedetection:
-    detectors: [env, gcp]
-    timeout: 2s
-    override: true
-  resource/set_instance_id:
-    attributes:
-      - key: service.instance.id
-        from_attribute: faas.id
-        action: upsert
-      - key: service.instance.id
-        from_attribute: faas.instance
-        action: upsert
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 250
+    spike_limit_mib: 50
 
 exporters:
-  googlecloud: {} # Laissé vide pour auto-détection par le service account métadatas
+  googlecloud:
+    log:
+      default_log_name: "opentelemetry.io/collector-logs"
+  # L'exportateur googlecloud détecte automatiquement le projet ID sur Cloud Run
 
 service:
+  telemetry:
+    metrics:
+      level: none
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [resourcedetection, resource/set_instance_id, batch]
+      processors: [memory_limiter, batch]
       exporters: [googlecloud]
     metrics:
-      receivers: [prometheus, otlp]
-      processors: [resourcedetection, resource/set_instance_id, batch]
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
       exporters: [googlecloud]

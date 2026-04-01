@@ -50,3 +50,8 @@ resource "google_dns_record_set" "internal_api_a" {
 
   rrdatas = [google_compute_forwarding_rule.internal_rule.ip_address]
 }
+
+import {
+  to = google_dns_managed_zone.env_zone
+  id = "projects/${var.project_id}/managedZones/zone-${terraform.workspace}"
+}

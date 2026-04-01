@@ -17,7 +17,7 @@ variable "default_image" {
 # Service Account mutualisé pour simplifier, ou un par service
 resource "google_service_account" "cr_sa" {
   for_each   = toset(["users", "items", "competencies", "cv", "prompts", "agent"])
-  account_id = "sa-${each.value}-${terraform.workspace}"
+  account_id = "sa-${each.value}-${terraform.workspace}-v2"
 }
 
 # ==============================================================
@@ -57,8 +57,8 @@ resource "google_cloud_run_v2_service" "mcp_services" {
     containers {
       name    = "api"
       image   = var.default_image # géré par CI
-      command = ["sh", "-c"]
-      args    = ["uvicorn main:app --host 0.0.0.0 --port $$PORT"]
+      command = ["uvicorn"]
+      args    = ["main:app", "--host", "0.0.0.0", "--port", "8080"]
       ports {
         container_port = 8080 # Le trafic Cloud Run arrive ici, GCP injecte le $PORT=8080 automatiquement
       }
@@ -235,8 +235,8 @@ resource "google_cloud_run_v2_service" "prompts_api" {
     containers {
       name    = "api"
       image   = var.default_image
-      command = ["sh", "-c"]
-      args    = ["uvicorn src.main:app --host 0.0.0.0 --port $$PORT"]
+      command = ["uvicorn"]
+      args    = ["src.main:app", "--host", "0.0.0.0", "--port", "8080"]
       ports {
         container_port = 8080
       }
@@ -363,8 +363,8 @@ resource "google_cloud_run_v2_service" "agent_api" {
     containers {
       name    = "api"
       image   = var.default_image
-      command = ["sh", "-c"]
-      args    = ["uvicorn agent_api.main:app --host 0.0.0.0 --port $$PORT"]
+      command = ["uvicorn"]
+      args    = ["agent_api.main:app", "--host", "0.0.0.0", "--port", "8080"]
       ports {
         container_port = 8080
       }

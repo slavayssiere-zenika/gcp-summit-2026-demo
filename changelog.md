@@ -1,3 +1,18 @@
+## Mise à jour automatique - 2026-04-01 19:40:33
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | 947   | 132  |  86% |
+| competencies_api | 739   | 56   |  92% |
+| cv_api           | 626   | 129  |  79% |
+| items_api        | 824   | 69   |  92% |
+| prompts_api      | 406   | 21   |  95% |
+| users_api        | 835   | 68   |  92% |
+
+---
+
 ## Mise à jour automatique - 2026-04-01 18:07:12
 
 ### Couverture de Code

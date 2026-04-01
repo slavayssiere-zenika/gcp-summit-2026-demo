@@ -17,4 +17,4 @@ ENV ITEMS_API_URL=http://items_api:8001
 EXPOSE 8002
 
 ENV PORT=8002
-CMD ["sh", "-c", "uvicorn agent_api.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "exec uvicorn agent_api.main:app --host 0.0.0.0 --port $PORT"]
