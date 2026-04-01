@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText } from 'lucide-vue-next'
+import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText, MessageSquare } from 'lucide-vue-next'
 
 const md = markdownit({
   html: true,
@@ -19,6 +19,7 @@ interface SpecTab {
 
 const tabs: SpecTab[] = [
   { id: 'agent', name: 'Agent API', url: '/api/spec', icon: Cpu },
+  { id: 'prompts', name: 'Prompts API', url: '/prompts-api/spec', icon: MessageSquare },
   { id: 'users', name: 'Users API', url: '/users-api/spec', icon: KeyRound },
   { id: 'items', name: 'Items API', url: '/items-api/spec', icon: Database },
   { id: 'competencies', name: 'Competencies API', url: '/comp-api/spec', icon: Network },
@@ -136,7 +137,7 @@ onMounted(() => {
 h2 {
   font-size: 36px;
   font-weight: 800;
-  color: #fff;
+  color: #1A1A1A;
   letter-spacing: -1px;
 }
 
@@ -145,7 +146,7 @@ h2 {
 }
 
 .subtitle {
-  color: #888;
+  color: #555;
   font-size: 18px;
 }
 
@@ -163,20 +164,22 @@ h2 {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: rgba(30, 30, 30, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 12px;
-  color: #aaa;
+  color: #555;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
 }
 
 .tab-btn:hover {
-  background: rgba(40, 40, 40, 0.8);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1A1A1A;
+  transform: translateY(-2px);
 }
 
 .tab-btn.active {
@@ -197,10 +200,10 @@ h2 {
 /* Glass Card */
 .glass-panel {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 40px rgba(227, 25, 55, 0.08); /* Zenika Red tinted shadow */
   overflow: hidden;
 }
 

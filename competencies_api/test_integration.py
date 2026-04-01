@@ -60,7 +60,7 @@ def test_assign_competency_propagates_jwt(client):
     # 2. Mock external get_user_from_api inter-service call 
     mock_user = MagicMock()
     mock_user.status_code = 200
-    mock_user.json.return_value = {"id": 1, "username": "testuser", "is_active": True}
+    mock_user.json.return_value = {"id": 1, "username": "testuser", "is_active": True, "email": "test@example.com"}
     mock_user.raise_for_status = MagicMock()
 
     # 3. Patch directly the AsyncClient.get
@@ -98,3 +98,114 @@ def test_assign_competency_fails_silently_on_unauthorized_fetch(client):
         response = client.post(f"/competencies/user/1/assign/{comp_id}")
         assert response.status_code == 503
         assert "Users API unavailable" in response.json()["detail"]
+
+def test_get_competency(client):
+    create_resp = client.post("/competencies/", json={"name": "GetTest", "description": "To be fetched"})
+    comp_id = create_resp.json()["id"]
+    
+    resp = client.get(f"/competencies/{comp_id}")
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "GetTest"
+    
+    # Not found
+    resp404 = client.get("/competencies/9999")
+    assert resp404.status_code == 404
+
+def test_update_competency(client):
+    create_resp = client.post("/competencies/", json={"name": "UpdTest", "description": "Desc"})
+    comp_id = create_resp.json()["id"]
+    
+    put_resp = client.put(f"/competencies/{comp_id}", json={"description": "Updated Desc"})
+    assert put_resp.status_code == 200
+    assert put_resp.json()["description"] == "Updated Desc"
+    
+    # 404
+    put_404 = client.put("/competencies/9999", json={"description": "Updated Desc"})
+    assert put_404.status_code == 404
+    
+    # Circular ref checking
+    put_circ = client.put(f"/competencies/{comp_id}", json={"parent_id": comp_id})
+    assert put_circ.status_code == 400
+
+def test_delete_competency(client):
+    create_resp = client.post("/competencies/", json={"name": "DelTest", "description": "Del"})
+    comp_id = create_resp.json()["id"]
+    
+    del_resp = client.delete(f"/competencies/{comp_id}")
+    assert del_resp.status_code == 204
+    
+    del_404 = client.delete("/competencies/9999")
+    assert del_404.status_code == 404
+
+def test_create_competency_parent_not_found(client):
+    response = client.post("/competencies/", json={"name": "Child", "parent_id": 9999})
+    assert response.status_code == 400
+
+def test_assign_and_list_user_competencies(client):
+    # 1. Create competency first
+    create_resp = client.post("/competencies/", json={"name": "UserComp", "description": "DevOps"})
+    comp_id = create_resp.json()["id"]
+
+    mock_user = MagicMock()
+    mock_user.status_code = 200
+    mock_user.json.return_value = {"id": 1, "username": "testuser", "is_active": True, "email": "test@e.com"}
+    mock_user.raise_for_status = MagicMock()
+
+    with patch("httpx.AsyncClient.get", return_value=mock_user):
+        # First assignment
+        assign_resp = client.post(f"/competencies/user/1/assign/{comp_id}")
+        assert assign_resp.status_code == 201
+        
+        # Second assignment yields "already assigned" without crashing
+        assign_resp2 = client.post(f"/competencies/user/1/assign/{comp_id}")
+        assert assign_resp2.status_code == 201
+        assert "already assigned" in assign_resp2.json()["message"]
+
+    # List user competencies
+    list_resp = client.get("/competencies/user/1")
+    assert list_resp.status_code == 200
+    assert len(list_resp.json()) >= 1
+    names = [c["name"] for c in list_resp.json()]
+    assert "UserComp" in names
+
+    # Remove competency
+    rem_resp = client.delete(f"/competencies/user/1/remove/{comp_id}")
+    assert rem_resp.status_code == 204
+
+def test_get_user_from_api_not_found(client):
+    # 1. Create competency
+    create_resp = client.post("/competencies/", json={"name": "NotFoundUser", "description": "DevOps"})
+    comp_id = create_resp.json()["id"]
+
+    mock_user = MagicMock()
+    mock_user.status_code = 404
+    mock_user.json.return_value = {"detail": "Not found"}
+
+    with patch("httpx.AsyncClient.get", return_value=mock_user):
+        response = client.post(f"/competencies/user/999/assign/{comp_id}")
+        assert response.status_code == 404
+
+def test_bulk_import_tree_unauthorized(client):
+    # Dependency override in conftest gives {"sub": "1", "allowed_category_ids": [1]} without role=admin
+    response = client.post("/competencies/bulk_tree", json={"tree": {"Root": {}}})
+    assert response.status_code == 403
+
+def test_bulk_import_tree_authorized(client):
+    from main import app
+    from src.auth import verify_jwt
+    app.dependency_overrides[verify_jwt] = lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}
+
+    payload = {
+        "tree": {
+            "Language": {
+                "sub": {
+                    "Python": {
+                        "sub": ["FastAPI", ["Django", "Web Framework"]]
+                    }
+                }
+            }
+        }
+    }
+    response = client.post("/competencies/bulk_tree", json=payload)
+    assert response.status_code == 200
+

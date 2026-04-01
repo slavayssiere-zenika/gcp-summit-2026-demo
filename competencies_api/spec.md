@@ -9,6 +9,14 @@ L'API **Competencies** gère une nomenclature arborescente (Structure N-Aires 3 
 ## 🏛️ Architecture et Modèles Récursifs
 Contrairement aux bases plates traditionnelles, le modèle métier repose sur des concepts d'auto-parentage assurant une structuration en répertoire (Dossiers/Sous-dossiers).
 
+## Description Fonctionnelle Détaillée
+Fonctionnellement, l'API Competencies est la cartographie des savoir-faire de Zenika. Elle permet de structurer la capacité de l'entreprise à répondre à des appels d'offres ou à recruter stratégiquement.
+Le service permet de construire dynamiquement un arbre de compétences (ex: Cloud > Google Cloud > Kubernetes) sans duplicat via ses règles de gestion strictes (idempotence).
+Il offre aux managers la possibilité de :
+- Mettre à jour les référentiels technologiques face à un marché mouvant.
+- Évaluer factuellement les compétences des collaborateurs (croisement entre `Competencies` et `Users`).
+- Interroger (souvent via l'Agent IA) le catalogue d'expertise interne pour construire des équipes projet sur-mesure ou identifier des manques capacitaires à combler par la formation (GPEC - Gestion Prévisionnelle des Emplois et des Compétences).
+
 ### 1. La Compétence (Table : `competencies`)
 - `id` : Integer (PK)
 - `name` : String (Indexé)
@@ -44,3 +52,6 @@ L'Agent peut manipuler la vue "Skills" sans effort grâce aux tools injectables 
 - `assign_competency_to_user`
 - `delete_competency`
 - `list_competencies`
+
+## 🔒 Sécurité Zero-Trust & JWT
+L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.

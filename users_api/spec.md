@@ -42,3 +42,13 @@ Ce microservice fait tourner un serveur secondaire (`mcp_server.py`) qui permet 
 - `search_users` : Moteur de recherche NLP.
 - `toggle_user_status` : Désactivation/Réactivation de comptes en un clic.
 - `get_user_stats` : Analyse de population d'accès.
+
+## Description Fonctionnelle Détaillée
+L'API Users est le registre central des collaborateurs de Zenika. D'un point de vue fonctionnel, ce service est responsable du cycle de vie des identités de l'entreprise :
+- **Onboarding / Offboarding** : Création des collaborateurs, définition de leurs mots de passe, et désactivation de comptes de manière sécurisée et tracée.
+- **Sécurité & Accréditation** : Fourniture du rempart d'authentification (JWT) garantissant que seuls les employés légitimes peuvent interroger l'Agent IA, modifier le référentiel de compétences ou lire l'inventaire matériel. Il porte la logique de RBAC (Role-Based Access Control) via les catégories de droits.
+- **Transversalité** : Les autres microservices dépendent continuellement de l'API Users pour enrichir leurs propres données (par exemple, afficher le nom et prénom d’un propriétaire de matériel dans l'`items_api` au lieu d'un simple identifiant numérique).
+
+
+## 🔒 Sécurité Zero-Trust & JWT
+L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.

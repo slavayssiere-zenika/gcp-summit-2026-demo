@@ -106,6 +106,7 @@ async def list_items(
     request: Request,
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
+    search: str = Query(None, description="Search term"),
     db: Session = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):

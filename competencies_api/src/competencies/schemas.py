@@ -16,6 +16,7 @@ class CompetencyCreate(CompetencyBase):
 class CompetencyUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    parent_id: Optional[int] = None
 
 
 class CompetencyResponse(CompetencyBase):

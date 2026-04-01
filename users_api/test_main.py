@@ -78,10 +78,15 @@ class TestPagination:
 
 class TestSecurityStateless:
     def test_protected_routes_reject_unauthorized(self):
-        # A 403 or 401 is required when pinging a Depend(verify_jwt) route with no headers
-        response = client.get("/protected_endpoint")
-        assert response.status_code == 401
-        assert "Token invalide ou manquant" in response.json().get("detail", "")
+        original = app.dependency_overrides.pop(verify_jwt, None)
+        try:
+            # A 403 or 401 is required when pinging a Depend(verify_jwt) route with no headers
+            response = client.get("/protected_endpoint")
+            assert response.status_code == 401
+            assert "Not authenticated" in response.json().get("detail", "")
+        finally:
+            if original:
+                app.dependency_overrides[verify_jwt] = original
         
     def test_protected_routes_accept_valid_mock(self):
         # Mocking the dependency to reflect the successful propagation validation

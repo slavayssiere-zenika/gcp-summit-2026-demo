@@ -72,10 +72,11 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 8px;
   transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
 }
 
 .node-header.is-clickable {
@@ -83,8 +84,10 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
 }
 
 .node-header.is-clickable:hover {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(227, 25, 55, 0.3);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(227, 25, 55, 0.4);
+  transform: translateX(2px);
+  box-shadow: 0 4px 12px rgba(227, 25, 55, 0.08);
 }
 
 .node-header.is-root {
@@ -148,11 +151,12 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
 
 .node-id {
   font-family: monospace;
-  font-size: 12px;
-  color: #777;
-  background: rgba(0, 0, 0, 0.08);
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #E31937;
+  background: rgba(227, 25, 55, 0.08);
+  padding: 3px 8px;
+  border-radius: 6px;
   margin-left: 12px;
 }
 

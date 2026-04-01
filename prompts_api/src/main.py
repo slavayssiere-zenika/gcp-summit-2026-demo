@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -61,3 +61,11 @@ app.include_router(router.router, prefix="/prompts", tags=["prompts"])
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/spec")
+async def get_spec():
+    try:
+        with open("spec.md", "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/markdown")
+    except Exception:
+        return Response(content="# Specification introuvable", media_type="text/markdown")

@@ -13,8 +13,23 @@ const fetchCompetencies = async () => {
   error.value = ''
   
   try {
-    const response = await axios.get('/comp-api/competencies/')
-    competencies.value = response.data.items || []
+    const limit = 50
+    const firstRes = await axios.get(`/comp-api/competencies/?skip=0&limit=${limit}`)
+    let allItems = firstRes.data.items || []
+    const total = firstRes.data.total || 0
+    
+    if (total > limit) {
+      const promises = []
+      for (let skip = limit; skip < total; skip += limit) {
+        promises.push(axios.get(`/comp-api/competencies/?skip=${skip}&limit=${limit}`))
+      }
+      const responses = await Promise.all(promises)
+      responses.forEach(res => {
+        allItems = allItems.concat(res.data.items || [])
+      })
+    }
+    
+    competencies.value = allItems
   } catch (err: any) {
     error.value = "Impossible de charger l'arbre des compétences."
     console.error(err)
@@ -108,12 +123,12 @@ h2 {
 }
 
 .glass-panel {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 12px 40px rgba(227, 25, 55, 0.08);
   overflow: hidden;
 }
 

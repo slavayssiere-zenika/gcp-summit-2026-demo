@@ -510,7 +510,13 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     # Explicitly create the session if it doesn't exist
     # This is required by the google-adk Runner to avoid "Session not found" errors
     try:
-        await session_service.get_session(session_id)
+        session = await session_service.get_session(
+            app_name="zenika_assistant", 
+            user_id="user_1", 
+            session_id=session_id
+        )
+        if session is None:
+            raise KeyError("Session not found")
     except Exception:
         await session_service.create_session(
             app_name="zenika_assistant",

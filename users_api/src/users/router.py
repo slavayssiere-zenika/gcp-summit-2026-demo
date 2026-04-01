@@ -10,12 +10,13 @@ from src.auth import get_password_hash, verify_password, create_access_token, SE
 from jose import jwt, JWTError
 from fastapi import Response
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["users"], dependencies=[Depends(verify_jwt)])
+auth_router = APIRouter(prefix="/users", tags=["auth"])
 
 CACHE_TTL = 60
 
 
-@router.get("/stats", response_model=UserStatsResponse, dependencies=[Depends(verify_jwt)])
+@router.get("/stats", response_model=UserStatsResponse)
 async def get_user_stats(db: Session = Depends(get_db)):
     cache_key = "users:stats"
     cached = get_cache(cache_key)
@@ -66,7 +67,7 @@ def map_user_to_response(user: User) -> dict:
     }
 
 
-@router.get("/", dependencies=[Depends(verify_jwt)])
+@router.get("/")
 async def list_users(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
@@ -89,7 +90,7 @@ async def list_users(
     return result
 
 
-@router.get("/search", dependencies=[Depends(verify_jwt)])
+@router.get("/search")
 async def search_users(
     query: str = Query(..., min_length=1, description="Search term"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
@@ -124,7 +125,7 @@ async def search_users(
     return result
 
 
-@router.get("/me", dependencies=[Depends(verify_jwt)])
+@router.get("/me")
 async def get_me(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
     if not token:
@@ -152,7 +153,7 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Token invalide")
 
 
-@router.post("/login", response_model=TokenResponse)
+@auth_router.post("/login", response_model=TokenResponse)
 async def login(login_data: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == login_data.email).first()
     if not user or not verify_password(login_data.password, user.hashed_password):
@@ -187,18 +188,18 @@ async def login(login_data: LoginRequest, response: Response, db: Session = Depe
     )
 
 
-@router.post("/logout")
+@auth_router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Déconnexion réussie"}
 
 
-@router.get("/health")
+@auth_router.get("/health")
 async def router_health():
     return {"status": "healthy"}
 
 
-@router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(verify_jwt)])
+@router.get("/{user_id}", response_model=UserResponse)
 def get_user(user_id: int, db: Session = Depends(get_db)):
     cache_key = f"users:{user_id}"
     cached = get_cache(cache_key)
@@ -214,7 +215,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     return result
 
 
-@router.post("/", response_model=UserResponse, status_code=201, dependencies=[Depends(verify_jwt)])
+@router.post("/", response_model=UserResponse, status_code=201)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     allowed_ids_str = ",".join(map(str, user.allowed_category_ids))
     db_user = User(
@@ -237,7 +238,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 
-@router.put("/{user_id}", response_model=UserResponse, dependencies=[Depends(verify_jwt)])
+@router.put("/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -260,7 +261,7 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
     return map_user_to_response(user)
 
 
-@router.delete("/{user_id}", status_code=204, dependencies=[Depends(verify_jwt)])
+@router.delete("/{user_id}", status_code=204)
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:

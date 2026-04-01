@@ -15,6 +15,7 @@ def test_create_user(client):
     response = client.post("/users/", json={
         "username": "testuser",
         "email": "test@example.com",
+        "password": "securepassword",
         "full_name": "Test User"
     })
     assert response.status_code == 201
@@ -24,7 +25,7 @@ def test_create_user(client):
 
 def test_get_user(client):
     # Create first
-    create_resp = client.post("/users/", json={"username": "getuser", "email": "get@example.com"})
+    create_resp = client.post("/users/", json={"username": "getuser", "email": "get@example.com", "password": "pwd"})
     user_id = create_resp.json()["id"]
     
     response = client.get(f"/users/{user_id}")
@@ -36,7 +37,7 @@ def test_get_user_not_found(client):
     assert response.status_code == 404
 
 def test_list_users(client):
-    client.post("/users/", json={"username": "listuser", "email": "list@example.com"})
+    client.post("/users/", json={"username": "listuser", "email": "list@example.com", "password": "pwd"})
     response = client.get("/users/")
     assert response.status_code == 200
     data = response.json()
@@ -44,7 +45,7 @@ def test_list_users(client):
     assert data["total"] >= 1
 
 def test_update_user(client):
-    create_resp = client.post("/users/", json={"username": "updateuser", "email": "up@e.com"})
+    create_resp = client.post("/users/", json={"username": "updateuser", "email": "up@e.com", "password": "pwd"})
     user_id = create_resp.json()["id"]
     
     response = client.put(f"/users/{user_id}", json={"full_name": "Updated Name"})
@@ -52,7 +53,7 @@ def test_update_user(client):
     assert response.json()["full_name"] == "Updated Name"
 
 def test_delete_user(client):
-    create_resp = client.post("/users/", json={"username": "deluser", "email": "del@e.com"})
+    create_resp = client.post("/users/", json={"username": "deluser", "email": "del@e.com", "password": "pwd"})
     user_id = create_resp.json()["id"]
     
     response = client.delete(f"/users/{user_id}")
@@ -62,6 +63,7 @@ def test_create_user_with_permissions(client):
     response = client.post("/users/", json={
         "username": "permuser",
         "email": "perm@example.com",
+        "password": "pwd",
         "allowed_category_ids": [1, 2, 3]
     })
     assert response.status_code == 201
@@ -69,9 +71,64 @@ def test_create_user_with_permissions(client):
     assert data["allowed_category_ids"] == [1, 2, 3]
 
 def test_update_user_permissions(client):
-    create_resp = client.post("/users/", json={"username": "up_perm", "email": "perm_up@e.com"})
+    create_resp = client.post("/users/", json={"username": "up_perm", "email": "perm_up@e.com", "password": "pwd"})
     user_id = create_resp.json()["id"]
     
     response = client.put(f"/users/{user_id}", json={"allowed_category_ids": [5, 10]})
     assert response.status_code == 200
     assert response.json()["allowed_category_ids"] == [5, 10]
+
+def test_login_logout(client):
+    # Create user for auth
+    client.post("/users/", json={"username": "authuser", "email": "auth@example.com", "password": "secure"})
+    
+    # Login success
+    login_resp = client.post("/users/login", json={"email": "auth@example.com", "password": "secure"})
+    assert login_resp.status_code == 200
+    assert "access_token" in login_resp.json()
+    
+    # Login fail
+    bad_login = client.post("/users/login", json={"email": "auth@example.com", "password": "wrong"})
+    assert bad_login.status_code == 401
+    
+    # Logout
+    logout_resp = client.post("/users/logout")
+    assert logout_resp.status_code == 200
+
+def test_get_me(client):
+    # Valid via mock token in dependency override for integration tests? No, get_me extracts token from cookies manually!
+    client.post("/users/", json={"username": "me_user", "email": "me@example.com", "password": "pwd"})
+    # Login to get cookie
+    login_resp = client.post("/users/login", json={"email": "me@example.com", "password": "pwd"})
+    cookies = login_resp.cookies
+    
+    me_resp = client.get("/users/me", cookies=cookies)
+    assert me_resp.status_code == 200
+    assert me_resp.json()["username"] == "me_user"
+    
+    # Missing cookie
+    client.cookies.clear()
+    no_cookie_resp = client.get("/users/me")
+    assert no_cookie_resp.status_code == 401
+
+def test_get_user_stats(client):
+    resp = client.get("/users/stats")
+    assert resp.status_code == 200
+    assert "total" in resp.json()
+
+def test_search_users(client):
+    resp = client.get("/users/search?query=auth")
+    assert resp.status_code == 200
+    assert "items" in resp.json()
+
+def test_update_delete_not_found(client):
+    put_resp = client.put("/users/9999", json={"first_name": "x"})
+    assert put_resp.status_code == 404
+    
+    del_resp = client.delete("/users/9999")
+    assert del_resp.status_code == 404
+    
+def test_router_health(client):
+    resp = client.get("/users/health")
+    assert resp.status_code == 200
+

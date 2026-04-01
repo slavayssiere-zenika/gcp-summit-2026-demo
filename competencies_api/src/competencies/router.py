@@ -1,5 +1,6 @@
 import os
 import httpx
+from opentelemetry.propagate import inject
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +28,8 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
     
+    inject(headers)
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{USERS_API_URL}/users/{user_id}", headers=headers)
@@ -162,7 +165,7 @@ async def create_competency(competency: CompetencyCreate, db: Session = Depends(
             return CompetencyResponse.model_validate(existing)
         raise HTTPException(status_code=409, detail="Competency naming conflict unresolved")
     
-    delete_cache_pattern("competencies:list:*")
+    delete_cache_pattern("competencies:tree:*")
     return CompetencyResponse.model_validate(db_comp)
 
 
@@ -201,7 +204,7 @@ async def delete_competency(competency_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     delete_cache(f"competencies:{competency_id}")
-    delete_cache_pattern("competencies:list:*")
+    delete_cache_pattern("competencies:tree:*")
     return Response(status_code=204)
 
 

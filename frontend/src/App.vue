@@ -209,7 +209,8 @@ body {
 
 .nav-pill:hover {
   background: rgba(0, 0, 0, 0.04);
-  color: var(--text-primary);
+  color: var(--zenika-red);
+  transform: translateY(-2px);
 }
 
 .nav-pill.active {
@@ -410,7 +411,8 @@ body {
   width: 260px;
   outline: none;
   border-color: var(--zenika-red);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 0 0 4px rgba(227, 25, 55, 0.15), 0 4px 10px rgba(227, 25, 55, 0.1);
+  transform: translateY(-1px);
 }
 
 .content {

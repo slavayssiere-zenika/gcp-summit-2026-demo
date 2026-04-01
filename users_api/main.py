@@ -12,7 +12,7 @@ from opentelemetry.propagate import extract
 from opentelemetry.trace import set_span_in_context
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, init_db
-from src.users.router import router
+from src.users.router import router, auth_router
 import time
 
 
@@ -49,6 +49,7 @@ async def startup_event():
 FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics")
 SQLAlchemyInstrumentor().instrument(engine=engine)
 
+app.include_router(auth_router)
 app.include_router(router)
 
 

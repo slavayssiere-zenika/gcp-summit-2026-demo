@@ -4,6 +4,7 @@ import axios from 'axios'
 
 
 const prompts = ref<any[]>([])
+const originalPrompts = ref<Record<string, string>>({})
 const loading = ref(true)
 const error = ref('')
 const success = ref('')
@@ -47,6 +48,9 @@ const fetchPrompts = async () => {
     error.value = ''
     const res = await axios.get('/prompts-api/prompts/')
     prompts.value = res.data
+    res.data.forEach((p: any) => {
+      originalPrompts.value[p.key] = p.value
+    })
   } catch(e: any) {
     error.value = "Erreur lors de la récupération des prompts: " + e.message
   } finally {
@@ -62,6 +66,7 @@ const updatePrompt = async (prompt: any) => {
       value: prompt.value
     })
     success.value = "Prompt mis à jour avec succès : " + res.data.key
+    originalPrompts.value[prompt.key] = res.data.value
     setTimeout(() => success.value = '', 3000)
   } catch(e: any) {
     error.value = "Erreur lors de la mise à jour: " + e.message
@@ -98,7 +103,13 @@ onMounted(() => {
           <button class="btn secondary" @click="analyzePrompt(prompt)" :disabled="analyzingKey === prompt.key">
             {{ analyzingKey === prompt.key ? 'Analyse en cours...' : '✨ Improve Prompt' }}
           </button>
-          <button class="btn primary" @click="updatePrompt(prompt)">Enregistrer la modification</button>
+          <button 
+            class="btn primary" 
+            @click="updatePrompt(prompt)"
+            :disabled="originalPrompts[prompt.key] === prompt.value"
+          >
+            Enregistrer la modification
+          </button>
         </div>
       </div>
       <div v-if="prompts.length === 0" class="empty-state">
@@ -198,22 +209,24 @@ onMounted(() => {
 
 .prompt-textarea {
   width: 100%;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
+  background: #1A1A1A;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8f8f2;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 1.2rem;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
   resize: vertical;
   margin-bottom: 1rem;
   transition: all 0.3s ease;
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .prompt-textarea:focus {
   outline: none;
   border-color: var(--zenika-red);
-  box-shadow: 0 0 0 2px rgba(227, 25, 55, 0.2);
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(227, 25, 55, 0.25);
 }
 
 .btn {
@@ -230,7 +243,14 @@ onMounted(() => {
   color: white;
 }
 
-.btn.primary:hover {
+.btn.primary:disabled {
+  background: var(--text-secondary);
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn.primary:hover:not(:disabled) {
   filter: brightness(1.1);
   transform: translateY(-1px);
 }

@@ -8,7 +8,6 @@ from . import models, schemas
 from src.cache import get_cache, set_cache, delete_cache
 from jose import jwt, JWTError
 
-router = APIRouter()
 security = HTTPBearer()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "zenika_super_secret_key_change_me_in_production")
@@ -24,6 +23,8 @@ def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 def verify_admin(payload: dict = Depends(verify_jwt)):
     if payload.get("role") != "admin":

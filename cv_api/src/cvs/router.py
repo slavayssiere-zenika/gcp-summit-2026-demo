@@ -26,8 +26,22 @@ if not GEMINI_API_KEY:
 else:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
+import urllib.parse
+
 async def _fetch_cv_content(url: str) -> str:
     """Download the CV content. If Google Docs, map to raw export endpoint."""
+    parsed = urllib.parse.urlparse(url)
+    hostname = parsed.hostname or ""
+    
+    if parsed.scheme not in ("http", "https"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+        
+    forbidden_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
+    if hostname in forbidden_hosts or hostname.endswith(".local") or hostname.endswith("_api"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Internal URLs are not allowed")
+
     if "docs.google.com/document/d/" in url:
         # Map to export format if user pastes the browser URL
         doc_id = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
@@ -61,7 +75,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
     # 3. LLM Parsing Pass (Structured Output)
     try:
         async with httpx.AsyncClient() as http_client:
-            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.extract_cv_info", timeout=5.0)
+            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.extract_cv_info", headers=headers, timeout=5.0)
             res_prompt.raise_for_status()
             prompt = res_prompt.json()["value"]
     except Exception as e:
@@ -304,11 +318,33 @@ async def recalculate_competencies_tree(request: Request, db: Session = Depends(
     combined_text = "\n\n--- CV SUIVANT ---\n\n".join([p.raw_content for p in profiles])
     try:
         async with httpx.AsyncClient() as http_client:
-            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.generate_taxonomy_tree", timeout=5.0)
+            headers_downstream = {"Authorization": auth_header}
+            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.generate_taxonomy_tree", headers=headers_downstream, timeout=5.0)
             res_prompt.raise_for_status()
             instruction = res_prompt.json()["value"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
+
+    try:
+        async with httpx.AsyncClient() as http_client:
+            headers = {"Authorization": auth_header}
+            comp_res = await http_client.get(f"{COMPETENCIES_API_URL}/competencies/?limit=1000", headers=headers)
+            comp_data = comp_res.json()
+            all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
+            
+            def get_all_names(nodes):
+                names = []
+                for n in nodes:
+                    names.append(n["name"])
+                    if "sub_competencies" in n and n["sub_competencies"]:
+                        names.extend(get_all_names(n["sub_competencies"]))
+                return names
+            
+            existing_names = get_all_names(all_comps)
+            skills_str = ", ".join(existing_names) if existing_names else "Aucune compétence existante"
+            instruction = instruction.replace("{{EXISTING_COMPETENCIES}}", skills_str)
+    except Exception as e:
+        print(f"WARNING: Failed to inject existing competencies: {e}")
 
     try:
         response = client.models.generate_content(

@@ -7,6 +7,11 @@ L'API CV est un service asynchrone hybride couplant PostgreSQL (avec son extensi
 - **Délégation Asynchrone (Agent MCP)** : Embarque son propre Sidecar (`cv_mcp:8000`) autorisant les prompts contextuels par l'Agentic Dashboard (Recherche conversationnelle de candidats).
 - **RAG Capability (Embeddings 3072-D)** : Traduction du contenu texte via LLM `gemini-embedding-001` persistée en index optimisé.
 
+## Description Fonctionnelle Détaillée
+L'API CV agit en tant que moteur de traitement du langage naturel et d'extraction de connaissances. Elle permet aux recruteurs et aux managers de Zenika d'automatiser l'analyse des profils candidats ou collaborateurs.
+Lorsqu'un Curriculum Vitae est soumis sous forme de lien Google Doc, le service télécharge son contenu, utilise les modèles LLM de Gemini pour en extraire l'essence (expériences, technologies maîtrisées, soft skills), puis transforme ces données non-structurées en vecteurs de connaissances (RAG).
+Ces métadonnées sont alors croisées avec le référentiel d'entreprise (via `competencies_api`) pour mettre à jour ou suggérer automatiquement les compétences d'un profil (via `users_api`). Ce service décharge l'humain des tâches de saisie manuelle et offre une capacité de recherche sémantique profonde (ex: "Trouve-moi quelqu'un ayant travaillé 5 ans sur React dans le secteur bancaire").
+
 ## Modèles Techniques - SQL Alchemy
 - `id` (PK)
 - `user_id` (Integer) -> Clé Etrangère logique interservice pointant sur `Users`
@@ -39,3 +44,6 @@ Extrait, analyse, parse, connecte et vectorise un Profil de façon synchrone.
 ## Observabilité Intrinsèque
 - Root Tracing propagé inter-services (Opentelemetry interceptors `httpx`).
 - Route Prometheus `/metrics` sur `8004`.
+
+## 🔒 Sécurité Zero-Trust & JWT
+L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.

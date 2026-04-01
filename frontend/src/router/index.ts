@@ -86,4 +86,15 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
   }
 })
 
+// Handle dynamic import failures (e.g. after a deployment)
+router.onError((error: Error, to: RouteLocationNormalized) => {
+  if (
+    error.message.includes('Failed to fetch dynamically imported module') ||
+    error.message.includes('Importing a module script failed') ||
+    error.name === 'ChunkLoadError'
+  ) {
+    window.location.href = to.fullPath
+  }
+})
+
 export default router

@@ -12,3 +12,4 @@ litellm>=1.0.0
 google-cloud-storage>=2.14.0
 prometheus-fastapi-instrumentator>=6.1.0
 redis>=5.0.0
+python-jose[cryptography]>=3.3.0

@@ -12,6 +12,11 @@ Ce moteur propulse un agent IA asynchrone défini par :
 - **System Prompt** : Un encadrement délimitant son persona (l'Assistant de consultation expert Zenika) et son comportement linguistique (Poli, concis, direct).
 - **Tooling Engine** : Une liste exhaustive de +20 fonctions (Wrappers) que l'IA peut appeler arbitrairement pour questionner l'architecture (Users, Items, Competencies) au travers de protocoles réseau SSE.
 
+## Description Fonctionnelle Détaillée
+L'Agent API est la porte d'entrée conversationnelle intelligente pour les collaborateurs Zenika. Son rôle fonctionnel est de traduire le langage naturel de l'humain en actions techniques concrètes réparties sur les différents microservices.
+Plutôt que d'exiger des utilisateurs qu'ils naviguent dans des interfaces complexes, l'Agent leur permet de poser des questions simples (ex: "Qui est le meilleur expert Kubernetes à Paris ?") ou de déclencher des processus complexes (ex: "Assigne ce nouvel ordinateur portable à Thomas").
+Pour accomplir ces tâches, le système analyse l'intention, déduit les outils MCP nécessaires, planifie des appels vers les sous-systèmes (Users, Competencies, Items, CV), collecte les résultats de manière sécurisée (Zero-Trust), et synthétise une réponse lisible et utile pour l'utilisateur.
+
 ### 2. Connecteurs MCP (Server-Sent Events)
 L'Agent charge `mcp.get_mcp_client()` vers 3 adresses indépendantes du réseau Docker (ex: `http://users_mcp:5000/mcp/sse`). Il maintient sa mémoire active afin d'agréger les retours distants.
 
@@ -33,3 +38,6 @@ Cet API est l'unique canal d'interaction autorisé pour la Console Chat Front-En
 ## 🚨 Sécurité Cognitive (Stateless & Pass-through)
 Bien que super-intelligent, cet Agent **n'avertit pas les règles structurelles**.
 Si un Endpoint sous-jacent (Items) refuse une attribution ou lève un code HTTP 400 (Violation parentale de Compétence), c'est le Wrapper Python de l'Agent qui réceptionne l'exception. Gemini interprète alors vocalement cet "échec" vers l'utilisateur final.
+
+## 🔒 Sécurité Zero-Trust & JWT
+L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.

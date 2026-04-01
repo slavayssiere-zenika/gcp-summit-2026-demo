@@ -71,6 +71,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 security = HTTPBearer()
 
+SECRET_KEY = os.getenv("SECRET_KEY", "zenika_super_secret_key_change_me_in_production")
+ALGORITHM = "HS256"
+
 @app.post("/query")
 async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     auth_header = f"{auth.scheme} {auth.credentials}"
@@ -79,9 +82,8 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
     auth_header_var.set(auth_header)
     
     try:
-        import base64
-        parts = auth.credentials.split('.')
-        payload = json.loads(base64.urlsafe_b64decode(parts[1] + '==').decode('utf-8'))
+        from jose import jwt, JWTError
+        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         computed_session_id = payload.get("sub", "anon")
     except Exception:
         computed_session_id = "anon"
@@ -107,9 +109,8 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
 @app.get("/history")
 async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        import base64
-        parts = auth.credentials.split('.')
-        payload = json.loads(base64.urlsafe_b64decode(parts[1] + '==').decode('utf-8'))
+        from jose import jwt, JWTError
+        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         session_id = payload.get("sub")
         if not session_id:
             raise Exception("No user")
@@ -189,8 +190,10 @@ USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 @app.post("/login")
 async def login(request: Request, response: Response):
     data = await request.json()
+    headers = {}
+    inject(headers)
     async with httpx.AsyncClient() as client:
-        res = await client.post(f"{USERS_API_URL}/users/login", json=data)
+        res = await client.post(f"{USERS_API_URL}/users/login", json=data, headers=headers)
         if res.status_code != 200:
             raise HTTPException(status_code=res.status_code, detail=res.json().get("detail", "Erreur de connexion"))
         
@@ -209,10 +212,12 @@ async def logout(response: Response):
 
 @app.get("/me")
 async def get_me(request: Request):
+    headers = {}
+    inject(headers)
     async with httpx.AsyncClient() as client:
         # Forward the incoming cookie to users_api
         cookies = request.cookies
-        res = await client.get(f"{USERS_API_URL}/users/me", cookies=cookies)
+        res = await client.get(f"{USERS_API_URL}/users/me", cookies=cookies, headers=headers)
         if res.status_code != 200:
             raise HTTPException(status_code=res.status_code, detail="Non connecté")
         return res.json()

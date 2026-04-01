@@ -1,110 +1,152 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from unittest.mock import patch, MagicMock, AsyncMock
+import json
+import base64
 
 from main import app
 
 client = TestClient(app)
 
+# Helper for JWT payload Generation
+def get_auth_token(sub="user_1"):
+    payload = {"sub": sub, "role": "admin"}
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode('utf-8')).decode('utf-8')
+    return f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{encoded}.sign"
 
-class TestHealth:
-    def test_health(self):
-        response = client.get("/health")
-        assert response.status_code == 200
-        assert response.json() == {"status": "healthy"}
+def test_health():
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
 
+def test_root():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "ADK Agent API" in response.json()["message"]
 
-class TestRoot:
-    def test_root_returns_html(self):
-        response = client.get("/")
-        assert response.status_code == 200
-        assert "text/html" in response.headers.get("content-type", "")
+def test_get_spec_success(mocker):
+    mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
+    response = client.get("/spec")
+    assert response.status_code == 200
+    assert "# Spec doc" in response.text
 
+def test_get_spec_fail(mocker):
+    mocker.patch("builtins.open", side_effect=Exception("Not found"))
+    response = client.get("/spec")
+    assert response.status_code == 200
+    assert "# Specification introuvable" in response.text
 
-class TestQueryEndpoint:
-    @patch('main.get_users_mcp')
-    def test_query_list_users(self, mock_get_users_mcp):
-        mock_client = MagicMock()
-        mock_client.call_tool.return_value = [
-            {"type": "text", "text": '{"items": [{"id": 1, "username": "testuser", "email": "test@example.com", "full_name": "Test User", "is_active": true}], "total": 1, "skip": 0, "limit": 10}'}
-        ]
-        mock_get_users_mcp.return_value = mock_client
+@pytest.fixture
+def mock_httpx(mocker):
+    mock = mocker.patch("main.httpx.AsyncClient")
+    client_instance = AsyncMock()
+    mock.return_value.__aenter__.return_value = client_instance
+    return client_instance
 
-        response = client.post("/query", json={"query": "affiche les utilisateurs"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "users_api"
-        assert "response" in data
-        assert data["response"]["total"] == 1
+def test_login_success(mock_httpx):
+    mock_resp = MagicMock(status_code=200, cookies={"access_token": "abc"})
+    mock_resp.json.return_value = {"message": "Success"}
+    mock_httpx.post.return_value = mock_resp
 
-    @patch('main.get_users_mcp')
-    def test_query_search_user(self, mock_get_users_mcp):
-        mock_client = MagicMock()
-        mock_client.call_tool.return_value = [
-            {"type": "text", "text": '{"items": [{"id": 1, "username": "john", "email": "john@example.com", "full_name": "John Doe", "is_active": true}], "total": 1, "skip": 0, "limit": 100}'}
-        ]
-        mock_get_users_mcp.return_value = mock_client
+    response = client.post("/login", json={"username": "bob", "password": "123"})
+    assert response.status_code == 200
+    assert response.cookies.get("access_token") == "abc"
 
-        response = client.post("/query", json={"query": "cherche l'utilisateur nommé john"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "users_api"
-        assert data["search"] == "john"
-        assert data["response"]["total"] == 1
+def test_login_fail(mock_httpx):
+    mock_resp = MagicMock(status_code=401)
+    mock_resp.json.return_value = {"detail": "Invalid creds"}
+    mock_httpx.post.return_value = mock_resp
 
-    @patch('main.get_items_mcp')
-    def test_query_list_items(self, mock_get_items_mcp):
-        mock_client = MagicMock()
-        mock_client.call_tool.return_value = [
-            {"type": "text", "text": '{"items": [{"id": 1, "name": "Test Item", "user_id": 1}], "total": 1}'}
-        ]
-        mock_get_items_mcp.return_value = mock_client
+    response = client.post("/login", json={"username": "bob", "password": "123"})
+    assert response.status_code == 401
+    assert "Invalid creds" in response.json()["detail"]
 
-        response = client.post("/query", json={"query": "montre les items"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "items_api"
+def test_logout():
+    client.cookies.set("access_token", "abc")
+    response = client.post("/logout")
+    assert response.status_code == 200
+    assert response.cookies.get("access_token") is None
 
-    def test_query_help(self):
-        response = client.post("/query", json={"query": "bonjour"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "help"
-        assert "items" in data["response"]
+def test_get_me_success(mock_httpx):
+    mock_resp = MagicMock(status_code=200)
+    mock_resp.json.return_value = {"username": "bob"}
+    mock_httpx.get.return_value = mock_resp
+    
+    response = client.get("/me")
+    assert response.status_code == 200
+    assert response.json()["username"] == "bob"
 
-    def test_query_empty_query(self):
-        response = client.post("/query", json={"query": ""})
-        assert response.status_code == 200
+def test_get_me_fail(mock_httpx):
+    mock_resp = MagicMock(status_code=401)
+    mock_httpx.get.return_value = mock_resp
+    
+    response = client.get("/me")
+    assert response.status_code == 401
 
-    @patch('main.get_users_mcp')
-    def test_query_mcp_error(self, mock_get_users_mcp):
-        mock_get_users_mcp.side_effect = Exception("MCP connection failed")
+def test_mcp_registry():
+    response = client.get("/mcp/registry")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "services" in payload
+    assert len(payload["services"]) > 0
 
-        response = client.post("/query", json={"query": "affiche les utilisateurs"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "error"
-        assert "Erreur MCP" in data["response"]
+@patch('main.run_agent_query')
+def test_query_success(mock_run_agent_query):
+    mock_run_agent_query.return_value = {"response": "Answer", "source": "gemini"}
+    token = get_auth_token()
+    
+    response = client.post("/query", json={"query": "Hello"}, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["response"] == "Answer"
 
+@patch('main.run_agent_query')
+def test_query_error(mock_run_agent_query):
+    mock_run_agent_query.side_effect = Exception("Agent fail")
+    token = get_auth_token()
+    
+    response = client.post("/query", json={"query": "Hello"}, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["source"] == "error"
+    assert "Agent fail" in response.json()["response"]
 
-class TestQueryValidation:
-    def test_query_requires_query_field(self):
-        response = client.post("/query", json={})
-        assert response.status_code == 422
+def test_query_no_auth():
+    response = client.post("/query", json={"query": "Hello"})
+    assert response.status_code == 401
 
+def test_get_history_success(mocker):
+    # Mock get_session_service
+    mock_svc = AsyncMock()
+    mock_session = MagicMock()
+    
+    mock_event_1 = MagicMock(author="user")
+    mock_event_1.content.parts = [MagicMock(text="User msg")]
+    
+    mock_event_2 = MagicMock(author="assistant")
+    mock_event_2.content = "```json\n{\"reply\": \"Ans\", \"display_type\": \"text\"}\n```"
+    
+    mock_session.events = [mock_event_1, mock_event_2]
+    mock_svc.get_session.return_value = mock_session
+    
+    mocker.patch("agent_api.agent.get_session_service", return_value=mock_svc)
+    
+    token = get_auth_token("test_user_hi")
+    response = client.get("/history", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    history = response.json()["history"]
+    assert len(history) == 2
+    assert history[0]["content"] == "User msg"
+    assert history[1]["content"] == "Ans"
 
-class TestMCPClient:
-    def test_mcp_client_initialization(self):
-        from mcp_client import MCPStdioClient
-        
-        with patch('subprocess.Popen') as mock_popen:
-            mock_popen.return_value.stdout.readline.return_value = '{"jsonrpc": "2.0", "id": 0, "result": {}}'
-            
-            client = MCPStdioClient(command="python", args=["-m", "test"])
-            assert client.command == "python"
-            assert client.args == ["-m", "test"]
-            client.stop()
+def test_get_history_no_session(mocker):
+    mock_svc = AsyncMock()
+    mock_svc.get_session.return_value = None
+    mocker.patch("agent_api.agent.get_session_service", return_value=mock_svc)
+    
+    token = get_auth_token()
+    response = client.get("/history", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["history"] == []
+
+def test_get_history_invalid_auth():
+    response = client.get("/history", headers={"Authorization": "Bearer invalid"})
+    assert response.status_code == 401

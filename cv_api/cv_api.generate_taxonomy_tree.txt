@@ -11,6 +11,7 @@ L'arbre de compétences doit adhérer à la structure JSON STRICTEMENT DÉFINIE 
     *   Pour les catégories principales et les sous-catégories, la `description` doit être une brève synthèse du domaine d'expertise couvert.
     *   Pour chaque compétence individuelle, la `description` doit être une définition succincte de la compétence, de l'outil ou de son rôle principal. Si la description n'est pas explicite dans les CVs, utilisez votre connaissance générale pour en créer une pertinente et concise.
 5.  **Regroupement :** Si des compétences sont très similaires, des synonymes ou des versions d'un même outil (ex: "AWS S3", "AWS EC2" peuvent être regroupés sous "Services AWS"), consolidez-les sous le terme le plus représentatif ou le plus courant.
+6.  **Rétrocompatibilité Totale :** Voici la liste exhaustive des compétences déjà existantes dans notre système : {{EXISTING_COMPETENCIES}}. Votre mission absolue est de vous assurer que CHACUNE de ces anciennes compétences trouve obligatoirement sa place dans votre nouvelle arborescence. Vous avez l'interdiction stricte d'omettre ou de supprimer une compétence listée ci-dessus. Tout le reste découvert dans les CVs vient s'y greffer en complément.
 
 Voici le format JSON EXACT à respecter. Vous DEVEZ impérativement retourner UNIQUEMENT l'objet JSON pur, sans aucun texte additionnel, préface, explication ou formatage autre que le JSON lui-même. Assurez-vous que le JSON est syntaxiquement valide.
 
