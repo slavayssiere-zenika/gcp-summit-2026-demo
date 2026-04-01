@@ -5,3 +5,39 @@ __pycache__/
 .coverage
 .pytest_cache/
 coverage.json
+frontend-*.tar.gz
+.env
+otelcol-contrib
+*.tar.gz
+output.log
+*.patch
+
+# =========================
+# Terraform Gitignore
+# =========================
+
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files
+*.tfvars
+*.tfvars.json
+*.auto.tfvars.json
+
+# Ignore override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc

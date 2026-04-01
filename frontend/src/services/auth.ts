@@ -43,6 +43,10 @@ export const authService = {
     state.isLoading = true
     try {
       const response = await axios.get(`${API_BASE}/me`)
+      // Strict validation: if the response is not a proper JSON object with an id (e.g. we hit a proxy or dummy container returning 200 HTML), reject it.
+      if (!response.data || typeof response.data !== 'object' || !('id' in response.data)) {
+        throw new Error("Invalid payload received from /auth/me")
+      }
       state.user = response.data
       state.isAuthenticated = true
     } catch (error) {

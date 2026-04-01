@@ -37,4 +37,4 @@ test_integration.py: 15 warnings
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 36 passed, 17 warnings in 0.98s ========================
+======================= 36 passed, 17 warnings in 0.76s ========================

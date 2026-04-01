@@ -13,3 +13,4 @@ redis>=5.0.0
 mcp[fastapi]>=1.0.0
 prometheus-fastapi-instrumentator>=6.1.0
 python-jose[cryptography]>=3.3.0
+google-auth>=2.20.0

@@ -1,0 +1,52 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'cloudrun-api'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:8080']
+          relabel_configs:
+            - action: labeldrop
+              regex: "(instance|job)"
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: "(up|scrape_duration_seconds|scrape_samples_scraped|scrape_samples_post_metric_relabeling|scrape_series_added)"
+              action: drop
+
+processors:
+  batch:
+    send_batch_size: 100
+    timeout: 5s
+  resourcedetection:
+    detectors: [env, gcp]
+    timeout: 2s
+    override: true
+  resource/set_instance_id:
+    attributes:
+      - key: service.instance.id
+        from_attribute: faas.id
+        action: upsert
+      - key: service.instance.id
+        from_attribute: faas.instance
+        action: upsert
+
+exporters:
+  googlecloud: {} # Laissé vide pour auto-détection par le service account métadatas
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resourcedetection, resource/set_instance_id, batch]
+      exporters: [googlecloud]
+    metrics:
+      receivers: [prometheus, otlp]
+      processors: [resourcedetection, resource/set_instance_id, batch]
+      exporters: [googlecloud]

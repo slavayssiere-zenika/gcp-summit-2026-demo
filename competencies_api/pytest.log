@@ -42,4 +42,4 @@ test_integration.py::test_assign_and_list_user_competencies
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 31 passed, 21 warnings in 0.90s ========================
+======================= 31 passed, 21 warnings in 0.72s ========================

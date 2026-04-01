@@ -1,0 +1,7 @@
+project_id: "slavayssiere-sandbox-462015"
+base_domain: "zenika.slavayssiere.fr"
+parent_zone_name: "slavayssiere-zenika"
+cloudrun_min_instances: 2
+cloudrun_max_instances: 50
+alloydb_cpu: 8
+waf_rate_limit: 10000

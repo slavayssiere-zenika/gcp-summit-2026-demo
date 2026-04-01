@@ -3,6 +3,8 @@ version: '3.8'
 services:
   users_api:
     build: ./users_api
+    container_name: users_api
+    hostname: users_api
     ports:
       - "8000:8000"
     environment:
@@ -10,16 +12,21 @@ services:
       - OTEL_SERVICE_NAME=users-api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
       - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - users-api
 
   users_mcp:
     build: ./users_api
+    container_name: users_mcp
+    hostname: users_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
       - USERS_API_URL=http://users_api:8000
@@ -32,6 +39,8 @@ services:
 
   items_api:
     build: ./items_api
+    container_name: items_api
+    hostname: items_api
     ports:
       - "8001:8001"
     environment:
@@ -39,16 +48,21 @@ services:
       - OTEL_SERVICE_NAME=items-api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
       - REDIS_URL=redis://redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - items-api
 
   items_mcp:
     build: ./items_api
+    container_name: items_mcp
+    hostname: items_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
       - USERS_API_URL=http://users_api:8000
@@ -62,6 +76,8 @@ services:
 
   competencies_api:
     build: ./competencies_api
+    container_name: competencies_api
+    hostname: competencies_api
     ports:
       - "8003:8003"
     environment:
@@ -70,16 +86,21 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
       - REDIS_URL=redis://redis:6379/3
       - USERS_API_URL=http://users_api:8000
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - competencies-api
 
   competencies_mcp:
     build: ./competencies_api
+    container_name: competencies_mcp
+    hostname: competencies_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
       - USERS_API_URL=http://users_api:8000
@@ -92,6 +113,8 @@ services:
       - monitoring_net
   cv_api:
     build: ./cv_api
+    container_name: cv_api
+    hostname: cv_api
     ports:
       - "8004:8004"
     environment:
@@ -102,16 +125,21 @@ services:
       - USERS_API_URL=http://users_api:8000
       - COMPETENCIES_API_URL=http://competencies_api:8003
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - cv-api
 
   cv_mcp:
     build: ./cv_api
+    container_name: cv_mcp
+    hostname: cv_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
       - CV_API_URL=http://cv_api:8004
@@ -127,6 +155,8 @@ services:
     build:
       context: .
       dockerfile: agent_api/Dockerfile
+    container_name: agent-api
+    hostname: agent-api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_MODEL=gemini-2.5-flash
@@ -141,6 +171,7 @@ services:
       - REDIS_URL=redis://redis:6379/1
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=agent-api
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,10 +199,17 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: frontend
+    hostname: frontend
     ports:
       - "8002:80"
     depends_on:
       - agent-api
+      - users_api
+      - items_api
+      - prompts_api
+      - competencies_api
+      - cv_api
     networks:
       - monitoring_net
 
@@ -330,13 +368,16 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
       - REDIS_URL=redis://redis:6379/5
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - prompts-api
 
 volumes:
   postgres_data:

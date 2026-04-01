@@ -1,0 +1,7 @@
+project_id: "slavayssiere-sandbox-462015"
+base_domain: "zenika.slavayssiere.fr"
+parent_zone_name: "slavayssiere-zenika"
+cloudrun_min_instances: 0
+cloudrun_max_instances: 2
+alloydb_cpu: 2 # Coeurs virtuels (2 est le minimum pour AlloyDB en custom type)
+waf_rate_limit: 100

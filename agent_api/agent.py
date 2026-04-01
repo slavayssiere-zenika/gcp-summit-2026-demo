@@ -465,7 +465,41 @@ LOKI_TOOLS = [
     loki_metric_aggregator
 ]
 
+# --- GCP Logging Tools ---
 
+async def gcp_query_logs(filter_str: str, limit: int = 100) -> dict:
+    """
+    Exécute une requête native sur Google Cloud Logging (Stackdriver) pour analyser les logs des applications sur GCP.
+    
+    Args:
+        filter_str (str): Filtre stackdriver (ex: 'resource.type="cloud_run_revision" AND severity>="ERROR"').
+        limit (int): Nombre max de lignes retournées. Par défaut 100.
+    """
+    try:
+        from google.cloud import logging as cloud_logging
+        client = cloud_logging.Client()
+        entries = client.list_entries(filter_=filter_str, page_size=limit)
+        
+        logs = []
+        for entry in entries:
+            logs.append({
+                "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+                "severity": entry.severity,
+                "payload": entry.payload,
+                "resource": entry.resource.labels if entry.resource else {}
+            })
+            if len(logs) >= limit:
+                break
+                
+        # Mock du format cible habituel du MCP
+        return format_mcp_result([{"text": json.dumps(logs)}], "gcp_logs")
+    except Exception as e:
+        logger.error(f"Error in gcp_query_logs: {e}")
+        return {"result": f"Erreur Google Cloud Logging: {e}"}
+
+GCP_LOGGING_TOOLS = [
+    gcp_query_logs
+]
 
 
 async def create_agent():
@@ -481,6 +515,10 @@ async def create_agent():
         
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
+    # Choix dynamique des outils de log
+    use_gcp_logging = os.getenv("USE_GCP_LOGGING", "false").lower() == "true"
+    log_tools = GCP_LOGGING_TOOLS if use_gcp_logging else LOKI_TOOLS
+    
     agent = Agent(
         name="assistant_zenika",
         model=model,
@@ -490,8 +528,8 @@ async def create_agent():
             )
         ),
         instruction=instruction_text,
-        description="Assistant IA pour la gestion des utilisateurs, items et compétences. Et analyse des logs via Loki.",
-        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *LOKI_TOOLS]
+        description="Assistant IA pour la gestion des utilisateurs, items et compétences. Et analyse des logs via Loki ou GCP.",
+        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *log_tools]
     )
     
     return agent

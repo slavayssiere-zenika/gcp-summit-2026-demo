@@ -32,6 +32,6 @@ main.py:26
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 11 passed, 2 warnings in 2.24s ========================
-Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 0.98s.
+======================== 11 passed, 2 warnings in 1.64s ========================
+Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 1.06s.
 Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE
