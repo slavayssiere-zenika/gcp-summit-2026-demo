@@ -1,1 +1,7 @@
 secrets.sh
+__pycache__/
+*.pyc
+*.pyo
+.coverage
+.pytest_cache/
+coverage.json
