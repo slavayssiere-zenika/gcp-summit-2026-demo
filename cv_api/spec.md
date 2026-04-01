@@ -47,3 +47,13 @@ Extrait, analyse, parse, connecte et vectorise un Profil de façon synchrone.
 
 ## 🔒 Sécurité Zero-Trust & JWT
 L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **POST** `/cvs/import` : Import And Analyze Cv
+- **GET** `/cvs/search` : Search Candidates
+- **GET** `/cvs/user/{user_id}` : Get User Cv
+- **POST** `/cvs/recalculate_tree` : Recalculate Competencies Tree
+- **GET** `/health` : Health
+- **GET** `/spec` : Get Spec

@@ -41,3 +41,16 @@ Si un Endpoint sous-jacent (Items) refuse une attribution ou lève un code HTTP 
 
 ## 🔒 Sécurité Zero-Trust & JWT
 L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **GET** `/` : Root
+- **GET** `/spec` : Get Spec
+- **POST** `/query` : Query
+- **GET** `/history` : Get History
+- **POST** `/login` : Login
+- **POST** `/logout` : Logout
+- **GET** `/me` : Get Me
+- **GET** `/mcp/registry` : Mcp Registry
+- **GET** `/health` : Health

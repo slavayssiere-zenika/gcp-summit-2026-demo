@@ -55,3 +55,18 @@ L'Agent peut manipuler la vue "Skills" sans effort grâce aux tools injectables 
 
 ## 🔒 Sécurité Zero-Trust & JWT
 L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **GET** `/competencies/` : List Competencies
+- **POST** `/competencies/` : Create Competency
+- **GET** `/competencies/{competency_id}` : Get Competency
+- **PUT** `/competencies/{competency_id}` : Update Competency
+- **DELETE** `/competencies/{competency_id}` : Delete Competency
+- **POST** `/competencies/bulk_tree` : Bulk Import Tree
+- **POST** `/competencies/user/{user_id}/assign/{competency_id}` : Assign Competency To User
+- **DELETE** `/competencies/user/{user_id}/remove/{competency_id}` : Remove Competency From User
+- **GET** `/competencies/user/{user_id}` : List User Competencies
+- **GET** `/health` : Health
+- **GET** `/spec` : Get Spec

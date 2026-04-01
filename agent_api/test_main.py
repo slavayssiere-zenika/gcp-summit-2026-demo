@@ -10,9 +10,10 @@ client = TestClient(app)
 
 # Helper for JWT payload Generation
 def get_auth_token(sub="user_1"):
+    from jose import jwt
+    from main import SECRET_KEY, ALGORITHM
     payload = {"sub": sub, "role": "admin"}
-    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode('utf-8')).decode('utf-8')
-    return f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{encoded}.sign"
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 def test_health():
     response = client.get("/health")

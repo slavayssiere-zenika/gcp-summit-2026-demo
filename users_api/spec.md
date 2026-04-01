@@ -52,3 +52,20 @@ L'API Users est le registre central des collaborateurs de Zenika. D'un point de 
 
 ## 🔒 Sécurité Zero-Trust & JWT
 L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **POST** `/users/login` : Login
+- **POST** `/users/logout` : Logout
+- **GET** `/users/health` : Router Health
+- **GET** `/users/stats` : Get User Stats
+- **GET** `/users/` : List Users
+- **POST** `/users/` : Create User
+- **GET** `/users/search` : Search Users
+- **GET** `/users/me` : Get Me
+- **GET** `/users/{user_id}` : Get User
+- **PUT** `/users/{user_id}` : Update User
+- **DELETE** `/users/{user_id}` : Delete User
+- **GET** `/health` : Health
+- **GET** `/spec` : Get Spec

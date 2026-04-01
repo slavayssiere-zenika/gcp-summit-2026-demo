@@ -57,3 +57,16 @@ Le service jumeau `mcp_server.py` permet à l'Agent Gemini de lire ce métier vi
 
 ## 🔒 Sécurité Zero-Trust & JWT
 L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **GET** `/items/categories` : List Categories
+- **POST** `/items/categories` : Create Category
+- **GET** `/items/stats` : Get Item Stats
+- **GET** `/items/` : List Items
+- **POST** `/items/` : Create Item
+- **GET** `/items/{item_id}` : Get Item
+- **GET** `/items/user/{user_id}` : List User Items
+- **GET** `/health` : Health
+- **GET** `/spec` : Get Spec

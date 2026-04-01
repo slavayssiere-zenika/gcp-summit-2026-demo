@@ -29,3 +29,14 @@ D'un point de vue fonctionnel, elle permet aux administrateurs (Prompt Engineers
 
 ## 🔒 Sécurité Zero-Trust & JWT
 L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **GET** `/prompts/` : List Prompts
+- **POST** `/prompts/` : Create Prompt
+- **GET** `/prompts/{key}` : Read Prompt
+- **PUT** `/prompts/{key}` : Update Prompt
+- **POST** `/prompts/{key}/analyze` : Analyze Prompt
+- **GET** `/health` : Health Check
+- **GET** `/spec` : Get Spec

@@ -4,23 +4,29 @@ description: Automatisation de la préparation au push Git (Tests, Specs, Change
 
 Voici les étapes strictes à suivre pour l'exécution d'un workflow de préparation `/git-push` :
 
-1. **Relancer les tests unitaires pour chaque projet avec calcul de la couverture (Coverage)**
-   Exécute la suite de tests sur tous les microservices en calculant explicitement le code coverage pour générer les rapports finaux. (Ces données seront nécessaires pour le changelog).
+1. **Relancer les tests unitaires via script parallèle**
+   Exécute le script bash dédié pour effectuer la couverture en simultané sur chaque environnement. L'arrêt est requis si le script est en erreur.
 // turbo
 ```bash
-python -m pytest agent_api competencies_api cv_api items_api prompts_api users_api --cov=agent_api --cov=competencies_api --cov=cv_api --cov=items_api --cov=prompts_api --cov=users_api
+bash scripts/run_tests.sh
 ```
 
-2. **Relancer le build des specs**
-   Si des spécifications techniques comme des fichiers `spec.md` (pour OpenAPI) ou de la documentation existante nécessitent d'être générés ou mis à jour via des scripts/outils existants, exécute-les. En l'absence de script de build, mets toi-même à jour les fichiers de spécification comme `users_api/spec.md` ou `cv_api/spec.md` avec les dernières fonctionnalités ajoutées en utilisant tes propres capacités d'analyse de code.
+2. **Génération automatique ou mise à jour des spécifications techniques (`spec.md`)**
+   Régénère le document API via OpenAPI.
+// turbo
+```bash
+test_env/bin/python scripts/generate_specs.py
+```
 
-3. **Générer et ajouter les nouveautés et la couverture au `changelog.md`**
-   - Analyse les modifications locales (`git diff`, `git status`, logs locaux) qui n'ont pas encore été pushées pour formuler un résumé clair des fonctionnalités ajoutées.
-   - Extrait les statistiques de coverage issues de l'exécution précédente de pytest pour chaque API (`agent_api`, `competencies_api`, etc.).
-   - Insère au sein du `changelog.md` (crée-le en racine s'il manque) ton résumé (avec la date du jour) **ET** ajoute systématiquement un tableau Markdown récapitulatif du taux de couverture (Code Coverage) pour chaque API.
+3. **Génération et mise à jour dynamique du `changelog.md`**
+   Insère les nouveaux bilans de couverture.
+// turbo
+```bash
+test_env/bin/python scripts/generate_changelog.py
+```
 
 4. **Ajouter les fichiers via git add**
-   Ajoute l'ensemble des fichiers modifiés (y compris le nouveau ou l'ancien `changelog.md`) au staging Git.
+   Ajoute l'ensemble des fichiers modifiés (y compris le nouveau `changelog.md` et les scripts modifiés) au staging Git.
 // turbo
 ```bash
 git add .
