@@ -63,6 +63,7 @@ def map_user_to_response(user: User) -> dict:
         "is_active": user.is_active,
         "role": user.role,
         "allowed_category_ids": allowed_ids,
+        "picture_url": user.picture_url,
         "created_at": user.created_at.isoformat() if user.created_at else None
     }
 
@@ -147,6 +148,8 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
             
         result = map_user_to_response(user)
+        result["access_token"] = token
+        
         set_cache(cache_key, result, 300) # Fast 5m UI Poll Burst
         return result
     except JWTError:
@@ -192,6 +195,158 @@ async def login(login_data: LoginRequest, response: Response, db: Session = Depe
 async def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Déconnexion réussie"}
+
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from src.users.schemas import ServiceAccountLoginRequest
+
+@auth_router.post("/service-account/login", response_model=TokenResponse)
+async def service_account_login(req: ServiceAccountLoginRequest, db: Session = Depends(get_db)):
+    try:
+        # Verify Identity Token with Google public certificates
+        # We don't verify audience strictly here because it could be dynamic from Cloud Run,
+        # but in production we should check `audience` matches the users_api URL or Client ID.
+        request_obj = google_requests.Request()
+        id_info = id_token.verify_oauth2_token(req.id_token, request_obj)
+
+        email = id_info.get("email")
+        if not email:
+            raise HTTPException(status_code=403, detail="Un email est requis dans l'ID Token")
+
+        # In a real environment, you'd check whether this email belongs to a known internal service account pattern
+        if not email.endswith(".iam.gserviceaccount.com"):
+             raise HTTPException(status_code=403, detail="Ce token n'appartient pas à un Service Account autorisé")
+
+        # Give it a service account role in our system
+        access_token = create_access_token(data={
+            "sub": email,
+            "role": "service_account",
+            "allowed_category_ids": []
+        })
+
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            username=email,
+            role="service_account"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Token invalide: {e}")
+
+
+
+import os
+import requests
+from urllib.parse import urlencode
+from fastapi.responses import RedirectResponse
+import string
+import secrets as pysecrets
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_SECRET_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_SECRET_KEY", "")
+# Assumed redirect URI relative to current host. In prod, ensure PUBLIC_API_URL or origin is handled.
+PROXY_BASE_URL = os.getenv("PROXY_BASE_URL", "http://localhost:8002")
+REDIRECT_URI = f"{PROXY_BASE_URL}/auth/google/callback"
+
+@auth_router.get("/google/config")
+async def get_google_config():
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google Client ID not configured")
+    return {"client_id": GOOGLE_CLIENT_ID}
+
+
+@auth_router.get("/google/login")
+async def google_login():
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "consent"
+    }
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+    return RedirectResponse(url)
+
+
+@auth_router.get("/google/callback")
+async def google_callback(code: str, response: Response, db: Session = Depends(get_db)):
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail="Google Client ID or Secret not configured")
+
+    token_url = "https://oauth2.googleapis.com/token"
+    token_data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+    token_res = requests.post(token_url, data=token_data)
+    if not token_res.ok:
+        raise HTTPException(status_code=400, detail="Failed to get token from Google")
+    
+    access_token_google = token_res.json().get("access_token")
+    
+    userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
+    userinfo_res = requests.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"})
+    if not userinfo_res.ok:
+        raise HTTPException(status_code=400, detail="Failed to get user info from Google")
+        
+    user_info = userinfo_res.json()
+    email = user_info.get("email")
+    if not email or not email.endswith("@zenika.com"):
+        raise HTTPException(status_code=403, detail="Uniquement les e-mails @zenika.com sont autorisés")
+        
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        # Create the user
+        dummy_password = ''.join(pysecrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+        db_user = User(
+            username=email.split("@")[0],
+            email=email,
+            first_name=user_info.get("given_name", ""),
+            last_name=user_info.get("family_name", ""),
+            full_name=user_info.get("name", email.split("@")[0]),
+            hashed_password=get_password_hash(dummy_password),
+            picture_url=user_info.get("picture", ""),
+            google_id=user_info.get("sub", ""),
+            allowed_category_ids=""
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        user = db_user
+    else:
+        # Link / update the user
+        user.picture_url = user_info.get("picture", user.picture_url)
+        user.google_id = user_info.get("sub", user.google_id)
+        db.commit()
+        db.refresh(user)
+
+    # Generate JWT
+    allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
+    access_token = create_access_token(data={
+        "sub": user.username,
+        "allowed_category_ids": allowed_ids,
+        "role": user.role
+    })
+    
+    frontend_url = os.getenv("FRONTEND_URL", "/")
+    redirect_response = RedirectResponse(frontend_url)
+    
+    redirect_response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=3600 * 24, # 24h
+        samesite="lax",
+        secure=False # Set to True in production with HTTPS
+    )
+    
+    return redirect_response
 
 
 @auth_router.get("/health")

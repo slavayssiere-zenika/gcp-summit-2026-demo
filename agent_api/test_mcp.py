@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 import httpx
 
-from agent_api.mcp_client import (
+from mcp_client import (
     MCPHttpClient, MCPSseClient, auth_header_var,
     get_users_mcp, get_items_mcp, get_competencies_mcp, get_cv_mcp, get_loki_mcp,
     users_mcp_client
@@ -10,7 +10,7 @@ from agent_api.mcp_client import (
 
 @pytest.fixture
 def mock_httpx(mocker):
-    mock = mocker.patch("agent_api.mcp_client.httpx.AsyncClient")
+    mock = mocker.patch("mcp_client.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock.return_value.__aenter__.return_value = client_instance
     return client_instance
@@ -56,7 +56,7 @@ async def test_mcp_http_client_call_tool_error(mock_httpx):
 
 @pytest.mark.asyncio
 async def test_mcp_client_helpers():
-    import agent_api.mcp_client as mc
+    import mcp_client as mc
     # reset globals for test
     mc.users_mcp_client = None
     mc.items_mcp_client = None

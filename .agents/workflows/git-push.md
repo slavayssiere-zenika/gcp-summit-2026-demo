@@ -47,7 +47,25 @@ rm -f *.tar.gz otelcol-contrib output.log *.patch
 git add .
 ```
 
-7. **Ajouter les fichiers via git commit**
+7. **Vérifier la non-divulgation des secrets**
+   Parse le fichier `secrets.sh` et s'assure qu'aucune des valeurs des variables secrètes n'est introduite dans les fichiers prêts à être commités. Arrête le script en erreur si une faille est détectée.
+// turbo
+```bash
+if [ -f "secrets.sh" ]; then
+  SECRETS=$(grep "export " secrets.sh | awk -F '=' '{print $2}' | tr -d '"'\'' ')
+  for SECRET in $SECRETS; do
+    if [ ${#SECRET} -gt 12 ]; then
+      if git diff --cached HEAD 2>/dev/null | grep '^+' | grep -v '^+++' | grep -Fq "$SECRET"; then
+        echo "[!] ERREUR CRITIQUE : Une valeur extraite de secrets.sh est sur le point d'être commitée. Opération annulée."
+        exit 1
+      fi
+    fi
+  done
+  echo "[+] SÉCURITÉ : Aucun ajout de secret provenant de secrets.sh détecté, le commit est autorisé."
+fi
+```
+
+8. **Ajouter les fichiers via git commit**
    Rédige un message de commit très court résumant la fonctionnalité.
    **Contrainte stricte :** Le texte du commit doit faire **entre 5 et 8 mots maximum**.
 ```bash
@@ -55,9 +73,10 @@ git add .
 git commit -m "<MESSAGE>"
 ```
 
-8. **Push vers le dépôt distant (git push)**
+9. **Push vers le dépôt distant (git push)**
    Envoie les modifications commitées vers la branche distante.
 // turbo
 ```bash
 git push
 ```
+

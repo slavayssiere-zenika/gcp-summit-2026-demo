@@ -59,6 +59,9 @@ const jwtToken = ref(localStorage.getItem('access_token') || 'Token introuvable'
         <ShieldCheck size="16" />
         Compte Actif
       </div>
+      <div v-if="user?.picture_url" class="avatar-container">
+        <img :src="user.picture_url" alt="Avatar" class="avatar-img" />
+      </div>
     </header>
 
     <div class="profile-grid">
@@ -151,6 +154,23 @@ const jwtToken = ref(localStorage.getItem('access_token') || 'Token introuvable'
   max-width: 1000px;
   margin: 0 auto;
   animation: fadeIn 0.5s ease-out;
+}
+
+.avatar-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  margin-right: 1.5rem;
+}
+
+.avatar-img {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  object-fit: cover;
 }
 
 @keyframes fadeIn {

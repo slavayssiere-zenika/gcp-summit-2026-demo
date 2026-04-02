@@ -52,7 +52,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-def init_db():
-    from src.competencies.models import Base as ModelsBase
-    ModelsBase.metadata.create_all(bind=engine)

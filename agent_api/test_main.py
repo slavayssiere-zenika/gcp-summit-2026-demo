@@ -128,7 +128,7 @@ def test_get_history_success(mocker):
     mock_session.events = [mock_event_1, mock_event_2]
     mock_svc.get_session.return_value = mock_session
     
-    mocker.patch("agent_api.agent.get_session_service", return_value=mock_svc)
+    mocker.patch("agent.get_session_service", return_value=mock_svc)
     
     token = get_auth_token("test_user_hi")
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})
@@ -141,7 +141,7 @@ def test_get_history_success(mocker):
 def test_get_history_no_session(mocker):
     mock_svc = AsyncMock()
     mock_svc.get_session.return_value = None
-    mocker.patch("agent_api.agent.get_session_service", return_value=mock_svc)
+    mocker.patch("agent.get_session_service", return_value=mock_svc)
     
     token = get_auth_token()
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})

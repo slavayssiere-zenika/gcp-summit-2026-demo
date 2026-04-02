@@ -3,21 +3,18 @@ platform darwin -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0
 rootdir: /Users/sebastien.lavayssiere/Code/test-open-code/agent_api
 plugins: mock-3.15.1, cov-7.1.0, langsmith-0.7.23, asyncio-1.3.0, anyio-4.13.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collected 30 items
+collected 41 items
 
-test_agent_logic.py ........                                             [ 26%]
-test_main.py ................                                            [ 80%]
-test_mcp.py ....../Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ast.py:50: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
-  return compile(source, filename, mode, flags,
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-                                                       [100%]
+test_agent_logic.py ........                                             [ 19%]
+test_main.py ................                                            [ 58%]
+test_mcp.py ......                                                       [ 73%]
+test_session.py ...........                                              [100%]
 
 =============================== warnings summary ===============================
 ../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
-main.py:48
 main.py:48
   /Users/sebastien.lavayssiere/Code/test-open-code/agent_api/main.py:48: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
@@ -28,7 +25,6 @@ main.py:48
     @app.on_event("startup")
 
 ../test_env/lib/python3.13/site-packages/fastapi/applications.py:4598
-../test_env/lib/python3.13/site-packages/fastapi/applications.py:4598
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/applications.py:4598: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
   
@@ -37,12 +33,18 @@ main.py:48
           
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
+test_session.py::test_init
+  /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:2247: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    def __init__(self, name, parent):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 30 passed, 5 warnings in 0.37s ========================
+======================== 41 passed, 4 warnings in 0.41s ========================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -64,7 +66,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
 >
 
 During handling of the above exception, another exception occurred:
@@ -90,7 +92,7 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8078014114783192)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8620072425851799)
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -112,7 +114,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused"}"
 >
 
 During handling of the above exception, another exception occurred:

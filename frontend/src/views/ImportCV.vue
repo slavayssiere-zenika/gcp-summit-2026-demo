@@ -1,36 +1,101 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { FileDown, RefreshCw, CheckCircle, AlertCircle } from 'lucide-vue-next'
+import { FileDown, RefreshCw, CheckCircle, AlertCircle, Lock } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
 const cvUrl = ref('')
 const loading = ref(false)
 const error = ref('')
 const successData = ref<any>(null)
+const googleClientId = ref('')
+const tokenClient = ref<any>(null)
+
+onMounted(async () => {
+  try {
+    const res = await axios.get('/auth/google/config')
+    if (res.data.client_id) {
+      googleClientId.value = res.data.client_id
+      initGoogleClient()
+    }
+  } catch (err) {
+    console.warn("Impossible de récupérer la configuration Google ID")
+  }
+})
+
+const initGoogleClient = () => {
+  if (!(window as any).google) return;
+  tokenClient.value = (window as any).google.accounts.oauth2.initTokenClient({
+    client_id: googleClientId.value,
+    scope: 'https://www.googleapis.com/auth/documents.readonly https://www.googleapis.com/auth/drive.readonly',
+    callback: (response: any) => {
+      if (response.error !== undefined) {
+        throw (response);
+      }
+      executeImport(response.access_token);
+    },
+  });
+}
+
+const handlePrivateImport = () => {
+  if (!cvUrl.value) {
+    error.value = "Veuillez d'abord renseigner le lien du Google Doc.";
+    return;
+  }
+  
+  error.value = '';
+  
+  if (!tokenClient.value && googleClientId.value) {
+    initGoogleClient();
+  }
+
+  if (!tokenClient.value) {
+    if (!googleClientId.value) {
+      error.value = "Configuration Google ID manquante. Vérifiez que 'source secrets.sh' a bien été exécuté avant 'docker-compose up'.";
+    } else {
+      error.value = "Le script d'authentification Google est introuvable (bloqué par un bloqueur de pub ?)";
+    }
+    return;
+  }
+  
+  loading.value = true;
+  tokenClient.value.requestAccessToken();
+}
 
 const submitCV = async () => {
   if (!cvUrl.value) return
-  
+  await executeImport()
+}
+
+const executeImport = async (googleToken?: string) => {
   loading.value = true
   error.value = ''
   successData.value = null
 
   try {
+    const payload: any = { url: cvUrl.value }
+    if (googleToken) {
+      payload.google_access_token = googleToken
+    }
     const response = await axios.post('/cv-api/cvs/import', 
-      { url: cvUrl.value },
+      payload,
       { headers: { Authorization: `Bearer ${authService.state.token}` } }
     )
     successData.value = response.data
     cvUrl.value = ''
   } catch (err: any) {
     console.error(err)
-    error.value = err.response?.data?.detail || "Erreur lors de l'analyse du CV. Vérifiez le lien."
+    if (err.response?.status === 400 && err.response?.data?.detail?.includes("refusé")) {
+      error.value = "Accès refusé. Veuillez utiliser le bouton 'Importer en mode Privé'."
+    } else {
+      error.value = err.response?.data?.detail || "Erreur lors de l'analyse du CV. Vérifiez le lien."
+    }
   } finally {
     loading.value = false
   }
 }
 </script>
+
 
 <template>
   <div class="import-wrapper fade-in">
@@ -62,10 +127,16 @@ const submitCV = async () => {
             <small class="hint">Assurez-vous que le lien est réglé sur "Tous les utilisateurs disposant du lien".</small>
           </div>
           
-          <button type="submit" class="submit-btn" :disabled="loading || !cvUrl">
-            <RefreshCw v-if="loading" size="18" class="spin" />
-            <span v-else>Scanner & Intégrer</span>
-          </button>
+          <div class="actions-group">
+            <button type="submit" class="submit-btn" :disabled="loading || !cvUrl">
+              <RefreshCw v-if="loading" size="18" class="spin" />
+              <span v-else>Scanner & Intégrer (Public)</span>
+            </button>
+            <button type="button" @click="handlePrivateImport" class="submit-btn private-btn" :disabled="loading" title="Autoriser l'accès à ce document privé via Google">
+              <Lock size="18" />
+              <span>Importer avec mon compte Google</span>
+            </button>
+          </div>
         </form>
 
         <div v-if="error" class="alert-box error">
@@ -195,6 +266,11 @@ label {
   font-size: 13px;
 }
 
+.actions-group {
+  display: flex;
+  gap: 16px;
+}
+
 .submit-btn {
   background: #111;
   color: #fff;
@@ -209,6 +285,18 @@ label {
   justify-content: center;
   align-items: center;
   gap: 8px;
+  flex: 1;
+}
+
+.private-btn {
+  background: transparent;
+  color: #E31937;
+  border: 2px solid #E31937;
+}
+
+.private-btn:hover:not(:disabled) {
+  background: #E31937;
+  color: #fff;
 }
 
 .submit-btn:hover:not(:disabled) {

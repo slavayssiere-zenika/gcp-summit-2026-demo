@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: "1"
+      author: "antigravity"
+      changes:
+        - createTable:
+            tableName: "prompts"
+            columns:
+              - column:
+                  name: "key"
+                  type: "varchar"
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "value"
+                  type: "text"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "updated_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"

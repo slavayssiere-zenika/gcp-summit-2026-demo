@@ -94,10 +94,28 @@ const fetchCompetencies = async () => {
   }
 }
 
+const cvProfile = ref<any>(null)
+const importerUser = ref<User | null>(null)
+
+const fetchCVProfile = async () => {
+  try {
+    const response = await axios.get(`/cv-api/cvs/user/${userId}`)
+    cvProfile.value = response.data
+    
+    if (cvProfile.value?.imported_by_id) {
+      const importerRes = await axios.get(`/auth/${cvProfile.value.imported_by_id}`)
+      importerUser.value = importerRes.data
+    }
+  } catch (err) {
+    console.warn("No CV profile found for this user.")
+  }
+}
+
 onMounted(() => {
   fetchUser()
   fetchCategories()
   fetchCompetencies()
+  fetchCVProfile()
 })
 </script>
 
@@ -157,6 +175,15 @@ onMounted(() => {
             <div class="info-item">
               <label><Hash size="14" /> ID Utilisateur</label>
               <div class="value code">#{{ user?.id }}</div>
+            </div>
+
+            <div class="info-item" v-if="importerUser" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #eee;">
+              <label><UserIcon size="14" /> Profil Importé Par</label>
+              <div class="value">
+                <RouterLink :to="{ name: 'user-detail', params: { id: importerUser.id } }" class="importer-link">
+                  {{ importerUser.full_name || importerUser.username }}
+                </RouterLink>
+              </div>
             </div>
           </div>
         </section>
@@ -389,6 +416,17 @@ h1 {
   color: #666;
   font-size: 0.95rem;
   margin-bottom: 1.5rem;
+}
+
+.importer-link {
+  color: var(--zenika-red);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.importer-link:hover {
+  text-decoration: underline;
 }
 
 .category-tags {

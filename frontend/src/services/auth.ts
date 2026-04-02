@@ -47,6 +47,9 @@ export const authService = {
       if (!response.data || typeof response.data !== 'object' || !('id' in response.data)) {
         throw new Error("Invalid payload received from /auth/me")
       }
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token)
+      }
       state.user = response.data
       state.isAuthenticated = true
     } catch (error) {

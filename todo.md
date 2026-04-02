@@ -1,0 +1,5 @@
+- permettre de donner des droits admin a des utilisateurs
+- permettre aux admin de mettre un user et ses CV en mode inactif
+- inclure un élément utilisant bigquery
+- ajouter la gestion des metrics et des traces dans les apis dans le cas d'une installation dans GCP
+- ajouter la surveillance des SLI / SLO des apis

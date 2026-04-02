@@ -83,7 +83,7 @@ class TestSecurityStateless:
             # A 403 or 401 is required when pinging a Depend(verify_jwt) route with no headers
             response = client.get("/protected_endpoint")
             assert response.status_code == 401
-            assert "Not authenticated" in response.json().get("detail", "")
+            assert "Token invalide" in response.json().get("detail", "")
         finally:
             if original:
                 app.dependency_overrides[verify_jwt] = original

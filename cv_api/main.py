@@ -8,7 +8,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from database import engine, init_db
+from database import engine
 from src.cvs.router import router
 from logger import setup_logging, LoggingMiddleware
 
@@ -29,10 +29,8 @@ Instrumentator().instrument(app).expose(app)
 import asyncio
 import os
 
-@app.on_event("startup")
-async def startup_event():
-    if not os.getenv("TESTING"):
-        asyncio.create_task(asyncio.to_thread(init_db))
+import logging
+
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)

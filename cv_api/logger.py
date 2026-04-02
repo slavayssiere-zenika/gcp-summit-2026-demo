@@ -44,7 +44,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         
         try:
             response = await call_next(request)
-            if request.url.path not in skip_paths:
+            if not request.url.path.endswith(("/health", "/metrics", "/docs", "/openapi.json")):
                 process_time = time.time() - start_time
                 logger.info(
                     "HTTP Request Processed",
