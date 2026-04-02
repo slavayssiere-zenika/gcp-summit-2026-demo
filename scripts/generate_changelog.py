@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 
-apis = ["agent_api", "competencies_api", "cv_api", "items_api", "prompts_api", "users_api"]
+apis = ["agent_api", "competencies_api", "cv_api", "drive_api", "items_api", "prompts_api", "users_api"]
 table_rows = []
 
 for api in apis:

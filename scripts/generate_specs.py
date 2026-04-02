@@ -2,7 +2,7 @@ import subprocess
 import os
 import sys
 
-apis = ["agent_api", "competencies_api", "cv_api", "items_api", "prompts_api", "users_api"]
+apis = ["agent_api", "competencies_api", "cv_api", "drive_api", "items_api", "prompts_api", "users_api"]
 
 extractor_code = """
 import os
