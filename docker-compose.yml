@@ -10,7 +10,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=users-api
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
@@ -46,7 +46,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=items-api
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/items
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
@@ -83,7 +83,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=competencies-api
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/competencies
       - REDIS_URL=redis://redis:6379/3
       - USERS_API_URL=http://users_api:8000
       - SECRET_KEY=${SECRET_KEY}
@@ -120,7 +120,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=cv-api
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/cv
       - REDIS_URL=redis://redis:6379/4
       - USERS_API_URL=http://users_api:8000
       - COMPETENCIES_API_URL=http://competencies_api:8003
@@ -157,6 +157,8 @@ services:
       dockerfile: agent_api/Dockerfile
     container_name: agent-api
     hostname: agent-api
+    volumes:
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_MODEL=gemini-2.5-flash
@@ -167,7 +169,7 @@ services:
       - COMPETENCIES_MCP_URL=http://competencies_mcp:8000
       - CV_MCP_URL=http://cv_mcp:8000
       - LOKI_MCP_URL=http://loki_mcp:8080/sse
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/1
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=agent-api
@@ -202,7 +204,7 @@ services:
     container_name: frontend
     hostname: frontend
     ports:
-      - "8002:80"
+      - "8002:8080"
     depends_on:
       - agent-api
       - users_api
@@ -365,7 +367,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=prompts_api
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mydb
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/prompts
       - REDIS_URL=redis://redis:6379/5
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}

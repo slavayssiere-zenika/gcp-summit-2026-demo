@@ -84,6 +84,15 @@ COMPETENCIES_ZENIKA_TREE = {
     }
 }
 
+def get_db_url(dbname):
+    base_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+    if "?" in base_url:
+        uri, params = base_url.split("?")
+        uri = uri.rsplit("/", 1)[0] + "/" + dbname
+        return f"{uri}?{params}"
+    else:
+        return base_url.rsplit("/", 1)[0] + "/" + dbname
+
 def random_string(length=8):
     return ''.join(random.choices(string.ascii_lowercase, k=length))
 
@@ -189,7 +198,7 @@ def main():
     print("🚀 Starting Zenika Seed Data Process...\n")
 
     print("🔑 Connecting to DB recursively to insert Root Admin...")
-    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mydb")
+    db_url = get_db_url("users")
     try:
         import psycopg2
         conn = psycopg2.connect(db_url)
@@ -266,7 +275,7 @@ def main():
     print("\n🔄 Upgrading Admin Category Permissions dynamically via SQL...")
     try:
         import psycopg2
-        db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mydb")
+        db_url = get_db_url("users")
         conn = psycopg2.connect(db_url)
         cur = conn.cursor()
         ids_str = ",".join(map(str, category_ids))
@@ -310,7 +319,7 @@ def main():
     print("\n🛠️ Seeding Competencies (Cleaning legacy flats...)")
     try:
         import psycopg2
-        db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mydb")
+        db_url = get_db_url("competencies")
         conn = psycopg2.connect(db_url)
         cur = conn.cursor()
         cur.execute("TRUNCATE TABLE competencies CASCADE;")

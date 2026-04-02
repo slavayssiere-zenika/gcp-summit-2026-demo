@@ -29,14 +29,9 @@ resource "google_alloydb_instance" "primary" {
   machine_config {
     cpu_count = var.alloydb_cpu
   }
-}
 
-resource "google_alloydb_user" "iam_users" {
-  for_each = toset(["users", "items", "competencies", "cv", "prompts"])
-  cluster  = google_alloydb_cluster.main.name
-  # AlloyDB exige que l'on retire le suffixe '.gserviceaccount.com' pour les Service Accounts IAM
-  user_id    = replace(google_service_account.cr_sa[each.key].email, ".gserviceaccount.com", "")
-  user_type  = "ALLOYDB_IAM_USER"
-  depends_on = [google_alloydb_instance.primary]
+  database_flags = {
+    "alloydb.iam_authentication" = "on"
+  }
 }
 

@@ -1,0 +1,14 @@
+2026-04-02 14:42:52,998 DEBUG    root            Loaded Command Group: ['gcloud', 'auth']
+2026-04-02 14:42:52,999 DEBUG    root            Loaded Command Group: ['gcloud', 'auth', 'application_default']
+2026-04-02 14:42:53,038 DEBUG    root            Loaded Command Group: ['gcloud', 'auth', 'application-default', 'login']
+2026-04-02 14:42:53,040 DEBUG    root            Running [gcloud.auth.application-default.login] with arguments: []
+2026-04-02 14:42:53,040 DEBUG    root            Failed to read GCE cache file: [Errno 2] No such file or directory: '/Users/sebastien.lavayssiere/Code/test-open-code/.gcloud_config/gce'
+2026-04-02 14:42:53,072 DEBUG    root            Failed to check metadata server: <urlopen error [Errno 8] nodename nor servname provided, or not known>
+2026-04-02 14:42:53,072 DEBUG    root            On GCE from server: False
+2026-04-02 14:42:53,257 DEBUG    root            On GCE from memory cache: False
+2026-04-02 14:42:56,740 DEBUG    requests_oauthlib.oauth2_session Generated new state NJVc46Qo5Dh6sldDHw9bJ44aJSAoib.
+2026-04-02 14:42:59,217 INFO     ___FILE_ONLY___ Your browser has been opened to visit:
+
+    https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A8085%2F&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fsqlservice.login&state=NJVc46Qo5Dh6sldDHw9bJ44aJSAoib&access_type=offline&code_challenge=G-3XH7i7lz4hKEzcEzWjVCMsNTdT_R04IFvF9SwfUyg&code_challenge_method=S256
+
+

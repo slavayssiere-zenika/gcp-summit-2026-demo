@@ -36,3 +36,86 @@ resource "google_compute_subnetwork" "proxy_only" {
   purpose       = "REGIONAL_MANAGED_PROXY"
   role          = "ACTIVE"
 }
+
+# =========================================================
+# FIREWALL RULES (ZERO-TRUST EGRESS FOR CLOUD RUN)
+# =========================================================
+
+# 1. Règle "Deny All" Egress pour toutes les instances tagguées "cr-egress".
+resource "google_compute_firewall" "deny_all_egress" {
+  name      = "fw-deny-egress-${terraform.workspace}"
+  network   = google_compute_network.main.id
+  direction = "EGRESS"
+  priority  = 65534
+
+  deny {
+    protocol = "all"
+  }
+
+  destination_ranges = ["0.0.0.0/0"]
+  target_tags        = ["cr-egress"]
+}
+
+# 2. Règle "Allow" Egress vers AlloyDB (Port 5432).
+resource "google_compute_firewall" "allow_alloydb_egress" {
+  name      = "fw-allow-alloydb-egress-${terraform.workspace}"
+  network   = google_compute_network.main.id
+  direction = "EGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5432"]
+  }
+
+  destination_ranges = ["${google_compute_global_address.private_ip_alloc.address}/${google_compute_global_address.private_ip_alloc.prefix_length}"]
+  target_tags        = ["cr-egress"]
+}
+
+# 2.bis. Règle "Allow" Ingress depuis les APIs vers AlloyDB (Port 5432).
+resource "google_compute_firewall" "allow_alloydb_ingress" {
+  name      = "fw-allow-alloydb-ingress-${terraform.workspace}"
+  network   = google_compute_network.main.id
+  direction = "INGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5432"]
+  }
+
+  # Le traffic provient du subnet principal (où Cloud Run s'attache via Direct VPC Egress)
+  source_ranges = [google_compute_subnetwork.main.ip_cidr_range]
+}
+
+# 3. Règle "Allow" Egress vers le Load Balancer Interne (Port 80) / Reste du VPC.
+resource "google_compute_firewall" "allow_ilb_egress" {
+  name      = "fw-allow-ilb-egress-${terraform.workspace}"
+  network   = google_compute_network.main.id
+  direction = "EGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80"]
+  }
+
+  destination_ranges = [google_compute_subnetwork.main.ip_cidr_range]
+  target_tags        = ["cr-egress"]
+}
+
+# 4. Règle "Allow" Egress vers Redis (Port 6379).
+resource "google_compute_firewall" "allow_redis_egress" {
+  name      = "fw-allow-redis-egress-${terraform.workspace}"
+  network   = google_compute_network.main.id
+  direction = "EGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["6379"]
+  }
+
+  destination_ranges = ["${google_compute_global_address.private_ip_alloc.address}/${google_compute_global_address.private_ip_alloc.prefix_length}"]
+  target_tags        = ["cr-egress"]
+}

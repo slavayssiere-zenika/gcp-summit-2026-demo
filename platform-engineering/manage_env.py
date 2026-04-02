@@ -68,8 +68,8 @@ def set_workspace(env):
 
 def import_persistent_resource(env, address, resource_id):
     # Check if resource is in state, silence output to avoid confusing users on first deploy
-    state_res = subprocess.run(["terraform", "state", "list", address], cwd=TERRAFORM_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if state_res.returncode != 0:
+    state_res = subprocess.run(["terraform", "state", "list", address], cwd=TERRAFORM_DIR, capture_output=True, text=True)
+    if state_res.returncode != 0 or address not in state_res.stdout:
         print(f"[*] Checking if persistent resource {address} exists in GCP to import it...")
         import_res = subprocess.run(["terraform", "import", address, resource_id], cwd=TERRAFORM_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if import_res.returncode == 0:
@@ -90,9 +90,25 @@ def deploy(env, base_domain, project_id, config, force=False):
     import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/{dns_name}/A")
     import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/api.{dns_name}/A")
 
+    # Cloud Run API import fallback in case previous deploy timed out (container crash loop) leaving orphaned GCP services
+    region = config.get("region", "europe-west1")
+    import_persistent_resource(env, "google_cloud_run_v2_service.prompts_api", f"projects/{project_id}/locations/{region}/services/prompts-api-{env}")
+    import_persistent_resource(env, "google_cloud_run_v2_service.agent_api", f"projects/{project_id}/locations/{region}/services/agent-api-{env}")
+    for key in ["users", "items", "competencies", "cv"]:
+        import_persistent_resource(env, f'google_cloud_run_v2_service.mcp_services["{key}"]', f"projects/{project_id}/locations/{region}/services/{key}-api-{env}")
+
     if force:
         print("[!] FORCE MODE: Bypassing prevent_destroy logic to allow replacements.")
         toggle_prevent_destroy(disable=True)
+
+    print("[*] Pre-Deploy: Tainting AlloyDB IAM users to bypass immutable user_type error...")
+    for user_key in ["users", "items", "competencies", "cv", "prompts"]:
+        subprocess.run(
+            ["terraform", "taint", f'google_alloydb_user.iam_users["{user_key}"]'],
+            cwd=TERRAFORM_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
 
     cmd = ["terraform", "apply"]
     try:

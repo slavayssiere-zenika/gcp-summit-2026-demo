@@ -13,6 +13,7 @@ from src.items.router import router
 from database import engine, init_db
 from src.items.router import router
 import time
+from logger import setup_logging, LoggingMiddleware
 
 
 provider = TracerProvider(
@@ -26,16 +27,22 @@ trace.set_tracer_provider(provider)
 
 trace.set_tracer_provider(provider)
 
+setup_logging()
 app = FastAPI(title="Items API")
+app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
 
 
+import asyncio
+import os
+
 @app.on_event("startup")
 async def startup_event():
-    init_db()
+    if not os.getenv("TESTING"):
+        asyncio.create_task(asyncio.to_thread(init_db))
 
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)
 
 app.include_router(router)

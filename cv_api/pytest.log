@@ -9,8 +9,12 @@ test_main.py .......                                                     [ 63%]
 test_mcp_tools.py ....                                                   [100%]
 
 =============================== warnings summary ===============================
-main.py:26
-  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/main.py:26: DeprecationWarning: 
+../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+main.py:32
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/main.py:32: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
   
           Read more about it in the
@@ -32,7 +36,100 @@ main.py:26
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 11 passed, 2 warnings in 2.23s ========================
-Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 0.94s.
-Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 3.57s.
-Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE
+======================== 11 passed, 3 warnings in 2.48s ========================
+--- Logging error ---
+Traceback (most recent call last):
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
+    self._client.Export(
+    ~~~~~~~~~~~~~~~~~~~^
+        request=self._translate_data(data),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        metadata=self._headers,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        timeout=deadline_sec - time(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/grpc/_channel.py", line 1159, in __call__
+    return _end_unary_response_blocking(state, call, False, None)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/grpc/_channel.py", line 990, in _end_unary_response_blocking
+    raise _InactiveRpcError(state)  # pytype: disable=not-instantiable
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py", line 1154, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: I/O operation on closed file.
+Call stack:
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1014, in _bootstrap
+    self._bootstrap_inner()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 994, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/sdk/_shared_internal/__init__.py", line 168, in worker
+    self._export(BatchExportStrategy.EXPORT_ALL)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/sdk/_shared_internal/__init__.py", line 179, in _export
+    self._exporter.export(
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/trace_exporter/__init__.py", line 146, in export
+    return self._export(spans)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
+    logger.warning(
+Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.125232877712507)
+--- Logging error ---
+Traceback (most recent call last):
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
+    self._client.Export(
+    ~~~~~~~~~~~~~~~~~~~^
+        request=self._translate_data(data),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        metadata=self._headers,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        timeout=deadline_sec - time(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/grpc/_channel.py", line 1159, in __call__
+    return _end_unary_response_blocking(state, call, False, None)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/grpc/_channel.py", line 990, in _end_unary_response_blocking
+    raise _InactiveRpcError(state)  # pytype: disable=not-instantiable
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused"}"
+>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py", line 1154, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: I/O operation on closed file.
+Call stack:
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1014, in _bootstrap
+    self._bootstrap_inner()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 994, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/sdk/_shared_internal/__init__.py", line 168, in worker
+    self._export(BatchExportStrategy.EXPORT_ALL)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/sdk/_shared_internal/__init__.py", line 179, in _export
+    self._exporter.export(
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/trace_exporter/__init__.py", line 146, in export
+    return self._export(spans)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 416, in _export
+    logger.error(
+Message: 'Failed to export %s to %s, error code: %s'
+Arguments: ('traces', 'localhost:4317', <StatusCode.UNAVAILABLE: (14, 'unavailable')>)
