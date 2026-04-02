@@ -17,7 +17,7 @@ from opentelemetry.trace import SpanKind
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS
+from agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS, DRIVE_TOOLS
 import inspect
 from logger import setup_logging, LoggingMiddleware
 
@@ -258,6 +258,13 @@ async def mcp_registry():
                 "status": "connected",
                 "version": "1.0",
                 "tools": get_tool_metadata(CV_TOOLS)
+            },
+            {
+                "id": "drive",
+                "name": "Google Drive Sync Agent",
+                "status": "connected",
+                "version": "1.0",
+                "tools": get_tool_metadata(DRIVE_TOOLS)
             }
         ]
     }

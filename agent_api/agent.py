@@ -4,8 +4,7 @@ import logging
 from typing import Optional
 from google.genai import types
 from google.adk.agents import Agent
-
-from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp
+from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp, get_drive_mcp
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +83,63 @@ CV_TOOLS = [
     analyze_cv,
     search_best_candidates,
     recalculate_competencies_tree
+]
+
+# --- Drive Tools ---
+
+async def add_drive_folder(google_folder_id: str, tag: str) -> dict:
+    """
+    Ajoute un nouveau répertoire Google Drive à la liste des dossiers scruptés pour extraire automatiquement les CVs.
+    
+    Args:
+        google_folder_id (str): L'ID Google Drive du répertoire cible.
+        tag (str): Tag business associé (ex: 'Paris', 'Data').
+    """
+    mcp = await get_drive_mcp()
+    result = await mcp.call_tool("add_drive_folder", {"google_folder_id": google_folder_id, "tag": tag})
+    return format_mcp_result(result, "drive")
+
+async def list_drive_folders() -> dict:
+    """
+    Liste les dossiers Google Drive actuellement suivis par la plateforme Zenika.
+    """
+    mcp = await get_drive_mcp()
+    result = await mcp.call_tool("list_drive_folders", {})
+    return format_mcp_result(result, "drive_folders")
+
+async def delete_drive_folder(folder_id: int) -> dict:
+    """
+    Supprime un dossier du suivi (arrêt de scanner les CVs dans ce répertoire).
+    
+    Args:
+        folder_id (int): L'identifiant interne en base de données du dossier à supprimer.
+    """
+    mcp = await get_drive_mcp()
+    result = await mcp.call_tool("delete_drive_folder", {"folder_id": folder_id})
+    return format_mcp_result(result, "drive")
+
+async def get_drive_status() -> dict:
+    """
+    Consulte le statut de synchronisation Drive (statistiques de documents parsés, en erreur, etc).
+    """
+    mcp = await get_drive_mcp()
+    result = await mcp.call_tool("get_drive_status", {})
+    return format_mcp_result(result, "drive_status")
+
+async def trigger_drive_sync() -> dict:
+    """
+    Déclenche manuellement une synchronisation planifiée pour scruter les changements (delta) sur tous les dossiers configurés.
+    """
+    mcp = await get_drive_mcp()
+    result = await mcp.call_tool("trigger_drive_sync", {})
+    return format_mcp_result(result, "drive_sync")
+
+DRIVE_TOOLS = [
+    add_drive_folder,
+    list_drive_folders,
+    delete_drive_folder,
+    get_drive_status,
+    trigger_drive_sync
 ]
 
 # --- Users Tools ---
@@ -529,7 +585,7 @@ async def create_agent():
         ),
         instruction=instruction_text,
         description="Assistant IA pour la gestion des utilisateurs, items et compétences. Et analyse des logs via Loki ou GCP.",
-        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *log_tools]
+        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *DRIVE_TOOLS, *log_tools]
     )
     
     return agent

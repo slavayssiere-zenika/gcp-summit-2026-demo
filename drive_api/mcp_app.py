@@ -4,9 +4,10 @@ import os
 import uvicorn
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from mcp_server import list_tools, call_tool
+from mcp_server import list_tools, call_tool, mcp_auth_header_var
 
-app = FastAPI(title="CV Analysis MCP Sidecar")
+app = FastAPI(title="Drive MCP Sidecar (HTTP Standard)")
+
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health")
 
 class ToolCallRequest(BaseModel):
@@ -22,7 +23,6 @@ async def get_tools():
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from mcp_server import mcp_auth_header_var
         mcp_auth_header_var.set(auth_header)
     
     try:
@@ -35,7 +35,7 @@ async def execute_tool(request: ToolCallRequest, http_request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "cv-mcp"}
+    return {"status": "healthy", "service": "drive-mcp", "transport": "http"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

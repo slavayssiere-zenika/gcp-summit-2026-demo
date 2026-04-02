@@ -41,4 +41,4 @@ test_integration.py::test_get_me
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 43 passed, 13 warnings in 4.36s ========================
+======================= 43 passed, 13 warnings in 4.42s ========================

@@ -120,17 +120,19 @@ users_mcp_client: Optional[MCPHttpClient] = None
 items_mcp_client: Optional[MCPHttpClient] = None
 competencies_mcp_client: Optional[MCPHttpClient] = None
 cv_mcp_client: Optional[MCPHttpClient] = None
+drive_mcp_client: Optional[MCPHttpClient] = None
 loki_mcp_client: Optional[MCPSseClient] = None
 _mcp_lock = threading.Lock()
 
 def init_mcp_clients():
-    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client
+    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client
     import os
     
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))
     items_url = os.getenv("ITEMS_MCP_URL", os.getenv("ITEMS_API_URL", "http://items_mcp:8000"))
     comps_url = os.getenv("COMPETENCIES_MCP_URL", os.getenv("COMPETENCIES_API_URL", "http://competencies_mcp:8000"))
     cv_url = os.getenv("CV_MCP_URL", os.getenv("CV_API_URL", "http://cv_mcp:8000"))
+    drive_url = os.getenv("DRIVE_MCP_URL", "http://drive_mcp:8000")
     loki_url = os.getenv("LOKI_MCP_URL", "http://loki_mcp:8080/sse")
 
     with _mcp_lock:
@@ -143,6 +145,8 @@ def init_mcp_clients():
             competencies_mcp_client = MCPHttpClient(comps_url)
         if cv_mcp_client is None:
             cv_mcp_client = MCPHttpClient(cv_url)
+        if drive_mcp_client is None:
+            drive_mcp_client = MCPHttpClient(drive_url)
         if loki_mcp_client is None:
             loki_mcp_client = MCPSseClient(loki_url)
 
@@ -165,3 +169,7 @@ async def get_loki_mcp() -> MCPSseClient:
 async def get_cv_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return cv_mcp_client
+
+async def get_drive_mcp() -> MCPHttpClient:
+    init_mcp_clients()
+    return drive_mcp_client

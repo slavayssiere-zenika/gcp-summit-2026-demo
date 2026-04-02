@@ -98,6 +98,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                 response_schema={
                     "type": "object",
                     "properties": {
+                        "is_cv": {"type": "boolean"},
                         "first_name": {"type": "string"},
                         "last_name": {"type": "string"},
                         "email": {"type": "string"},
@@ -113,7 +114,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                             }
                         }
                     },
-                    "required": ["first_name", "last_name", "email", "competencies"]
+                    "required": ["is_cv", "first_name", "last_name", "email", "competencies"]
                 }
             )
         )
@@ -121,6 +122,11 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
         # LLM returns a JSON string matching schema
         import json
         structured_cv = json.loads(parsed_data)
+        
+        if not structured_cv.get("is_cv", False):
+            raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
     email = structured_cv["email"]
