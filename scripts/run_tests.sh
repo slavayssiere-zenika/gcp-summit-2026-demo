@@ -5,7 +5,7 @@ echo "Démarrage des tests en parallèle..."
 
 pids=""
 
-for api in agent_api competencies_api cv_api items_api prompts_api users_api; do
+for api in agent_api competencies_api cv_api drive_api items_api prompts_api users_api; do
     echo "Lancement des tests pour $api..."
     (
         cd "$api"

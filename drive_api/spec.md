@@ -51,9 +51,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **POST** `/cvs/import` : Import And Analyze Cv
-- **GET** `/cvs/search` : Search Candidates
-- **GET** `/cvs/user/{user_id}` : Get User Cv
-- **POST** `/cvs/recalculate_tree` : Recalculate Competencies Tree
+- **GET** `/drive-api/folders` : List Folders
+- **POST** `/drive-api/folders` : Add Folder
+- **DELETE** `/drive-api/folders/{folder_id}` : Delete Folder
+- **GET** `/drive-api/status` : Get Status
+- **POST** `/drive-api/sync` : Trigger Sync
 - **GET** `/health` : Health
 - **GET** `/spec` : Get Spec
