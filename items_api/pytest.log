@@ -10,8 +10,12 @@ test_main.py .......                                                     [ 44%]
 test_mcp_tools.py ....................                                   [100%]
 
 =============================== warnings summary ===============================
-main.py:33
-  /Users/sebastien.lavayssiere/Code/test-open-code/items_api/main.py:33: DeprecationWarning: 
+../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+main.py:39
+  /Users/sebastien.lavayssiere/Code/test-open-code/items_api/main.py:39: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
   
           Read more about it in the
@@ -37,4 +41,4 @@ test_integration.py: 15 warnings
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 36 passed, 17 warnings in 0.99s ========================
+======================= 36 passed, 18 warnings in 1.12s ========================

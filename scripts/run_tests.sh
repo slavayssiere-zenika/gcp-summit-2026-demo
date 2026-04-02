@@ -9,7 +9,7 @@ for api in agent_api competencies_api cv_api items_api prompts_api users_api; do
     echo "Lancement des tests pour $api..."
     (
         cd "$api"
-        PYTHONPATH=. ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1
+        PYTHONPATH=. TESTING=1 ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1
     ) &
     pids="$pids $!"
 done

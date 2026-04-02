@@ -5,3 +5,11 @@ cloudrun_min_instances: 2
 cloudrun_max_instances: 50
 alloydb_cpu: 8
 waf_rate_limit: 10000
+
+image_users: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/users_api:latest"
+image_items: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/items_api:latest"
+image_competencies: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/competencies_api:latest"
+image_cv: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/cv_api:latest"
+image_prompts: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/prompts_api:latest"
+image_agent: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_api:latest"
+admin_user: "sebastien.lavayssiere@zenika.com"

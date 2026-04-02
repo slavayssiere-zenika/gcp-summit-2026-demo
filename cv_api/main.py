@@ -10,6 +10,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from database import engine, init_db
 from src.cvs.router import router
+from logger import setup_logging, LoggingMiddleware
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -20,14 +21,20 @@ provider = TracerProvider(
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
+setup_logging()
 app = FastAPI(title="CV Analysis API")
+app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
+
+import asyncio
+import os
 
 @app.on_event("startup")
 async def startup_event():
-    init_db()
+    if not os.getenv("TESTING"):
+        asyncio.create_task(asyncio.to_thread(init_db))
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)
 
 app.include_router(router)

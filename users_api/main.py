@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, init_db
 from src.users.router import router, auth_router
 import time
+from logger import setup_logging, LoggingMiddleware
 
 
 provider = TracerProvider(
@@ -29,7 +30,9 @@ tracer = trace.get_tracer(__name__)
 
 tracer = trace.get_tracer(__name__)
 
+setup_logging()
 app = FastAPI(title="Users API")
+app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(
@@ -41,12 +44,15 @@ app.add_middleware(
 )
 
 
+import asyncio
+import os
+
 @app.on_event("startup")
 async def startup_event():
-    init_db()
+    if not os.getenv("TESTING"):
+        asyncio.create_task(asyncio.to_thread(init_db))
 
-
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)
 
 app.include_router(auth_router)

@@ -22,6 +22,11 @@ variable "parent_zone_name" {
   default     = "zenika-slavayssiere-fr"
 }
 
+variable "admin_user" {
+  description = "Utilisateur administrateur principal"
+  type        = string
+}
+
 variable "cloudrun_min_instances" {
   description = "Nombre minimum d'instances Cloud Run"
   type        = number
@@ -40,4 +45,34 @@ variable "alloydb_cpu" {
 variable "waf_rate_limit" {
   description = "Limite de requêtes par IP pour le pare-feu"
   type        = number
+}
+
+variable "image_users" {
+  description = "Image for Users API container"
+  type        = string
+}
+
+variable "image_items" {
+  description = "Image for Items API container"
+  type        = string
+}
+
+variable "image_competencies" {
+  description = "Image for Competencies API container"
+  type        = string
+}
+
+variable "image_cv" {
+  description = "Image for CV API container"
+  type        = string
+}
+
+variable "image_prompts" {
+  description = "Image for Prompts API container"
+  type        = string
+}
+
+variable "image_agent" {
+  description = "Image for Agent API container"
+  type        = string
 }

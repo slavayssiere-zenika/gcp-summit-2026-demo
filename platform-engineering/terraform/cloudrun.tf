@@ -7,12 +7,7 @@ data "google_secret_manager_secret" "gemini_api_key" {
   secret_id = "gemini-api-key"
 }
 
-# Image fallback (à surcharger par CI/CD pour déployer la vraie image)
-# En Terraform on déploie souvent une infra avec une image temporaire type "hello-world"
-# qui est ensuite mise à jour par les pipelines.
-variable "default_image" {
-  default = "us-docker.pkg.dev/cloudrun/container/hello"
-}
+
 
 # Service Account mutualisé pour simplifier, ou un par service
 resource "google_service_account" "cr_sa" {
@@ -25,6 +20,12 @@ resource "google_service_account" "cr_sa" {
 # ==============================================================
 locals {
   mcp_services = ["users", "items", "competencies", "cv"]
+  mcp_images = {
+    "users"        = var.image_users
+    "items"        = var.image_items
+    "competencies" = var.image_competencies
+    "cv"           = var.image_cv
+  }
 }
 
 resource "google_cloud_run_v2_service" "mcp_services" {
@@ -41,24 +42,20 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       max_instance_count = var.cloudrun_max_instances
     }
 
-    annotations = {
-      "run.googleapis.com/otel-config" = google_secret_manager_secret_version.otel_config_version.version
-    }
-
-
     vpc_access {
       network_interfaces {
         network    = google_compute_network.main.id
         subnetwork = google_compute_subnetwork.main.id
+        tags       = ["cr-egress"]
       }
     }
 
     # Conteneur principal (API)
     containers {
       name    = "api"
-      image   = var.default_image # géré par CI
-      command = ["uvicorn"]
-      args    = ["main:app", "--host", "0.0.0.0", "--port", "8080"]
+      image   = local.mcp_images[each.key] # géré par Terraform
+      command = ["python"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
       ports {
         container_port = 8080 # Le trafic Cloud Run arrive ici, GCP injecte le $PORT=8080 automatiquement
       }
@@ -87,11 +84,15 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
       env {
         name  = "DATABASE_URL"
-        value = "postgresql://${replace(google_service_account.cr_sa[each.key].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/postgres"
+        value = "postgresql://${replace(google_service_account.cr_sa[each.key].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/${each.key}?sslmode=require"
       }
       env {
         name  = "USE_IAM_AUTH"
         value = "true"
+      }
+      env {
+        name  = "REDIS_URL"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
       }
       env {
         name = "SECRET_KEY"
@@ -117,16 +118,25 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         }
       }
 
-      env {
-        name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
-        value = "http://localhost:4317"
+      # Alimentation exclusive pour l'API CV responsable des embeddings RAG
+      dynamic "env" {
+        for_each = each.key == "cv" ? [1] : []
+        content {
+          name = "GOOGLE_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = data.google_secret_manager_secret.gemini_api_key.secret_id
+              version = "1"
+            }
+          }
+        }
       }
     }
 
     # Conteneur Sidecar (MCP)
     containers {
       name    = "mcp"
-      image   = var.default_image # géré par CI
+      image   = local.mcp_images[each.key] # géré par Terraform
       command = ["python"]
       args    = ["mcp_app.py"]
       startup_probe {
@@ -136,6 +146,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         failure_threshold     = 5
         http_get {
           path = "/health"
+          port = 8081
         }
       }
       liveness_probe {
@@ -145,6 +156,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         failure_threshold     = 3
         http_get {
           path = "/health"
+          port = 8081
         }
       }
       resources {
@@ -162,50 +174,15 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         value = "http://localhost:8080" # L'API est sur localhost nativement
       }
     }
-
-    # Conteneur Sidecar (OTel Collector)
-    containers {
-      name    = "otel-collector"
-      image   = "otel/opentelemetry-collector-contrib:latest"
-      command = ["/otelcol-contrib"]
-      args    = ["--config=/etc/otel/otel-collector.yaml"]
-      resources {
-        limits = {
-          memory = "256Mi"
-        }
-      }
-
-      volume_mounts {
-        name       = "otel-config"
-        mount_path = "/etc/otel"
-      }
-    }
-
-    volumes {
-      name = "otel-config"
-      secret {
-        secret = google_secret_manager_secret.otel_config.secret_id
-        items {
-          version = "latest"
-          path    = "otel-collector.yaml"
-        }
-      }
-    }
   }
 
-  lifecycle {
-    ignore_changes = [
-      template[0].containers[0].image,
-      template[0].containers[1].image,
-      template[0].containers[2].image
-    ]
-  }
+
 
   depends_on = [
     google_secret_manager_secret_iam_member.jwt_secret_access,
     google_secret_manager_secret_iam_member.gemini_secret_access,
     google_secret_manager_secret_iam_member.admin_password_access,
-    google_secret_manager_secret_iam_member.otel_config_access
+    null_resource.run_db_init_job
   ]
 }
 
@@ -223,20 +200,18 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances
     }
-    annotations = {
-      "run.googleapis.com/otel-config" = google_secret_manager_secret_version.otel_config_version.version
-    }
     vpc_access {
       network_interfaces {
         network    = google_compute_network.main.id
         subnetwork = google_compute_subnetwork.main.id
+        tags       = ["cr-egress"]
       }
     }
     containers {
       name    = "api"
-      image   = var.default_image
-      command = ["uvicorn"]
-      args    = ["src.main:app", "--host", "0.0.0.0", "--port", "8080"]
+      image   = var.image_prompts
+      command = ["python"]
+      args    = ["-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
       ports {
         container_port = 8080
       }
@@ -268,17 +243,21 @@ resource "google_cloud_run_v2_service" "prompts_api" {
         value_source {
           secret_key_ref {
             secret  = data.google_secret_manager_secret.gemini_api_key.secret_id
-            version = "latest"
+            version = "1"
           }
         }
       }
       env {
         name  = "DATABASE_URL"
-        value = "postgresql://${replace(google_service_account.cr_sa["prompts"].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/postgres"
+        value = "postgresql://${replace(google_service_account.cr_sa["prompts"].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/prompts?sslmode=require"
       }
       env {
         name  = "USE_IAM_AUTH"
         value = "true"
+      }
+      env {
+        name  = "REDIS_URL"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
       }
       env {
         name = "SECRET_KEY"
@@ -289,54 +268,16 @@ resource "google_cloud_run_v2_service" "prompts_api" {
           }
         }
       }
-
-      env {
-        name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
-        value = "http://localhost:4317"
-      }
     }
 
-    # Conteneur Sidecar (OTel Collector)
-    containers {
-      name    = "otel-collector"
-      image   = "otel/opentelemetry-collector-contrib:latest"
-      command = ["/otelcol-contrib"]
-      args    = ["--config=/etc/otel/otel-collector.yaml"]
-      resources {
-        limits = {
-          memory = "256Mi"
-        }
-      }
-
-      volume_mounts {
-        name       = "otel-config"
-        mount_path = "/etc/otel"
-      }
-    }
-
-    volumes {
-      name = "otel-config"
-      secret {
-        secret = google_secret_manager_secret.otel_config.secret_id
-        items {
-          version = "latest"
-          path    = "otel-collector.yaml"
-        }
-      }
-    }
   }
 
-  lifecycle {
-    ignore_changes = [
-      template[0].containers[0].image,
-      template[0].containers[1].image
-    ]
-  }
+
 
   depends_on = [
     google_secret_manager_secret_iam_member.jwt_secret_access,
     google_secret_manager_secret_iam_member.gemini_secret_access,
-    google_secret_manager_secret_iam_member.otel_config_access
+    null_resource.run_db_init_job
   ]
 }
 
@@ -351,20 +292,18 @@ resource "google_cloud_run_v2_service" "agent_api" {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances
     }
-    annotations = {
-      "run.googleapis.com/otel-config" = google_secret_manager_secret_version.otel_config_version.version
-    }
     vpc_access {
       network_interfaces {
         network    = google_compute_network.main.id
         subnetwork = google_compute_subnetwork.main.id
+        tags       = ["cr-egress"]
       }
     }
     containers {
       name    = "api"
-      image   = var.default_image
-      command = ["uvicorn"]
-      args    = ["agent_api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+      image   = var.image_agent
+      command = ["python"]
+      args    = ["-m", "uvicorn", "agent_api.main:app", "--host", "0.0.0.0", "--port", "8080"]
       ports {
         container_port = 8080
       }
@@ -396,7 +335,7 @@ resource "google_cloud_run_v2_service" "agent_api" {
         value_source {
           secret_key_ref {
             secret  = data.google_secret_manager_secret.gemini_api_key.secret_id
-            version = "latest"
+            version = "1"
           }
         }
       }
@@ -428,6 +367,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
         value = var.project_id
       }
       env {
+        name  = "REDIS_URL"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/1"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -436,54 +379,16 @@ resource "google_cloud_run_v2_service" "agent_api" {
           }
         }
       }
-
-      env {
-        name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
-        value = "http://localhost:4317"
-      }
     }
 
-    # Conteneur Sidecar (OTel Collector)
-    containers {
-      name    = "otel-collector"
-      image   = "otel/opentelemetry-collector-contrib:latest"
-      command = ["/otelcol-contrib"]
-      args    = ["--config=/etc/otel/otel-collector.yaml"]
-      resources {
-        limits = {
-          memory = "256Mi"
-        }
-      }
-
-      volume_mounts {
-        name       = "otel-config"
-        mount_path = "/etc/otel"
-      }
-    }
-
-    volumes {
-      name = "otel-config"
-      secret {
-        secret = google_secret_manager_secret.otel_config.secret_id
-        items {
-          version = "latest"
-          path    = "otel-collector.yaml"
-        }
-      }
-    }
   }
 
-  lifecycle {
-    ignore_changes = [
-      template[0].containers[0].image,
-      template[0].containers[1].image
-    ]
-  }
+
 
   depends_on = [
     google_secret_manager_secret_iam_member.jwt_secret_access,
     google_secret_manager_secret_iam_member.gemini_secret_access,
-    google_secret_manager_secret_iam_member.otel_config_access
+    null_resource.run_db_init_job
   ]
 }
 
@@ -512,14 +417,6 @@ resource "google_secret_manager_secret_iam_member" "admin_password_access" {
   role      = "roles/secretmanager.secretAccessor"
   # Uniquement l'API Users a besoin d'accéder à ce mot de passe de Boot.
   member = "serviceAccount:${google_service_account.cr_sa["users"].email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "otel_config_access" {
-  for_each  = google_service_account.cr_sa
-  project   = google_secret_manager_secret.otel_config.project
-  secret_id = google_secret_manager_secret.otel_config.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${each.value.email}"
 }
 
 # ==============================================================

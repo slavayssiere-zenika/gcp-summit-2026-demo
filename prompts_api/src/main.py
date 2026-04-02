@@ -16,10 +16,13 @@ from src.database import engine, Base
 from src.prompts import router
 
 # 1. Setup DB Schema
-Base.metadata.create_all(bind=engine)
+# Deferring schema creation to async startup event to speed up uvicorn boot
 
 # 2. Initialize FastAPI
+from src.logger import setup_logging, LoggingMiddleware
+setup_logging()
 app = FastAPI(title="Prompts API", version="1.0.0")
+app.add_middleware(LoggingMiddleware)
 
 # 3. Setup CORS
 app.add_middleware(
@@ -29,6 +32,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import asyncio
+import os
+@app.on_event("startup")
+async def startup_event():
+    if not os.getenv("TESTING"):
+        asyncio.create_task(asyncio.to_thread(Base.metadata.create_all, bind=engine))
 
 # 4. OpenTelemetry Configuration
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "prompts-api")
@@ -49,7 +59,7 @@ otlp_exporter = OTLPSpanExporter(
 span_processor = BatchSpanProcessor(otlp_exporter)
 provider.add_span_processor(span_processor)
 
-FastAPIInstrumentor.instrument_app(app)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)
 
 # 5. Prometheus Instrumentator

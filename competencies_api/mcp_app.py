@@ -11,7 +11,7 @@ from mcp_server import list_tools, call_tool
 app = FastAPI(title="Competencies MCP Sidecar (HTTP Standard)")
 
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-FastAPIInstrumentor.instrument_app(app)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health")
 
 class ToolCallRequest(BaseModel):
     name: str

@@ -19,6 +19,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from agent_api.agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS
 import inspect
+from logger import setup_logging, LoggingMiddleware
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -32,14 +33,16 @@ trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
 
+setup_logging()
 app = FastAPI(
     title="ADK Web Agent",
     version="1.0.0",
     docs_url="/docs",
     openapi_url="/openapi.json"
 )
+app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
-FastAPIInstrumentor.instrument_app(app)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 
 
 @app.on_event("startup")
