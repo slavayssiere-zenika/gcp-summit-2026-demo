@@ -58,6 +58,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **POST** `/users/login` : Login
 - **POST** `/users/logout` : Logout
+- **POST** `/users/service-account/login` : Service Account Login
+- **GET** `/users/google/config` : Get Google Config
+- **GET** `/users/google/login` : Google Login
+- **GET** `/users/google/callback` : Google Callback
 - **GET** `/users/health` : Router Health
 - **GET** `/users/stats` : Get User Stats
 - **GET** `/users/` : List Users

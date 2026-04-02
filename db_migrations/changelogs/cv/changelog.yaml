@@ -1,0 +1,67 @@
+databaseChangeLog:
+  - changeSet:
+      id: "1"
+      author: "antigravity"
+      changes:
+        - sql:
+            sql: "CREATE EXTENSION IF NOT EXISTS vector;"
+        - createTable:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "source_url"
+                  type: "varchar"
+              - column:
+                  name: "raw_content"
+                  type: "text"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "semantic_embedding"
+                  type: "vector(3072)"
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+
+  - changeSet:
+      id: "2"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "imported_by_id"
+                  type: "integer"
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: "3"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "source_tag"
+                  type: "varchar"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "extracted_competencies"
+                  type: "jsonb"
+                  constraints:
+                    nullable: true

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["GOOGLE_API_KEY"] = "test-key"
 os.environ["GEMINI_MODEL"] = "gemini-2.0-flash"
 
-from agent_api.main import app
+from main import app
 
 @pytest.fixture(scope="module")
 def client():

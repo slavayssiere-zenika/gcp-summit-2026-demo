@@ -37,7 +37,7 @@ Le monitoring n'est pas une option, c'est l'épine dorsale du debugging asynchro
 ---
 
 ## 💾 5. DATA, CACHE & SEEDING
-- **Synchronisation BDD** : Toute modification de modèle SQLAlchemy doit être accompagnée d'une mise à jour logicielle répercutée dans le script de réinitialisation (`seed_data.py`).
+- **Synchronisation BDD (Liquibase)** : Toute modification de la structure de données (nouveau champ, nouvelle table) ou ajout de nouvelle API **DOIT impérativement** être accompagnée d'une mise à jour du fichier `changelog.yaml` Liquibase correspondant dans `db_migrations/changelogs/`. Puis, le script de réinitialisation (`seed_data.py`) doit être ajusté si des données initiales sont impactées.
 - **Cache Redis** : Toute modification métier (POST, PUT, DELETE) **DOIT** purger ou invalider le cache Redis associé (ex: suppression des patterns `items:list:*`).
 - **Sessions** : Injection par dépendance stricte via `Depends(get_db)`.
 

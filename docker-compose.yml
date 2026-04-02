@@ -1,6 +1,39 @@
 version: '3.8'
 
 services:
+  db_init:
+    image: postgres:15
+    container_name: db_init
+    hostname: db_init
+    environment:
+      - PGPASSWORD=postgres
+    volumes:
+      - ./init.sql:/init.sql:ro
+    command: >
+      sh -c "psql -h postgres -U postgres -d postgres -f /init.sql || true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+  db_migrations:
+    build:
+      context: ./db_migrations
+    container_name: db_migrations
+    hostname: db_migrations
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    depends_on:
+      db_init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
   users_api:
     build: ./users_api
     container_name: users_api
@@ -13,7 +46,11 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
+      - GOOGLE_SECRET_ID=${GOOGLE_SECRET_ID}
+      - GOOGLE_SECRET_KEY=${GOOGLE_SECRET_KEY}
     depends_on:
+      db_migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -50,6 +87,8 @@ services:
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
+      db_migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -88,6 +127,8 @@ services:
       - USERS_API_URL=http://users_api:8000
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
+      db_migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -127,6 +168,8 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
+      db_migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -175,6 +218,8 @@ services:
       - OTEL_SERVICE_NAME=agent-api
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
+      db_migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -372,6 +417,8 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
+      db_migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

@@ -3,9 +3,9 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from src.database import get_db
+from database import get_db
 from . import models, schemas
-from src.cache import get_cache, set_cache, delete_cache
+from cache import get_cache, set_cache, delete_cache
 from jose import jwt, JWTError
 
 security = HTTPBearer()

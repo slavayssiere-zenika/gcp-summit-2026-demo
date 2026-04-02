@@ -20,6 +20,7 @@ class UserBase(BaseModel):
     full_name: Optional[str] = None
     role: str = "user"
     allowed_category_ids: List[int] = []
+    picture_url: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -29,6 +30,10 @@ class UserCreate(UserBase):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ServiceAccountLoginRequest(BaseModel):
+    id_token: str
 
 
 class TokenResponse(BaseModel):

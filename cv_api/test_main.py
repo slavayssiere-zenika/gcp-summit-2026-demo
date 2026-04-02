@@ -61,7 +61,9 @@ def test_get_user_cv(mocker):
     
     response = client.get("/cvs/user/1")
     assert response.status_code == 200
-    assert response.json() == {"user_id": 1, "source_url": "http://test.com/cv.pdf"}
+    data = response.json()
+    assert data["user_id"] == 1
+    assert data["source_url"] == "http://test.com/cv.pdf"
     
     # Not found case
     mock_db.query().filter().first.return_value = None
@@ -190,3 +192,79 @@ def test_recalculate_tree(mocker):
     response = client.post("/cvs/recalculate_tree", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json() == {"tree": {"some": "tree"}}
+
+
+def test_fetch_cv_content_internal_url(mocker):
+    response = client.post("/cvs/import", json={"url": "http://localhost/cv.pdf"}, headers={"Authorization": "Bearer token"})
+    assert response.status_code == 400
+    assert "Internal URLs are not allowed" in response.text
+
+def test_fetch_cv_content_invalid_scheme(mocker):
+    response = client.post("/cvs/import", json={"url": "ftp://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
+    assert response.status_code == 400
+    assert "Invalid URL scheme" in response.text
+
+def test_import_cv_no_auth(mocker):
+    response = client.post("/cvs/import", json={"url": "http://test.com/cv.pdf"})
+    assert response.status_code == 401
+
+def test_import_cv_genai_not_configured(mocker):
+    # force client to None
+    mocker.patch("src.cvs.router.client", None)
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="text")
+    response = client.post("/cvs/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
+    assert response.status_code == 500
+    assert "GenAI Client not configured" in response.text
+
+def test_import_cv_prompt_fail(mocker):
+    mocker.patch("src.cvs.router.client", MagicMock())
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    client_instance = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = client_instance
+    client_instance.get.side_effect = Exception("HTTP fetch failed")
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="text")
+    response = client.post("/cvs/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
+    assert response.status_code == 500
+    assert "Cannot fetch generic prompt" in response.text
+
+def test_search_candidates_no_client(mocker):
+    mocker.patch("src.cvs.router.client", None)
+    response = client.get("/cvs/search?query=test")
+    assert response.status_code == 500
+
+def test_search_candidates_embed_fail(mocker):
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.models.embed_content.side_effect = Exception("embed error")
+    response = client.get("/cvs/search?query=test")
+    assert response.status_code == 400
+    assert "Embedding search query failed" in response.text
+
+def test_recalculate_tree_no_auth(mocker):
+    response = client.post("/cvs/recalculate_tree")
+    assert response.status_code == 403
+
+def test_recalculate_tree_bad_token(mocker):
+    response = client.post("/cvs/recalculate_tree", headers={"Authorization": "Bearer badtoken"})
+    assert response.status_code == 403
+
+def test_recalculate_tree_not_admin(mocker):
+    mocker.patch("jose.jwt.decode", return_value={"role": "user"})
+    response = client.post("/cvs/recalculate_tree", headers={"Authorization": "Bearer valid"})
+    assert response.status_code == 403
+
+def test_recalculate_tree_no_client(mocker):
+    mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
+    mocker.patch("src.cvs.router.client", None)
+    response = client.post("/cvs/recalculate_tree", headers={"Authorization": "Bearer valid"})
+    assert response.status_code == 500
+
+def test_recalculate_tree_no_profiles(mocker):
+    mocker.patch("src.cvs.router.client", MagicMock())
+    mock_db = MagicMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    mock_db.query().all.return_value = []
+    mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
+    
+    response = client.post("/cvs/recalculate_tree", headers={"Authorization": "Bearer valid"})
+    assert response.status_code == 404
+

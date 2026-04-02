@@ -205,14 +205,7 @@ def main():
         cur = conn.cursor()
         # Stable bcrypt hash for 'admin'
         admin_hash = "$2b$12$DmcLZx/FfS5ZVVpGVbYOZOM6a27EsafCWBmc26RTxfY5mnn0o/Usi"
-        
-        # Inject the SQL Patch for Competencies tree structural upgrade
-        cur.execute("ALTER TABLE competencies ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES competencies(id);")
-        
-        # Inject the SQL Patch for RBAC Admin Roles
-        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR DEFAULT 'user';")
-        cur.execute("UPDATE users SET role = 'admin' WHERE username = 'admin';")
-        conn.commit()
+        # Removed DDL/ALTER TABLE since Liquibase handles schema management natively
         
         cur.execute("SELECT id FROM users WHERE username = 'admin'")
         if not cur.fetchone():

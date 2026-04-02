@@ -8,9 +8,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from database import engine, init_db
-from src.items.router import router
-from database import engine, init_db
+from database import engine
 from src.items.router import router
 import time
 from logger import setup_logging, LoggingMiddleware
@@ -25,8 +23,6 @@ provider = TracerProvider(
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
-trace.set_tracer_provider(provider)
-
 setup_logging()
 app = FastAPI(title="Items API")
 app.add_middleware(LoggingMiddleware)
@@ -36,10 +32,7 @@ Instrumentator().instrument(app).expose(app)
 import asyncio
 import os
 
-@app.on_event("startup")
-async def startup_event():
-    if not os.getenv("TESTING"):
-        asyncio.create_task(asyncio.to_thread(init_db))
+import logging
 
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")

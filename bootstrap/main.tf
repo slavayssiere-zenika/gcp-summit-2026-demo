@@ -89,3 +89,46 @@ resource "google_secret_manager_secret_version" "gemini" {
     ignore_changes = [secret_data]
   }
 }
+
+# =========================================================
+# 6. Secret Manager pour Google OAuth
+# =========================================================
+resource "google_secret_manager_secret" "google_secret_id" {
+  secret_id = "google-secret-id"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret" "google_secret_key" {
+  secret_id = "google-secret-key"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "g_id" {
+  secret      = google_secret_manager_secret.google_secret_id.id
+  secret_data = "dummy"
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
+}
+
+resource "google_secret_manager_secret_version" "g_key" {
+  secret      = google_secret_manager_secret.google_secret_key.id
+  secret_data = "dummy"
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
+}

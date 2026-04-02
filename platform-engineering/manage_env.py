@@ -40,6 +40,10 @@ def run_cmd(cmd, check=True):
         sys.exit(result.returncode)
     return result
 
+def get_tf_args():
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    return [f"-var=gemini_api_key={api_key}"] if api_key else []
+
 def toggle_prevent_destroy(disable=True):
     print(f"[*] {'Temporarily disabling' if disable else 'Restoring'} prevent_destroy safeguards in Terraform files...")
     for filename in os.listdir(TERRAFORM_DIR):
@@ -94,6 +98,7 @@ def deploy(env, base_domain, project_id, config, force=False):
     region = config.get("region", "europe-west1")
     import_persistent_resource(env, "google_cloud_run_v2_service.prompts_api", f"projects/{project_id}/locations/{region}/services/prompts-api-{env}")
     import_persistent_resource(env, "google_cloud_run_v2_service.agent_api", f"projects/{project_id}/locations/{region}/services/agent-api-{env}")
+    import_persistent_resource(env, "google_cloud_run_v2_service.drive_api", f"projects/{project_id}/locations/{region}/services/drive-api-{env}")
     for key in ["users", "items", "competencies", "cv"]:
         import_persistent_resource(env, f'google_cloud_run_v2_service.mcp_services["{key}"]', f"projects/{project_id}/locations/{region}/services/{key}-api-{env}")
 
@@ -102,7 +107,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         toggle_prevent_destroy(disable=True)
 
     print("[*] Pre-Deploy: Tainting AlloyDB IAM users to bypass immutable user_type error...")
-    for user_key in ["users", "items", "competencies", "cv", "prompts"]:
+    for user_key in ["users", "items", "competencies", "cv", "prompts", "drive"]:
         subprocess.run(
             ["terraform", "taint", f'google_alloydb_user.iam_users["{user_key}"]'],
             cwd=TERRAFORM_DIR,
@@ -110,39 +115,9 @@ def deploy(env, base_domain, project_id, config, force=False):
             stderr=subprocess.DEVNULL
         )
 
-    cmd = ["terraform", "apply"]
+    cmd = ["terraform", "apply"] + get_tf_args()
     try:
         run_cmd(cmd)
-        
-        # Post-deploy: Mise à jour des images Docker sur Cloud Run
-        print("\n[*] Post-Deploy: Updating Cloud Run container images with latest builds...")
-        region = config.get("region", "europe-west1")
-        registry = config.get("registry", "z-gcp-summit-services")
-        base_image_path = f"{region}-docker.pkg.dev/{project_id}/{registry}"
-        
-        mcp_keys = ["users", "items", "competencies", "cv"]
-        std_keys = ["prompts", "agent"]
-        
-        for key in mcp_keys + std_keys:
-            svc_name = f"{key}-api-{env}"
-            img_url = f"{base_image_path}/{key}_api:latest"
-            
-            cmd_update = [
-                "gcloud", "run", "services", "update", svc_name,
-                "--region", region,
-                "--project", project_id,
-                "--container", "api", "--image", img_url
-            ]
-            
-            if key in mcp_keys:
-                cmd_update.extend(["--container", "mcp", "--image", img_url])
-            
-            print(f"    -> Updating {svc_name} (this takes ~30s)...")
-            res_update = subprocess.run(cmd_update, capture_output=True, text=True)
-            if res_update.returncode == 0:
-                print(f"       [+] Successfully updated {svc_name}")
-            else:
-                print(f"       [-] Error updating {svc_name}: {res_update.stderr.strip()}")
         
         # Post-deploy: Déploiement du Frontend
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
@@ -419,7 +394,8 @@ def deploy(env, base_domain, project_id, config, force=False):
                     "/items-api/",   # items_api
                     "/prompts-api/", # prompts_api
                     "/comp-api/",    # competencies_api
-                    "/cv-api/"       # cv_api
+                    "/cv-api/",      # cv_api
+                    "/drive-api/"    # drive_api
                 ]
                 
                 for route in api_routes:
@@ -453,7 +429,7 @@ def plan(env):
     set_workspace(env)
     
     print(f"[*] Generating dry-run (terraform plan) for environment '{env}'...")
-    cmd = ["terraform", "plan"]
+    cmd = ["terraform", "plan"] + get_tf_args()
     run_cmd(cmd)
 
 def destroy(env, force=False):
@@ -472,7 +448,7 @@ def destroy(env, force=False):
             run_cmd(["terraform", "state", "rm", res], check=False)
 
     print(f"[*] Destroying all other components for environment '{env}'...")
-    cmd = ["terraform", "destroy"]
+    cmd = ["terraform", "destroy"] + get_tf_args()
     try:
         run_cmd(cmd)
     finally:

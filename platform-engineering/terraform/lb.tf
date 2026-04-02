@@ -44,6 +44,15 @@ resource "google_compute_region_network_endpoint_group" "agent_neg" {
   }
 }
 
+resource "google_compute_region_network_endpoint_group" "drive_neg" {
+  name                  = "neg-drive-${terraform.workspace}"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+  cloud_run {
+    service = google_cloud_run_v2_service.drive_api.name
+  }
+}
+
 # =========================================================
 # Backend Services
 # =========================================================
@@ -76,6 +85,16 @@ resource "google_compute_backend_service" "agent_backend" {
   security_policy       = google_compute_security_policy.waf.id
   backend {
     group = google_compute_region_network_endpoint_group.agent_neg.id
+  }
+}
+
+resource "google_compute_backend_service" "drive_backend" {
+  name                  = "backend-drive-${terraform.workspace}"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  security_policy       = google_compute_security_policy.waf.id
+  backend {
+    group = google_compute_region_network_endpoint_group.drive_neg.id
   }
 }
 
@@ -177,6 +196,17 @@ resource "google_compute_url_map" "default" {
       priority = 70
       match_rules { prefix_match = "/cv-api/" }
       service = google_compute_backend_service.mcp_backend["cv"].id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 80
+      match_rules { prefix_match = "/drive-api/" }
+      service = google_compute_backend_service.drive_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

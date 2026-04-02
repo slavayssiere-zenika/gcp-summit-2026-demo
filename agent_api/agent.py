@@ -5,7 +5,7 @@ from typing import Optional
 from google.genai import types
 from google.adk.agents import Agent
 
-from agent_api.mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp
+from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ _session_service = None
 def get_session_service():
     global _session_service
     if _session_service is None:
-        from agent_api.session import RedisSessionService
+        from session import RedisSessionService
         _session_service = RedisSessionService()
     return _session_service
 

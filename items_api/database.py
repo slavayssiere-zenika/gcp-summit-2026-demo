@@ -53,8 +53,3 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-
-
-def init_db():
-    from src.items.models import Base
-    Base.metadata.create_all(bind=engine)

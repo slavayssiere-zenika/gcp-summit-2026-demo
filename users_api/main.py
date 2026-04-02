@@ -11,7 +11,7 @@ from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import extract
 from opentelemetry.trace import set_span_in_context
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, init_db
+from database import engine
 from src.users.router import router, auth_router
 import time
 from logger import setup_logging, LoggingMiddleware
@@ -25,8 +25,6 @@ provider = TracerProvider(
 )
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
-
-tracer = trace.get_tracer(__name__)
 
 tracer = trace.get_tracer(__name__)
 
@@ -45,12 +43,9 @@ app.add_middleware(
 
 
 import asyncio
+import logging
 import os
 
-@app.on_event("startup")
-async def startup_event():
-    if not os.getenv("TESTING"):
-        asyncio.create_task(asyncio.to_thread(init_db))
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)

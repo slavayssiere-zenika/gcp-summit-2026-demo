@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { Settings, RefreshCw, Network, AlertTriangle, ShieldCheck, CheckCircle2 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
+import DriveAdminPanel from '../components/DriveAdminPanel.vue'
 
 const isLoading = ref(false)
 const error = ref('')
@@ -59,6 +60,8 @@ const applyRemapping = async () => {
     </div>
 
     <div class="dashboard-grid">
+      <DriveAdminPanel />
+
       <!-- Moteur Taxonomique Core -->
       <div class="glass-panel">
         <div class="panel-header">

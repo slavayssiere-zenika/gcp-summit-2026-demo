@@ -19,3 +19,5 @@ class User(Base):
     role = Column(String, default="user", nullable=False)
     allowed_category_ids = Column(String, default="")  # Comma-separated IDs for simplicity
     created_at = Column(DateTime, default=datetime.utcnow)
+    picture_url = Column(String, nullable=True)
+    google_id = Column(String, nullable=True)

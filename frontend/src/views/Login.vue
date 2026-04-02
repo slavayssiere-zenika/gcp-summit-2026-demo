@@ -36,6 +36,10 @@ const handleLogin = async () => {
     isLoading.value = false
   }
 }
+
+const loginWithGoogle = () => {
+  window.location.href = '/auth/google/login'
+}
 </script>
 
 <template>
@@ -59,7 +63,7 @@ const handleLogin = async () => {
             v-model="email" 
             type="email" 
             placeholder="Ex: admin@zenika.com"
-            required
+
             :disabled="isLoading"
           >
         </div>
@@ -70,7 +74,7 @@ const handleLogin = async () => {
             v-model="password" 
             type="password" 
             placeholder="••••••••"
-            required
+
             :disabled="isLoading"
           >
         </div>
@@ -79,6 +83,14 @@ const handleLogin = async () => {
           <span v-if="!isLoading">Se connecter</span>
           <span v-else class="loader"></span>
           <LogIn v-if="!isLoading" size="18" />
+        </button>
+
+        <div class="divider">
+          <span>OU</span>
+        </div>
+
+        <button type="button" @click="loginWithGoogle" class="google-button" :disabled="isLoading">
+          Se connecter avec Google
         </button>
       </form>
 
@@ -245,5 +257,55 @@ p {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #999;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #eee;
+}
+
+.divider span {
+  padding: 0 10px;
+}
+
+.google-button {
+  background: white;
+  color: #444;
+  border: 1px solid #ddd;
+  padding: 1rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.google-button:hover:not(:disabled) {
+  background: #f8f8f8;
+  border-color: #ccc;
+  transform: translateY(-2px);
+}
+
+.google-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.google-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 </style>

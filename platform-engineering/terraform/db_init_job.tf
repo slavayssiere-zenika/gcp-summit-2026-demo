@@ -82,11 +82,33 @@ try:
 
     # L'API Agent possède aussi un service_account
     all_iam_services = services + ["agent"]
+    
+    # Etape de nettoyage: Pour éviter "cannot drop role... dependencies"
+    for svc in services + ["agent"]:
+        target_db = "users" if svc == "agent" else svc
+        svc_db_url = f"postgresql://postgres:{root_pw}@{db_ip}:5432/{target_db}?sslmode=require"
+        try:
+            conn_cl = psycopg2.connect(svc_db_url)
+            conn_cl.autocommit = True
+            cur_cl = conn_cl.cursor()
+            for iam_svc in all_iam_services:
+                iam_user = f"sa-{iam_svc}-{env_name}-v2@{project_id}.iam"
+                try:
+                    cur_cl.execute(f'REASSIGN OWNED BY "{iam_user}" TO postgres;')
+                    cur_cl.execute(f'DROP OWNED BY "{iam_user}";')
+                except Exception:
+                    pass
+            cur_cl.close()
+            conn_cl.close()
+        except Exception:
+            pass
+
     for svc in all_iam_services:
         iam_user = f"sa-{svc}-{env_name}-v2@{project_id}.iam"
         try:
-            cur.execute(f'CREATE ROLE "{iam_user}" WITH LOGIN IN ROLE alloydb_iam_user;')
-            print(f"[DB INIT] Created IAM user '{iam_user}'")
+            # We DONT create it. We DROP it if it exists from the previous run to fix the Terraform ALLOYDB_IAM_USER conflict.
+            cur.execute(f'DROP ROLE IF EXISTS "{iam_user}";')
+            print(f"[DB INIT] Cleaned up built-in DB user '{iam_user}'")
         except Exception as e:
             print(f"[DB INIT] Info on user '{iam_user}': {e}")
 

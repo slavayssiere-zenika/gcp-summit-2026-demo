@@ -12,14 +12,14 @@ from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
-from src.database import engine, Base
+from database import engine, Base
 from src.prompts import router
 
 # 1. Setup DB Schema
 # Deferring schema creation to async startup event to speed up uvicorn boot
 
 # 2. Initialize FastAPI
-from src.logger import setup_logging, LoggingMiddleware
+from logger import setup_logging, LoggingMiddleware
 setup_logging()
 app = FastAPI(title="Prompts API", version="1.0.0")
 app.add_middleware(LoggingMiddleware)
@@ -35,29 +35,8 @@ app.add_middleware(
 
 import asyncio
 import os
-@app.on_event("startup")
-async def startup_event():
-    if not os.getenv("TESTING"):
-        asyncio.create_task(asyncio.to_thread(Base.metadata.create_all, bind=engine))
+import logging
 
-# 4. OpenTelemetry Configuration
-OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "prompts-api")
-OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4317")
-
-resource = Resource.create({
-    ResourceAttributes.SERVICE_NAME: OTEL_SERVICE_NAME
-})
-
-provider = TracerProvider(resource=resource)
-trace.set_tracer_provider(provider)
-
-otlp_exporter = OTLPSpanExporter(
-    endpoint=OTEL_EXPORTER_OTLP_ENDPOINT,
-    insecure=True
-)
-
-span_processor = BatchSpanProcessor(otlp_exporter)
-provider.add_span_processor(span_processor)
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 SQLAlchemyInstrumentor().instrument(engine=engine)

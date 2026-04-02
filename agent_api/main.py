@@ -17,7 +17,7 @@ from opentelemetry.trace import SpanKind
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from agent_api.agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS
+from agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS
 import inspect
 from logger import setup_logging, LoggingMiddleware
 
@@ -68,7 +68,7 @@ class QueryRequest(BaseModel):
     session_id: Optional[str] = None
 
 
-from agent_api.mcp_client import auth_header_var
+from mcp_client import auth_header_var
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -120,7 +120,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
         
-    from agent_api.agent import get_session_service
+    from agent import get_session_service
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_assistant", 

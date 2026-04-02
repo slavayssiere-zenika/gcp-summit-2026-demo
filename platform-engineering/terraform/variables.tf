@@ -67,6 +67,11 @@ variable "image_cv" {
   type        = string
 }
 
+variable "image_drive" {
+  description = "Image for Drive API container"
+  type        = string
+}
+
 variable "image_prompts" {
   description = "Image for Prompts API container"
   type        = string
@@ -75,4 +80,16 @@ variable "image_prompts" {
 variable "image_agent" {
   description = "Image for Agent API container"
   type        = string
+}
+
+variable "image_db_migrations" {
+  description = "Image for DB Migrations container"
+  type        = string
+}
+
+variable "gemini_api_key" {
+  description = "Google Gemini API Key envoyée via manage_env"
+  type        = string
+  sensitive   = true
+  default     = ""
 }

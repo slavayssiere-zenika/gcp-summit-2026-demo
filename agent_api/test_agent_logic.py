@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 import json
 
-from agent_api.agent import (
+from agent import (
     list_users, get_user, create_user, update_user, delete_user, search_users, toggle_user_status, get_user_stats, health_check_users,
     list_items, get_item, create_item, update_item, delete_item, get_item_with_user, search_items, get_items_by_user, get_item_stats, health_check_items,
     list_competencies, get_competency, create_competency, delete_competency, assign_competency_to_user, remove_competency_from_user, list_user_competencies,
@@ -27,7 +27,7 @@ def test_format_mcp_result():
 def mock_users_mcp(mocker):
     m = AsyncMock()
     m.call_tool.return_value = [{"text": '{"result": "success"}'}]
-    mocker.patch("agent_api.agent.get_users_mcp", return_value=m)
+    mocker.patch("agent.get_users_mcp", return_value=m)
     return m
 
 @pytest.mark.asyncio
@@ -46,7 +46,7 @@ async def test_users_tools(mock_users_mcp):
 def mock_items_mcp(mocker):
     m = AsyncMock()
     m.call_tool.return_value = [{"text": '{"result": "success"}'}]
-    mocker.patch("agent_api.agent.get_items_mcp", return_value=m)
+    mocker.patch("agent.get_items_mcp", return_value=m)
     return m
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_items_tools(mock_items_mcp):
 def mock_competencies_mcp(mocker):
     m = AsyncMock()
     m.call_tool.return_value = [{"text": '{"result": "success"}'}]
-    mocker.patch("agent_api.agent.get_competencies_mcp", return_value=m)
+    mocker.patch("agent.get_competencies_mcp", return_value=m)
     return m
 
 @pytest.mark.asyncio
@@ -83,7 +83,7 @@ async def test_competencies_tools(mock_competencies_mcp):
 def mock_cv_mcp(mocker):
     m = AsyncMock()
     m.call_tool.return_value = [{"text": '{"result": "success"}'}]
-    mocker.patch("agent_api.agent.get_cv_mcp", return_value=m)
+    mocker.patch("agent.get_cv_mcp", return_value=m)
     return m
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_cv_tools(mock_cv_mcp):
 def mock_loki_mcp(mocker):
     m = AsyncMock()
     m.call_tool.return_value = [{"text": '{"result": "success"}'}]
-    mocker.patch("agent_api.agent.get_loki_mcp", return_value=m)
+    mocker.patch("agent.get_loki_mcp", return_value=m)
     return m
 
 @pytest.mark.asyncio
@@ -139,8 +139,8 @@ async def test_run_agent_query_logic(mocker):
             tool_event.content.parts = [MagicMock(text='{"result": "{\"tool_data\": 1}"}')]
             yield tool_event
             
-    with patch("agent_api.agent.get_session_service", return_value=mock_session_service), \
-         patch("agent_api.agent.create_agent", return_value=mock_agent), \
+    with patch("agent.get_session_service", return_value=mock_session_service), \
+         patch("agent.create_agent", return_value=mock_agent), \
          patch("google.adk.runners.Runner", new=MockRunner):
         
         result = await run_agent_query("hello")

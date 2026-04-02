@@ -14,24 +14,6 @@ test_mcp_tools.py ..............                                         [100%]
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
-main.py:37
-  /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/main.py:37: DeprecationWarning: 
-          on_event is deprecated, use lifespan event handlers instead.
-  
-          Read more about it in the
-          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
-    @app.on_event("startup")
-
-../test_env/lib/python3.13/site-packages/fastapi/applications.py:4598
-  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/applications.py:4598: DeprecationWarning: 
-          on_event is deprecated, use lifespan event handlers instead.
-  
-          Read more about it in the
-          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
-    return self.router.on_event(event_type)  # ty: ignore[deprecated]
-
 test_integration.py: 17 warnings
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/sqlalchemy/sql/schema.py:3624: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
     return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
@@ -46,4 +28,4 @@ test_integration.py::test_assign_and_list_user_competencies
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 31 passed, 22 warnings in 1.06s ========================
+======================= 31 passed, 20 warnings in 1.04s ========================

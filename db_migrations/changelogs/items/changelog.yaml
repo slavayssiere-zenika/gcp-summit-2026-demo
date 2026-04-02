@@ -1,0 +1,70 @@
+databaseChangeLog:
+  - changeSet:
+      id: "1"
+      author: "antigravity"
+      changes:
+        - createTable:
+            tableName: "categories"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "name"
+                  type: "varchar"
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: "description"
+                  type: "varchar"
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+        - createTable:
+            tableName: "items"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "name"
+                  type: "varchar"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "description"
+                  type: "varchar"
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+        - createTable:
+            tableName: "item_category"
+            columns:
+              - column:
+                  name: "item_id"
+                  type: "integer"
+                  constraints:
+                    primaryKey: true
+                    foreignKeyName: "fk_item_category_item"
+                    references: "items(id)"
+              - column:
+                  name: "category_id"
+                  type: "integer"
+                  constraints:
+                    primaryKey: true
+                    foreignKeyName: "fk_item_category_category"
+                    references: "categories(id)"

@@ -29,10 +29,7 @@ COPY agent_api/requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
-COPY users_api/ ./users_api/
-COPY items_api/ ./items_api/
-COPY competencies_api/ ./competencies_api/
-COPY agent_api/ ./agent_api/
+COPY agent_api/ ./
 
 ENV PYTHONPATH=/app
 ENV USERS_API_URL=http://users_api:8000
@@ -44,4 +41,4 @@ EXPOSE 8002
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
-CMD ["python", "-m", "uvicorn", "agent_api.main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]

@@ -1,0 +1,52 @@
+databaseChangeLog:
+  - changeSet:
+      id: "1"
+      author: "antigravity"
+      changes:
+        - createTable:
+            tableName: "competencies"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "name"
+                  type: "varchar"
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: "description"
+                  type: "varchar"
+              - column:
+                  name: "parent_id"
+                  type: "integer"
+                  constraints:
+                    foreignKeyName: "fk_competency_parent"
+                    references: "competencies(id)"
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+        - createTable:
+            tableName: "user_competency"
+            columns:
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "competency_id"
+                  type: "integer"
+                  constraints:
+                    primaryKey: true
+                    foreignKeyName: "fk_user_competency_competency"
+                    references: "competencies(id)"
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
