@@ -495,6 +495,12 @@ resource "google_cloud_run_v2_service" "agent_api" {
         value = "http://api.internal.zenika/cv-api/"
       }
       env {
+        name = "DRIVE_MCP_URL"
+        # We target the Cloud Run internal LB URL with the drive-api suffix and fallback in agent to 8081 if local.
+        # However, following the pattern we point to the API base URL.
+        value = "http://api.internal.zenika/drive-api/"
+      }
+      env {
         name  = "USE_GCP_LOGGING"
         value = "true"
       }
@@ -517,11 +523,54 @@ resource "google_cloud_run_v2_service" "agent_api" {
       }
     }
 
+    # Conteneur Sidecar (MCP)
+    containers {
+      name    = "mcp"
+      image   = var.image_drive
+      command = ["python"]
+      args    = ["mcp_app.py"]
+      startup_probe {
+        initial_delay_seconds = 10
+        timeout_seconds       = 3
+        period_seconds        = 5
+        failure_threshold     = 5
+        http_get {
+          path = "/health"
+          port = 8081
+        }
+      }
+      liveness_probe {
+        initial_delay_seconds = 15
+        timeout_seconds       = 3
+        period_seconds        = 10
+        failure_threshold     = 3
+        http_get {
+          path = "/health"
+          port = 8081
+        }
+      }
+      resources {
+        limits = {
+          memory = "256Mi"
+        }
+      }
+
+      env {
+        name  = "PORT"
+        value = "8081"
+      }
+      env {
+        name  = "DRIVE_API_URL"
+        value = "http://localhost:8080"
+      }
+    }
+
   }
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].resources[0].limits["cpu"]
+      template[0].containers[0].resources[0].limits["cpu"],
+      template[0].containers[1].resources[0].limits["cpu"]
     ]
   }
 

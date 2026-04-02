@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Terminal, Database, Cpu, ChevronRight, Activity, Code2, Box } from 'lucide-vue-next'
+import { Terminal, Database, Cpu, ChevronRight, Activity, Code2, Box, Cloud } from 'lucide-vue-next'
 
 interface Parameter {
   name: string
@@ -88,6 +88,7 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
           <div class="nav-icon">
             <Database v-if="service.id === 'users'" />
             <Box v-else-if="service.id === 'items'" />
+            <Cloud v-else-if="service.id === 'drive'" />
             <Cpu v-else />
           </div>
           <div class="nav-info">

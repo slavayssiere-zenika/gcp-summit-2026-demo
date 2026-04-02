@@ -40,7 +40,7 @@ update_cloudrun() {
       "--container" "api" "--image" "$IMAGE_NAME"
     )
     
-    if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" ]]; then
+    if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" || "$SERVICE" == "drive_api" ]]; then
       CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_NAME" )
     fi
     
@@ -107,7 +107,7 @@ build_and_upload_frontend() {
 # ==============================================================================
 # Main logic
 # ==============================================================================
-SERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "db_migrations")
+SERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "db_migrations")
 TARGET_SERVICE="${1:-all}"
 # Normalize input (e.g. agent-api -> agent_api)
 TARGET_SERVICE=${TARGET_SERVICE//-/_}

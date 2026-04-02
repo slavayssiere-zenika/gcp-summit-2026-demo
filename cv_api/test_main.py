@@ -112,7 +112,7 @@ def test_import_and_analyze_cv(mocker):
 
     # Mocking Gemini Client
     mock_genai = mocker.patch("src.cvs.router.client")
-    mock_genai.models.generate_content.return_value.text = '{"first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "competencies": [{"name": "Python", "parent": "Lang"}]}'
+    mock_genai.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "competencies": [{"name": "Python", "parent": "Lang"}]}'
     mock_genai.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
     
     # Mock HTTP responses
@@ -268,3 +268,36 @@ def test_recalculate_tree_no_profiles(mocker):
     response = client.post("/cvs/recalculate_tree", headers={"Authorization": "Bearer valid"})
     assert response.status_code == 404
 
+
+def test_import_cv_not_a_cv_boolean_check(mocker):
+    # Setup Mocks
+    mock_db = MagicMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    client_instance = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = client_instance
+    
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="This is a cake recipe, not a resume.")
+
+    # Mocking Gemini Client to return is_cv false
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.models.generate_content.return_value.text = '{"is_cv": false, "first_name": null, "last_name": null, "email": null, "competencies": []}'
+    
+    # Mock HTTP responses for prompts_api
+    mock_resp_prompts = MagicMock()
+    mock_resp_prompts.json.return_value = {"value": "Prompt"}
+    
+    def get_side_effect(*args, **kwargs):
+        url = args[0] if args else kwargs.get("url", "")
+        if "prompts_api" in url:
+            return mock_resp_prompts
+        return MagicMock(status_code=200)
+    
+    client_instance.get.side_effect = get_side_effect
+
+    # Make Request
+    response = client.post("/cvs/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
+    
+    assert response.status_code == 400
+    assert "Not a CV" in response.json()["detail"]
