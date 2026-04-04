@@ -24,7 +24,7 @@ tests/test_router.py::test_list_folders
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 8 passed, 4 warnings in 2.42s =========================
+======================== 8 passed, 4 warnings in 3.05s =========================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -72,7 +72,7 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.1300062262266082)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8511622978946528)
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -94,7 +94,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
 >
 
 During handling of the above exception, another exception occurred:

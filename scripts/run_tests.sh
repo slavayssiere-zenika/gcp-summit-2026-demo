@@ -1,28 +1,32 @@
 #!/bin/bash
+
+# Configuration
 set -e
 
 echo "Démarrage des tests en parallèle..."
 
-pids=""
+pids=()
+apis=("agent_api" "competencies_api" "cv_api" "drive_api" "items_api" "prompts_api" "users_api" "market_mcp")
 
-for api in agent_api competencies_api cv_api drive_api items_api prompts_api users_api; do
+for api in "${apis[@]}"; do
     echo "Lancement des tests pour $api..."
-    (
-        cd "$api"
-        PYTHONPATH=. TESTING=1 ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1
-    ) &
-    pids="$pids $!"
+    (cd "$api" && PYTHONPATH=. ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1) &
+    pids+=("$api:$!")
 done
 
-failed=0
-for pid in $pids; do
-    wait $pid || {
-        echo "❌ L'un des tests a échoué (PID: $pid)."
-        failed=1
-    }
+failure=0
+for entry in "${pids[@]}"; do
+    api_name="${entry%%:*}"
+    pid="${entry##*:}"
+    
+    wait "$pid"
+    if [ $? -ne 0 ]; then
+        echo "❌ L'un des tests a échoué: $api_name (PID: $pid)."
+        failure=1
+    fi
 done
 
-if [ $failed -ne 0 ]; then
+if [ $failure -ne 0 ]; then
     echo "Échec des tests critiques, annulation du git push."
     exit 1
 fi
