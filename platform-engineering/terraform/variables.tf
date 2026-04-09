@@ -93,3 +93,21 @@ variable "gemini_api_key" {
   sensitive   = true
   default     = ""
 }
+
+variable "slo_availability_goal" {
+  description = "Objectif de disponibilité (SLO) pour les API Cloud Run"
+  type        = number
+  default     = 0.999
+}
+
+variable "slo_latency_goal" {
+  description = "Objectif du ratio de requêtes satisfaisant le critère de latence (SLO)"
+  type        = number
+  default     = 0.95
+}
+
+variable "slo_latency_threshold_ms" {
+  description = "Seuil de latence en millisecondes pour considérer une requête comme rapide"
+  type        = number
+  default     = 500
+}

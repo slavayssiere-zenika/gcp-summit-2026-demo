@@ -5,6 +5,7 @@ from sqlalchemy.future import select
 import httpx
 import os
 import re
+import unicodedata
 from typing import Optional, List
 from google import genai
 from google.genai import types
@@ -13,7 +14,7 @@ from opentelemetry.propagate import inject
 from database import get_db
 from src.auth import verify_jwt
 from src.cvs.models import CVProfile
-from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse
+from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse, UserMergeRequest
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 
@@ -147,21 +148,46 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
         raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
     email = structured_cv["email"]
     async with httpx.AsyncClient(timeout=30.0) as http_client:
-        # Check if user exists
-        user_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/", params={"skip":0, "limit": 100}, headers=headers)
         user_id = None
         importer_id = None
-        importer_username = token_payload.get("sub")
-        if user_res.status_code == 200:
-            for u in user_res.json()["items"]:
-                if u["email"].lower() == email.lower():
+
+        # 1. Resolve target user by email (avoids pagination limits)
+        search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
+        if search_res.status_code == 200:
+            for u in search_res.json().get("items", []):
+                if u.get("email", "").lower() == email.lower():
                     user_id = u["id"]
-                
-                u_username = u.get("username", "")
-                if importer_username and u_username and u_username.lower() == importer_username.lower():
-                    importer_id = u["id"]
-                
-                # Small optimization: If both are found, we don't need to break early since limit=100 is small.
+                    logger.info(f"User matched exactly by email: {email} -> ID: {user_id}")
+                    break
+        
+        # 2. Semantic Fallback: if email wasn't found (e.g. personal vs pro email)
+        if not user_id:
+            first_n = structured_cv.get('first_name', '')
+            last_n = structured_cv.get('last_name', '')
+            if first_n and last_n:
+                logger.info(f"Email {email} not found. Attempting semantic fallback on {first_n} {last_n}.")
+                search_q = f"{first_n} {last_n}"
+                name_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": search_q, "limit": 10}, headers=headers)
+                if name_res.status_code == 200:
+                    def normalize_str(s: str) -> str:
+                        if not s: return ""
+                        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
+                    
+                    for u in name_res.json().get("items", []):
+                        if normalize_str(u.get("first_name")) == normalize_str(first_n) and normalize_str(u.get("last_name")) == normalize_str(last_n):
+                            user_id = u["id"]
+                            logger.info(f"User matched semantically by name -> ID: {user_id}")
+                            break
+
+        # 3. Resolve internal importer properly
+        importer_username = token_payload.get("sub")
+        if importer_username:
+            importer_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": importer_username, "limit": 10}, headers=headers)
+            if importer_res.status_code == 200:
+                for u in importer_res.json().get("items", []):
+                    if u.get("username", "").lower() == importer_username.lower():
+                        importer_id = u["id"]
+                        break
 
         if not user_id:
             logger.info("User not found, creating new user...")
@@ -248,6 +274,9 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
         vector_data = None
 
     # 8. PostGreSQL Physical Save
+    from sqlalchemy import delete
+    await db.execute(delete(CVProfile).where(CVProfile.source_url == req.url).where(CVProfile.user_id == user_id))
+    
     cv_record = CVProfile(
         user_id=user_id,
         source_url=req.url,
@@ -353,28 +382,15 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
 
     return mapped_results
 
-@router.get("/user/{user_id}", response_model=CVProfileResponse)
+@router.get("/user/{user_id}", response_model=List[CVProfileResponse])
 async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
-    Récupére le lien source (Google Doc) original du CV associé au collaborateur.
+    Récupére le ou les liens source (Google Doc) originaux des CVs associés au collaborateur.
     """
-    profile = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id))).scalars().first()
-    if not profile:
+    profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
+    if not profiles:
         raise HTTPException(status_code=404, detail="Aucun CV trouvé pour cet utilisateur.")
         
-    return CVProfileResponse(
-        user_id=profile.user_id,
-        source_url=profile.source_url,
-        source_tag=profile.source_tag,
-        imported_by_id=profile.imported_by_id
-    )
-
-@router.get("/users/tag/{tag}", response_model=List[CVProfileResponse])
-async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession = Depends(get_db)):
-    """
-    Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
-    """
-    profiles = (await db.execute(select(CVProfile).filter(CVProfile.source_tag == tag))).scalars().all()
     return [
         CVProfileResponse(
             user_id=p.user_id,
@@ -383,6 +399,31 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
             imported_by_id=p.imported_by_id
         ) for p in profiles
     ]
+
+@router.get("/users/tag/{tag}", response_model=List[CVProfileResponse])
+async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession = Depends(get_db)):
+    """
+    Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
+    Sans redondance par utilisateur (déduplication).
+    """
+    profiles = (await db.execute(select(CVProfile).filter(CVProfile.source_tag == tag).order_by(CVProfile.created_at.desc()))).scalars().all()
+    
+    seen_users = set()
+    unique_profiles = []
+    
+    for p in profiles:
+        if p.user_id not in seen_users:
+            seen_users.add(p.user_id)
+            unique_profiles.append(
+                CVProfileResponse(
+                    user_id=p.user_id,
+                    source_url=p.source_url,
+                    source_tag=p.source_tag,
+                    imported_by_id=p.imported_by_id
+                )
+            )
+            
+    return unique_profiles
 
 @router.post("/recalculate_tree")
 async def recalculate_competencies_tree(request: Request, db: AsyncSession = Depends(get_db)):
@@ -456,3 +497,23 @@ async def recalculate_competencies_tree(request: Request, db: AsyncSession = Dep
         return {"tree": json.loads(response.text)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur Gemini: {str(e)}")
+
+@router.post("/internal/users/merge")
+async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Internal endpoint to merge user data.
+    Updates cv_profiles.user_id = target_id where user_id = source_id.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Missing Authorization via CV merge")
+        
+    from sqlalchemy import update
+    stmt = update(CVProfile).where(CVProfile.user_id == req.source_id).values(user_id=req.target_id)
+    await db.execute(stmt)
+    
+    stmt2 = update(CVProfile).where(CVProfile.imported_by_id == req.source_id).values(imported_by_id=req.target_id)
+    await db.execute(stmt2)
+
+    await db.commit()
+    return {"message": f"Successfully migrated CVs from user {req.source_id} to {req.target_id}"}

@@ -94,16 +94,17 @@ const fetchCompetencies = async () => {
   }
 }
 
-const cvProfile = ref<any>(null)
+const cvProfiles = ref<any[]>([])
 const importerUser = ref<User | null>(null)
 
 const fetchCVProfile = async () => {
   try {
     const response = await axios.get(`/cv-api/user/${userId}`)
-    cvProfile.value = response.data
+    cvProfiles.value = response.data
     
-    if (cvProfile.value?.imported_by_id) {
-      const importerRes = await axios.get(`/auth/${cvProfile.value.imported_by_id}`)
+    // We display the importer based on the most recent CV if it exists
+    if (cvProfiles.value && cvProfiles.value.length > 0 && cvProfiles.value[0].imported_by_id) {
+      const importerRes = await axios.get(`/auth/${cvProfiles.value[0].imported_by_id}`)
       importerUser.value = importerRes.data
     }
   } catch (err) {
@@ -183,6 +184,16 @@ onMounted(() => {
                 <RouterLink :to="{ name: 'user-detail', params: { id: importerUser.id } }" class="importer-link">
                   {{ importerUser.full_name || importerUser.username }}
                 </RouterLink>
+              </div>
+            </div>
+            
+            <div class="info-item" v-if="cvProfiles && cvProfiles.length > 0" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #eee;">
+              <label><UserIcon size="14" /> Documents Associés (CVs)</label>
+              <div class="value" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem">
+                <a v-for="(cv, index) in cvProfiles" :key="index" :href="cv.source_url" target="_blank" class="importer-link" style="font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+                  Lien Source vers le CV {{ index + 1 }}
+                  <span v-if="cv.source_tag" style="background: rgba(227, 25, 55, 0.05); cursor: default; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; text-decoration: none !important;">{{ cv.source_tag }}</span>
+                </a>
               </div>
             </div>
           </div>

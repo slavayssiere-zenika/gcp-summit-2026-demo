@@ -15,7 +15,7 @@ test_mcp_tools.py ....                                                   [100%]
     warnings.warn(
 
 test_main.py::test_import_and_analyze_cv
-  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py:264: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py:293: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
     db.add(cv_record)
   Enable tracemalloc to get traceback where the object was allocated.
   See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
@@ -25,7 +25,7 @@ test_main.py::test_import_and_analyze_cv
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 28 passed, 2 warnings in 4.61s ========================
+======================== 28 passed, 2 warnings in 5.34s ========================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -73,4 +73,4 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.0630888580355224)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8855227439943507)

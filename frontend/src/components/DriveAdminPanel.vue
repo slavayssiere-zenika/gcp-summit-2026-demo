@@ -136,6 +136,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import axios from 'axios'
 import {
   UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw
 } from 'lucide-vue-next'
@@ -152,8 +153,8 @@ let pollInterval: any = null
 
 const fetchFolders = async () => {
   try {
-    const res = await fetch('/drive-api/folders')
-    if (res.ok) folders.value = await res.json()
+    const res = await axios.get('/drive-api/folders')
+    folders.value = res.data
   } catch (error) {
     console.error("Failed to load folders", error)
   }
@@ -161,8 +162,8 @@ const fetchFolders = async () => {
 
 const fetchStatus = async () => {
   try {
-    const res = await fetch('/drive-api/status')
-    if (res.ok) syncStatus.value = await res.json()
+    const res = await axios.get('/drive-api/status')
+    syncStatus.value = res.data
   } catch (error) {
     console.error("Failed to load status", error)
   }
@@ -170,8 +171,8 @@ const fetchStatus = async () => {
 
 const fetchFiles = async () => {
   try {
-    const res = await fetch('/drive-api/files')
-    if (res.ok) files.value = await res.json()
+    const res = await axios.get('/drive-api/files')
+    files.value = res.data
   } catch (error) {
     console.error("Failed to load files", error)
   }
@@ -196,12 +197,10 @@ const retryErrors = async () => {
   if (isRetrying.value) return
   isRetrying.value = true
   try {
-    const res = await fetch('/drive-api/retry-errors', { method: 'POST' })
-    if (res.ok) {
-      await fetchStatus()
-      await fetchFiles()
-      triggerSync() // trigger sync to process pending items immediately
-    }
+    await axios.post('/drive-api/retry-errors')
+    await fetchStatus()
+    await fetchFiles()
+    triggerSync() // trigger sync to process pending items immediately
   } catch (err) {
     console.error('Failed to retry errors', err)
   } finally {
@@ -213,21 +212,13 @@ const addFolder = async () => {
   if (!newFolder.value.google_folder_id || !newFolder.value.tag) return
   isAdding.value = true
   try {
-    const res = await fetch('/drive-api/folders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newFolder.value)
-    })
-    if (res.ok) {
-      newFolder.value = { google_folder_id: '', tag: '' }
-      await fetchFolders()
-      // Manually trigger a background sync to wake up the worker
-      triggerSync()
-    } else {
-      alert("Erreur lors de l'ajout.")
-    }
+    await axios.post('/drive-api/folders', newFolder.value)
+    newFolder.value = { google_folder_id: '', tag: '' }
+    await fetchFolders()
+    // Manually trigger a background sync to wake up the worker
+    triggerSync()
   } catch (err) {
-    alert("Erreur de connexion.")
+    alert("Erreur lors de l'ajout.")
   } finally {
     isAdding.value = false
   }
@@ -236,7 +227,7 @@ const addFolder = async () => {
 const deleteFolder = async (id: number) => {
   if (!confirm('Voulez-vous retirer cette source ? La file d\'attente existante ne sera pas détruite.')) return
   try {
-    await fetch(`/drive-api/folders/${id}`, { method: 'DELETE' })
+    await axios.delete(`/drive-api/folders/${id}`)
     await fetchFolders()
   } catch (err) {
     console.error(err)
@@ -248,11 +239,9 @@ const syncStartedMsg = ref('')
 const triggerSync = async () => {
   isSyncing.value = true
   try {
-    const res = await fetch('/drive-api/sync', { method: 'POST' })
-    if (res.ok) {
-      syncStartedMsg.value = 'Synchronisation démarrée en arrière-plan...'
-      setTimeout(() => { syncStartedMsg.value = '' }, 3000)
-    }
+    await axios.post('/drive-api/sync')
+    syncStartedMsg.value = 'Synchronisation démarrée en arrière-plan...'
+    setTimeout(() => { syncStartedMsg.value = '' }, 3000)
     await fetchStatus()
   } catch (error) {
     console.error("Sync failed", error)

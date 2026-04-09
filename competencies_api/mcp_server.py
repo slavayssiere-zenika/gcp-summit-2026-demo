@@ -65,6 +65,18 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="search_competencies",
+            description="Search for a competency by name",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search term"},
+                    "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10}
+                },
+                "required": ["query"]
+            }
+        ),
+        Tool(
             name="get_competency",
             description="Get details of a specific competency by ID",
             inputSchema={
@@ -161,6 +173,17 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["user_id"]
             }
+        ),
+        Tool(
+            name="list_competency_users",
+            description="Get a list of user IDs that possess a specific competency",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "competency_id": {"type": "integer", "description": "The competency ID"}
+                },
+                "required": ["competency_id"]
+            }
         )
     ]
 
@@ -189,6 +212,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         try:
             if name == "list_competencies":
                 response = await client.get(f"{API_BASE_URL}/", params=arguments)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "search_competencies":
+                response = await client.get(f"{API_BASE_URL}/search", params=arguments)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -235,6 +263,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "list_user_competencies":
                 response = await client.get(f"{API_BASE_URL}/user/{arguments['user_id']}")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "list_competency_users":
+                response = await client.get(f"{API_BASE_URL}/{arguments['competency_id']}/users")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

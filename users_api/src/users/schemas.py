@@ -67,3 +67,10 @@ class UserStatsResponse(BaseModel):
     active: int
     inactive: int
     by_username_prefix: dict[str, int]
+
+class MergeRequest(BaseModel):
+    source_id: int
+    target_id: int
+
+class DuplicateCandidate(BaseModel):
+    users: List[UserResponse]

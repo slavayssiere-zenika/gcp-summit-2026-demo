@@ -52,6 +52,10 @@ async def list_tools() -> list[Tool]:
                     "url": {
                         "type": "string",
                         "description": "The URL of the candidate's CV. Must be a Google Document link."
+                    },
+                    "source_tag": {
+                        "type": "string",
+                        "description": "Optional thematic tag (e.g., location, department) to associate with this CV."
                     }
                 },
                 "required": ["url"]
@@ -127,11 +131,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         async with httpx.AsyncClient() as client:
             if name == "analyze_cv":
                 url = arguments.get("url")
+                source_tag = arguments.get("source_tag")
                 if not url:
                     return [TextContent(type="text", text="Error: Missing url argument.")]
                 
                 try:
-                    response = await client.post(f"{API_BASE_URL}/import", json={"url": url}, headers=headers, timeout=60.0)
+                    payload = {"url": url}
+                    if source_tag:
+                        payload["source_tag"] = source_tag
+                    response = await client.post(f"{API_BASE_URL}/import", json=payload, headers=headers, timeout=60.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:

@@ -367,3 +367,32 @@ async def list_user_items(
     )
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
+
+from pydantic import BaseModel
+
+class UserMergeRequest(BaseModel):
+    source_id: int
+    target_id: int
+
+@router.post("/internal/users/merge")
+async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Internal endpoint to merge user data.
+    Updates items.user_id = target_id where user_id = source_id.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Missing Authorization via items merge")
+        
+    from sqlalchemy import update
+    stmt = update(Item).where(Item.user_id == req.source_id).values(user_id=req.target_id)
+    await db.execute(stmt)
+    await db.commit()
+    
+    # Invalidate cache for users involved
+    delete_cache_pattern(f"items:user:{req.source_id}:*")
+    delete_cache_pattern(f"items:user:{req.target_id}:*")
+    delete_cache_pattern("items:list:*")
+    delete_cache_pattern("items:search:*")
+    
+    return {"message": f"Successfully migrated items from user {req.source_id} to {req.target_id}"}

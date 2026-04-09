@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="description" content="Cabinet d&#x27;innovation technologique, managériale et organisationnelle"/><meta name="viewport" content="minimum-scale=1, initial-scale=1, width=device-width"/><meta name="og:title" content="Zenika"/><meta name="og:description" content="Cabinet d&#x27;innovation technologique, managériale et organisationnelle"/><meta name="og:type" content="article"/><meta name="og:url" content="http://zenika.com/favicon.ico"/><meta name="og:image" content="http://zenika.com/static/images/logo.png"/><meta name="og:site_name" content="Zenika"/><title>404: This page could not be found</title><meta name="next-head-count" content="10"/><meta name="theme-color" content="#DF2147"/><link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon-32x32.png"/><link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon-16x16.png"/><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="true"/><link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&amp;display=swap" rel="stylesheet"/><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;700&amp;display=swap"/><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans&amp;display=swap"/><script type="opt-in" data-name="googleTagManager" data-type="application/javascript">
+              (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
+              var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-T4VDQJT6');
+            </script><script type="opt-in" data-name="googleAnalytics" data-type="application/javascript" data-src="https://www.googletagmanager.com/gtag/js?id=UA-1812827-15" async=""></script><script type="opt-in" data-name="googleAnalytics" data-type="application/javascript">
+                    window.dataLayer = window.dataLayer || [];
+                    function gtag(){dataLayer.push(arguments);}
+                    gtag('js', new Date());
+                    gtag('config', 'UA-1812827-15', {
+                      cookie_expires: 365 * 24 * 60 * 60 // Cookies expire after 1 year
+                    });
+                </script><script async="" defer="" src="//static.cdn.prismic.io/prismic.js?repo=zenika-website&amp;new=true"></script><script type="opt-in" data-name="Brevo" data-type="application/javascript" data-src="https://cdn.brevo.com/js/sdk-loader.js" async=""></script><script type="opt-in" data-name="Brevo" data-type="application/javascript">
+                    window.Brevo = window.Brevo || []; Brevo.push([ "init", { client_key: "olcy0odsy5ix9dshbmdxd75j" } ]); 
+                </script><link rel="preload" href="/_next/static/css/9b4f4bc8232f64c5.css" as="style"/><link rel="stylesheet" href="/_next/static/css/9b4f4bc8232f64c5.css" data-n-g=""/><noscript data-n-css=""></noscript><script defer="" nomodule="" src="/_next/static/chunks/polyfills-c67a75d1b6f99dc8.js"></script><script src="/_next/static/chunks/webpack-2b124733369f6e68.js" defer=""></script><script src="/_next/static/chunks/framework-1c157c368c8b4031.js" defer=""></script><script src="/_next/static/chunks/main-43763f558ab2c597.js" defer=""></script><script src="/_next/static/chunks/pages/_app-9b0bf8516a4da072.js" defer=""></script><script src="/_next/static/chunks/pages/_error-83cfe0c6e98fff15.js" defer=""></script><script src="/_next/static/EXgxlic_iMxODnJfVo3Eu/_buildManifest.js" defer=""></script><script src="/_next/static/EXgxlic_iMxODnJfVo3Eu/_ssgManifest.js" defer=""></script><style id="jss-server-side">html {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+strong, b {
+  font-weight: 700;
+}
+body {
+  color: rgba(255, 255, 255, 0.87);
+  margin: 0;
+  font-size: 0.875rem;
+  font-family: Nunito;
+  font-weight: 400;
+  line-height: 1.188rem;
+  letter-spacing: 0.01071em;
+  background-color: #121212;
+}
+@media print {
+  body {
+    background-color: #fff;
+  }
+}
+body::backdrop {
+  background-color: #121212;
+}
+*:focus-visible {
+  outline: 2px solid #858585 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+    animation-play-state: paused !important;
+  }
+}</style></head><body><noscript>
+              <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T4VDQJT6" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+            </noscript><div id="__next" data-reactroot=""><div style="font-family:-apple-system, BlinkMacSystemFont, Roboto, &quot;Segoe UI&quot;, &quot;Fira Sans&quot;, Avenir, &quot;Helvetica Neue&quot;, &quot;Lucida Grande&quot;, sans-serif;height:100vh;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center"><div><style>
+                body { margin: 0; color: #000; background: #fff; }
+                .next-error-h1 {
+                  border-right: 1px solid rgba(0, 0, 0, .3);
+                }
+
+                @media (prefers-color-scheme: dark) {
+                  body { color: #fff; background: #000; }
+                  .next-error-h1 {
+                    border-right: 1px solid rgba(255, 255, 255, .3);
+                  }
+                }</style><h1 class="next-error-h1" style="display:inline-block;margin:0;margin-right:20px;padding:0 23px 0 0;font-size:24px;font-weight:500;vertical-align:top;line-height:49px">404</h1><div style="display:inline-block;text-align:left;line-height:49px;height:49px;vertical-align:middle"><h2 style="font-size:14px;font-weight:normal;line-height:49px;margin:0;padding:0">This page could not be found<!-- -->.</h2></div></div></div></div><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"statusCode":404}},"page":"/_error","query":{},"buildId":"EXgxlic_iMxODnJfVo3Eu","isFallback":false,"gip":true,"locale":"fr-FR","locales":["fr-FR","fr-CA","en-CA","en-US","en-SG"],"defaultLocale":"fr-FR","scriptLoader":[]}</script></body></html>

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 
@@ -21,3 +21,4 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     picture_url = Column(String, nullable=True)
     google_id = Column(String, nullable=True)
+    merged_into_id = Column(Integer, ForeignKey("users.id"), nullable=True)
