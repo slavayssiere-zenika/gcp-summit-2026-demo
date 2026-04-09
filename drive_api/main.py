@@ -54,7 +54,11 @@ FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
 
 app.include_router(router)
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+from src.auth import verify_jwt
+from fastapi import APIRouter, Depends
+protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
+@protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_mcp(path: str, request: Request):
     import httpx
     url = f"http://localhost:8081/mcp/{path}"
@@ -90,13 +94,15 @@ async def health(response: Response):
     response.status_code = 503
     return {"status": "unhealthy"}
 
-@app.get("/spec")
+@protected_router.get("/spec")
 async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
             return Response(content=f.read(), media_type="text/markdown")
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
+
+app.include_router(protected_router)
 
 if __name__ == "__main__":
     import uvicorn

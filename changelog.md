@@ -1,3 +1,46 @@
+## Mise à jour automatique - 2026-04-09 12:08:18
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | 1176  | 144  |  88% |
+| competencies_api | 898   | 198  |  78% |
+| cv_api           | 987   | 175  |  82% |
+| drive_api        | 719   | 327  |  55% |
+| items_api        | 1031  | 210  |  80% |
+| prompts_api      | 574   | 115  |  80% |
+| users_api        | 1065  | 235  |  78% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Fix tests for async routing and mocks
+
+#### Fichiers (non commités)
+- `agents/workflows/git-push.md` (M)
+- `agent_api/main.py` (M)
+- `competencies_api/main.py` (M)
+- `drive_api/main.py` (M)
+- `get_failures.py` (D)
+- `patch_async_tests.py` (D)
+- `patch_code.py` (D)
+- `patch_code_new.py` (D)
+- `patch_cv_tests.py` (D)
+- `patch_databases.py` (D)
+- `patch_health.py` (D)
+- `patch_health_v2.py` (D)
+- `patch_mock.py` (D)
+- `patch_secrets.py` (D)
+- `patch_tf.py` (D)
+- `prompts_api/main.py` (M)
+- `scripts/generate_changelog.py` (M)
+- `test_drive.py` (D)
+- `test_drive_adc.py` (D)
+- `test_fastapi_mock.py` (D)
+
+---
+
 ## Mise à jour automatique - 2026-04-09 12:03:28
 
 ### Couverture de Code
