@@ -293,6 +293,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:
+                return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
             return [TextContent(type="text", text=f"HTTP Error: {e.response.status_code} - {e.response.text}")]
         except Exception as e:
             return [TextContent(type="text", text=f"Error: {str(e)}")]

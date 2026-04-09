@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+import json
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -21,6 +23,7 @@ router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 COMPETENCIES_API_URL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
 PROMPTS_API_URL = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+DRIVE_API_URL = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
 
 # Initialize Gemini Client
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -74,10 +77,20 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
     headers = {"Authorization": auth_header}
     inject(headers)  # Mandatory Trace Span Propagation (Agent.md Rule 4)
 
+    return await _process_cv_core(
+        url=req.url,
+        google_access_token=req.google_access_token,
+        source_tag=req.source_tag,
+        headers=headers,
+        token_payload=token_payload,
+        db=db
+    )
+
+async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession) -> CVResponse:
     # 2. Fetch Text from CV Link
     try:
-        logger.info(f"Downloading CV content from {req.url}")
-        raw_text = await _fetch_cv_content(req.url, req.google_access_token)
+        logger.info(f"Downloading CV content from {url}")
+        raw_text = await _fetch_cv_content(url, google_access_token)
     except HTTPException as he:
         logger.error(f"HTTPException while downloading CV: {he.detail}")
         raise
@@ -123,19 +136,38 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
                                 "type": "object",
                                 "properties": {
                                     "name": {"type": "string"},
-                                    "parent": {"type": "string"}
+                                    "parent": {"type": "string"},
+                                    "aliases": {
+                                        "type": "array",
+                                        "items": {"type": "string"}
+                                    }
                                 },
                                 "required": ["name"]
                             }
+                        },
+                        "missions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "company": {"type": "string"},
+                                    "description": {"type": "string"},
+                                    "competencies": {
+                                        "type": "array",
+                                        "items": {"type": "string"}
+                                    }
+                                },
+                                "required": ["title", "competencies"]
+                            }
                         }
                     },
-                    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies"]
+                    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies", "missions"]
                 }
             )
         )
         parsed_data = response.text
         # LLM returns a JSON string matching schema
-        import json
         structured_cv = json.loads(parsed_data)
         
         if not structured_cv.get("is_cv", False):
@@ -213,9 +245,16 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
         comp_data = comp_res.json()
         all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
         
+
+        def normalize_comp(text):
+            if not text: return ""
+            text = text.strip().lower()
+            return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
+
         def find_comp_id(node_list, t_name):
+            t_norm = normalize_comp(t_name)
             for n in node_list:
-                if n['name'].lower() == t_name.lower(): return n['id']
+                if normalize_comp(n['name']) == t_norm: return n['id']
                 found = find_comp_id(n.get('sub_competencies', []), t_name)
                 if found: return found
             return None
@@ -239,7 +278,12 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
                             all_comps.append(p_res.json()) # quick cache patch
                 
                 # Create leaf
-                leaf_data = {"name": name, "description": "Candidate CV Skill"}
+                aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
+                leaf_data = {
+                    "name": name, 
+                    "description": "Candidate CV Skill",
+                    "aliases": aliases_str
+                }
                 if p_id: leaf_data["parent_id"] = p_id
                 
                 c_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=headers)
@@ -275,17 +319,18 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
 
     # 8. PostGreSQL Physical Save
     from sqlalchemy import delete
-    await db.execute(delete(CVProfile).where(CVProfile.source_url == req.url).where(CVProfile.user_id == user_id))
+    await db.execute(delete(CVProfile).where(CVProfile.source_url == url).where(CVProfile.user_id == user_id))
     
     cv_record = CVProfile(
         user_id=user_id,
-        source_url=req.url,
-        source_tag=req.source_tag,
+        source_url=url,
+        source_tag=source_tag,
         extracted_competencies=structured_cv.get("competencies", []),
         current_role=structured_cv.get("current_role"),
         years_of_experience=structured_cv.get("years_of_experience"),
         summary=structured_cv.get("summary"),
         competencies_keywords=comp_keywords,
+        missions=structured_cv.get("missions", []),
         raw_content=raw_text,
         semantic_embedding=vector_data,
         imported_by_id=importer_id
@@ -317,7 +362,6 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
             contents=filter_prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
-        import json
         required_skills = json.loads(filter_res.text)
         if not isinstance(required_skills, list):
             required_skills = []
@@ -425,25 +469,32 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
             
     return unique_profiles
 
+@router.get("/user/{user_id}/missions")
+async def get_user_missions(user_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Récupère le détail des missions extraites du CV pour un utilisateur.
+    """
+    profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
+    if not profiles:
+        raise HTTPException(status_code=404, detail="Aucun profil CV trouvé pour cet utilisateur.")
+    
+    # On renvoie les missions du CV le plus récent
+    return {"user_id": user_id, "missions": profiles[0].missions or []}
+
 @router.post("/recalculate_tree")
-async def recalculate_competencies_tree(request: Request, db: AsyncSession = Depends(get_db)):
+async def recalculate_competencies_tree(
+    request: Request, 
+    db: AsyncSession = Depends(get_db), 
+    token_payload: dict = Depends(verify_jwt)
+):
     """
     (Admin Only) Lit tous les CVs de la base et donne à Gemini la mission de synthétiser 
     le modèle hiérarchique optimal pour l'entreprise (Catégories -> Spécialités -> Compétences).
     """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Opération refusée: privilèges administrateur requis.")
+    
     auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=403, detail="Opération refusée: Authentification manquante.")
-        
-    token = auth_header.split(" ")[1]
-    try:
-        from jose import jwt
-        from src.auth import SECRET_KEY, ALGORITHM
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Opération refusée: privilèges administrateur requis.")
-    except Exception:
-        raise HTTPException(status_code=403, detail="Token invalide pour cette opération protégée.")
              
     if not client:
         raise HTTPException(status_code=500, detail="Gemini SDK non configuré (Google API Key manquante).")
@@ -465,9 +516,29 @@ async def recalculate_competencies_tree(request: Request, db: AsyncSession = Dep
     try:
         async with httpx.AsyncClient() as http_client:
             headers = {"Authorization": auth_header}
-            comp_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers)
-            comp_data = comp_res.json()
-            all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
+            all_comps = []
+            skip = 0
+            limit = 100
+            while True:
+                comp_res = await http_client.get(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/", 
+                    params={"skip": skip, "limit": limit}, 
+                    headers=headers,
+                    timeout=10.0
+                )
+                comp_res.raise_for_status()
+                comp_data = comp_res.json()
+                
+                # Handling both direct list and PaginationResponse
+                items = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
+                all_comps.extend(items)
+                
+                if isinstance(comp_data, dict) and "total" in comp_data:
+                    if len(all_comps) >= comp_data["total"]:
+                        break
+                elif len(items) < limit:
+                    break
+                skip += limit
             
             def get_all_names(nodes):
                 names = []
@@ -493,10 +564,105 @@ async def recalculate_competencies_tree(request: Request, db: AsyncSession = Dep
             )
         )
         # Parse JSON string from model implicitly as it's guaranteed to be valid by `response_mime_type`
-        import json
         return {"tree": json.loads(response.text)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur Gemini: {str(e)}")
+
+@router.post("/reanalyze")
+async def reanalyze_cvs(
+    request: Request,
+    tag: Optional[str] = None,
+    user_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt)
+):
+    """
+    (Admin Only) Relance l'analyse des CVs correspondant aux filtres.
+    Efface les assignations de compétences existantes pour ces utilisateurs.
+    """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    
+    auth_header = request.headers.get("Authorization")
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+
+    # 1. Fetch CVs to re-process
+    stmt = select(CVProfile)
+    if tag:
+        stmt = stmt.filter(CVProfile.source_tag == tag)
+    if user_id:
+        stmt = stmt.filter(CVProfile.user_id == user_id)
+        
+    cvs = (await db.execute(stmt)).scalars().all()
+    if not cvs:
+        return {"message": "Aucun CV trouvé pour ces filtres.", "count": 0}
+
+    # Dedoublonner les user_ids pour nettoyer les compétences une seule fois par utilisateur
+    user_ids_to_clear = {cv.user_id for cv in cvs}
+    
+    processed_count = 0
+    errors = []
+
+    async def generate():
+        async with httpx.AsyncClient(timeout=60.0) as http_client:
+            # 1.5 Get Google token
+            google_access_token = None
+            try:
+                tok_res = await http_client.get(f"{DRIVE_API_URL.rstrip('/')}/tokens/google", headers=headers, timeout=5.0)
+                if tok_res.status_code == 200:
+                    google_access_token = tok_res.json().get("access_token")
+                    yield json.dumps({"status": "info", "message": "Successfully acquired Google Access Token."}) + "\n"
+                else:
+                    yield json.dumps({"status": "warn", "message": f"Could not fetch Google Token (status {tok_res.status_code}). Proceeding as public."}) + "\n"
+            except Exception as e:
+                yield json.dumps({"status": "error", "message": f"Error fetching Google Token: {str(e)}"}) + "\n"
+
+            # 2. Clear user competencies
+            for uid in user_ids_to_clear:
+                try:
+                    clear_res = await http_client.delete(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{uid}/clear", headers=headers)
+                    clear_res.raise_for_status()
+                    yield json.dumps({"status": "info", "message": f"Cleared competencies for user {uid}"}) + "\n"
+                except Exception as e:
+                    yield json.dumps({"status": "error", "message": f"Failed to clear competencies for user {uid}: {str(e)}"}) + "\n"
+
+            # 3. Process each CV
+            processed_count = 0
+            errors = []
+            total_cvs = len(cvs)
+            
+            for index, cv in enumerate(cvs):
+                try:
+                    url = cv.source_url
+                    s_tag = cv.source_tag
+                    u_id = cv.user_id
+                    
+                    yield json.dumps({"status": "processing", "message": f"Processing CV {index+1}/{total_cvs} (User ID: {u_id})...", "url": url}) + "\n"
+                    
+                    await _process_cv_core(
+                        url=url,
+                        google_access_token=google_access_token,
+                        source_tag=s_tag,
+                        headers=headers,
+                        token_payload=token_payload,
+                        db=db
+                    )
+                    processed_count += 1
+                    yield json.dumps({"status": "success", "message": f"Finished re-processing CV {index+1}/{total_cvs}", "url": url}) + "\n"
+                except Exception as e:
+                    err_msg = str(e)
+                    errors.append(f"CV {cv.id}: {err_msg}")
+                    yield json.dumps({"status": "error", "message": f"Failed CV {index+1}/{total_cvs}: {err_msg}"}) + "\n"
+
+            yield json.dumps({
+                "status": "completed", 
+                "message": f"Réanalyse terminée. {processed_count} CVs traités avec succès.",
+                "count": processed_count,
+                "errors": errors
+            }) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 @router.post("/internal/users/merge")
 async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):

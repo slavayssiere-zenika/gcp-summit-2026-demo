@@ -37,7 +37,7 @@ def delete_cache(key: str):
 def delete_cache_pattern(pattern: str):
     with tracer.start_as_current_span(f"cache.delete_pattern", attributes={"cache.pattern": pattern}) as span:
         deleted = 0
-        for key in client.scan_iter(pattern):
+        for key in client.scan_iter(match=pattern):
             client.delete(key)
             deleted += 1
         span.set_attribute("cache.deleted_count", deleted)

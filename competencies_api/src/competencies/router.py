@@ -1,7 +1,11 @@
 import os
 import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 from opentelemetry.propagate import inject
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
+from sqlalchemy import update, func, desc, asc
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -14,14 +18,15 @@ from cache import get_cache, set_cache, delete_cache, delete_cache_pattern
 from src.competencies.models import Competency, user_competency
 from src.competencies.schemas import (
     CompetencyCreate, CompetencyUpdate, CompetencyResponse, 
-    PaginationResponse, UserInfo, TreeImportRequest
+    PaginationResponse, UserInfo, TreeImportRequest,
+    StatsRequest, CompetencyCount, CompetencyStatsResponse
 )
 
 from src.auth import verify_jwt
 
 router = APIRouter(prefix="", tags=["competencies"], dependencies=[Depends(verify_jwt)])
 
-USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users-api:8000")
 CACHE_TTL = 60
 
 
@@ -30,10 +35,42 @@ def serialize_competency(c: Competency) -> dict:
         "id": c.id,
         "name": c.name,
         "description": c.description,
+        "aliases": c.aliases,
         "parent_id": c.parent_id,
         "created_at": c.created_at,
         "sub_competencies": []
     }
+
+
+def get_grammatical_variants(name: str) -> List[str]:
+    """Generates potential singular/plural variants for a given name."""
+    name = name.strip()
+    variants = {name.lower()}
+    
+    # Plural to Singular (basic rules)
+    if name.lower().endswith('s'):
+        variants.add(name[:-1].lower())
+    if name.lower().endswith('es'):
+        variants.add(name[:-2].lower())
+    if name.lower().endswith('x'):
+        variants.add(name[:-1].lower())
+        
+    # Singular to Plural (common suffixes)
+    variants.add(name.lower() + 's')
+    variants.add(name.lower() + 'es')
+    variants.add(name.lower() + 'x')
+    
+    return list(variants)
+
+
+async def check_grammatical_conflict(db: AsyncSession, name: str, exclude_id: Optional[int] = None) -> Optional[Competency]:
+    """Checks if any grammatical variant of the name already exists in the database."""
+    variants = get_grammatical_variants(name)
+    stmt = select(Competency).filter(func.lower(Competency.name).in_(variants))
+    if exclude_id:
+        stmt = stmt.filter(Competency.id != exclude_id)
+    result = (await db.execute(stmt)).scalars().first()
+    return result
 
 
 async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
@@ -112,9 +149,15 @@ async def search_competencies(
     if cached:
         return PaginationResponse(**cached)
 
+    from sqlalchemy import or_
     results = (await db.execute(
         select(Competency)
-        .filter(Competency.name.ilike(f"%{query}%"))
+        .filter(
+            or_(
+                Competency.name.ilike(f"%{query}%"),
+                Competency.aliases.ilike(f"%{query}%")
+            )
+        )
         .limit(limit)
     )).scalars().all()
 
@@ -171,65 +214,134 @@ async def bulk_import_tree(
     if jwt_payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
         
+    # --- RESET CHAINING ---
+    await db.execute(update(Competency).values(parent_id=None))
+    await db.flush()
+    
+    touched_ids = set()
+        
     async def upsert_level(nodes_dict: dict, parent_id: Optional[int] = None):
         if not isinstance(nodes_dict, dict):
             return
             
         for name, data in nodes_dict.items():
+            name = name.strip()
+            aliases = data.get("aliases") if isinstance(data, dict) else None
             desc = data.get("description", "Généré par Model IA") if isinstance(data, dict) else "Catégorie"
             
             existing = (await db.execute(select(Competency).filter(Competency.name.ilike(name)))).scalars().first()
             if existing:
                 existing.parent_id = parent_id
+                if aliases:
+                    existing.aliases = aliases
                 node_id = existing.id
+                touched_ids.add(node_id)
             else:
-                new_comp = Competency(name=name, description=desc, parent_id=parent_id)
-                db.add(new_comp)
-                await db.flush()
-                node_id = new_comp.id
+                is_category = False
+                if isinstance(data, dict):
+                    sub = data.get("sub") or data.get("sub_competencies")
+                    if sub:
+                        is_category = True
+                
+                if is_category:
+                    new_comp = Competency(name=name, description=desc, aliases=aliases, parent_id=parent_id)
+                    db.add(new_comp)
+                    await db.flush()
+                    node_id = new_comp.id
+                    touched_ids.add(node_id)
+                else:
+                    # Check for grammatical variant in bulk import - if found, use it instead of skipping
+                    conflict = await check_grammatical_conflict(db, name)
+                    if conflict:
+                        conflict.parent_id = parent_id
+                        node_id = conflict.id
+                        touched_ids.add(node_id)
+                        logger.info(f"Bulk Import: Matched '{name}' with existing variant '{conflict.name}'")
+                    else:
+                        logger.warning(f"Skipping creation of unknown leaf competency from tree: {name}")
+                        continue
             
             if isinstance(data, dict):
-                sub = data.get("sub")
+                sub = data.get("sub") or data.get("sub_competencies")
                 if isinstance(sub, dict):
                     await upsert_level(sub, node_id)
                 elif isinstance(sub, list):
                     for item in sub:
                         if isinstance(item, list) and len(item) > 0:
                             sub_name = str(item[0])
-                            sub_desc = str(item[1]) if len(item) > 1 else "Compétence"
+                        elif isinstance(item, dict):
+                            sub_name = item.get("name", str(item))
                         else:
                             sub_name = str(item)
-                            sub_desc = "Compétence"
+                        
+                        sub_name = sub_name.strip()
                             
+                        # Use ilike or grammatical check
                         leaf = (await db.execute(select(Competency).filter(Competency.name.ilike(sub_name)))).scalars().first()
+                        if not leaf:
+                            leaf = await check_grammatical_conflict(db, sub_name)
+
                         if leaf:
                             leaf.parent_id = node_id
+                            touched_ids.add(leaf.id)
                         else:
-                            db.add(Competency(name=sub_name, description=sub_desc, parent_id=node_id))
-                            await db.flush()
+                            logger.warning(f"Skipping creation of unknown leaf competency from list: {sub_name}")
 
     try:
         await upsert_level(payload.tree, None)
+        
+        # --- ORPHAN HANDLING ---
+        # Any root competency that was not touched is moved to Archives
+        archive_name = "Compétences Archives / Non classées"
+        archives = (await db.execute(select(Competency).filter(Competency.name == archive_name))).scalars().first()
+        if not archives:
+            archives = Competency(name=archive_name, description="Compétences conservées mais absentes de la dernière taxonomie calculée.")
+            db.add(archives)
+            await db.flush()
+        
+        archives_id = archives.id
+        touched_ids.add(archives_id)
+        
+        # Update all roots (parent_id IS NULL) that were NOT touched
+        await db.execute(
+            update(Competency)
+            .where(Competency.parent_id.is_(None))
+            .where(Competency.id.not_in(touched_ids))
+            .values(parent_id=archives_id)
+        )
+        
         await db.commit()
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'import: {str(e)}")
         
     delete_cache_pattern("competencies:*")
-    return {"message": "Taxonomie fusionnée avec succès sans corrompre les ids !"}
+    return {"message": "Taxonomie fusionnée avec succès et orphelins archivés !"}
 
 
 @router.post("/", response_model=CompetencyResponse, status_code=201)
 async def create_competency(competency: CompetencyCreate, db: AsyncSession = Depends(get_db)):
+    # Force normalization to prevent duplicates
+    competency.name = competency.name.strip()
+    
     if competency.parent_id is not None:
         parent = (await db.execute(select(Competency).filter(Competency.id == competency.parent_id))).scalars().first()
         if not parent:
             raise HTTPException(status_code=400, detail="Parent competency not found")
             
     # Check for direct existence explicitly to prevent ID drops on race conditions
-    existing = (await db.execute(select(Competency).filter(Competency.name.ilike(competency.name)))).scalars().first()
-    if existing:
-        return CompetencyResponse(**serialize_competency(existing))
+    # This also checks for plural/singular variants
+    conflict = await check_grammatical_conflict(db, competency.name)
+    if conflict:
+        if conflict.name.lower() == competency.name.lower():
+            # Exact match (case insensitive) -> return existing
+            return CompetencyResponse(**serialize_competency(conflict))
+        else:
+            # Grammatical variant (singular/plural) -> Conflict 409 per user request
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Une variante grammaticale de '{competency.name}' existe déjà : '{conflict.name}'."
+            )
         
     db_comp = Competency(**competency.model_dump())
     db.add(db_comp)
@@ -263,10 +375,24 @@ async def update_competency(
         raise HTTPException(status_code=400, detail="A competency cannot be its own parent")
         
     for key, value in competency_update.model_dump(exclude_unset=True).items():
+        if key == "name" and value is not None:
+            value = value.strip()
+            if value != db_comp.name:
+                # Check if name already exists for another record (grammatical variant check)
+                conflict = await check_grammatical_conflict(db, value, exclude_id=competency_id)
+                if conflict:
+                    raise HTTPException(
+                        status_code=409, 
+                        detail=f"Une compétence nommée '{value}' ou une variante ('{conflict.name}') existe déjà."
+                    )
         setattr(db_comp, key, value)
         
-    await db.commit()
-    await db.refresh(db_comp)
+    try:
+        await db.commit()
+        await db.refresh(db_comp)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Conflit de données : le nom est probablement déjà utilisé.")
     
     delete_cache(f"competencies:{competency_id}")
     delete_cache_pattern("competencies:tree:*")
@@ -285,6 +411,53 @@ async def delete_competency(competency_id: int, db: AsyncSession = Depends(get_d
     delete_cache(f"competencies:{competency_id}")
     delete_cache_pattern("competencies:tree:*")
     return Response(status_code=204)
+
+
+@router.post("/stats/counts", response_model=CompetencyStatsResponse)
+async def get_competency_stats(
+    req: StatsRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Calcule les statistiques de compétences (comptage par utilisateur).
+    Permet de filtrer sur une cohorte d'utilisateurs spécifique.
+    """
+    # Base query for counting users per competency
+    stmt = (
+        select(
+            Competency.id,
+            Competency.name,
+            func.count(user_competency.c.user_id).label("count")
+        )
+        .join(user_competency, Competency.id == user_competency.c.competency_id)
+    )
+    
+    # Filter by user_ids if provided
+    if req.user_ids is not None:
+        if not req.user_ids:
+            return CompetencyStatsResponse(items=[])
+        stmt = stmt.where(user_competency.c.user_id.in_(req.user_ids))
+    
+    # Group by competency
+    stmt = stmt.group_by(Competency.id, Competency.name)
+    
+    # Sorting
+    if req.sort_order.lower() == "asc":
+        stmt = stmt.order_by(func.count(user_competency.c.user_id).asc())
+    else:
+        stmt = stmt.order_by(func.count(user_competency.c.user_id).desc())
+        
+    # Limit
+    stmt = stmt.limit(req.limit)
+    
+    results = (await db.execute(stmt)).all()
+    
+    items = [
+        CompetencyCount(id=r[0], name=r[1], count=r[2])
+        for r in results
+    ]
+    
+    return CompetencyStatsResponse(items=items)
 
 
 # --- User Associations ---
@@ -405,3 +578,24 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
     delete_cache_pattern(f"competencies:user:{req.target_id}:*")
     
     return {"message": f"Successfully migrated competencies from user {req.source_id} to {req.target_id}"}
+
+
+@router.delete("/user/{user_id}/clear", status_code=204)
+async def clear_user_competencies(
+    user_id: int, 
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt)
+):
+    """
+    (Admin Only) Supprime toutes les assignations de compétences pour un utilisateur.
+    """
+    if jwt_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+        
+    await db.execute(
+        user_competency.delete().where(user_competency.c.user_id == user_id)
+    )
+    await db.commit()
+    
+    delete_cache_pattern(f"competencies:user:{user_id}:*")
+    return Response(status_code=204)

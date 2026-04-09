@@ -50,3 +50,78 @@ databaseChangeLog:
                   name: "created_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+  - changeSet:
+      id: "drop-old-unique"
+      author: "antigravity"
+      changes:
+        - sql:
+            sql: "ALTER TABLE competencies DROP CONSTRAINT IF EXISTS competencies_name_key"
+  - changeSet:
+      id: "cleanup-competency-duplicates"
+      author: "antigravity"
+      changes:
+        - sql:
+            sql: |
+              -- 1. Update children to point to canonical parent
+              UPDATE competencies
+              SET parent_id = canonicals.min_id
+              FROM (
+                  SELECT LOWER(name) as lname, MIN(id) as min_id
+                  FROM competencies
+                  GROUP BY LOWER(name)
+              ) canonicals
+              JOIN competencies p ON LOWER(p.name) = canonicals.lname
+              WHERE competencies.parent_id = p.id
+              AND p.id != canonicals.min_id;
+
+              -- 2. Migrate user associations to canonical competency
+              -- Insert missing ones first
+              INSERT INTO user_competency (user_id, competency_id, created_at)
+              SELECT uc.user_id, canonicals.min_id, MIN(uc.created_at)
+              FROM user_competency uc
+              JOIN competencies c ON uc.competency_id = c.id
+              JOIN (
+                  SELECT LOWER(name) as lname, MIN(id) as min_id
+                  FROM competencies
+                  GROUP BY LOWER(name)
+              ) canonicals ON LOWER(c.name) = canonicals.lname
+              WHERE c.id != canonicals.min_id
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_competency uc2
+                  WHERE uc2.user_id = uc.user_id AND uc2.competency_id = canonicals.min_id
+              )
+              GROUP BY uc.user_id, canonicals.min_id;
+
+              -- 3. Delete associations to non-canonical competencies
+              DELETE FROM user_competency
+              WHERE competency_id IN (
+                  SELECT c.id
+                  FROM competencies c
+                  JOIN (
+                      SELECT LOWER(name) as lname, MIN(id) as min_id
+                      FROM competencies
+                      GROUP BY LOWER(name)
+                  ) canonicals ON LOWER(c.name) = canonicals.lname
+                  WHERE c.id != canonicals.min_id
+              );
+
+              -- 4. Delete duplicate competencies
+              DELETE FROM competencies
+              WHERE id IN (
+                  SELECT c.id
+                  FROM competencies c
+                  JOIN (
+                      SELECT LOWER(name) as lname, MIN(id) as min_id
+                      FROM competencies
+                      GROUP BY LOWER(name)
+                  ) canonicals ON LOWER(c.name) = canonicals.lname
+                  WHERE c.id != canonicals.min_id
+              );
+  - changeSet:
+      id: "case-insensitive-unique-competency"
+      author: "antigravity"
+      changes:
+        - sql:
+            sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_competency_name_lower ON competencies (LOWER(name))"
+  - include:
+      file: "db_migrations/changelogs/competencies/003-add-competency-aliases.yaml"

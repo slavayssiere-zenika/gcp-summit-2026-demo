@@ -3,10 +3,10 @@ platform darwin -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0
 rootdir: /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api
 plugins: mock-3.15.1, cov-7.1.0, langsmith-0.7.23, asyncio-1.3.0, anyio-4.13.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collected 31 items
+collected 32 items
 
-test_integration.py ..............                                       [ 45%]
-test_main.py ...                                                         [ 54%]
+test_integration.py ...............                                      [ 46%]
+test_main.py ...                                                         [ 56%]
 test_mcp_tools.py ..............                                         [100%]
 
 =============================== warnings summary ===============================
@@ -14,17 +14,20 @@ test_mcp_tools.py ..............                                         [100%]
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
-test_integration.py: 17 warnings
+test_integration.py: 18 warnings
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/sqlalchemy/sql/schema.py:3624: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
     return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
 
 test_integration.py::test_assign_competency_propagates_jwt
 test_integration.py::test_assign_and_list_user_competencies
-  /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/src/competencies/router.py:320: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+test_integration.py::test_get_competency_stats
+test_integration.py::test_get_competency_stats
+test_integration.py::test_get_competency_stats
+  /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/src/competencies/router.py:493: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
     created_at=datetime.utcnow()
 
 test_main.py::test_openapi_json
-  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/openapi/utils.py:252: UserWarning: Duplicate Operation ID proxy_mcp_mcp__path__post for function proxy_mcp at /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/main.py
+  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/openapi/utils.py:252: UserWarning: Duplicate Operation ID proxy_mcp_mcp__path__put for function proxy_mcp at /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/main.py
     warnings.warn(message, stacklevel=1)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -32,4 +35,4 @@ test_main.py::test_openapi_json
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 31 passed, 21 warnings in 1.43s ========================
+======================= 32 passed, 25 warnings in 1.00s ========================

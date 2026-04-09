@@ -172,6 +172,30 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         }
       }
 
+      dynamic "env" {
+        for_each = each.key == "users" ? [1] : []
+        content {
+          name  = "CV_API_URL"
+          value = "http://api.internal.zenika/cv-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "users" ? [1] : []
+        content {
+          name  = "ITEMS_API_URL"
+          value = "http://api.internal.zenika/items-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "users" ? [1] : []
+        content {
+          name  = "COMPETENCIES_API_URL"
+          value = "http://api.internal.zenika/comp-api/"
+        }
+      }
+
       # Alimentation exclusive pour l'API CV responsable des embeddings RAG
       dynamic "env" {
         for_each = each.key == "cv" ? [1] : []
@@ -207,6 +231,14 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         content {
           name  = "COMPETENCIES_API_URL"
           value = "http://api.internal.zenika/comp-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "cv" ? [1] : []
+        content {
+          name  = "DRIVE_API_URL"
+          value = "http://api.internal.zenika/drive-api/"
         }
       }
     }
@@ -845,8 +877,8 @@ resource "google_cloud_run_v2_service_iam_member" "drive_invoker" {
 # ==============================================================
 resource "google_cloud_scheduler_job" "drive_sync_job" {
   name             = "drive-sync-trigger-${terraform.workspace}"
-  description      = "Triggers Drive API /sync every 5 minutes"
-  schedule         = "*/5 * * * *"
+  description      = "Triggers Drive API /sync every hour"
+  schedule         = "0 * * * *"
   time_zone        = "Europe/Paris"
   attempt_deadline = "320s"
 

@@ -50,6 +50,9 @@ services:
       - GOOGLE_SECRET_ID=${GOOGLE_SECRET_ID}
       - GOOGLE_SECRET_KEY=${GOOGLE_SECRET_KEY}
       - ROOT_PATH=/users-api
+      - CV_API_URL=http://cv-api:8004
+      - ITEMS_API_URL=http://items-api:8001
+      - COMPETENCIES_API_URL=http://competencies-api:8003
     depends_on:
       db_migrations:
         condition: service_completed_successfully

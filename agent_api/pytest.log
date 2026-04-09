@@ -13,7 +13,7 @@ test_session.py ...........                                              [100%]
 =================================== FAILURES ===================================
 ____________________________ test_get_spec_success _____________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x118ccabe0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x118ef2be0>
 
     def test_get_spec_success(mocker):
         mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
@@ -24,12 +24,12 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:31: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 14:08:50,301", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0006, "trace_id": "67a406dcf6ee963654efddeda1ecd431", "span_id": "8a53025be50ef584"}
+{"asctime": "2026-04-09 18:09:32,637", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0009, "trace_id": "2cecbee41e83f3dfa03ce30e6835d62a", "span_id": "6aefe7d0bb0d2d86"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 ______________________________ test_get_spec_fail ______________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x118dd9750>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x118fddb50>
 
     def test_get_spec_fail(mocker):
         mocker.patch("builtins.open", side_effect=Exception("Not found"))
@@ -40,7 +40,7 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:37: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 14:08:50,470", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0005, "trace_id": "e1ae74768f72d4a994823490100d70e8", "span_id": "e81dcc35777d9bda"}
+{"asctime": "2026-04-09 18:09:32,791", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0008, "trace_id": "45bf6ab09bc7caed61e8fb12d7c3bc10", "span_id": "8107659a3ce3858c"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 ______________________________ test_mcp_registry _______________________________
@@ -53,7 +53,7 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:89: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 14:08:50,590", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/mcp/registry", "http.status_code": 401, "http.duration_s": 0.0008, "trace_id": "96980831c57e64a8ff1369669df45962", "span_id": "80a545f7426c1ef0"}
+{"asctime": "2026-04-09 18:09:32,939", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/mcp/registry", "http.status_code": 401, "http.duration_s": 0.0006, "trace_id": "fc0c34656b8190ae5ba90a1c22fc30ee", "span_id": "536dbfc80517485b"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 =============================== warnings summary ===============================
@@ -94,7 +94,7 @@ Coverage JSON written to file coverage.json
 FAILED test_main.py::test_get_spec_success - assert 401 == 200
 FAILED test_main.py::test_get_spec_fail - assert 401 == 200
 FAILED test_main.py::test_mcp_registry - assert 401 == 200
-=================== 3 failed, 38 passed, 4 warnings in 0.77s ===================
+=================== 3 failed, 38 passed, 4 warnings in 0.65s ===================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -142,7 +142,7 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.0990294401957725)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8194118950160663)
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export

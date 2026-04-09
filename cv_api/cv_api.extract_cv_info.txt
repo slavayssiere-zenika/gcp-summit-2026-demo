@@ -10,8 +10,14 @@ The JSON object must contain the following top-level keys:
 6.  **"current_role"**: (string) The candidate's current or last professional title.
 7.  **"years_of_experience"**: (integer) The derived total professional experience in years. If the exact number cannot be confidently calculated from the dates, return `null` instead of guessing.
 8.  **"competencies"**: (array of objects) A list of all identified technical and methodological skills. Each object in the array must contain:
-    *   **"name"**: (string) The specific competency (e.g., 'Python', 'AWS', 'Agile').
+    *   **"name"**: (string) The specific competency (e.g., 'Python', 'AWS', 'Agile'). **Use EXCLUSIVELY the singular form** (e.g., 'Service', 'Container', 'System').
     *   **"parent"**: (string) A generic category for the competency (e.g., 'Programming Languages').
+    *   **"aliases"**: (array of strings) A list of 2-3 common synonyms or acronyms for this competency. Example for 'Google Cloud Platform': ['GCP', 'Google Cloud'].
+9.  **"missions"**: (array of objects) A list of professional experiences or projects. Each object must contain:
+    *   **"title"**: (string) The job title or mission name.
+    *   **"company"**: (string) The company name where the mission took place.
+    *   **"description"**: (string) A brief description of the mission.
+    *   **"competencies"**: (array of strings) The technical skills and tools specifically used during THIS mission.
 
-**Strict Output Requirements:**
+** Strict Output Requirements:**
 *   Output the JSON object and ensure the JSON is valid. Do not include conversational text.

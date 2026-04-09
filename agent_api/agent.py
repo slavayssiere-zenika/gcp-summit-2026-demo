@@ -448,6 +448,18 @@ async def create_competency(name: str, description: Optional[str] = None, parent
     result = await mcp.call_tool("create_competency", payload)
     return format_mcp_result(result, "competency")
 
+async def apply_competency_tree(tree: dict) -> dict:
+    """
+    Applique et persiste un arbre de compétences complet dans la base de données (Admin uniquement).
+    Cet outil est utilisé pour valider et enregistrer une taxonomie après un recalcul.
+    
+    Args:
+        tree (dict): L'objet JSON représentant l'arbre hiérarchique des compétences.
+    """
+    mcp = await get_competencies_mcp()
+    result = await mcp.call_tool("bulk_import_tree", {"tree": tree})
+    return format_mcp_result(result, "bulk_import")
+
 
 async def delete_competency(competency_id: int) -> dict:
     """
@@ -500,9 +512,9 @@ async def list_competency_users(competency_id: int) -> dict:
 
 
 COMPETENCIES_TOOLS = [
-    list_competencies, get_competency, create_competency, delete_competency,
-    assign_competency_to_user, remove_competency_from_user, list_user_competencies,
-    search_competencies, list_competency_users
+    list_competencies, get_competency, create_competency, apply_competency_tree,
+    delete_competency, assign_competency_to_user, remove_competency_from_user,
+    list_user_competencies, search_competencies, list_competency_users
 ]
 
 # --- Loki Tools ---
