@@ -78,6 +78,12 @@ const router = createRouter({
       meta: { adminOnly: true }
     },
     {
+      path: '/admin/reanalysis',
+      name: 'admin-reanalysis',
+      component: () => import('../views/AdminReanalysis.vue'),
+      meta: { adminOnly: true }
+    },
+    {
       path: '/help',
       name: 'help',
       component: () => import('../views/Help.vue')

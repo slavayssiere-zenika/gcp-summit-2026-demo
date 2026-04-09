@@ -29,6 +29,19 @@ resource "google_compute_region_backend_service" "internal_prompts_backend" {
   }
 }
 
+resource "google_compute_region_backend_service" "internal_drive_backend" {
+  name                  = "backend-internal-drive-${terraform.workspace}"
+  region                = var.region
+  protocol              = "HTTP"
+  load_balancing_scheme = "INTERNAL_MANAGED"
+
+  backend {
+    group           = google_compute_region_network_endpoint_group.drive_neg.id
+    balancing_mode  = "UTILIZATION"
+    capacity_scaler = 1.0
+  }
+}
+
 resource "google_compute_region_url_map" "internal_url_map" {
   name            = "lb-internal-${terraform.workspace}"
   region          = var.region
@@ -102,6 +115,17 @@ resource "google_compute_region_url_map" "internal_url_map" {
       priority = 70
       match_rules { prefix_match = "/cv-api/" }
       service = google_compute_region_backend_service.internal_mcp_backend["cv"].id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 80
+      match_rules { prefix_match = "/drive-api/" }
+      service = google_compute_region_backend_service.internal_drive_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

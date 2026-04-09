@@ -21,7 +21,7 @@ router = APIRouter(prefix="", tags=["items"], dependencies=[Depends(verify_jwt)]
 
 import os
 
-USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users-api:8000")
 CACHE_TTL = 60
 
 

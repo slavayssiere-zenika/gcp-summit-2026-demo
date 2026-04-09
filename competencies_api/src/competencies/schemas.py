@@ -6,6 +6,7 @@ from datetime import datetime
 class CompetencyBase(BaseModel):
     name: str
     description: Optional[str] = None
+    aliases: Optional[str] = None
     parent_id: Optional[int] = None
 
 
@@ -16,6 +17,7 @@ class CompetencyCreate(CompetencyBase):
 class CompetencyUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    aliases: Optional[str] = None
     parent_id: Optional[int] = None
 
 
@@ -53,3 +55,16 @@ class PaginationResponse(BaseModel):
 
 class TreeImportRequest(BaseModel):
     tree: Dict[str, Any]
+
+class StatsRequest(BaseModel):
+    user_ids: Optional[List[int]] = None
+    limit: int = 10
+    sort_order: str = "desc" # "asc" or "desc"
+
+class CompetencyCount(BaseModel):
+    id: int
+    name: str
+    count: int
+
+class CompetencyStatsResponse(BaseModel):
+    items: List[CompetencyCount]

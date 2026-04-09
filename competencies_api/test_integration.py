@@ -209,3 +209,53 @@ def test_bulk_import_tree_authorized(client):
     response = client.post("/bulk_tree", json=payload)
     assert response.status_code == 200
 
+
+def test_get_competency_stats(client):
+    # 1. Create competencies
+    comp1 = client.post("/", json={"name": "RareSkill", "description": "Rare"}).json()["id"]
+    comp2 = client.post("/", json={"name": "CommonSkill", "description": "Common"}).json()["id"]
+    
+    # 2. Mock user fetch (Assignment requires validating user in users_api)
+    mock_user = MagicMock()
+    mock_user.status_code = 200
+    mock_user.json.return_value = {"id": 1, "username": "u1", "is_active": True, "email": "u1@e.com"}
+    mock_user.raise_for_status = MagicMock()
+    
+    with patch("httpx.AsyncClient.get", return_value=mock_user):
+        # Assign comp2 to user 1, comp1 to user 1
+        client.post(f"/user/1/assign/{comp2}")
+        client.post(f"/user/1/assign/{comp1}")
+        
+    mock_user2 = MagicMock()
+    mock_user2.status_code = 200
+    mock_user2.json.return_value = {"id": 2, "username": "u2", "is_active": True, "email": "u2@e.com"}
+    mock_user2.raise_for_status = MagicMock()
+    
+    with patch("httpx.AsyncClient.get", return_value=mock_user2):
+        # Assign comp2 to user 2 (so comp2 has 2 users, comp1 has 1)
+        client.post(f"/user/2/assign/{comp2}")
+
+    # 3. Test stats - Most common (sort_order=desc)
+    resp = client.post("/stats/counts", json={"sort_order": "desc", "limit": 10})
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert items[0]["name"] == "CommonSkill"
+    assert items[0]["count"] == 2
+    assert items[1]["name"] == "RareSkill"
+    assert items[1]["count"] == 1
+    
+    # 4. Test stats - Rarest (sort_order=asc)
+    resp_rare = client.post("/stats/counts", json={"sort_order": "asc", "limit": 10})
+    assert resp_rare.status_code == 200
+    items_rare = resp_rare.json()["items"]
+    assert items_rare[0]["name"] == "RareSkill"
+    assert items_rare[0]["count"] == 1
+    
+    # 5. Test filter by user_id
+    resp_filter = client.post("/stats/counts", json={"user_ids": [2]})
+    assert resp_filter.status_code == 200
+    items_filter = resp_filter.json()["items"]
+    assert len(items_filter) == 1
+    assert items_filter[0]["name"] == "CommonSkill"
+    assert items_filter[0]["count"] == 1
+

@@ -4,7 +4,7 @@ parent_zone_name: "slavayssiere-zenika"
 cloudrun_min_instances: 1
 cloudrun_max_instances: 2
 alloydb_cpu: 2 # Coeurs virtuels (2 est le minimum pour AlloyDB en custom type)
-waf_rate_limit: 100
+waf_rate_limit: 2000
 
 image_users: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/users_api:latest"
 image_items: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/items_api:latest"

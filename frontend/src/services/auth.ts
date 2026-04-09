@@ -22,12 +22,14 @@ interface User {
 
 interface AuthState {
   user: User | null
+  token: string | null
   isAuthenticated: boolean
   isLoading: boolean
 }
 
 const state = reactive<AuthState>({
   user: null,
+  token: null,
   isAuthenticated: false,
   isLoading: true
 })
@@ -48,12 +50,16 @@ export const authService = {
         throw new Error("Invalid payload received from /auth/me")
       }
       if (response.data.access_token) {
+        state.token = response.data.access_token
         localStorage.setItem('access_token', response.data.access_token)
+      } else {
+        state.token = localStorage.getItem('access_token')
       }
       state.user = response.data
       state.isAuthenticated = true
     } catch (error) {
       state.user = null
+      state.token = null
       state.isAuthenticated = false
     } finally {
       state.isLoading = false
@@ -65,6 +71,7 @@ export const authService = {
       const response = await axios.post(`${API_BASE}/login`, { email, password })
       // Capture the explicit access_token from the JSON payload
       if (response.data.access_token) {
+        state.token = response.data.access_token
         localStorage.setItem('access_token', response.data.access_token)
       }
       // The cookie is also set automatically by the browser since it's HttpOnly
@@ -80,6 +87,7 @@ export const authService = {
       await axios.post(`${API_BASE}/logout`)
     } finally {
       localStorage.removeItem('access_token')
+      state.token = null
       state.user = null
       state.isAuthenticated = false
       window.location.href = '/login'

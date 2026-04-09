@@ -184,6 +184,33 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["competency_id"]
             }
+        ),
+        Tool(
+            name="clear_user_competencies",
+            description="(Admin Only) Supprime toutes les assignations de compétences pour un utilisateur spécifique.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID de l'utilisateur"}
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="get_competency_stats",
+            description="Get analytics on competency distribution. Can identify rarest/most common and filter by a specific cohort of users (e.g. from an agency).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_ids": {
+                        "type": "array", 
+                        "items": {"type": "integer"},
+                        "description": "Optional list of user IDs to filter by (e.g. collected via get_users_by_tag in cv_api)."
+                    },
+                    "limit": {"type": "integer", "description": "Number of results", "default": 10},
+                    "sort_order": {"type": "string", "enum": ["asc", "desc"], "default": "desc", "description": "Use 'asc' for rarest, 'desc' for most common."}
+                }
+            }
         )
     ]
 
@@ -270,10 +297,25 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response = await client.get(f"{API_BASE_URL}/{arguments['competency_id']}/users")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
+            
+            elif name == "clear_user_competencies":
+                user_id = arguments["user_id"]
+                response = await client.delete(f"{API_BASE_URL}/user/{user_id}/clear")
+                response.raise_for_status()
+                return [TextContent(type="text", text=f"All competencies cleared for user {user_id}")]
+
+            elif name == "get_competency_stats":
+                response = await client.post(f"{API_BASE_URL}/stats/counts", json=arguments)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:
+                return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
+            return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
         except Exception as e:
             return [TextContent(type="text", text=f"Error: {str(e)}")]
 

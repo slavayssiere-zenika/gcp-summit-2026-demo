@@ -115,6 +115,37 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
                 "required": []
             }
+        ),
+        Tool(
+            name="get_user_missions",
+            description="Récupère la liste des missions (projets, expériences) d'un consultant avec les compétences associées à chaque mission.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "L'ID de l'utilisateur"
+                    }
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="global_reanalyze_cvs",
+            description="(Admin Only) Relance l'analyse des CVs correspondant à un tag ou pour un utilisateur spécifique. Efface les compétences existantes avant ré-import.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tag": {
+                        "type": "string",
+                        "description": "Filtre par tag (ex: Niort)"
+                    },
+                    "user_id": {
+                        "type": "integer",
+                        "description": "Filtre par ID utilisateur"
+                    }
+                }
+            }
         )
     ]
 
@@ -143,6 +174,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 409:
+                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
@@ -157,6 +190,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 409:
+                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
@@ -170,6 +205,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 409:
+                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
@@ -179,6 +216,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 409:
+                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
@@ -189,6 +228,32 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 
                 try:
                     response = await client.get(f"{API_BASE_URL}/users/tag/{tag}", headers=headers, timeout=10.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_user_missions":
+                user_id = arguments.get("user_id")
+                if not user_id:
+                    return [TextContent(type="text", text="Error: Missing user_id argument.")]
+                
+                try:
+                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/missions", headers=headers, timeout=10.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "global_reanalyze_cvs":
+                try:
+                    params = {}
+                    if arguments.get("tag"): params["tag"] = arguments["tag"]
+                    if arguments.get("user_id"): params["user_id"] = arguments["user_id"]
+                    
+                    response = await client.post(f"{API_BASE_URL}/reanalyze", params=params, headers=headers, timeout=300.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:

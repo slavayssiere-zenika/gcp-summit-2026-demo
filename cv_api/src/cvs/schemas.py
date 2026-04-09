@@ -11,6 +11,12 @@ class ExtractedCompetency(BaseModel):
     name: str # The specific node (e.g. Python)
     parent: Optional[str] = None # Its parent category (e.g. Langages Backend)
 
+class ExtractedMission(BaseModel):
+    title: str
+    company: Optional[str] = None
+    description: Optional[str] = None
+    competencies: List[str]
+
 class ExtractedProfile(BaseModel):
     is_cv: bool
     first_name: Optional[str] = None
@@ -20,6 +26,7 @@ class ExtractedProfile(BaseModel):
     current_role: Optional[str] = None
     years_of_experience: Optional[int] = None
     competencies: List[ExtractedCompetency]
+    missions: List[ExtractedMission]
 
 class CVResponse(BaseModel):
     message: str

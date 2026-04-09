@@ -5,17 +5,64 @@ plugins: mock-3.15.1, cov-7.1.0, langsmith-0.7.23, asyncio-1.3.0, anyio-4.13.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collected 28 items
 
-test_main.py ....................                                        [ 71%]
+test_main.py ..............FFF...                                        [ 71%]
 test_mcp_app.py ....                                                     [ 85%]
 test_mcp_tools.py ....                                                   [100%]
 
+=================================== FAILURES ===================================
+________________________ test_recalculate_tree_no_auth _________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x116715230>
+
+    def test_recalculate_tree_no_auth(mocker):
+        response = client.post("/recalculate_tree")
+>       assert response.status_code == 403
+E       assert 500 == 403
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+test_main.py:252: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-09 18:09:34,225", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0007, "trace_id": "7c68ab21694a440e550a8b2ac01f9fd5", "span_id": "744b96a6481da843"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+_______________________ test_recalculate_tree_bad_token ________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11690e000>
+
+    def test_recalculate_tree_bad_token(mocker):
+        response = client.post("/recalculate_tree", headers={"Authorization": "Bearer badtoken"})
+>       assert response.status_code == 403
+E       assert 500 == 403
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+test_main.py:256: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-09 18:09:34,289", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0014, "trace_id": "8480042c751c0cf6ddbb8a3fe9b86614", "span_id": "f950ebe456b32d4e"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+_______________________ test_recalculate_tree_not_admin ________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x116717ee0>
+
+    def test_recalculate_tree_not_admin(mocker):
+        mocker.patch("jose.jwt.decode", return_value={"role": "user"})
+        response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
+>       assert response.status_code == 403
+E       assert 500 == 403
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+test_main.py:261: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-09 18:09:34,298", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0009, "trace_id": "5ad6e814d8b6a2ce4bbee491bf1eb7c2", "span_id": "1d982aa091070e19"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
 =============================== warnings summary ===============================
 ../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
 test_main.py::test_import_and_analyze_cv
-  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py:293: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py:338: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
     db.add(cv_record)
   Enable tracemalloc to get traceback where the object was allocated.
   See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
@@ -25,7 +72,11 @@ test_main.py::test_import_and_analyze_cv
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 28 passed, 2 warnings in 5.27s ========================
+=========================== short test summary info ============================
+FAILED test_main.py::test_recalculate_tree_no_auth - assert 500 == 403
+FAILED test_main.py::test_recalculate_tree_bad_token - assert 500 == 403
+FAILED test_main.py::test_recalculate_tree_not_admin - assert 500 == 403
+=================== 3 failed, 25 passed, 2 warnings in 3.76s ===================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -47,7 +98,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
 >
 
 During handling of the above exception, another exception occurred:
@@ -73,4 +124,4 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.0273098631304887)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.1072374032159134)

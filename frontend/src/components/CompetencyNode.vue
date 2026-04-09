@@ -13,12 +13,16 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits(['select-leaf'])
+
 // Initialize state (folded by default if it has children)
 const isExpanded = ref(false)
 
 const toggle = () => {
   if (props.node.sub_competencies && props.node.sub_competencies.length) {
     isExpanded.value = !isExpanded.value
+  } else {
+    emit('select-leaf', props.node)
   }
 }
 
@@ -30,7 +34,11 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
     <div 
       class="node-header" 
       @click="toggle"
-      :class="{ 'is-clickable': hasChildren, 'is-root': depth === 0 }"
+      :class="{ 
+        'is-clickable': hasChildren || !hasChildren, 
+        'is-root': depth === 0,
+        'is-leaf': !hasChildren
+      }"
     >
       <span class="icon-toggle" v-if="hasChildren">
         <ChevronDown v-if="isExpanded" size="16" />
@@ -45,6 +53,11 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
 
       <div class="node-info">
         <span class="name">{{ node.name }}</span>
+        <div class="aliases" v-if="node.aliases">
+          <span v-for="alias in node.aliases.split(',')" :key="alias" class="alias-badge">
+            {{ alias.trim() }}
+          </span>
+        </div>
         <span class="description" v-if="node.description">{{ node.description }}</span>
       </div>
       
@@ -58,6 +71,7 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
         :key="child.id" 
         :node="child"
         :depth="depth + 1"
+        @select-leaf="$emit('select-leaf', $event)"
       />
     </div>
   </div>
@@ -86,8 +100,13 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
 .node-header.is-clickable:hover {
   background: rgba(255, 255, 255, 0.9);
   border-color: rgba(227, 25, 55, 0.4);
-  transform: translateX(2px);
+  transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(227, 25, 55, 0.08);
+}
+
+.node-header.is-leaf:hover {
+  border-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.05);
 }
 
 .node-header.is-root {
@@ -147,6 +166,24 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
   font-size: 13px;
   color: #666;
   margin-top: 2px;
+}
+
+.aliases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.alias-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.05);
+  color: #555;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .node-id {

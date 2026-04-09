@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: "add-competency-aliases"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "competencies"
+            columns:
+              - column:
+                  name: "aliases"
+                  type: "varchar"
+                  constraints:
+                    nullable: true

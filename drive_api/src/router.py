@@ -132,3 +132,15 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
 
     background_tasks.add_task(run_sync)
     return {"status": "started"}
+from src.google_auth import get_google_access_token
+
+@router.get("/tokens/google")
+async def get_google_token():
+    """
+    Retourne le token d'accès Google Drive (ADC) pour les opérations de réanalyse.
+    Cet endpoint est protégé par verify_jwt sur le router principal.
+    """
+    token = get_google_access_token()
+    if not token:
+        raise HTTPException(status_code=500, detail="Impossible de générer le token Google ADC.")
+    return {"access_token": token}

@@ -5,6 +5,7 @@ import axios from 'axios'
 import markdownit from 'markdown-it'
 import { Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network, Trash2 } from 'lucide-vue-next'
 import CompetencyNode from '@/components/CompetencyNode.vue'
+import { authService } from '@/services/auth'
 
 const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_name);
 const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
@@ -37,6 +38,7 @@ const messages = ref<Message[]>([
 
 const userInput = ref('')
 const isTyping = ref(false)
+const savingTree = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
 
 const scrollToBottom = () => {
@@ -110,6 +112,32 @@ const sendQuery = async (queryOverride?: string) => {
 }
 
 // Handle search query from URL or Events
+const applyTree = async (treeData: any) => {
+  if (!confirm('Voulez-vous vraiment appliquer cette nouvelle taxonomie ? Cela réinitialisera toutes les relations parent/enfant actuelles.')) return;
+  
+  savingTree.value = true
+  try {
+    const response = await axios.post('/api/query', { 
+      query: `Applique cette taxonomie de compétences : ${JSON.stringify(treeData)}` 
+    })
+    
+    let replyText = response.data.response || ''
+    messages.value.push({
+      role: 'assistant',
+      content: replyText,
+      displayType: 'text_only'
+    })
+  } catch (error: any) {
+    messages.value.push({
+      role: 'error',
+      content: `Erreur lors de l'application: ${error.response?.data?.detail || error.message}`
+    })
+  } finally {
+    savingTree.value = false
+    scrollToBottom()
+  }
+}
+
 const handleSearch = (queryText: string) => {
   if (!queryText) return
   sendQuery(`cherche l'utilisateur nommé ${queryText}`)
@@ -296,6 +324,19 @@ const goToUser = (id: number) => {
                  <div v-for="(val, key) in msg.parsedData" :key="key" style="margin-bottom: 8px;">
                    <CompetencyNode :node="{ name: key, ...val }" :depth="0" />
                  </div>
+               </div>
+               
+               <!-- Validation Button for Admin -->
+               <div v-if="authService.state.user?.role === 'admin'" class="tree-actions">
+                 <button 
+                  class="apply-tree-btn" 
+                  @click="applyTree(msg.parsedData)"
+                  :disabled="savingTree"
+                 >
+                   <CheckCircle2 v-if="!savingTree" size="18" />
+                   <RefreshCw v-else size="18" class="spin" />
+                   {{ savingTree ? 'Application en cours...' : 'Valider et Appliquer la Taxonomie' }}
+                 </button>
                </div>
             </div>
           </div>
@@ -849,5 +890,36 @@ button:disabled {
   overflow-x: auto;
   border: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);
+}
+.tree-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.apply-tree-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--zenika-red);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(227, 25, 55, 0.2);
+}
+
+.apply-tree-btn:hover:not(:disabled) {
+  background: #c2152f;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(227, 25, 55, 0.3);
+}
+
+.apply-tree-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 </style>

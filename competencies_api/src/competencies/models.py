@@ -20,6 +20,7 @@ class Competency(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
     description = Column(String, nullable=True)
+    aliases = Column(String, nullable=True)
     parent_id = Column(Integer, ForeignKey("competencies.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

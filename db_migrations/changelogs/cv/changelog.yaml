@@ -93,3 +93,15 @@ databaseChangeLog:
                   type: "text[]"
                   constraints:
                     nullable: true
+  - changeSet:
+      id: "5"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "missions"
+                  type: "jsonb"
+                  constraints:
+                    nullable: true
