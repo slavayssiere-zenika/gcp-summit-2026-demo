@@ -13,7 +13,7 @@ test_session.py ...........                                              [100%]
 =================================== FAILURES ===================================
 ____________________________ test_get_spec_success _____________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1148b2be0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11537ebe0>
 
     def test_get_spec_success(mocker):
         mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
@@ -24,12 +24,12 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:31: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 12:10:20,008", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0005, "trace_id": "0d0413a7fc0a3a26f04baa1a13b966ab", "span_id": "41d52547cd8e8954"}
+{"asctime": "2026-04-09 14:05:59,191", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0006, "trace_id": "4f5d43c2cb21f28d40441504b54587e3", "span_id": "815c6ad93cd556e7"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 ______________________________ test_get_spec_fail ______________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1149c5750>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x115465750>
 
     def test_get_spec_fail(mocker):
         mocker.patch("builtins.open", side_effect=Exception("Not found"))
@@ -40,7 +40,7 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:37: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 12:10:20,144", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0005, "trace_id": "7de009df0af5b8774d802a0c3b881afd", "span_id": "828387a288461aac"}
+{"asctime": "2026-04-09 14:05:59,371", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0004, "trace_id": "48d3e73752945e4ca9214fb762b1cc96", "span_id": "26a6255612c26016"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 ______________________________ test_mcp_registry _______________________________
@@ -53,7 +53,7 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:89: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 12:10:20,233", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/mcp/registry", "http.status_code": 401, "http.duration_s": 0.0006, "trace_id": "3a5d56f3525c22e7030f169665cb83e5", "span_id": "2f4d81a101478835"}
+{"asctime": "2026-04-09 14:05:59,481", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/mcp/registry", "http.status_code": 401, "http.duration_s": 0.0008, "trace_id": "141c287f40a70aa2444e872c15b3ec09", "span_id": "c3fa64417b83af4d"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 =============================== warnings summary ===============================
@@ -94,7 +94,7 @@ Coverage JSON written to file coverage.json
 FAILED test_main.py::test_get_spec_success - assert 401 == 200
 FAILED test_main.py::test_get_spec_fail - assert 401 == 200
 FAILED test_main.py::test_mcp_registry - assert 401 == 200
-=================== 3 failed, 38 passed, 4 warnings in 0.61s ===================
+=================== 3 failed, 38 passed, 4 warnings in 0.73s ===================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -142,7 +142,7 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8435517429671459)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.0039738843852137)
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -164,7 +164,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
 >
 
 During handling of the above exception, another exception occurred:

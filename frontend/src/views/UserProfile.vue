@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import axios from 'axios'
 import { User, Activity, Mail, Award, CheckCircle2, FileText } from 'lucide-vue-next'
-import { authService } from '../services/auth'
 
 const route = useRoute()
 const userId = route.params.id
@@ -15,30 +15,23 @@ const error = ref('')
 
 onMounted(async () => {
   try {
-    const headers = {
-      'Authorization': `Bearer ${authService.state.token}`
-    }
-    
     // Fetch User Identity Information
-    const userRes = await fetch(`/users-api/users/${userId}`, { headers })
-    if (!userRes.ok) throw new Error('Utilisateur introuvable dans le Hub.')
-    userProfile.value = await userRes.json()
+    const userRes = await axios.get(`/users-api/users/${userId}`)
+    userProfile.value = userRes.data
 
     // Fetch Assigned Technical/Functional Skills
-    const compRes = await fetch(`/comp-api/competencies/user/${userId}`, { headers })
-    if (compRes.ok) {
-      competencies.value = await compRes.json()
-    }
+    try {
+      const compRes = await axios.get(`/comp-api/competencies/user/${userId}`)
+      competencies.value = compRes.data
+    } catch(e) {}
 
     // Fetch the candidate's Google Docs CV Link (silently fail if 404 because not all users are candidates)
     try {
-      const cvRes = await fetch(`/cv-api/cvs/user/${userId}`, { headers })
-      if (cvRes.ok) {
-        cvData.value = await cvRes.json()
-      }
+      const cvRes = await axios.get(`/cv-api/cvs/user/${userId}`)
+      cvData.value = cvRes.data
     } catch(e) {}
   } catch (err: any) {
-    error.value = err.message
+    error.value = err.response?.data?.detail || err.message || 'Utilisateur introuvable.'
   } finally {
     loading.value = false
   }

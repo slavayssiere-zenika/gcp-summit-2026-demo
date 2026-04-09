@@ -129,6 +129,19 @@ async def search_users(
     return result
 
 
+@router.post("/bulk", response_model=List[UserResponse])
+async def get_users_bulk(
+    user_ids: List[int],
+    db: AsyncSession = Depends(get_db)
+):
+    if not user_ids:
+        return []
+    
+    users = (await db.execute(select(User).filter(User.id.in_(user_ids)))).scalars().all()
+    # Cache shouldn't be too heavy, we'll map them directly
+    return [map_user_to_response(u) for u in users]
+
+
 @router.get("/me")
 async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
     token = request.cookies.get("access_token")
@@ -436,3 +449,85 @@ async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
     delete_cache_pattern("users:list:*")
     delete_cache_pattern("users:search:*")
     delete_cache_pattern("users:me:*")
+
+from src.users.schemas import MergeRequest, DuplicateCandidate
+import httpx
+from opentelemetry.propagate import inject
+
+@router.get("/duplicates", response_model=List[DuplicateCandidate])
+async def get_duplicates(db: AsyncSession = Depends(get_db)):
+    users = (await db.execute(select(User).filter(User.is_active == True))).scalars().all()
+    grouped = {}
+    for u in users:
+        if u.first_name and u.last_name:
+            key = (u.first_name.lower().strip(), u.last_name.lower().strip())
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append(u)
+            
+    duplicates = []
+    for key, group in grouped.items():
+        if len(group) > 1:
+            duplicates.append(DuplicateCandidate(users=[map_user_to_response(u) for u in group]))
+            
+    return duplicates
+
+@router.post("/merge")
+async def merge_users(req: MergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Non autorisé")
+        
+    token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+    try:
+        from src.auth import SECRET_KEY, ALGORITHM
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Token invalide")
+
+    source = (await db.execute(select(User).filter(User.id == req.source_id))).scalars().first()
+    target = (await db.execute(select(User).filter(User.id == req.target_id))).scalars().first()
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="Utilisateur(s) non trouvé(s)")
+        
+    cv_url = os.getenv("CV_API_URL", "http://cv_api:8004")
+    items_url = os.getenv("ITEMS_API_URL", "http://items_api:8001")
+    comp_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
+    
+    headers = {"Authorization": auth_header}
+    inject(headers)
+    
+    payload_data = {"source_id": req.source_id, "target_id": req.target_id}
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            r1 = await client.post(f"{cv_url}/internal/users/merge", json=payload_data, headers=headers)
+            r1.raise_for_status()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Échec de la fusion CV: {e}")
+            
+        try:
+            r2 = await client.post(f"{items_url}/internal/users/merge", json=payload_data, headers=headers)
+            r2.raise_for_status()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Échec de la fusion Items: {e}")
+            
+        try:
+            r3 = await client.post(f"{comp_url}/internal/users/merge", json=payload_data, headers=headers)
+            r3.raise_for_status()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Échec de la fusion Competencies: {e}")
+            
+    source.is_active = False
+    source.merged_into_id = req.target_id
+    await db.commit()
+    
+    delete_cache_pattern(f"users:{req.source_id}")
+    delete_cache_pattern(f"users:{req.target_id}")
+    delete_cache_pattern("users:list:*")
+    delete_cache_pattern("users:search:*")
+    delete_cache_pattern("users:me:*")
+    
+    return {"message": "Utilisateurs fusionnés avec succès."}

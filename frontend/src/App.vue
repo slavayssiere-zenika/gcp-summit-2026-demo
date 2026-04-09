@@ -45,6 +45,7 @@ const handleLogout = async () => {
             <div class="dropdown-content">
               <RouterLink to="/admin" active-class="dropdown-active">Configuration Service Drive</RouterLink>
               <RouterLink to="/admin/users" active-class="dropdown-active">Gestion des Accès</RouterLink>
+              <RouterLink to="/admin/deduplication" active-class="dropdown-active">Déduplication</RouterLink>
               <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
               <div class="dropdown-divider"></div>
               <a href="/users-api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">

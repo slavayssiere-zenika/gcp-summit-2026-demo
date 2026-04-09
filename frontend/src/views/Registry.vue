@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import axios from 'axios'
 import { Terminal, Database, Cpu, ChevronRight, Activity, Code2, Box, Cloud } from 'lucide-vue-next'
 
 interface Parameter {
@@ -28,15 +29,13 @@ const selectedService = ref<string | null>(null)
 
 const fetchRegistry = async () => {
   try {
-    const response = await fetch('/api/mcp/registry')
-    if (!response.ok) throw new Error('Erreur lors du chargement du registre')
-    const data = await response.json()
-    services.value = data.services
+    const response = await axios.get('/api/mcp/registry')
+    services.value = response.data.services
     if (services.value.length > 0) {
       selectedService.value = services.value[0].id
     }
   } catch (err: any) {
-    error.value = err.message
+    error.value = err.response?.data?.detail || err.message || 'Erreur lors du chargement du registre'
   } finally {
     loading.value = false
   }

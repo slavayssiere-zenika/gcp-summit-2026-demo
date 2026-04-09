@@ -69,4 +69,17 @@ databaseChangeLog:
               - column:
                   name: "google_id"
                   type: "varchar"
-
+  - changeSet:
+      id: "3"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "users"
+            columns:
+              - column:
+                  name: "merged_into_id"
+                  type: "integer"
+                  constraints:
+                    nullable: true
+                    foreignKeyName: "fk_users_merged_into"
+                    references: "users(id)"

@@ -39,3 +39,7 @@ class CVProfileResponse(BaseModel):
     source_url: str
     source_tag: Optional[str] = None
     imported_by_id: Optional[int] = None
+
+class UserMergeRequest(BaseModel):
+    source_id: int
+    target_id: int

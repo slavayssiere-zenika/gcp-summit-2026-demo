@@ -77,6 +77,21 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="get_users_bulk",
+            description="Get multiple users by their IDs",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "List of user IDs to retrieve"
+                    }
+                },
+                "required": ["user_ids"]
+            }
+        ),
+        Tool(
             name="create_user",
             description="Create a new user",
             inputSchema={
@@ -148,6 +163,23 @@ async def list_tools() -> list[Tool]:
             name="get_user_stats",
             description="Get statistics about users",
             inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="get_user_duplicates",
+            description="Get a list of potential duplicate users based on name similarity",
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="merge_users",
+            description="Merge a source user into a target user",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_id": {"type": "integer", "description": "The ID of the duplicate user to be merged and deactivated"},
+                    "target_id": {"type": "integer", "description": "The ID of the master user to keep"}
+                },
+                "required": ["source_id", "target_id"]
+            }
         )
     ]
 
@@ -193,6 +225,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
+            elif name == "get_users_bulk":
+                user_ids = arguments.get("user_ids", [])
+                if not user_ids:
+                    return [TextContent(type="text", text="[]")]
+                response = await client.post(f"{API_BASE_URL}/bulk", json=user_ids)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
             elif name == "create_user":
                 response = await client.post(f"{API_BASE_URL}/", json={
                     "username": arguments["username"],
@@ -234,6 +274,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "get_user_stats":
                 response = await client.get(f"{API_BASE_URL}/stats")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "get_user_duplicates":
+                response = await client.get(f"{API_BASE_URL}/duplicates")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "merge_users":
+                source_id = arguments["source_id"]
+                target_id = arguments["target_id"]
+                response = await client.post(f"{API_BASE_URL}/merge", json={"source_id": source_id, "target_id": target_id})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

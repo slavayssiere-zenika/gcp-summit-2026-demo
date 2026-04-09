@@ -63,7 +63,11 @@ if os.path.exists(changelog_path):
 now = datetime.now().strftime("%H:%M:%S")
 header = f"## Mise à jour automatique - {today} {now}\n"
 
-new_entry = f"{header}\n### Couverture de Code\n\n{table}\n\n### Modifications depuis le dernier push\n\n{get_recent_changes()}\n\n---\n\n"
+summary_text = os.environ.get("CHANGELOG_SUMMARY", "")
+if summary_text:
+    summary_text = f"### Résumé des Changements\n\n{summary_text}\n\n"
+
+new_entry = f"{header}\n{summary_text}### Couverture de Code\n\n{table}\n\n### Modifications depuis le dernier push\n\n{get_recent_changes()}\n\n---\n\n"
 
 with open(changelog_path, "w", encoding="utf-8") as f:
     f.write(new_entry + existing_content)

@@ -60,7 +60,7 @@ def test_get_user_cv(mocker):
     mock_profile = MagicMock(user_id=1, source_url="http://test.com/cv.pdf", source_tag=None, imported_by_id=None)
     mock_result = MagicMock()
     mock_scalars = MagicMock()
-    mock_scalars.first.return_value = mock_profile
+    mock_scalars.all.return_value = [mock_profile]
     mock_result.scalars.return_value = mock_scalars
     mock_db.execute.return_value = mock_result
     
@@ -69,11 +69,11 @@ def test_get_user_cv(mocker):
     response = client.get("/user/1")
     assert response.status_code == 200
     data = response.json()
-    assert data["user_id"] == 1
-    assert data["source_url"] == "http://test.com/cv.pdf"
+    assert data[0]["user_id"] == 1
+    assert data[0]["source_url"] == "http://test.com/cv.pdf"
     
     # Not found case
-    mock_scalars.first.return_value = None
+    mock_scalars.all.return_value = []
     response = client.get("/user/2")
     assert response.status_code == 404
 

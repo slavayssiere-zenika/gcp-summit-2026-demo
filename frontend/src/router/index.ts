@@ -72,6 +72,12 @@ const router = createRouter({
       meta: { adminOnly: true }
     },
     {
+      path: '/admin/deduplication',
+      name: 'admin-deduplication',
+      component: () => import('../views/AdminDeduplication.vue'),
+      meta: { adminOnly: true }
+    },
+    {
       path: '/help',
       name: 'help',
       component: () => import('../views/Help.vue')

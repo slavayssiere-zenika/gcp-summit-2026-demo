@@ -59,6 +59,7 @@ from fastapi import APIRouter, Depends
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@protected_router.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     import httpx
     url = f"http://localhost:8081/mcp/{path}"

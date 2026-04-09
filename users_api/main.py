@@ -131,9 +131,9 @@ async def get_spec():
 
 app.include_router(auth_router)
 app.include_router(router)
-app.include_router(protected_router)
 
 @protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@protected_router.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     import httpx
     url = f"http://localhost:8081/mcp/{path}"
@@ -162,6 +162,7 @@ async def proxy_mcp(path: str, request: Request):
         except Exception as e:
             return Response(content=str(e), status_code=502)
 
+app.include_router(protected_router)
 
 if __name__ == "__main__":
     import uvicorn

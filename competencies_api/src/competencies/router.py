@@ -101,6 +101,33 @@ async def list_competencies(
     return result
 
 
+@router.get("/search", response_model=PaginationResponse)
+async def search_competencies(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    cache_key = f"competencies:search:{query}:{limit}"
+    cached = get_cache(cache_key)
+    if cached:
+        return PaginationResponse(**cached)
+
+    results = (await db.execute(
+        select(Competency)
+        .filter(Competency.name.ilike(f"%{query}%"))
+        .limit(limit)
+    )).scalars().all()
+
+    response = PaginationResponse(
+        items=[serialize_competency(c) for c in results],
+        total=len(results),
+        skip=0,
+        limit=limit
+    )
+    set_cache(cache_key, response.model_dump(), CACHE_TTL)
+    return response
+
+
 @router.get("/{competency_id}", response_model=CompetencyResponse)
 async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db)):
     cache_key = f"competencies:{competency_id}"
@@ -115,6 +142,24 @@ async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db))
     result = CompetencyResponse(**serialize_competency(competency))
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
+
+
+@router.get("/{competency_id}/users", response_model=List[int])
+async def list_competency_users(competency_id: int, db: AsyncSession = Depends(get_db)):
+    cache_key = f"competencies:{competency_id}:users"
+    cached = get_cache(cache_key)
+    if cached:
+        return cached
+
+    # Fetch user ids associated with this competency
+    results = (await db.execute(
+        select(user_competency.c.user_id)
+        .where(user_competency.c.competency_id == competency_id)
+    )).all()
+    
+    user_ids = [r[0] for r in results]
+    set_cache(cache_key, user_ids, CACHE_TTL)
+    return user_ids
 
 
 @router.post("/bulk_tree", status_code=200)
@@ -315,3 +360,48 @@ async def list_user_competencies(user_id: int, db: AsyncSession = Depends(get_db
     items = [CompetencyResponse(**serialize_competency(c)) for c in results]
     set_cache(cache_key, [i.model_dump() for i in items], CACHE_TTL)
     return items
+
+from pydantic import BaseModel
+
+class UserMergeRequest(BaseModel):
+    source_id: int
+    target_id: int
+
+@router.post("/internal/users/merge")
+async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Internal endpoint to merge user data.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Missing authorization via competencies merge")
+        
+    # Get source user competencies
+    stmt = select(user_competency.c.competency_id).where(user_competency.c.user_id == req.source_id)
+    source_comps = (await db.execute(stmt)).scalars().all()
+    
+    # Get target user competencies
+    stmt_t = select(user_competency.c.competency_id).where(user_competency.c.user_id == req.target_id)
+    target_comps = (await db.execute(stmt_t)).scalars().all()
+    
+    new_comps = set(source_comps) - set(target_comps)
+    
+    if new_comps:
+        from datetime import datetime
+        for cid in new_comps:
+            await db.execute(
+                user_competency.insert().values(
+                    user_id=req.target_id,
+                    competency_id=cid,
+                    created_at=datetime.utcnow()
+                )
+            )
+            
+    # delete source comps
+    await db.execute(user_competency.delete().where(user_competency.c.user_id == req.source_id))
+    await db.commit()
+    
+    delete_cache_pattern(f"competencies:user:{req.source_id}:*")
+    delete_cache_pattern(f"competencies:user:{req.target_id}:*")
+    
+    return {"message": f"Successfully migrated competencies from user {req.source_id} to {req.target_id}"}

@@ -42,7 +42,7 @@ def format_mcp_result(result: list, data_type: str) -> dict:
 
 # --- CV Tools ---
 
-async def analyze_cv(url: str) -> dict:
+async def analyze_cv(url: str, source_tag: Optional[str] = None) -> dict:
     """
     Télécharge, parse, extrait et convertit un CV (via un lien Google Docs) dans le système.
     Crée automatiquement le candidat, identifie ses compétences sémantiquement, et les rattache.
@@ -50,9 +50,13 @@ async def analyze_cv(url: str) -> dict:
 
     Args:
         url (str): L'URL publique du Google Doc contenant le CV.
+        source_tag (str, optional): Tag thématique (ex: ville) associé à ce CV.
     """
     mcp = await get_cv_mcp()
-    result = await mcp.call_tool("analyze_cv", {"url": url})
+    payload = {"url": url}
+    if source_tag:
+        payload["source_tag"] = source_tag
+    result = await mcp.call_tool("analyze_cv", payload)
     return format_mcp_result(result, "cv")
 
 async def search_best_candidates(query: str, limit: int = 5) -> dict:
@@ -91,11 +95,24 @@ async def get_users_by_tag(tag: str) -> dict:
     result = await mcp.call_tool("get_users_by_tag", {"tag": tag})
     return format_mcp_result(result, "users_by_tag")
 
+async def get_user_cv(user_id: int) -> dict:
+    """
+    Récupére le ou les liens source (Google Doc) originaux des CVs associés au collaborateur.
+    Utilise cet outil UNIQUEMENT pour voir le profil CV exact ou les détails du CV importé pour un utilisateur.
+    
+    Args:
+        user_id (int): L'identifiant interne de l'utilisateur cible.
+    """
+    mcp = await get_cv_mcp()
+    result = await mcp.call_tool("get_user_cv", {"user_id": user_id})
+    return format_mcp_result(result, "cv_profile")
+
 CV_TOOLS = [
     analyze_cv,
     search_best_candidates,
     recalculate_competencies_tree,
-    get_users_by_tag
+    get_users_by_tag,
+    get_user_cv
 ]
 
 # --- Drive Tools ---
@@ -265,9 +282,21 @@ async def health_check_users() -> dict:
     result = await mcp.call_tool("health_check_users", {})
     return format_mcp_result(result, "health")
 
+async def get_users_bulk(user_ids: list[int]) -> dict:
+    """
+    Récupère les informations détaillées de plusieurs utilisateurs en une seule fois, à partir de leurs identifiants.
+    Utilisez cet outil après avoir récupéré une liste d'IDs (par exemple depuis list_competency_users).
+    
+    Args:
+        user_ids (list[int]): La liste des identifiants des utilisateurs à récupérer.
+    """
+    mcp = await get_users_mcp()
+    result = await mcp.call_tool("get_users_bulk", {"user_ids": user_ids})
+    return format_mcp_result(result, "users_bulk")
+
 USERS_TOOLS = [
     list_users, get_user, create_user, update_user, delete_user, 
-    search_users, toggle_user_status, get_user_stats, health_check_users
+    search_users, toggle_user_status, get_user_stats, health_check_users, get_users_bulk
 ]
 
 # --- Items Tools ---
@@ -452,9 +481,28 @@ async def list_user_competencies(user_id: int) -> dict:
     result = await mcp.call_tool("list_user_competencies", {"user_id": user_id})
     return format_mcp_result(result, "competency")
 
+async def search_competencies(query: str, limit: int = 10) -> dict:
+    """
+    Recherche une ou plusieurs compétences par leur nom. Outil indispensable pour trouver l'ID d'une compétence (ex: "AWS").
+    """
+    mcp = await get_competencies_mcp()
+    result = await mcp.call_tool("search_competencies", {"query": query, "limit": limit})
+    return format_mcp_result(result, "competency_search")
+
+async def list_competency_users(competency_id: int) -> dict:
+    """
+    Récupère la liste des identifiants des utilisateurs (user_ids) qui possèdent une compétence spécifique.
+    Pour obtenir les noms et détails de ces utilisateurs, utilisez ensuite get_users_bulk avec les identifiants retournés.
+    """
+    mcp = await get_competencies_mcp()
+    result = await mcp.call_tool("list_competency_users", {"competency_id": competency_id})
+    return format_mcp_result(result, "competency_users")
+
+
 COMPETENCIES_TOOLS = [
     list_competencies, get_competency, create_competency, delete_competency,
-    assign_competency_to_user, remove_competency_from_user, list_user_competencies
+    assign_competency_to_user, remove_competency_from_user, list_user_competencies,
+    search_competencies, list_competency_users
 ]
 
 # --- Loki Tools ---
