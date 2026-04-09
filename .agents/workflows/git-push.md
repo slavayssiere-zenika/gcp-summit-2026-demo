@@ -37,7 +37,7 @@ terraform -chdir=platform-engineering/terraform fmt -recursive
    Supprime les archives, logs et gros exécutables obsolètes avant le commit pour éviter les rejets de push.
 // turbo
 ```bash
-rm -f *.tar.gz otelcol-contrib output.log *.patch
+rm -f *.tar.gz otelcol-contrib output.log *.patch patch_*.py test_*.py
 ```
 
 6. **Ajouter les fichiers via git add**

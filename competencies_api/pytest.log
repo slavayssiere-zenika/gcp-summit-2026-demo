@@ -23,13 +23,9 @@ test_integration.py::test_assign_and_list_user_competencies
   /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/src/competencies/router.py:275: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
     created_at=datetime.utcnow()
 
-test_main.py::test_openapi_json
-  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/openapi/utils.py:252: UserWarning: Duplicate Operation ID proxy_mcp_mcp__path__get for function proxy_mcp at /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/main.py
-    warnings.warn(message, stacklevel=1)
-
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 31 passed, 21 warnings in 1.37s ========================
+======================= 31 passed, 20 warnings in 1.10s ========================

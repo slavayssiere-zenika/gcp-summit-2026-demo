@@ -1,6 +1,30 @@
 import json
 import os
+import subprocess
 from datetime import datetime
+
+def get_recent_changes():
+    try:
+        commits = subprocess.check_output(["git", "log", "origin/main..HEAD", "--pretty=format:- %s"]).decode("utf-8").strip()
+    except Exception:
+        commits = ""
+        
+    try:
+        status = subprocess.check_output(["git", "status", "-s"]).decode("utf-8").strip()
+    except Exception:
+        status = ""
+        
+    changes = []
+    if commits:
+        changes.append("#### Commits non pushés\n" + commits)
+    else:
+        changes.append("#### Commits non pushés\n- Aucun commit local en attente")
+        
+    if status:
+        files = "\n".join(["- `" + line[3:] + "` (" + line[:2].strip() + ")" for line in status.split("\n")])
+        changes.append("#### Fichiers (non commités)\n" + files)
+        
+    return "\n\n".join(changes)
 
 apis = ["agent_api", "competencies_api", "cv_api", "drive_api", "items_api", "prompts_api", "users_api"]
 table_rows = []
@@ -39,7 +63,7 @@ if os.path.exists(changelog_path):
 now = datetime.now().strftime("%H:%M:%S")
 header = f"## Mise à jour automatique - {today} {now}\n"
 
-new_entry = f"{header}\n### Couverture de Code\n\n{table}\n\n---\n\n"
+new_entry = f"{header}\n### Couverture de Code\n\n{table}\n\n### Modifications depuis le dernier push\n\n{get_recent_changes()}\n\n---\n\n"
 
 with open(changelog_path, "w", encoding="utf-8") as f:
     f.write(new_entry + existing_content)

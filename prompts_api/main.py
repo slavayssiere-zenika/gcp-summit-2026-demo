@@ -69,7 +69,11 @@ async def health_check(response: Response):
         return {"status": "healthy"}
     response.status_code = 503
     return {"status": "unhealthy"}
-@app.get("/spec")
+from src.prompts.router import verify_jwt
+from fastapi import APIRouter, Depends
+protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
+@protected_router.get("/spec")
 async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
@@ -78,3 +82,4 @@ async def get_spec():
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 app.include_router(router.router, prefix="", tags=["prompts"])
+app.include_router(protected_router)

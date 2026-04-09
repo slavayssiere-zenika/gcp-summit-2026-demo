@@ -68,7 +68,11 @@ async def health(response: Response):
     response.status_code = 503
     return {"status": "unhealthy"}
 
-@app.get("/spec")
+from src.auth import verify_jwt
+from fastapi import APIRouter, Depends
+protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
+@protected_router.get("/spec")
 async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
@@ -77,8 +81,9 @@ async def get_spec():
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 app.include_router(router)
+app.include_router(protected_router)
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_mcp(path: str, request: Request):
     import httpx
     url = f"http://localhost:8081/mcp/{path}"

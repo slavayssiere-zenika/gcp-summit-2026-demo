@@ -64,14 +64,6 @@ async def startup_event():
 async def root():
     return {"message": "ADK Agent API - Use /query for interactions"}
 
-@app.get("/spec")
-async def get_spec():
-    try:
-        with open("spec.md", "r", encoding="utf-8") as f:
-            return Response(content=f.read(), media_type="text/markdown")
-    except Exception:
-        return Response(content="# Specification introuvable", media_type="text/markdown")
-
 
 class QueryRequest(BaseModel):
     query: str
@@ -89,7 +81,18 @@ if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
 ALGORITHM = "HS256"
 
-@app.post("/query")
+from fastapi import APIRouter
+protected_router = APIRouter(dependencies=[Depends(security)])
+
+@protected_router.get("/spec")
+async def get_spec():
+    try:
+        with open("spec.md", "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/markdown")
+    except Exception:
+        return Response(content="# Specification introuvable", media_type="text/markdown")
+
+@protected_router.post("/query")
 async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     auth_header = f"{auth.scheme} {auth.credentials}"
     
@@ -123,7 +126,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             span.set_attribute("error.message", str(e))
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
-@app.get("/history")
+@protected_router.get("/history")
 async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
         from jose import jwt, JWTError
@@ -179,7 +182,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
             
     return {"history": history}
 
-@app.delete("/history")
+@protected_router.delete("/history")
 async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
         from jose import jwt, JWTError
@@ -264,7 +267,7 @@ async def get_me(request: Request):
         return res.json()
 
 
-@app.get("/mcp/registry")
+@protected_router.get("/mcp/registry")
 async def mcp_registry():
     return {
         "services": [
@@ -312,6 +315,8 @@ async def mcp_registry():
 async def health():
     return {"status": "healthy"}
 
+
+app.include_router(protected_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8002)
