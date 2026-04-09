@@ -16,7 +16,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.propagate import inject, extract
 import httpx
@@ -34,7 +40,10 @@ provider = TracerProvider(
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
 tracer = trace.get_tracer(__name__)
@@ -54,6 +63,23 @@ async def list_tools() -> list[Tool]:
                     "skip": {"type": "integer", "description": "Number of items to skip", "default": 0},
                     "limit": {"type": "integer", "description": "Maximum number of items to return", "default": 10}
                 }
+            }
+        ),
+        Tool(
+            name="list_categories",
+            description="List all item categories",
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="create_category",
+            description="Create a new item category",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Category name"},
+                    "description": {"type": "string", "description": "Category description (optional)"}
+                },
+                "required": ["name"]
             }
         ),
         Tool(
@@ -177,17 +203,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if name == "list_items":
                 skip = arguments.get("skip", 0)
                 limit = arguments.get("limit", 10)
-                response = await client.get(f"{API_BASE_URL}/items/", params={"skip": skip, "limit": limit})
+                response = await client.get(f"{API_BASE_URL}/", params={"skip": skip, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_item":
-                response = await client.get(f"{API_BASE_URL}/items/{arguments['item_id']}/")
+                response = await client.get(f"{API_BASE_URL}/{arguments['item_id']}/")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "create_item":
-                response = await client.post(f"{API_BASE_URL}/items/", json={
+                response = await client.post(f"{API_BASE_URL}/", json={
                     "name": arguments["name"],
                     "description": arguments.get("description"),
                     "user_id": arguments["user_id"]
@@ -196,11 +222,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_item_with_user":
-                item_response = await client.get(f"{API_BASE_URL}/items/{arguments['item_id']}/")
+                item_response = await client.get(f"{API_BASE_URL}/{arguments['item_id']}/")
                 item_response.raise_for_status()
                 item_data = item_response.json()
 
-                user_response = await client.get(f"{USERS_API_URL}/users/{item_data.get('user_id')}/")
+                user_response = await client.get(f"{USERS_API_URL.rstrip('/')}/{item_data.get('user_id')}")
                 if user_response.status_code == 200:
                     item_data["user"] = user_response.json()
 
@@ -214,30 +240,35 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "update_item":
                 item_id = arguments["item_id"]
                 data = {k: v for k, v in arguments.items() if k not in ["item_id"] and v is not None}
-                response = await client.put(f"{API_BASE_URL}/items/{item_id}", json=data)
+                response = await client.put(f"{API_BASE_URL}/{item_id}", json=data)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "delete_item":
                 item_id = arguments["item_id"]
-                response = await client.delete(f"{API_BASE_URL}/items/{item_id}")
+                response = await client.delete(f"{API_BASE_URL}/{item_id}")
                 response.raise_for_status()
                 return [TextContent(type="text", text="Item deleted successfully")]
 
             elif name == "search_items":
                 query = arguments.get("query", "")
                 limit = arguments.get("limit", 10)
-                list_response = await client.get(f"{API_BASE_URL}/items/", params={"skip": 0, "limit": 100})
-                list_response.raise_for_status()
-                all_items = list_response.json()
-                if isinstance(all_items, dict):
-                    all_items = all_items.get("items", [])
-                matching_items = [
-                    i for i in all_items
-                    if query.lower() in i.get("name", "").lower()
-                    or query.lower() in i.get("description", "").lower()
-                ][:limit]
-                return [TextContent(type="text", text=json.dumps({"items": matching_items, "total": len(matching_items), "query": query}))]
+                response = await client.get(f"{API_BASE_URL}/search/query", params={"query": query, "limit": limit})
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "list_categories":
+                response = await client.get(f"{API_BASE_URL}/categories")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "create_category":
+                response = await client.post(f"{API_BASE_URL}/categories", json={
+                    "name": arguments["name"],
+                    "description": arguments.get("description")
+                })
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_items_by_user":
                 # Robust type conversion as LLMs might pass string IDs
@@ -247,14 +278,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"Error: user_id must be an integer, got {arguments.get('user_id')}")]
                 
                 # Use the new dedicated endpoint for better performance and reliability
-                response = await client.get(f"{API_BASE_URL}/items/user/{user_id}", params={"skip": 0, "limit": 100})
+                response = await client.get(f"{API_BASE_URL}/user/{user_id}", params={"skip": 0, "limit": 100})
                 response.raise_for_status()
                 data = response.json()
                 
                 return [TextContent(type="text", text=json.dumps(data))]
 
             elif name == "get_item_stats":
-                response = await client.get(f"{API_BASE_URL}/items/stats")
+                response = await client.get(f"{API_BASE_URL}/stats")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

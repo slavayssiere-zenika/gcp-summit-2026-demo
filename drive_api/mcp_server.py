@@ -9,7 +9,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.propagate import inject
 import httpx
@@ -25,7 +31,10 @@ provider = TracerProvider(
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
@@ -77,6 +86,16 @@ async def list_tools() -> list[Tool]:
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
+            name="list_drive_files",
+            description="List all tracked files across all synced Google Drive folders, ordered by most recent first.",
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="retry_drive_errors",
+            description="Flip all files stuck in ERROR state back to PENDING so the next batch ingestion will retry processing them.",
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
             name="trigger_drive_sync",
             description="Manually trigger a deep sync delta discovery across all tracked Drive folders to find new or updated CVs.",
             inputSchema={"type": "object", "properties": {}}
@@ -96,29 +115,39 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         async with httpx.AsyncClient() as client:
             try:
                 if name == "add_drive_folder":
-                    res = await client.post(f"{API_BASE_URL}/drive-api/folders", json=arguments, headers=headers, timeout=10.0)
+                    res = await client.post(f"{API_BASE_URL}/folders", json=arguments, headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     
                 elif name == "list_drive_folders":
-                    res = await client.get(f"{API_BASE_URL}/drive-api/folders", headers=headers, timeout=10.0)
+                    res = await client.get(f"{API_BASE_URL}/folders", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     
                 elif name == "delete_drive_folder":
                     fid = arguments.get("folder_id")
-                    res = await client.delete(f"{API_BASE_URL}/drive-api/folders/{fid}", headers=headers, timeout=10.0)
+                    res = await client.delete(f"{API_BASE_URL}/folders/{fid}", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     
                 elif name == "get_drive_status":
-                    res = await client.get(f"{API_BASE_URL}/drive-api/status", headers=headers, timeout=10.0)
+                    res = await client.get(f"{API_BASE_URL}/status", headers=headers, timeout=10.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+                    
+                elif name == "list_drive_files":
+                    res = await client.get(f"{API_BASE_URL}/files", headers=headers, timeout=10.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+                    
+                elif name == "retry_drive_errors":
+                    res = await client.post(f"{API_BASE_URL}/retry-errors", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     
                 elif name == "trigger_drive_sync":
                     # This endpoint might take longer to return (Cloud Run default limit 60 min, but HTTP is standard)
-                    res = await client.post(f"{API_BASE_URL}/drive-api/sync", headers=headers, timeout=300.0)
+                    res = await client.post(f"{API_BASE_URL}/sync", headers=headers, timeout=300.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     

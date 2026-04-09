@@ -1,2 +1,4 @@
 requests>=2.31.0
 google-cloud-bigquery>=3.11.0
+
+opentelemetry-exporter-gcp-trace>=1.6.0

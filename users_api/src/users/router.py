@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import func
 from typing import List
 
 from database import get_db
@@ -10,26 +13,26 @@ from src.auth import get_password_hash, verify_password, create_access_token, SE
 from jose import jwt, JWTError
 from fastapi import Response
 
-router = APIRouter(prefix="/users", tags=["users"], dependencies=[Depends(verify_jwt)])
-auth_router = APIRouter(prefix="/users", tags=["auth"])
+router = APIRouter(prefix="", tags=["users"], dependencies=[Depends(verify_jwt)])
+auth_router = APIRouter(prefix="", tags=["auth"])
 
 CACHE_TTL = 60
 
 
 @router.get("/stats", response_model=UserStatsResponse)
-async def get_user_stats(db: Session = Depends(get_db)):
+async def get_user_stats(db: AsyncSession = Depends(get_db)):
     cache_key = "users:stats"
     cached = get_cache(cache_key)
     if cached:
         return UserStatsResponse(**cached)
 
-    total = db.query(User).count()
-    active = db.query(User).filter(User.is_active == True).count()
+    total = (await db.execute(select(func.count()).select_from(User))).scalar()
+    active = (await db.execute(select(func.count()).select_from(User).filter(User.is_active == True))).scalar()
     inactive = total - active
     
     # Simple prefix stats for the demonstration
     prefixes = {}
-    users = db.query(User.username).all()
+    users = (await db.execute(select(User.username))).all()
     for (username,) in users:
         if username:
             p = username[0].upper()
@@ -72,15 +75,15 @@ def map_user_to_response(user: User) -> dict:
 async def list_users(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     cache_key = f"users:list:{skip}:{limit}"
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
-    total = db.query(User).count()
-    users = db.query(User).offset(skip).limit(limit).all()
+    total = (await db.execute(select(func.count()).select_from(User))).scalar()
+    users = (await db.execute(select(User).offset(skip).limit(limit))).scalars().all()
     result = PaginationResponse(
         items=[map_user_to_response(u) for u in users],
         total=total,
@@ -95,7 +98,7 @@ async def list_users(
 async def search_users(
     query: str = Query(..., min_length=1, description="Search term"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     cache_key = f"users:search:{query}:{limit}"
     cached = get_cache(cache_key)
@@ -113,8 +116,8 @@ async def search_users(
         User.username.ilike(f"%{query}%")
     )
     
-    total = db.query(User).filter(search_filter).count()
-    users = db.query(User).filter(search_filter).limit(limit).all()
+    total = (await db.execute(select(func.count()).select_from(User).filter(search_filter))).scalar()
+    users = (await db.execute(select(User).filter(search_filter).limit(limit))).scalars().all()
     
     result = PaginationResponse(
         items=[map_user_to_response(u) for u in users],
@@ -127,7 +130,7 @@ async def search_users(
 
 
 @router.get("/me")
-async def get_me(request: Request, db: Session = Depends(get_db)):
+async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="Non authentifié")
@@ -143,7 +146,7 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
         if cached:
             return cached
 
-        user = db.query(User).filter(User.username == username).first()
+        user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
         if user is None:
             raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
             
@@ -157,8 +160,8 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
 
 
 @auth_router.post("/login", response_model=TokenResponse)
-async def login(login_data: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == login_data.email).first()
+async def login(login_data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+    user = (await db.execute(select(User).filter(User.email == login_data.email))).scalars().first()
     if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Identifiants invalides")
     
@@ -202,7 +205,7 @@ from google.auth.transport import requests as google_requests
 from src.users.schemas import ServiceAccountLoginRequest
 
 @auth_router.post("/service-account/login", response_model=TokenResponse)
-async def service_account_login(req: ServiceAccountLoginRequest, db: Session = Depends(get_db)):
+async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSession = Depends(get_db)):
     try:
         # Verify Identity Token with Google public certificates
         # We don't verify audience strictly here because it could be dynamic from Cloud Run,
@@ -245,10 +248,6 @@ import secrets as pysecrets
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_SECRET_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_SECRET_KEY", "")
-# Assumed redirect URI relative to current host. In prod, ensure PUBLIC_API_URL or origin is handled.
-PROXY_BASE_URL = os.getenv("PROXY_BASE_URL", "http://localhost:8002")
-REDIRECT_URI = f"{PROXY_BASE_URL}/auth/google/callback"
-
 @auth_router.get("/google/config")
 async def get_google_config():
     if not GOOGLE_CLIENT_ID:
@@ -257,10 +256,14 @@ async def get_google_config():
 
 
 @auth_router.get("/google/login")
-async def google_login():
+async def google_login(request: Request):
+    scheme = request.headers.get("x-forwarded-proto", "http")
+    host = request.headers.get("host", "localhost")
+    redirect_uri = f"{scheme}://{host}/auth/google/callback"
+
     params = {
         "client_id": GOOGLE_CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -271,7 +274,11 @@ async def google_login():
 
 
 @auth_router.get("/google/callback")
-async def google_callback(code: str, response: Response, db: Session = Depends(get_db)):
+async def google_callback(request: Request, code: str, response: Response, db: AsyncSession = Depends(get_db)):
+    scheme = request.headers.get("x-forwarded-proto", "http")
+    host = request.headers.get("host", "localhost")
+    redirect_uri = f"{scheme}://{host}/auth/google/callback"
+
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google Client ID or Secret not configured")
 
@@ -280,7 +287,7 @@ async def google_callback(code: str, response: Response, db: Session = Depends(g
         "code": code,
         "client_id": GOOGLE_CLIENT_ID,
         "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "grant_type": "authorization_code"
     }
     token_res = requests.post(token_url, data=token_data)
@@ -299,7 +306,7 @@ async def google_callback(code: str, response: Response, db: Session = Depends(g
     if not email or not email.endswith("@zenika.com"):
         raise HTTPException(status_code=403, detail="Uniquement les e-mails @zenika.com sont autorisés")
         
-    user = db.query(User).filter(User.email == email).first()
+    user = (await db.execute(select(User).filter(User.email == email))).scalars().first()
     
     if not user:
         # Create the user
@@ -316,15 +323,15 @@ async def google_callback(code: str, response: Response, db: Session = Depends(g
             allowed_category_ids=""
         )
         db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        await db.commit()
+        await db.refresh(db_user)
         user = db_user
     else:
         # Link / update the user
         user.picture_url = user_info.get("picture", user.picture_url)
         user.google_id = user_info.get("sub", user.google_id)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
 
     # Generate JWT
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
@@ -355,13 +362,13 @@ async def router_health():
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: int, db: Session = Depends(get_db)):
+async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
     cache_key = f"users:{user_id}"
     cached = get_cache(cache_key)
     if cached:
         return UserResponse(**cached)
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = (await db.execute(select(User).filter(User.id == user_id))).scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -371,7 +378,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=UserResponse, status_code=201)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     allowed_ids_str = ",".join(map(str, user.allowed_category_ids))
     db_user = User(
         username=user.username,
@@ -383,8 +390,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         allowed_category_ids=allowed_ids_str
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
 
     delete_cache_pattern("users:list:*")
     delete_cache_pattern("users:search:*")
@@ -394,8 +401,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = Depends(get_db)):
+    user = (await db.execute(select(User).filter(User.id == user_id))).scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -406,8 +413,8 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
         else:
             setattr(user, field, value)
 
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     delete_cache(f"users:{user_id}")
     delete_cache_pattern("users:list:*")
@@ -417,13 +424,13 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    user = (await db.execute(select(User).filter(User.id == user_id))).scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.delete(user)
-    db.commit()
+    await db.delete(user)
+    await db.commit()
 
     delete_cache(f"users:{user_id}")
     delete_cache_pattern("users:list:*")

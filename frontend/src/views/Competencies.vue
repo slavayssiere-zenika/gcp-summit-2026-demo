@@ -14,14 +14,14 @@ const fetchCompetencies = async () => {
   
   try {
     const limit = 50
-    const firstRes = await axios.get(`/comp-api/competencies/?skip=0&limit=${limit}`)
+    const firstRes = await axios.get(`/comp-api/?skip=0&limit=${limit}`)
     let allItems = firstRes.data.items || []
     const total = firstRes.data.total || 0
     
     if (total > limit) {
       const promises = []
       for (let skip = limit; skip < total; skip += limit) {
-        promises.push(axios.get(`/comp-api/competencies/?skip=${skip}&limit=${limit}`))
+        promises.push(axios.get(`/comp-api/?skip=${skip}&limit=${limit}`))
       }
       const responses = await Promise.all(promises)
       responses.forEach(res => {

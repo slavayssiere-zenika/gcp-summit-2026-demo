@@ -17,7 +17,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.propagate import inject, extract
 import httpx
@@ -34,7 +40,10 @@ provider = TracerProvider(
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
 tracer = trace.get_tracer(__name__)
@@ -175,17 +184,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if name == "list_users":
                 skip = arguments.get("skip", 0)
                 limit = arguments.get("limit", 10)
-                response = await client.get(f"{API_BASE_URL}/users/", params={"skip": skip, "limit": limit})
+                response = await client.get(f"{API_BASE_URL}/", params={"skip": skip, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_user":
-                response = await client.get(f"{API_BASE_URL}/users/{arguments['user_id']}/")
+                response = await client.get(f"{API_BASE_URL}/{arguments['user_id']}/")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "create_user":
-                response = await client.post(f"{API_BASE_URL}/users/", json={
+                response = await client.post(f"{API_BASE_URL}/", json={
                     "username": arguments["username"],
                     "email": arguments["email"],
                     "full_name": arguments.get("full_name")
@@ -195,12 +204,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "update_user":
                 data = {k: v for k, v in arguments.items() if k != "user_id" and v is not None}
-                response = await client.put(f"{API_BASE_URL}/users/{arguments['user_id']}", json=data)
+                response = await client.put(f"{API_BASE_URL}/{arguments['user_id']}", json=data)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "delete_user":
-                response = await client.delete(f"{API_BASE_URL}/users/{arguments['user_id']}")
+                response = await client.delete(f"{API_BASE_URL}/{arguments['user_id']}")
                 response.raise_for_status()
                 return [TextContent(type="text", text="User deleted successfully")]
 
@@ -212,19 +221,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "search_users":
                 query = arguments.get("query", "")
                 limit = arguments.get("limit", 10)
-                response = await client.get(f"{API_BASE_URL}/users/search", params={"query": query, "limit": limit})
+                response = await client.get(f"{API_BASE_URL}/search", params={"query": query, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "toggle_user_status":
                 user_id = arguments["user_id"]
                 is_active = arguments["is_active"]
-                response = await client.put(f"{API_BASE_URL}/users/{user_id}", json={"is_active": is_active})
+                response = await client.put(f"{API_BASE_URL}/{user_id}", json={"is_active": is_active})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_user_stats":
-                response = await client.get(f"{API_BASE_URL}/users/stats")
+                response = await client.get(f"{API_BASE_URL}/stats")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

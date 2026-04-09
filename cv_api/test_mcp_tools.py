@@ -1,3 +1,5 @@
+import os
+os.environ['SECRET_KEY'] = 'testsecret'
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import json

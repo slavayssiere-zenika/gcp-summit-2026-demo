@@ -59,14 +59,18 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **GET** `/competencies/` : List Competencies
-- **POST** `/competencies/` : Create Competency
-- **GET** `/competencies/{competency_id}` : Get Competency
-- **PUT** `/competencies/{competency_id}` : Update Competency
-- **DELETE** `/competencies/{competency_id}` : Delete Competency
-- **POST** `/competencies/bulk_tree` : Bulk Import Tree
-- **POST** `/competencies/user/{user_id}/assign/{competency_id}` : Assign Competency To User
-- **DELETE** `/competencies/user/{user_id}/remove/{competency_id}` : Remove Competency From User
-- **GET** `/competencies/user/{user_id}` : List User Competencies
 - **GET** `/health` : Health
 - **GET** `/spec` : Get Spec
+- **GET** `/` : List Competencies
+- **POST** `/` : Create Competency
+- **GET** `/{competency_id}` : Get Competency
+- **PUT** `/{competency_id}` : Update Competency
+- **DELETE** `/{competency_id}` : Delete Competency
+- **POST** `/bulk_tree` : Bulk Import Tree
+- **POST** `/user/{user_id}/assign/{competency_id}` : Assign Competency To User
+- **DELETE** `/user/{user_id}/remove/{competency_id}` : Remove Competency From User
+- **GET** `/user/{user_id}` : List User Competencies
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp

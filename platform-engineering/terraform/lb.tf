@@ -143,7 +143,7 @@ resource "google_compute_url_map" "default" {
       service = google_compute_backend_service.mcp_backend["users"].id
       route_action {
         url_rewrite {
-          path_prefix_rewrite = "/users/"
+          path_prefix_rewrite = "/"
         }
       }
     }

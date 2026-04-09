@@ -6,9 +6,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-os.environ["DATABASE_URL"] = "sqlite://"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./competencies_test.db"
 os.environ["COMPETENCIES_API_URL"] = "http://competencies_api:8003"
 os.environ["USERS_API_URL"] = "http://users_api:8000"
+os.environ["SECRET_KEY"] = "testsecret"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     from main import app
@@ -16,16 +17,27 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
     from src.competencies.models import Base
     from src.auth import verify_jwt
 
-engine.dispose()
-engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
-def override_get_db():
+if engine: engine.dispose()
+
+sync_engine = create_engine(
+    "sqlite:///./competencies_test.db",
+    connect_args={"check_same_thread": False},
+)
+
+async_engine = create_async_engine(
+    "sqlite+aiosqlite:///./competencies_test.db",
+    connect_args={"check_same_thread": False},
+)
+TestingSessionLocal = sessionmaker(class_=AsyncSession, autocommit=False, autoflush=False, expire_on_commit=False, bind=async_engine)
+
+async def override_get_db():
     db = TestingSessionLocal()
     try:
         yield db
     finally:
-        db.close()
+        await db.close()
 
 def override_verify_jwt():
     return {"sub": "1", "allowed_category_ids": [1]}
@@ -39,9 +51,12 @@ def client():
         yield c
 
 @pytest.fixture(scope="function", autouse=True)
-def db_session():
-    Base.metadata.create_all(bind=engine)
-    session = TestingSessionLocal()
-    yield session
-    session.close()
-    Base.metadata.drop_all(bind=engine)
+def wipe_db():
+    Base.metadata.drop_all(bind=sync_engine)
+    Base.metadata.create_all(bind=sync_engine)
+    try:
+        import cache
+        cache.client.flushdb()
+    except ImportError:
+        pass
+    yield

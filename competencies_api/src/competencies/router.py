@@ -3,6 +3,8 @@ import httpx
 from opentelemetry.propagate import inject
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
@@ -17,10 +19,21 @@ from src.competencies.schemas import (
 
 from src.auth import verify_jwt
 
-router = APIRouter(prefix="/competencies", tags=["competencies"], dependencies=[Depends(verify_jwt)])
+router = APIRouter(prefix="", tags=["competencies"], dependencies=[Depends(verify_jwt)])
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
+
+
+def serialize_competency(c: Competency) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "description": c.description,
+        "parent_id": c.parent_id,
+        "created_at": c.created_at,
+        "sub_competencies": []
+    }
 
 
 async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
@@ -32,7 +45,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{USERS_API_URL}/users/{user_id}", headers=headers)
+            response = await client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail=f"User {user_id} not found")
             response.raise_for_status()
@@ -45,20 +58,41 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
 async def list_competencies(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     cache_key = f"competencies:tree:list:{skip}:{limit}"
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
-    # Automatically restrict to Root elements to build a nested JSON tree without endless flat repetitions
-    query = db.query(Competency).filter(Competency.parent_id == None)
-    total = query.count()
-    items = query.offset(skip).limit(limit).all()
+    # Fetch all competencies to build the tree in memory without lazy-loading issues
+    all_comps = (await db.execute(select(Competency))).scalars().all()
+    
+    nodes = {}
+    for c in all_comps:
+        nodes[c.id] = {
+            "id": c.id,
+            "name": c.name,
+            "description": c.description,
+            "parent_id": c.parent_id,
+            "created_at": c.created_at,
+            "sub_competencies": []
+        }
+        
+    roots = []
+    for c in all_comps:
+        if c.parent_id is None:
+            roots.append(nodes[c.id])
+        else:
+            if c.parent_id in nodes:
+                nodes[c.parent_id]["sub_competencies"].append(nodes[c.id])
+                
+    roots.sort(key=lambda x: x["id"])
+    total = len(roots)
+    paged_roots = roots[skip:skip+limit]
     
     result = PaginationResponse(
-        items=[CompetencyResponse.model_validate(c) for c in items],
+        items=paged_roots,
         total=total,
         skip=skip,
         limit=limit
@@ -68,17 +102,17 @@ async def list_competencies(
 
 
 @router.get("/{competency_id}", response_model=CompetencyResponse)
-async def get_competency(competency_id: int, db: Session = Depends(get_db)):
+async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db)):
     cache_key = f"competencies:{competency_id}"
     cached = get_cache(cache_key)
     if cached:
         return CompetencyResponse(**cached)
 
-    competency = db.query(Competency).filter(Competency.id == competency_id).first()
+    competency = (await db.execute(select(Competency).filter(Competency.id == competency_id))).scalars().first()
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
 
-    result = CompetencyResponse.model_validate(competency)
+    result = CompetencyResponse(**serialize_competency(competency))
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
@@ -86,33 +120,33 @@ async def get_competency(competency_id: int, db: Session = Depends(get_db)):
 @router.post("/bulk_tree", status_code=200)
 async def bulk_import_tree(
     payload: TreeImportRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     jwt_payload: dict = Depends(verify_jwt)
 ):
     if jwt_payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
         
-    def upsert_level(nodes_dict: dict, parent_id: Optional[int] = None):
+    async def upsert_level(nodes_dict: dict, parent_id: Optional[int] = None):
         if not isinstance(nodes_dict, dict):
             return
             
         for name, data in nodes_dict.items():
             desc = data.get("description", "Généré par Model IA") if isinstance(data, dict) else "Catégorie"
             
-            existing = db.query(Competency).filter(Competency.name.ilike(name)).first()
+            existing = (await db.execute(select(Competency).filter(Competency.name.ilike(name)))).scalars().first()
             if existing:
                 existing.parent_id = parent_id
                 node_id = existing.id
             else:
                 new_comp = Competency(name=name, description=desc, parent_id=parent_id)
                 db.add(new_comp)
-                db.flush()
+                await db.flush()
                 node_id = new_comp.id
             
             if isinstance(data, dict):
                 sub = data.get("sub")
                 if isinstance(sub, dict):
-                    upsert_level(sub, node_id)
+                    await upsert_level(sub, node_id)
                 elif isinstance(sub, list):
                     for item in sub:
                         if isinstance(item, list) and len(item) > 0:
@@ -122,18 +156,18 @@ async def bulk_import_tree(
                             sub_name = str(item)
                             sub_desc = "Compétence"
                             
-                        leaf = db.query(Competency).filter(Competency.name.ilike(sub_name)).first()
+                        leaf = (await db.execute(select(Competency).filter(Competency.name.ilike(sub_name)))).scalars().first()
                         if leaf:
                             leaf.parent_id = node_id
                         else:
                             db.add(Competency(name=sub_name, description=sub_desc, parent_id=node_id))
-                            db.flush()
+                            await db.flush()
 
     try:
-        upsert_level(payload.tree, None)
-        db.commit()
+        await upsert_level(payload.tree, None)
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
         
     delete_cache_pattern("competencies:*")
@@ -141,41 +175,41 @@ async def bulk_import_tree(
 
 
 @router.post("/", response_model=CompetencyResponse, status_code=201)
-async def create_competency(competency: CompetencyCreate, db: Session = Depends(get_db)):
+async def create_competency(competency: CompetencyCreate, db: AsyncSession = Depends(get_db)):
     if competency.parent_id is not None:
-        parent = db.query(Competency).filter(Competency.id == competency.parent_id).first()
+        parent = (await db.execute(select(Competency).filter(Competency.id == competency.parent_id))).scalars().first()
         if not parent:
             raise HTTPException(status_code=400, detail="Parent competency not found")
             
     # Check for direct existence explicitly to prevent ID drops on race conditions
-    existing = db.query(Competency).filter(Competency.name.ilike(competency.name)).first()
+    existing = (await db.execute(select(Competency).filter(Competency.name.ilike(competency.name)))).scalars().first()
     if existing:
-        return CompetencyResponse.model_validate(existing)
+        return CompetencyResponse(**serialize_competency(existing))
         
     db_comp = Competency(**competency.model_dump())
     db.add(db_comp)
     try:
-        db.commit()
-        db.refresh(db_comp)
+        await db.commit()
+        await db.refresh(db_comp)
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         # Fallback safeguard
-        existing = db.query(Competency).filter(Competency.name.ilike(competency.name)).first()
+        existing = (await db.execute(select(Competency).filter(Competency.name.ilike(competency.name)))).scalars().first()
         if existing:
-            return CompetencyResponse.model_validate(existing)
+            return CompetencyResponse(**serialize_competency(existing))
         raise HTTPException(status_code=409, detail="Competency naming conflict unresolved")
     
     delete_cache_pattern("competencies:tree:*")
-    return CompetencyResponse.model_validate(db_comp)
+    return CompetencyResponse(**serialize_competency(db_comp))
 
 
 @router.put("/{competency_id}", response_model=CompetencyResponse)
 async def update_competency(
     competency_id: int, 
     competency_update: CompetencyUpdate, 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    db_comp = db.query(Competency).filter(Competency.id == competency_id).first()
+    db_comp = (await db.execute(select(Competency).filter(Competency.id == competency_id))).scalars().first()
     if not db_comp:
         raise HTTPException(status_code=404, detail="Competency not found")
         
@@ -186,22 +220,22 @@ async def update_competency(
     for key, value in competency_update.model_dump(exclude_unset=True).items():
         setattr(db_comp, key, value)
         
-    db.commit()
-    db.refresh(db_comp)
+    await db.commit()
+    await db.refresh(db_comp)
     
     delete_cache(f"competencies:{competency_id}")
     delete_cache_pattern("competencies:tree:*")
-    return CompetencyResponse.model_validate(db_comp)
+    return CompetencyResponse(**serialize_competency(db_comp))
 
 
 @router.delete("/{competency_id}", status_code=204)
-async def delete_competency(competency_id: int, db: Session = Depends(get_db)):
-    db_comp = db.query(Competency).filter(Competency.id == competency_id).first()
+async def delete_competency(competency_id: int, db: AsyncSession = Depends(get_db)):
+    db_comp = (await db.execute(select(Competency).filter(Competency.id == competency_id))).scalars().first()
     if not db_comp:
         raise HTTPException(status_code=404, detail="Competency not found")
         
-    db.delete(db_comp)
-    db.commit()
+    await db.delete(db_comp)
+    await db.commit()
     
     delete_cache(f"competencies:{competency_id}")
     delete_cache_pattern("competencies:tree:*")
@@ -215,33 +249,33 @@ async def assign_competency_to_user(
     user_id: int, 
     competency_id: int, 
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     await get_user_from_api(user_id, request)
-    competency = db.query(Competency).filter(Competency.id == competency_id).first()
+    competency = (await db.execute(select(Competency).filter(Competency.id == competency_id))).scalars().first()
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
         
     # Check if already assigned
-    existing = db.execute(
-        user_competency.select().where(
+    existing = (await db.execute(
+        select(user_competency).where(
             user_competency.c.user_id == user_id,
             user_competency.c.competency_id == competency_id
         )
-    ).first()
+    )).first()
     
     if existing:
         return {"message": "Competency already assigned to user"}
         
     # Assign
-    db.execute(
+    await db.execute(
         user_competency.insert().values(
             user_id=user_id,
             competency_id=competency_id,
             created_at=datetime.utcnow()
         )
     )
-    db.commit()
+    await db.commit()
     
     delete_cache_pattern(f"competencies:user:{user_id}:*")
     return {"message": f"Competency {competency.name} assigned to user {user_id}"}
@@ -251,33 +285,33 @@ async def assign_competency_to_user(
 async def remove_competency_from_user(
     user_id: int, 
     competency_id: int, 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    db.execute(
+    await db.execute(
         user_competency.delete().where(
             user_competency.c.user_id == user_id,
             user_competency.c.competency_id == competency_id
         )
     )
-    db.commit()
+    await db.commit()
     
     delete_cache_pattern(f"competencies:user:{user_id}:*")
     return Response(status_code=204)
 
 
 @router.get("/user/{user_id}", response_model=List[CompetencyResponse])
-async def list_user_competencies(user_id: int, db: Session = Depends(get_db)):
+async def list_user_competencies(user_id: int, db: AsyncSession = Depends(get_db)):
     cache_key = f"competencies:user:{user_id}:list"
     cached = get_cache(cache_key)
     if cached:
         return [CompetencyResponse(**c) for c in cached]
 
     # Join competencies with association table
-    results = db.query(Competency).join(
+    results = (await db.execute(select(Competency).join(
         user_competency, 
         Competency.id == user_competency.c.competency_id
-    ).filter(user_competency.c.user_id == user_id).all()
+    ).filter(user_competency.c.user_id == user_id))).scalars().all()
     
-    items = [CompetencyResponse.model_validate(c) for c in results]
+    items = [CompetencyResponse(**serialize_competency(c)) for c in results]
     set_cache(cache_key, [i.model_dump() for i in items], CACHE_TTL)
     return items

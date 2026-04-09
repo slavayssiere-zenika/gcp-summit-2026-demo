@@ -33,10 +33,12 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **GET** `/prompts/` : List Prompts
-- **POST** `/prompts/` : Create Prompt
-- **GET** `/prompts/{key}` : Read Prompt
-- **PUT** `/prompts/{key}` : Update Prompt
-- **POST** `/prompts/{key}/analyze` : Analyze Prompt
 - **GET** `/health` : Health Check
 - **GET** `/spec` : Get Spec
+- **GET** `/user/me` : Get My Prompt
+- **PUT** `/user/me` : Update My Prompt
+- **GET** `/` : List Prompts
+- **POST** `/` : Create Prompt
+- **GET** `/{key}` : Read Prompt
+- **PUT** `/{key}` : Update Prompt
+- **POST** `/{key}/analyze` : Analyze Prompt

@@ -22,7 +22,8 @@ class DriveSyncState(Base):
 
     google_file_id = Column(String, primary_key=True, index=True)
     folder_id = Column(Integer, ForeignKey("drive_folders.id"), nullable=True) # Tag root
+    file_name = Column(String, nullable=True)
     revision_id = Column(String, nullable=True)
-    status = Column(Enum(DriveSyncStatus), default=DriveSyncStatus.PENDING, index=True)
+    status = Column(Enum(DriveSyncStatus, native_enum=False), default=DriveSyncStatus.PENDING, index=True)
     modified_time = Column(DateTime, nullable=True)
     last_processed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

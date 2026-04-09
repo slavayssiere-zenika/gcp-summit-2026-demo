@@ -57,7 +57,7 @@ const fetchUser = async () => {
 
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('/items-api/items/categories')
+    const response = await axios.get('/items-api/categories')
     categories.value = response.data.items || []
   } catch (err) {
     console.error('Failed to fetch categories:', err)
@@ -84,7 +84,7 @@ const errorCompetencies = ref<string | null>(null)
 
 const fetchCompetencies = async () => {
   try {
-    const response = await axios.get(`/comp-api/competencies/user/${userId}`)
+    const response = await axios.get(`/comp-api/user/${userId}`)
     competencies.value = response.data || []
   } catch (err) {
     console.error('Failed to fetch user competencies:', err)
@@ -99,7 +99,7 @@ const importerUser = ref<User | null>(null)
 
 const fetchCVProfile = async () => {
   try {
-    const response = await axios.get(`/cv-api/cvs/user/${userId}`)
+    const response = await axios.get(`/cv-api/user/${userId}`)
     cvProfile.value = response.data
     
     if (cvProfile.value?.imported_by_id) {

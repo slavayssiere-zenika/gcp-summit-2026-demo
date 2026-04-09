@@ -56,20 +56,19 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **POST** `/users/login` : Login
-- **POST** `/users/logout` : Logout
-- **POST** `/users/service-account/login` : Service Account Login
-- **GET** `/users/google/config` : Get Google Config
-- **GET** `/users/google/login` : Google Login
-- **GET** `/users/google/callback` : Google Callback
-- **GET** `/users/health` : Router Health
-- **GET** `/users/stats` : Get User Stats
-- **GET** `/users/` : List Users
-- **POST** `/users/` : Create User
-- **GET** `/users/search` : Search Users
-- **GET** `/users/me` : Get Me
-- **GET** `/users/{user_id}` : Get User
-- **PUT** `/users/{user_id}` : Update User
-- **DELETE** `/users/{user_id}` : Delete User
-- **GET** `/health` : Health
+- **GET** `/health` : Router Health
+- **POST** `/login` : Login
+- **POST** `/logout` : Logout
+- **POST** `/service-account/login` : Service Account Login
+- **GET** `/google/config` : Get Google Config
+- **GET** `/google/login` : Google Login
+- **GET** `/google/callback` : Google Callback
+- **GET** `/stats` : Get User Stats
+- **GET** `/` : List Users
+- **POST** `/` : Create User
+- **GET** `/search` : Search Users
+- **GET** `/me` : Get Me
+- **GET** `/{user_id}` : Get User
+- **PUT** `/{user_id}` : Update User
+- **DELETE** `/{user_id}` : Delete User
 - **GET** `/spec` : Get Spec

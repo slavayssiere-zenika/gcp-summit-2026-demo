@@ -43,8 +43,31 @@ const handleLogout = async () => {
               <Settings size="16" /> Administration <ChevronDown size="14" />
             </button>
             <div class="dropdown-content">
-              <RouterLink to="/admin" active-class="dropdown-active">Tableau de Bord</RouterLink>
+              <RouterLink to="/admin" active-class="dropdown-active">Configuration Service Drive</RouterLink>
+              <RouterLink to="/admin/users" active-class="dropdown-active">Gestion des Accès</RouterLink>
               <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
+              <div class="dropdown-divider"></div>
+              <a href="/users-api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
+                <BookOpen size="14" /> Swagger Users
+              </a>
+              <a href="/items-api/docs" target="_blank" class="nav-pill swagger-link" title="Items API Swagger">
+                <BookOpen size="14" /> Swagger Items
+              </a>
+              <a href="/comp-api/docs" target="_blank" class="nav-pill swagger-link" title="Competencies API Swagger">
+                <BookOpen size="14" /> Swagger Compétences
+              </a>
+              <a href="/cv-api/docs" target="_blank" class="nav-pill swagger-link" title="CV API Swagger">
+                <BookOpen size="14" /> Swagger CV
+              </a>
+              <a href="/prompts-api/docs" target="_blank" class="nav-pill swagger-link" title="Prompts API Swagger">
+                <BookOpen size="14" /> Swagger Instructions IA
+              </a>
+              <a href="/drive-api/docs" target="_blank" class="nav-pill swagger-link" title="Drive API Swagger">
+                <BookOpen size="14" /> Swagger Drive
+              </a>
+              <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">
+                <BookOpen size="14" /> Swagger Agent
+              </a>
             </div>
           </div>
 
@@ -72,28 +95,12 @@ const handleLogout = async () => {
               <BookOpen size="16" /> Documentation <ChevronDown size="14" />
             </button>
             <div class="dropdown-content">
+              <RouterLink to="/help" class="nav-pill" active-class="active">
+                <BookOpen size="16" /> Centre d'Aide
+              </RouterLink>
               <RouterLink to="/specs" class="nav-pill" active-class="active">
                 <BookOpen size="16" /> Spécifications Interne
               </RouterLink>
-              <div class="dropdown-divider"></div>
-              <a href="http://localhost:8000/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
-                <BookOpen size="14" /> Swagger Users
-              </a>
-              <a href="http://localhost:8001/docs" target="_blank" class="nav-pill swagger-link" title="Items API Swagger">
-                <BookOpen size="14" /> Swagger Items
-              </a>
-              <a href="http://localhost:8003/docs" target="_blank" class="nav-pill swagger-link" title="Competencies API Swagger">
-                <BookOpen size="14" /> Swagger Compétences
-              </a>
-              <a href="http://localhost:8004/docs" target="_blank" class="nav-pill swagger-link" title="CV API Swagger">
-                <BookOpen size="14" /> Swagger CV
-              </a>
-              <a href="http://localhost:8005/docs" target="_blank" class="nav-pill swagger-link" title="Prompts API Swagger">
-                <BookOpen size="14" /> Swagger Instructions IA
-              </a>
-              <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">
-                <BookOpen size="14" /> Swagger Agent
-              </a>
             </div>
           </div>
         </div>
@@ -126,6 +133,16 @@ const handleLogout = async () => {
   --text-secondary: #5a5a5a;
   --header-bg: rgba(255, 255, 255, 0.9);
   --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.05);
+
+  /* Shared variables for Admin Panels */
+  --surface-light: #ffffff;
+  --surface-color: #f8f9fa;
+  --border-color: #e2e8f0;
+  --text-light: #64748b;
+  --text-color: #1e293b;
+  --primary-color: var(--zenika-red);
+  --primary-light: #f87171;
+  --bg-color: var(--bg-gradient);
 }
 
 * {

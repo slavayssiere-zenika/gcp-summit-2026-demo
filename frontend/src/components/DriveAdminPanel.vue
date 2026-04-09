@@ -5,11 +5,14 @@
         <h2>Google Drive Scanner</h2>
         <p class="subtitle">Import automatisé et taggé des CV depuis Google Drive</p>
       </div>
-      <button class="btn-primary" @click="triggerSync" :disabled="isSyncing">
-        <UploadCloud v-if="!isSyncing" class="icon" />
-        <Loader2 v-else class="icon spinning" />
-        {{ isSyncing ? 'Synchronisation...' : 'Forcer Synchronisation' }}
-      </button>
+      <div class="action-container">
+        <span v-if="syncStartedMsg" class="sync-msg">{{ syncStartedMsg }}</span>
+        <button class="btn-primary" @click="triggerSync" :disabled="isSyncing">
+          <UploadCloud v-if="!isSyncing" class="icon" />
+          <Loader2 v-else class="icon spinning" />
+          {{ isSyncing ? 'Synchronisation...' : 'Forcer Synchronisation' }}
+        </button>
+      </div>
     </div>
 
     <!-- Dashboard Widget -->
@@ -35,12 +38,15 @@
           <span class="value">{{ syncStatus.ignored }}</span>
         </div>
       </div>
-       <div class="stat-card">
+      <div class="stat-card">
         <div class="stat-icon error"><AlertCircle class="icon" /></div>
         <div class="stat-content">
           <span class="label">Erreurs d'import</span>
           <span class="value">{{ syncStatus.errors }}</span>
         </div>
+        <button v-if="syncStatus.errors && syncStatus.errors > 0" class="btn-retry" @click="retryErrors" title="Réessayer tous les fichiers en erreur">
+          <RefreshCcw class="icon-sm" :class="{ 'spinning': isRetrying }" />
+        </button>
       </div>
     </div>
 
@@ -92,19 +98,54 @@
         </div>
       </div>
     </div>
+
+    <!-- Files Table -->
+    <div class="files-section">
+      <h3>Fichiers Historisés</h3>
+      <div class="card table-card">
+        <table v-if="files.length > 0" class="data-table">
+          <thead>
+            <tr>
+              <th>Nom du Fichier</th>
+              <th>Tag</th>
+              <th>Statut</th>
+              <th>Dernière exécution</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="file in files" :key="file.google_file_id">
+              <td class="font-medium">{{ file.file_name || file.google_file_id }}</td>
+              <td><span class="tag-badge">{{ getFolderTag(file.folder_id) }}</span></td>
+              <td>
+                <span class="status-badge" :class="file.status.toLowerCase()">
+                  {{ formatStatus(file.status) }}
+                </span>
+              </td>
+              <td class="text-sm">{{ formatDate(file.last_processed_at || file.modified_time) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div v-else class="empty-state">
+          <p>Aucun fichier encore analysé.</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus
+  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw
 } from 'lucide-vue-next'
 
 const folders = ref<any[]>([])
+const files = ref<any[]>([])
 const syncStatus = ref<any>(null)
 const isSyncing = ref(false)
 const isAdding = ref(false)
+const isRetrying = ref(false)
 const newFolder = ref({ google_folder_id: '', tag: '' })
 
 let pollInterval: any = null
@@ -124,6 +165,47 @@ const fetchStatus = async () => {
     if (res.ok) syncStatus.value = await res.json()
   } catch (error) {
     console.error("Failed to load status", error)
+  }
+}
+
+const fetchFiles = async () => {
+  try {
+    const res = await fetch('/drive-api/files')
+    if (res.ok) files.value = await res.json()
+  } catch (error) {
+    console.error("Failed to load files", error)
+  }
+}
+
+const getFolderTag = (folderId: number) => {
+  const f = folders.value.find(x => x.id === folderId)
+  return f ? f.tag : 'Inconnu'
+}
+
+const formatStatus = (status: string) => {
+  const map: Record<string, string> = {
+    'PENDING': 'En Attente',
+    'IMPORTED_CV': 'Importé',
+    'IGNORED_NOT_CV': 'Ignoré',
+    'ERROR': 'Erreur'
+  }
+  return map[status] || status
+}
+
+const retryErrors = async () => {
+  if (isRetrying.value) return
+  isRetrying.value = true
+  try {
+    const res = await fetch('/drive-api/retry-errors', { method: 'POST' })
+    if (res.ok) {
+      await fetchStatus()
+      await fetchFiles()
+      triggerSync() // trigger sync to process pending items immediately
+    }
+  } catch (err) {
+    console.error('Failed to retry errors', err)
+  } finally {
+    isRetrying.value = false
   }
 }
 
@@ -161,10 +243,16 @@ const deleteFolder = async (id: number) => {
   }
 }
 
+const syncStartedMsg = ref('')
+
 const triggerSync = async () => {
   isSyncing.value = true
   try {
-    await fetch('/drive-api/sync', { method: 'POST' })
+    const res = await fetch('/drive-api/sync', { method: 'POST' })
+    if (res.ok) {
+      syncStartedMsg.value = 'Synchronisation démarrée en arrière-plan...'
+      setTimeout(() => { syncStartedMsg.value = '' }, 3000)
+    }
     await fetchStatus()
   } catch (error) {
     console.error("Sync failed", error)
@@ -174,15 +262,21 @@ const triggerSync = async () => {
 }
 
 const formatDate = (ds: string) => {
+  if (!ds) return 'N/A'
   return new Date(ds).toLocaleString('fr-FR', {
-    day: '2-digit', month: 'short', year: 'numeric'
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
   })
 }
 
 onMounted(() => {
   fetchFolders()
   fetchStatus()
-  pollInterval = setInterval(fetchStatus, 5000)
+  fetchFiles()
+  pollInterval = setInterval(() => {
+    fetchStatus()
+    fetchFiles()
+  }, 5000)
 })
 
 onUnmounted(() => {
@@ -201,6 +295,24 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.action-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sync-msg {
+  color: #10b981;
+  font-weight: 500;
+  font-size: 0.9rem;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .subtitle {
@@ -327,6 +439,32 @@ onUnmounted(() => {
   background: var(--bg-color);
 }
 
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(227, 25, 55, 0.2);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #c3132e;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(227, 25, 55, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-icon {
   background: none;
   border: none;
@@ -357,5 +495,39 @@ onUnmounted(() => {
   height: 48px;
   margin-bottom: 1rem;
   opacity: 0.5;
+}
+
+.status-badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge.pending { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+.status-badge.imported_cv { background: rgba(16, 185, 129, 0.15); color: #059669; }
+.status-badge.ignored_not_cv { background: rgba(107, 114, 128, 0.15); color: #4b5563; }
+.status-badge.error { background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+.btn-retry {
+  background: var(--surface-light);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: auto;
+}
+
+.btn-retry:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.font-medium {
+  font-weight: 500;
+  color: var(--text-color);
 }
 </style>

@@ -47,6 +47,12 @@ class ItemCreate(ItemBase):
     category_ids: List[int]
 
 
+class ItemUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category_ids: Optional[List[int]] = None
+
+
 class ItemResponse(ItemBase):
     id: int
     user_id: int

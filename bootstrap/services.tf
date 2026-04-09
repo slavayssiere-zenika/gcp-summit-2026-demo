@@ -14,7 +14,10 @@ locals {
     "iam.googleapis.com",                  # Création de Service Accounts Cloud Run
     "cloudresourcemanager.googleapis.com", # API de base pour manipuler le projet et politiques
     "certificatemanager.googleapis.com",   # Si nous utilisons de l'auto-provisionnage de certificats lourds SSL
-    "redis.googleapis.com"                 # Redis
+    "redis.googleapis.com",                # Redis
+    "cloudscheduler.googleapis.com",       # Cloud Scheduler
+    "bigquery.googleapis.com",             # BigQuery
+    "drive.googleapis.com"                 # Drive
   ]
 }
 

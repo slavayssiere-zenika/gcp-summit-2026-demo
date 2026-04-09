@@ -77,7 +77,7 @@ const executeImport = async (googleToken?: string) => {
     if (googleToken) {
       payload.google_access_token = googleToken
     }
-    const response = await axios.post('/cv-api/cvs/import', 
+    const response = await axios.post('/cv-api/import', 
       payload,
       { headers: { Authorization: `Bearer ${authService.state.token}` } }
     )
@@ -187,7 +187,7 @@ const executeImport = async (googleToken?: string) => {
 h2 {
   font-size: 36px;
   font-weight: 800;
-  color: #fff;
+  color: #1a1a1a;
   letter-spacing: -1px;
 }
 
@@ -196,7 +196,7 @@ h2 {
 }
 
 .subtitle {
-  color: #888;
+  color: #475569;
   font-size: 18px;
 }
 

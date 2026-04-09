@@ -1,33 +1,34 @@
-import re
 import os
+import re
 
-services = ['users_api', 'items_api', 'competencies_api', 'cv_api', 'prompts_api']
+directories = ['users_api', 'items_api', 'competencies_api', 'cv_api', 'prompts_api', 'drive_api']
+for d in directories:
+    file_path = os.path.join(d, 'database.py')
+    if not os.path.exists(file_path):
+        continue
+    
+    with open(file_path, 'r') as f:
+        content = f.read()
 
-for svc in services:
-    # 1. database.py
-    for fname in [f"{svc}/database.py", f"{svc}/database.py"]:
-        if os.path.exists(fname):
-            with open(fname, "r") as f:
-                content = f.read()
-            # remove def init_db():... to end of file if it's there
-            content = re.sub(r'\n+def init_db\(\):[\s\S]*', '', content)
-            if 'init_db' in content: 
-                print(f"Warning: init_db still in {fname}")
-            with open(fname, "w") as f:
-                f.write(content)
-                
-    # 2. main.py
-    main_file = f"{svc}/main.py"
-    if os.path.exists(main_file):
-        with open(main_file, "r") as f:
-            content = f.read()
-            
-        content = re.sub(r'\n+background_tasks = set\(\)\n*', '\n\n', content)
-        content = re.sub(r'\n+def safe_init_db\(\):[\s\S]*?(?=\n@app\.on_event)', '\n\n', content)
-        content = re.sub(r'\n+@app\.on_event\("startup"\)\nasync def startup_event\(\):[\s\S]*?(?=\nFastAPIInstrumentor|\nSQLAlchemyInstrumentor|\napp\.include_router)', '\n\n', content)
-        content = content.replace("from database import engine, init_db", "from database import engine")
-        
-        with open(main_file, "w") as f:
-            f.write(content)
-        print(f"Patched {main_file}")
+    # The current code has:
+    # DB_USER = os.getenv("DB_USER", "postgres")
+    # DB_NAME = os.getenv("DB_NAME", "mydb")
+    
+    # We want to replace it with parsing from DATABASE_URL prioritizing it.
+    
+    new_vars = """import re
 
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_NAME = os.getenv("DB_NAME", "mydb")
+
+if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
+    m = re.match(r"postgresql(?:\\+asyncpg)?://([^:]+)(?::[^@]*)?@[^/]+/([^/?]+)", DATABASE_URL)
+    if m:
+        DB_USER = m.group(1)
+        DB_NAME = m.group(2)
+"""
+    content = content.replace('DB_USER = os.getenv("DB_USER", "postgres")\nDB_NAME = os.getenv("DB_NAME", "mydb")', new_vars)
+    
+    with open(file_path, 'w') as f:
+        f.write(content)
+    print(f"Patched {file_path}")

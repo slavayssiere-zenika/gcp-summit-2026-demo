@@ -50,6 +50,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
+    role: Optional[str] = None
     allowed_category_ids: Optional[List[int]] = None
 
 

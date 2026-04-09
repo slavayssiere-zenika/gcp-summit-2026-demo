@@ -75,45 +75,44 @@ def import_persistent_resource(env, address, resource_id):
     state_res = subprocess.run(["terraform", "state", "list", address], cwd=TERRAFORM_DIR, capture_output=True, text=True)
     if state_res.returncode != 0 or address not in state_res.stdout:
         print(f"[*] Checking if persistent resource {address} exists in GCP to import it...")
-        import_res = subprocess.run(["terraform", "import", address, resource_id], cwd=TERRAFORM_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if import_res.returncode == 0:
-            print(f"    -> Successfully imported {address} into state.")
-        else:
-            print(f"    -> {address} does not exist yet (or import failed). It will be created by apply.")
+        try:
+            import_res = subprocess.run(["terraform", "import", address, resource_id], cwd=TERRAFORM_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            if import_res.returncode == 0:
+                print(f"    -> Successfully imported {address} into state.")
+            else:
+                print(f"    -> {address} does not exist yet (or import failed). It will be created by apply.")
+        except subprocess.TimeoutExpired:
+            print(f"    -> [!] Import timed out for {address}. Proceeding without it.")
 
 def deploy(env, base_domain, project_id, config, force=False):
     init_tf()
     set_workspace(env)
 
-    # Attempt to re-import persistent resources that might have been removed from state during destroy
-    import_persistent_resource(env, "google_dns_managed_zone.env_zone", f"projects/{project_id}/managedZones/zone-{env}")
-    import_persistent_resource(env, "google_compute_managed_ssl_certificate.default", f"projects/{project_id}/global/sslCertificates/ssl-{env}")
+    # DNS-based check: If domain resolves, it's highly likely persistent resources exist.
+    import socket
+    front_domain = f"{env}.{base_domain}"
     
-    # DNS record ID format: projects/{{project}}/managedZones/{{managed_zone}}/rrsets/{{name}}/{{type}}
-    dns_name = f"{env}.{base_domain}."
-    import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/{dns_name}/A")
-    import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/api.{dns_name}/A")
+    dns_resolves = False
+    try:
+        socket.gethostbyname(front_domain)
+        dns_resolves = True
+    except Exception:
+        pass
 
-    # Cloud Run API import fallback in case previous deploy timed out (container crash loop) leaving orphaned GCP services
-    region = config.get("region", "europe-west1")
-    import_persistent_resource(env, "google_cloud_run_v2_service.prompts_api", f"projects/{project_id}/locations/{region}/services/prompts-api-{env}")
-    import_persistent_resource(env, "google_cloud_run_v2_service.agent_api", f"projects/{project_id}/locations/{region}/services/agent-api-{env}")
-    import_persistent_resource(env, "google_cloud_run_v2_service.drive_api", f"projects/{project_id}/locations/{region}/services/drive-api-{env}")
-    for key in ["users", "items", "competencies", "cv"]:
-        import_persistent_resource(env, f'google_cloud_run_v2_service.mcp_services["{key}"]', f"projects/{project_id}/locations/{region}/services/{key}-api-{env}")
+    if dns_resolves:
+        print(f"[*] DNS '{front_domain}' resolves. Attempting to import persistent network resources...")
+        import_persistent_resource(env, "google_dns_managed_zone.env_zone", f"projects/{project_id}/managedZones/zone-{env}")
+        import_persistent_resource(env, "google_compute_managed_ssl_certificate.default", f"projects/{project_id}/global/sslCertificates/ssl-{env}")
+        
+        dns_name = f"{env}.{base_domain}."
+        import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/{dns_name}/A")
+        import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/api.{dns_name}/A")
+    else:
+        print(f"[*] DNS '{front_domain}' does not resolve yet. Skipping import of network resources to prevent timeouts.")
 
     if force:
         print("[!] FORCE MODE: Bypassing prevent_destroy logic to allow replacements.")
         toggle_prevent_destroy(disable=True)
-
-    print("[*] Pre-Deploy: Tainting AlloyDB IAM users to bypass immutable user_type error...")
-    for user_key in ["users", "items", "competencies", "cv", "prompts", "drive"]:
-        subprocess.run(
-            ["terraform", "taint", f'google_alloydb_user.iam_users["{user_key}"]'],
-            cwd=TERRAFORM_DIR,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
 
     cmd = ["terraform", "apply"] + get_tf_args()
     try:
@@ -327,82 +326,111 @@ def deploy(env, base_domain, project_id, config, force=False):
                     print(f"  [-] Frontend FAIL ({type(e).__name__}: {e})")
                 
                 # --- CHECK 4: API LOGIN ---
-                print(f"\n[*] Check 4/5: Testing Web API login with seeded admin user...")
+                print(f"\n[*] Check 4/5: Testing Web API login with seeded admin user (Waiting for IAM Sync up to 8 mins)...")
                 
                 url = f"https://{api_dns_name}/auth/login"
-                data = json.dumps({"username": "admin", "password": admin_pwd}).encode("utf-8")
+                data = json.dumps({"email": "admin@zenika.com", "password": admin_pwd}).encode("utf-8")
                 req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
                 
-                try:
-                    response = urllib.request.urlopen(req, timeout=30, context=ctx_to_use)
-                    if response.status in [200, 201]:
-                        print("[+] Sanity Test PASS: Successfully logged in as admin via the API!")
-                        resp_data = json.loads(response.read().decode('utf-8'))
-                        access_token = resp_data.get("access_token")
-                        
-                        # --- CHECK 4.5: SEEDING PROMPTS ---
-                        if access_token:
-                            print(f"\n[*] Check 4.5: Seeding system prompts into Prompts API...")
-                            prompts_to_seed = {
-                                "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
-                                "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
-                                "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt"
-                            }
+                login_success = False
+                for attempt in range(16):
+                    try:
+                        response = urllib.request.urlopen(req, timeout=30, context=ctx_to_use)
+                        if response.status in [200, 201]:
+                            print("[+] Sanity Test PASS: Successfully logged in as admin via the API!")
+                            resp_data = json.loads(response.read().decode('utf-8'))
+                            access_token = resp_data.get("access_token")
+                            login_success = True
                             
-                            base_dir = os.path.dirname(os.path.dirname(__file__))
-                            headers = {
-                                "Content-Type": "application/json",
-                                "Authorization": f"Bearer {access_token}"
-                            }
-                            prompts_url = f"https://{api_dns_name}/prompts-api/prompts/"
-                            
-                            for p_key, rel_path in prompts_to_seed.items():
-                                file_path = os.path.join(base_dir, rel_path)
-                                if not os.path.exists(file_path):
-                                    print(f"  [-] Warning: Prompt file not found {file_path}")
-                                    continue
+                            # --- CHECK 4.5: SEEDING PROMPTS ---
+                            if access_token:
+                                print(f"\n[*] Check 4.5: Seeding system prompts into Prompts API...")
+                                prompts_to_seed = {
+                                    "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
+                                    "agent_api.capabilities_instruction": "agent_api/agent_api.capabilities_instruction.txt",
+                                    "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
+                                    "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt"
+                                }
                                 
-                                try:
+                                base_dir = os.path.dirname(os.path.dirname(__file__))
+                                headers = {
+                                    "Content-Type": "application/json",
+                                    "Authorization": f"Bearer {access_token}"
+                                }
+                                prompts_url = f"https://{api_dns_name}/prompts-api/"
+                                
+                                for p_key, rel_path in prompts_to_seed.items():
+                                    file_path = os.path.join(base_dir, rel_path)
+                                    if not os.path.exists(file_path):
+                                        print(f"  [-] Warning: Prompt file not found {file_path}")
+                                        continue
+                                    
                                     with open(file_path, "r", encoding="utf-8") as f:
                                         content = f.read()
                                         
                                     p_data = json.dumps({"key": p_key, "value": content}).encode("utf-8")
                                     p_req = urllib.request.Request(prompts_url, data=p_data, headers=headers, method="POST")
-                                    p_resp = urllib.request.urlopen(p_req, timeout=15, context=ctx_to_use)
-                                    if p_resp.status in [200, 201]:
-                                        print(f"  [+] Successfully seeded prompt: {p_key}")
-                                    else:
-                                        print(f"  [-] Failed to seed {p_key} (HTTP {p_resp.status})")
-                                except Exception as e:
-                                    print(f"  [-] Error seeding {p_key}: {e}")
                                     
-                    else:
-                        print(f"[-] Sanity Test FAIL: Login returned {response.status}")
-                except urllib.error.HTTPError as e:
-                    # Traite le cas classique d'erreur d'applicatif
-                    msg = e.read().decode('utf-8') if hasattr(e, 'read') else 'N/A'
-                    print(f"[-] Sanity Test FAIL: HTTP {e.code} during login via POST /auth/login. (Msg: {msg})")
-                except Exception as e:
-                    print(f"[-] Sanity Test FAIL: Exception during /auth/login request: {e}")
+                                    seeded = False
+                                    for attempt in range(8):
+                                        try:
+                                            p_resp = urllib.request.urlopen(p_req, timeout=15, context=ctx_to_use)
+                                            if p_resp.status in [200, 201]:
+                                                print(f"  [+] Successfully seeded prompt: {p_key}")
+                                                seeded = True
+                                                break
+                                            else:
+                                                print(f"  [-] Failed to seed {p_key} (HTTP {p_resp.status}). Retrying... (Attempt {attempt+1}/8)")
+                                        except urllib.error.HTTPError as e:
+                                            if e.code >= 500:
+                                                print(f"  [-] API Server Error {e.code} for {p_key} (Possible IAM propagation delay). Retrying in 15s... (Attempt {attempt+1}/8)")
+                                            else:
+                                                print(f"  [-] Error seeding {p_key}: HTTP {e.code}. Retrying... (Attempt {attempt+1}/8)")
+                                        except Exception as e:
+                                            print(f"  [-] Error seeding {p_key} ({type(e).__name__}): {e}. Retrying... (Attempt {attempt+1}/8)")
+                                        
+                                        time.sleep(15)
+
+                                    if not seeded:
+                                        print(f"  [!] Failed to seed {p_key} after all attempts.")
+                            break
+                        else:
+                            print(f"[-] Sanity Test FAIL: Login returned {response.status}")
+                            break
+                    except urllib.error.HTTPError as e:
+                        if e.code >= 500:
+                            print(f"  [-] API Server Error {e.code} (Possible Database IAM propagation delay). Retrying in 30s... (Attempt {attempt+1}/16)")
+                            time.sleep(30)
+                        else:
+                            # Traite le cas classique d'erreur d'applicatif
+                            msg = e.read().decode('utf-8') if hasattr(e, 'read') else 'N/A'
+                            print(f"[-] Sanity Test FAIL: HTTP {e.code} during login via POST /auth/login. (Msg: {msg})")
+                            break
+                    except Exception as e:
+                        print(f"  [-] Unexpected error Exception request: {e}. Retrying in 30s... (Attempt {attempt+1}/16)")
+                        time.sleep(30)
+                
+                if not login_success:
+                    print("[-] Authentication flow totally failed after all attempts.")
                     
                 # --- CHECK 5: API MICROSERVICES ---
                 print(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
                 # On teste toutes les routes déclarées dans le Load Balancer (lb.tf)
                 api_routes = [
-                    "/api/",         # agent_api
-                    "/users-api/",   # users_api
-                    "/items-api/",   # items_api
-                    "/prompts-api/", # prompts_api
-                    "/comp-api/",    # competencies_api
-                    "/cv-api/",      # cv_api
-                    "/drive-api/"    # drive_api
+                    "/api/health",         # agent_api
+                    "/users-api/health",   # users_api
+                    "/items-api/health",   # items_api
+                    "/prompts-api/health", # prompts_api
+                    "/comp-api/health",    # competencies_api
+                    "/cv-api/health",      # cv_api
+                    "/drive-api/health"    # drive_api
                 ]
                 
                 for route in api_routes:
                     api_url = f"https://{api_dns_name}{route}"
                     req_get = urllib.request.Request(api_url, method="GET")
                     try:
-                        resp = urllib.request.urlopen(req_get, timeout=10, context=ctx_to_use)
+                        resp = urllib.request.urlopen(req_get, timeout=35, context=ctx_to_use)
                         print(f"  [+] {route:<15} -> OK (HTTP {resp.status})")
                     except urllib.error.HTTPError as e:
                         # Si l'API renvoie 404, 401 ou 403, cela prouve que le conteneur Cloud Run tourne
@@ -446,6 +474,14 @@ def destroy(env, force=False):
         print("[*] Ejecting persistent resources from Terraform state to preserve them...")
         for res in PERSISTENT_RESOURCES:
             run_cmd(["terraform", "state", "rm", res], check=False)
+
+    print("[*] Ejecting AlloyDB users and Drive Service Account from Terraform state to preserve them...")
+    state_list_res = subprocess.run(["terraform", "state", "list"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
+    if state_list_res.returncode == 0:
+        for line in state_list_res.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("google_alloydb_user.") or line == 'google_service_account.cr_sa["drive"]':
+                run_cmd(["terraform", "state", "rm", line], check=False)
 
     print(f"[*] Destroying all other components for environment '{env}'...")
     cmd = ["terraform", "destroy"] + get_tf_args()

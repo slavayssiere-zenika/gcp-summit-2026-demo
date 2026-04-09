@@ -1,7 +1,7 @@
 project_id: "slavayssiere-sandbox-462015"
 base_domain: "zenika.slavayssiere.fr"
 parent_zone_name: "slavayssiere-zenika"
-cloudrun_min_instances: 0
+cloudrun_min_instances: 1
 cloudrun_max_instances: 2
 alloydb_cpu: 2 # Coeurs virtuels (2 est le minimum pour AlloyDB en custom type)
 waf_rate_limit: 100
@@ -13,4 +13,5 @@ image_cv: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-
 image_prompts: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/prompts_api:latest"
 image_db_migrations: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/db_migrations:latest"
 image_agent: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_api:latest"
+image_drive: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest"
 admin_user: "sebastien.lavayssiere@zenika.com"

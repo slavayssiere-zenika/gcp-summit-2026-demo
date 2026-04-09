@@ -17,7 +17,7 @@ const analyzePrompt = async (prompt: any) => {
   try {
     analyzingKey.value = prompt.key
     error.value = ''
-    const res = await axios.post(`/prompts-api/prompts/${prompt.key}/analyze`)
+    const res = await axios.post(`/prompts-api/${prompt.key}/analyze`)
     analysisResult.value = { key: prompt.key, data: res.data }
     showModal.value = true
   } catch(e: any) {
@@ -46,7 +46,7 @@ const fetchPrompts = async () => {
   try {
     loading.value = true
     error.value = ''
-    const res = await axios.get('/prompts-api/prompts/')
+    const res = await axios.get('/prompts-api/')
     prompts.value = res.data
     res.data.forEach((p: any) => {
       originalPrompts.value[p.key] = p.value
@@ -62,7 +62,7 @@ const updatePrompt = async (prompt: any) => {
   try {
     error.value = ''
     success.value = ''
-    const res = await axios.put(`/prompts-api/prompts/${prompt.key}`, {
+    const res = await axios.put(`/prompts-api/${prompt.key}`, {
       value: prompt.value
     })
     success.value = "Prompt mis à jour avec succès : " + res.data.key
