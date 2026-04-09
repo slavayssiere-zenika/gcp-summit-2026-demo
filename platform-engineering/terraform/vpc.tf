@@ -65,7 +65,7 @@ resource "google_compute_firewall" "allow_alloydb_egress" {
 
   allow {
     protocol = "tcp"
-    ports    = ["5432"]
+    ports    = ["5432", "5433"]
   }
 
   destination_ranges = ["${google_compute_global_address.private_ip_alloc.address}/${google_compute_global_address.private_ip_alloc.prefix_length}"]
@@ -81,7 +81,7 @@ resource "google_compute_firewall" "allow_alloydb_ingress" {
 
   allow {
     protocol = "tcp"
-    ports    = ["5432"]
+    ports    = ["5432", "5433"]
   }
 
   # Le traffic provient du subnet principal (où Cloud Run s'attache via Direct VPC Egress)

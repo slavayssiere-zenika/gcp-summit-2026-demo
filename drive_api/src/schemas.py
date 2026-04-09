@@ -20,3 +20,13 @@ class StatusResponse(BaseModel):
     ignored: int
     errors: int
     last_processed_time: Optional[datetime]
+
+class FileStateResponse(BaseModel):
+    google_file_id: str
+    file_name: Optional[str]
+    folder_id: Optional[int]
+    status: DriveSyncStatus
+    modified_time: Optional[datetime]
+    last_processed_at: Optional[datetime]
+    
+    model_config = {"from_attributes": True}

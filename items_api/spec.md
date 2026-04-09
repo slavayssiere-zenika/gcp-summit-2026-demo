@@ -61,12 +61,15 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **GET** `/items/categories` : List Categories
-- **POST** `/items/categories` : Create Category
-- **GET** `/items/stats` : Get Item Stats
-- **GET** `/items/` : List Items
-- **POST** `/items/` : Create Item
-- **GET** `/items/{item_id}` : Get Item
-- **GET** `/items/user/{user_id}` : List User Items
 - **GET** `/health` : Health
+- **GET** `/categories` : List Categories
+- **POST** `/categories` : Create Category
+- **GET** `/stats` : Get Item Stats
+- **GET** `/` : List Items
+- **POST** `/` : Create Item
+- **GET** `/{item_id}` : Get Item
+- **PUT** `/{item_id}` : Update Item
+- **DELETE** `/{item_id}` : Delete Item
+- **GET** `/search/query` : Search Items
+- **GET** `/user/{user_id}` : List User Items
 - **GET** `/spec` : Get Spec

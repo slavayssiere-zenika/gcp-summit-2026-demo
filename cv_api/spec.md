@@ -51,9 +51,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **POST** `/cvs/import` : Import And Analyze Cv
-- **GET** `/cvs/search` : Search Candidates
-- **GET** `/cvs/user/{user_id}` : Get User Cv
-- **POST** `/cvs/recalculate_tree` : Recalculate Competencies Tree
 - **GET** `/health` : Health
+- **POST** `/import` : Import And Analyze Cv
+- **GET** `/search` : Search Candidates
+- **GET** `/user/{user_id}` : Get User Cv
+- **GET** `/users/tag/{tag}` : Get Users By Tag
+- **POST** `/recalculate_tree` : Recalculate Competencies Tree
 - **GET** `/spec` : Get Spec

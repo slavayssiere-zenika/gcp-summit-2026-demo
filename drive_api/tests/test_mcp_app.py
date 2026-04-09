@@ -1,3 +1,5 @@
+import os
+os.environ['SECRET_KEY'] = 'testsecret'
 from fastapi.testclient import TestClient
 from mcp_app import app
 import pytest

@@ -65,3 +65,31 @@ databaseChangeLog:
                   type: "jsonb"
                   constraints:
                     nullable: true
+
+  - changeSet:
+      id: "4"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "current_role"
+                  type: "varchar"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "years_of_experience"
+                  type: "integer"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "summary"
+                  type: "text"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "competencies_keywords"
+                  type: "text[]"
+                  constraints:
+                    nullable: true

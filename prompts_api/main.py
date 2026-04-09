@@ -1,10 +1,18 @@
 import os
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
+from contextlib import asynccontextmanager
+import database
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
@@ -21,7 +29,16 @@ from src.prompts import router
 # 2. Initialize FastAPI
 from logger import setup_logging, LoggingMiddleware
 setup_logging()
-app = FastAPI(title="Prompts API", version="1.0.0")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await database.init_db_connector()
+    SQLAlchemyInstrumentor().instrument(engine=database.engine.sync_engine)
+    yield
+    await database.close_db_connector()
+
+app = FastAPI(lifespan=lifespan, title="Prompts API", version="1.0.0", root_path=os.getenv("ROOT_PATH", ""))
 app.add_middleware(LoggingMiddleware)
 
 # 3. Setup CORS
@@ -39,18 +56,19 @@ import logging
 
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
-SQLAlchemyInstrumentor().instrument(engine=engine)
+
 
 # 5. Prometheus Instrumentator
 Instrumentator().instrument(app).expose(app)
 
 # 6. Include Router
-app.include_router(router.router, prefix="/prompts", tags=["prompts"])
 
 @app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
+async def health_check(response: Response):
+    if await database.check_db_connection():
+        return {"status": "healthy"}
+    response.status_code = 503
+    return {"status": "unhealthy"}
 @app.get("/spec")
 async def get_spec():
     try:
@@ -58,3 +76,5 @@ async def get_spec():
             return Response(content=f.read(), media_type="text/markdown")
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
+
+app.include_router(router.router, prefix="", tags=["prompts"])

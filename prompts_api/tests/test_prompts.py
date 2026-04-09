@@ -1,9 +1,51 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
-from main import app
+import os
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./prompts_test.db"
+os.environ["SECRET_KEY"] = "testsecret"
 
-client = TestClient(app)
+from unittest.mock import MagicMock, patch
+
+with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+    from main import app
+    from database import get_db, engine
+    from src.prompts.models import Base
+    import database
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+
+if engine: engine.dispose()
+sync_engine = create_engine("sqlite:///./prompts_test.db", connect_args={"check_same_thread": False})
+async_engine = create_async_engine("sqlite+aiosqlite:///./prompts_test.db", connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(class_=AsyncSession, autocommit=False, autoflush=False, expire_on_commit=False, bind=async_engine)
+
+async def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        await db.close()
+
+app.dependency_overrides[get_db] = override_get_db
+
+@pytest.fixture(autouse=True)
+def wipe_db():
+    Base.metadata.drop_all(bind=sync_engine)
+    Base.metadata.create_all(bind=sync_engine)
+    yield
+
+@pytest.fixture(autouse=True)
+def mock_db_connection(monkeypatch):
+    async def mock_check_db_connection():
+        return True
+    monkeypatch.setattr(database, "check_db_connection", mock_check_db_connection)
+
+with TestClient(app) as c:
+    client = c
+
 
 # Override the verify_admin dependency for simplicity
 def override_verify_admin():
@@ -21,42 +63,42 @@ def test_health():
     assert response.status_code == 200
 
 def test_get_not_found():
-    response = client.get("/prompts/fake.prompt.unknown")
+    response = client.get("/fake.prompt.unknown")
     assert response.status_code == 404
 
 def test_create_and_read_prompt():
-    response = client.post("/prompts/", json={"key": "test_prompt", "value": "test_val"})
+    response = client.post("/", json={"key": "test_prompt", "value": "test_val"})
     assert response.status_code == 200
     assert response.json()["value"] == "test_val"
     
     # Read (DB hit)
-    read_resp = client.get("/prompts/test_prompt")
+    read_resp = client.get("/test_prompt")
     assert read_resp.status_code == 200
     assert read_resp.json()["value"] == "test_val"
     
     # Read (Cache hit)
-    read_resp_2 = client.get("/prompts/test_prompt")
+    read_resp_2 = client.get("/test_prompt")
     assert read_resp_2.status_code == 200
 
 def test_create_prompt_overwrite():
-    client.post("/prompts/", json={"key": "over_prompt", "value": "val1"})
-    resp = client.post("/prompts/", json={"key": "over_prompt", "value": "val2"})
+    client.post("/", json={"key": "over_prompt", "value": "val1"})
+    resp = client.post("/", json={"key": "over_prompt", "value": "val2"})
     assert resp.status_code == 200
     assert resp.json()["value"] == "val2"
 
 def test_update_prompt():
     # Update not exist ->Upsert
-    resp1 = client.put("/prompts/upd_prompt", json={"value": "foo"})
+    resp1 = client.put("/upd_prompt", json={"value": "foo"})
     assert resp1.status_code == 200
     assert resp1.json()["value"] == "foo"
     
     # Update exist
-    resp2 = client.put("/prompts/upd_prompt", json={"value": "bar"})
+    resp2 = client.put("/upd_prompt", json={"value": "bar"})
     assert resp2.status_code == 200
     assert resp2.json()["value"] == "bar"
 
 def test_list_prompts():
-    resp = client.get("/prompts/")
+    resp = client.get("/")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
@@ -64,13 +106,13 @@ def test_list_prompts():
 @patch("src.prompts.router.run_promptfoo_analysis")
 @patch("src.prompts.router.improve_prompt_with_gemini")
 def test_analyze_prompt(mock_improve, mock_run, mock_gen):
-    client.post("/prompts/", json={"key": "analyze_me", "value": "test"})
+    client.post("/", json={"key": "analyze_me", "value": "test"})
     
     mock_gen.return_value = [{"vars": {"input": "test"}, "assert": []}]
     mock_run.return_value = {"results": "mocked"}
     mock_improve.return_value = "Improved test!"
     
-    resp = client.post("/prompts/analyze_me/analyze")
+    resp = client.post("/analyze_me/analyze")
     assert resp.status_code == 200
     data = resp.json()
     assert data["improved_prompt"] == "Improved test!"
@@ -78,15 +120,15 @@ def test_analyze_prompt(mock_improve, mock_run, mock_gen):
 
 @patch("src.prompts.router.generate_test_cases")
 def test_analyze_prompt_fail(mock_gen):
-    client.post("/prompts/", json={"key": "fail_me", "value": "test"})
+    client.post("/", json={"key": "fail_me", "value": "test"})
     
     mock_gen.return_value = []
     
-    resp = client.post("/prompts/fail_me/analyze")
+    resp = client.post("/fail_me/analyze")
     assert resp.status_code == 500
 
 def test_analyze_not_found():
-    resp = client.post("/prompts/not_here/analyze")
+    resp = client.post("/not_here/analyze")
     assert resp.status_code == 404
 
 def test_auth_verify_jwt_pass():

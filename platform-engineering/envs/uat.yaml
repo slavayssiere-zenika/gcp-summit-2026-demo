@@ -12,4 +12,6 @@ image_competencies: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-g
 image_cv: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/cv_api:latest"
 image_prompts: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/prompts_api:latest"
 image_agent: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_api:latest"
+image_db_migrations: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/db_migrations:latest"
+image_drive: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest"
 admin_user: "sebastien.lavayssiere@zenika.com"

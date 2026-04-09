@@ -2,7 +2,7 @@ resource "google_bigquery_dataset" "market_data" {
   dataset_id                  = "market_data"
   friendly_name               = "Market Data Dataset"
   description                 = "Dataset containing job market data and related insights for LLM queries."
-  location                    = "EU"
+  location                    = "europe-west1"
   default_table_expiration_ms = null # Tables don't expire 
 }
 

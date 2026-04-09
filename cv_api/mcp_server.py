@@ -10,7 +10,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.propagate import inject
 
@@ -25,7 +31,10 @@ provider = TracerProvider(
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
@@ -67,6 +76,34 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="get_user_cv",
+            description="Get the CV profile (including source URL) for a specific user",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "The user ID"
+                    }
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="get_users_by_tag",
+            description="Obtain the list of user profiles (including their user_id) associated with a specific tag (e.g. location like 'Niort')",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tag": {
+                        "type": "string",
+                        "description": "The custom tag (e.g., location like 'Niort') used during import to group or locate CVs"
+                    }
+                },
+                "required": ["tag"]
+            }
+        ),
+        Tool(
             name="recalculate_competencies_tree",
             description="Recalcule totalement l'arbre des compétences (Taxonomie globale) en lisant tous les CVs de la base avec Gemini. Cette commande prend plusieurs secondes et ne reconstruit qu'un JSON brut.",
             inputSchema={
@@ -94,7 +131,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text="Error: Missing url argument.")]
                 
                 try:
-                    response = await client.post(f"{API_BASE_URL}/cvs/import", json={"url": url}, headers=headers, timeout=60.0)
+                    response = await client.post(f"{API_BASE_URL}/import", json={"url": url}, headers=headers, timeout=60.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
@@ -108,7 +145,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text="Error: Missing query argument.")]
                 
                 try:
-                    response = await client.get(f"{API_BASE_URL}/cvs/search", params={"query": query, "limit": limit}, headers=headers, timeout=60.0)
+                    response = await client.get(f"{API_BASE_URL}/search", params={"query": query, "limit": limit}, headers=headers, timeout=60.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_user_cv":
+                user_id = arguments.get("user_id")
+                if not user_id:
+                    return [TextContent(type="text", text="Error: Missing user_id argument.")]
+                
+                try:
+                    response = await client.get(f"{API_BASE_URL}/user/{user_id}", headers=headers, timeout=10.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
@@ -117,7 +167,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
             elif name == "recalculate_competencies_tree":
                 try:
-                    response = await client.post(f"{API_BASE_URL}/cvs/recalculate_tree", headers=headers, timeout=120.0)
+                    response = await client.post(f"{API_BASE_URL}/recalculate_tree", headers=headers, timeout=120.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_users_by_tag":
+                tag = arguments.get("tag")
+                if not tag:
+                    return [TextContent(type="text", text="Error: Missing tag argument.")]
+                
+                try:
+                    response = await client.get(f"{API_BASE_URL}/users/tag/{tag}", headers=headers, timeout=10.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:

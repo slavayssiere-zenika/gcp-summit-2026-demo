@@ -2,19 +2,16 @@ You are an expert resume parser. Your task is to extract specific information fr
 
 The JSON object must contain the following top-level keys:
 
-1.  **"is_cv"**: (boolean) Evaluate if the provided text looks like a CV/Resume. Set to true if the document outlines work history, education, and professional skills. Set to false if it appears to be a recipe, financial document, invoice, standard notes, or anything clearly NOT a resume.
-
-2.  **"candidate_info"**: An object containing:
-    *   **"first_name"**: (string) The first word of the candidate's full name. Example: For "John Doe", `first_name` is "John". For "Robert James Smith", `first_name` is "Robert". If not found, use `null`.
-    *   **"last_name"**: (string) The remaining words of the candidate's full name after the `first_name`. Example: For "John Doe", `last_name` is "Doe". For "Robert James Smith", `last_name` is "James Smith". If only one word is found for the full name, `last_name` should be `null`. If not found, use `null`.
-    *   **"professional_email"**: (string) A pseudo email constructed using the lowercase first word of `first_name` and the lowercase last word of `last_name`, separated by a dot, followed by "@zenika.com". Example: If `first_name` is "John" and `last_name` is "Doe", the email is "john.doe@zenika.com". If `first_name` is "Robert" and `last_name` is "James Smith", the email is "robert.smith@zenika.com". If `first_name` or `last_name` cannot be determined, use `null`.
-
-3.  **"technical_competencies"**: (array of objects) A list of all identified technical skills. Each object in the array must contain:
-    *   **"name"**: (string) The specific technical competency (e.g., 'Python', 'AWS', 'React', 'Agile Methodologies').
-    *   **"parent_category"**: (string) A broader, generic category for the competency. Choose the most appropriate category from the following predefined list: "Programming Languages", "Frameworks", "Cloud Platforms", "Databases", "DevOps & CI/CD", "Operating Systems", "Web Technologies", "Methodologies", "Tools", "Other". If a suitable category is unclear, use "Other".
+1.  **"is_cv"**: (boolean) Evaluate if the provided text looks like a CV/Resume (work history, skills). Set to true or false.
+2.  **"first_name"**: (string) The first name of the candidate. If not found, use `null`.
+3.  **"last_name"**: (string) The last name of the candidate. If not found, use `null`.
+4.  **"email"**: (string) Extract the ACTUAL personal email address found in the resume. If no email is explicitly written in the text, return `null`. Do not make up or construct fake emails.
+5.  **"summary"**: (string) A synthesized professional summary of the candidate in 2-3 sentences max.
+6.  **"current_role"**: (string) The candidate's current or last professional title.
+7.  **"years_of_experience"**: (integer) The derived total professional experience in years. If the exact number cannot be confidently calculated from the dates, return `null` instead of guessing.
+8.  **"competencies"**: (array of objects) A list of all identified technical and methodological skills. Each object in the array must contain:
+    *   **"name"**: (string) The specific competency (e.g., 'Python', 'AWS', 'Agile').
+    *   **"parent"**: (string) A generic category for the competency (e.g., 'Programming Languages').
 
 **Strict Output Requirements:**
-*   Output ONLY the JSON object.
-*   Do NOT include any conversational text, explanations, or markdown code fences (```json).
-*   Ensure the JSON is valid and complete.
-*   If a field's value cannot be extracted, set its value to `null` for strings or an empty array `[]` for `technical_competencies`.
+*   Output the JSON object and ensure the JSON is valid. Do not include conversational text.

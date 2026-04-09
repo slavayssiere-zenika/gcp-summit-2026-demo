@@ -20,7 +20,7 @@ if not CLIENT_ID or not CLIENT_SECRET:
     sys.exit(1)
 
 # GCP / BigQuery
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "slavayssiere-zenika") # Adapt if needed
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "slavayssiere-sandbox-462015") # Adapt if needed
 DATASET_ID = "market_data"
 TABLE_ID = "job_offers"
 
@@ -35,11 +35,11 @@ ZENIKA_CATEGORIES = [
 # API Endpoints
 AUTH_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire"
 JOB_SEARCH_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
-ROME_URL_TEMPLATE = "https://api.francetravail.io/partenaire/rome4/v1/metiers/{}"
+ROME_URL_TEMPLATE = "https://api.francetravail.io/partenaire/rome-metiers/v1/metiers/{}"
 AGENCY_URL_TEMPLATE = "https://api.francetravail.io/partenaire/referentielagences/v1/agences/{}"
 
 # Scopes (Standard France Travail Partenaire scopes)
-SCOPES = "api_offresdemploiv2 o2d2d api_rome4v1 api_referentielagencesv1"
+SCOPES = "api_offresdemploiv2 o2dsoffre api_rome-metiersv1 api_referentielagencesv1"
 
 # ==============================================================================
 # API CLIENT
@@ -53,9 +53,13 @@ class FranceTravailClient:
         self.token_expiry = 0
         
         # Rate Limiting State (Timestamps of last calls)
-        self.last_agency_call = 0.0
-        self.last_job_call = 0.0
-        self.last_rome_call = 0.0
+        self.last_calls = {
+            'job': 0.0,     # Offres d'emploi v2 (10/s)
+            'agency': 0.0,  # Référentiel des agences v1 (1/s)
+            'rome': 0.0,    # ROME 4.0 (Toutes APIs) (1/s)
+            'market': 0.0,  # Marché du travail v1 (10/s)
+            'access': 0.0   # Accès à l'emploi des demandeurs d'emploi v1 (10/s)
+        }
 
     def _get_token(self) -> str:
         """Récupère ou rafraîchit le token OAuth2."""
@@ -82,26 +86,23 @@ class FranceTravailClient:
         """Gère les pauses pour respecter strictement les Rate Limits."""
         now = time.time()
         
-        if call_type == 'job':
-            # Max 10 calls / sec -> wait 0.1sec
-            elapsed = now - self.last_job_call
-            if elapsed < 0.1:
-                time.sleep(0.1 - elapsed)
-            self.last_job_call = time.time()
+        # Configuration des délais minimums entre deux appels
+        delays = {
+            'job': 0.1,     # Offres d'emploi v2 (10/s)
+            'market': 0.1,  # Marché du travail v1 (10/s)
+            'access': 0.1,  # Accès à l'emploi des demandeurs (10/s)
+            'agency': 1.0,  # Référentiel des agences v1 (1/s)
+            'rome': 1.0     # ROME 4.0 - toutes sous-APIs (1/s)
+        }
+        
+        delay = delays.get(call_type, 1.0) # Défaut sécuritaire: 1 appel/sec
+        last_call_time = self.last_calls.get(call_type, 0.0)
+        
+        elapsed = now - last_call_time
+        if elapsed < delay:
+            time.sleep(delay - elapsed)
             
-        elif call_type == 'rome':
-            # Max 1 call / sec -> wait 1.0sec
-            elapsed = now - self.last_rome_call
-            if elapsed < 1.0:
-                time.sleep(1.0 - elapsed)
-            self.last_rome_call = time.time()
-            
-        elif call_type == 'agency':
-            # Max 1 call / sec -> wait 1.0sec
-            elapsed = now - self.last_agency_call
-            if elapsed < 1.0:
-                time.sleep(1.0 - elapsed)
-            self.last_agency_call = time.time()
+        self.last_calls[call_type] = time.time()
 
     def _make_request(self, method: str, url: str, call_type: str, params: dict = None) -> dict:
         """Exécute une requête avec relance sur 429."""
@@ -131,8 +132,10 @@ class FranceTravailClient:
                     
                 return response.json()
             except RequestException as e:
-                if response is not None and response.status_code in [400, 404]:
-                    # Ex: no jobs found, specific ROME code missing
+                # 400, 404: no data found or bad request
+                # 401, 403: gateway authorization sync issues, fallback gracefully
+                if response is not None and response.status_code in [400, 401, 403, 404]:
+                    print(f"  [Avertissement] Accès refusé ou donnée introuvable ({response.status_code}) pour {url}. Utilisation du fallback.")
                     return {}
                 print(f"Erreur API ({url}) : {e}")
                 if attempt == retries - 1:
@@ -169,7 +172,7 @@ class FranceTravailClient:
         return list(set(skills))
 
     def get_agency_details(self, agency_id: str) -> str:
-        if not agency_id:
+        if not agency_id or agency_id == "INCONNUE":
             return ""
         print(f"  > Récupération infos agence : {agency_id}")
         url = AGENCY_URL_TEMPLATE.format(agency_id)
@@ -208,7 +211,7 @@ def run_etl():
     extracted_data = []
 
     for category in ZENIKA_CATEGORIES:
-        jobs = client.search_jobs(category, limit=5) # Limitation à 5 pour l'exemple
+        jobs = client.search_jobs(category, limit=100) # Augmentation à 100 pour maximiser les données
         for job in jobs:
             offer_id = job.get("id")
             job_title = job.get("intitule")
@@ -254,6 +257,7 @@ def run_etl():
                 "agency_name": agency_name if agency_name else None,
             }
             extracted_data.append(record)
+            print(f"  [+] Offre '{job_title[:30]}...' traitée ({len(extracted_data)} en attente d'ingestion)")
 
     # Ingestion BigQuery finale
     ingest_to_bigquery(extracted_data)

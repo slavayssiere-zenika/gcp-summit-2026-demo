@@ -49,6 +49,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/spec` : Get Spec
 - **POST** `/query` : Query
 - **GET** `/history` : Get History
+- **DELETE** `/history` : Delete History
 - **POST** `/login` : Login
 - **POST** `/logout` : Logout
 - **GET** `/me` : Get Me

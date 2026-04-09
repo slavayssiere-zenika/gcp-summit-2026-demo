@@ -16,7 +16,7 @@ const triggerRemapping = async () => {
     successResponse.value = null
     
     try {
-      const resp = await axios.post('/cv-api/cvs/recalculate_tree')
+      const resp = await axios.post('/cv-api/recalculate_tree')
       // The response natively contains {"tree": { ... }} matching from FastAPI Schema
       successResponse.value = resp.data.tree || resp.data
     } catch (e: any) {
@@ -35,7 +35,7 @@ const applyRemapping = async () => {
   applySuccess.value = false
   
   try {
-    await axios.post('/comp-api/competencies/bulk_tree', { tree: successResponse.value })
+    await axios.post('/comp-api/bulk_tree', { tree: successResponse.value })
     applySuccess.value = true
     successResponse.value = null // Hide tree layout after active deploy
   } catch (e: any) {
@@ -301,7 +301,7 @@ const applyRemapping = async () => {
 
 .subtitle-tag {
   font-size: 0.85rem;
-  color: #64748b;
+  color: #475569;
   font-weight: 500;
   display: inline-block;
   margin-top: 4px;

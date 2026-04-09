@@ -16,7 +16,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.propagate import inject, extract
 import httpx
@@ -33,7 +39,10 @@ provider = TracerProvider(
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
 tracer = trace.get_tracer(__name__)
@@ -77,6 +86,34 @@ async def list_tools() -> list[Tool]:
                     "parent_id": {"type": "integer", "description": "Optional parent competency ID to nest under. Only use if generating a sub-category."}
                 },
                 "required": ["name"]
+            }
+        ),
+        Tool(
+            name="update_competency",
+            description="Update an existing competency",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "competency_id": {"type": "integer", "description": "The competency ID"},
+                    "name": {"type": "string", "description": "New name (optional)"},
+                    "description": {"type": "string", "description": "New description (optional)"},
+                    "parent_id": {"type": "integer", "description": "New parent ID (optional)"}
+                },
+                "required": ["competency_id"]
+            }
+        ),
+        Tool(
+            name="bulk_import_tree",
+            description="Bulk import a taxonomy tree (Admin only)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tree": {
+                        "type": "object",
+                        "description": "Hierarchical dictionary of competencies"
+                    }
+                },
+                "required": ["tree"]
             }
         ),
         Tool(
@@ -151,41 +188,53 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     async with httpx.AsyncClient(follow_redirects=True, headers=headers) as client:
         try:
             if name == "list_competencies":
-                response = await client.get(f"{API_BASE_URL}/competencies/", params=arguments)
+                response = await client.get(f"{API_BASE_URL}/", params=arguments)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_competency":
-                response = await client.get(f"{API_BASE_URL}/competencies/{arguments['competency_id']}/")
+                response = await client.get(f"{API_BASE_URL}/{arguments['competency_id']}/")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "create_competency":
-                response = await client.post(f"{API_BASE_URL}/competencies/", json=arguments)
+                response = await client.post(f"{API_BASE_URL}/", json=arguments)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "update_competency":
+                comp_id = arguments["competency_id"]
+                data = {k: v for k, v in arguments.items() if k != "competency_id" and v is not None}
+                response = await client.put(f"{API_BASE_URL}/{comp_id}", json=data)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "bulk_import_tree":
+                response = await client.post(f"{API_BASE_URL}/bulk_tree", json={"tree": arguments["tree"]})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "delete_competency":
-                response = await client.delete(f"{API_BASE_URL}/competencies/{arguments['competency_id']}")
+                response = await client.delete(f"{API_BASE_URL}/{arguments['competency_id']}")
                 response.raise_for_status()
                 return [TextContent(type="text", text="Competency deleted successfully")]
 
             elif name == "assign_competency_to_user":
                 user_id = arguments["user_id"]
                 comp_id = arguments["competency_id"]
-                response = await client.post(f"{API_BASE_URL}/competencies/user/{user_id}/assign/{comp_id}")
+                response = await client.post(f"{API_BASE_URL}/user/{user_id}/assign/{comp_id}")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "remove_competency_from_user":
                 user_id = arguments["user_id"]
                 comp_id = arguments["competency_id"]
-                response = await client.delete(f"{API_BASE_URL}/competencies/user/{user_id}/remove/{comp_id}")
+                response = await client.delete(f"{API_BASE_URL}/user/{user_id}/remove/{comp_id}")
                 response.raise_for_status()
                 return [TextContent(type="text", text="Competency removed from user")]
 
             elif name == "list_user_competencies":
-                response = await client.get(f"{API_BASE_URL}/competencies/user/{arguments['user_id']}")
+                response = await client.get(f"{API_BASE_URL}/user/{arguments['user_id']}")
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

@@ -51,10 +51,16 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **GET** `/drive-api/folders` : List Folders
-- **POST** `/drive-api/folders` : Add Folder
-- **DELETE** `/drive-api/folders/{folder_id}` : Delete Folder
-- **GET** `/drive-api/status` : Get Status
-- **POST** `/drive-api/sync` : Trigger Sync
+- **GET** `/folders` : List Folders
+- **POST** `/folders` : Add Folder
+- **DELETE** `/folders/{folder_id}` : Delete Folder
+- **GET** `/status` : Get Status
+- **GET** `/files` : List Files
+- **POST** `/retry-errors` : Retry Errors
+- **POST** `/sync` : Trigger Sync
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/health` : Health
 - **GET** `/spec` : Get Spec

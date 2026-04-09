@@ -41,4 +41,25 @@ resource "google_alloydb_user" "iam_users" {
   user_id    = replace(each.value.email, ".gserviceaccount.com", "")
   user_type  = "ALLOYDB_IAM_USER"
   depends_on = [google_alloydb_instance.primary]
+
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
+}
+
+resource "google_alloydb_user" "admin_user" {
+  cluster    = google_alloydb_cluster.main.name
+  user_id    = var.admin_user
+  user_type  = "ALLOYDB_IAM_USER"
+  depends_on = [google_alloydb_instance.primary]
+
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
+}
+
+resource "google_project_iam_member" "admin_database_user" {
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "user:${var.admin_user}"
 }

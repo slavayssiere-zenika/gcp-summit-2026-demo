@@ -3,7 +3,13 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network } from 'lucide-vue-next'
+import { Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network, Trash2 } from 'lucide-vue-next'
+import CompetencyNode from '@/components/CompetencyNode.vue'
+
+const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_name);
+const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
+const techKeys = ['semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 'username', 'name', 'full_name'];
+const filteredKeys = (obj: any) => Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_'));
 
 const route = useRoute()
 const router = useRouter()
@@ -130,6 +136,24 @@ const fetchHistory = async () => {
   }
 }
 
+const resetHistory = async () => {
+  if (!confirm('Voulez-vous vraiment effacer votre historique avec l\'agent ?')) return;
+  try {
+    const token = localStorage.getItem('access_token')
+    await axios.delete('/api/history', {
+       headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    messages.value = [
+      {
+        role: 'assistant',
+        content: "Bonjour ! Je suis l'assistant intelligent de Zenika. Je peux orchestrer vos services **Users**, **Items** et **Competencies** pour répondre à vos besoins."
+      }
+    ]
+  } catch(e) {
+    console.error("Impossible de réinitialiser l'historique", e)
+  }
+}
+
 onMounted(() => {
   window.addEventListener('search-user', handleSearchEvent)
   
@@ -202,19 +226,64 @@ const goToUser = (id: number) => {
               </table>
             </div>
 
-            <!-- Generic Cards UI -->
+            <!-- Dynamic Cards UI (Inferred Types) -->
             <div v-else-if="msg.displayType === 'cards'" class="generic-grid">
-               <div v-for="(obj, idx) in msg.parsedData" :key="idx" class="generic-dash-card" @click="obj.id || obj.user_id ? goToUser(obj.id || obj.user_id) : null">
-                  <div class="card-header" v-if="obj.username || obj.name || obj.full_name">
-                    <h3 class="name">{{ obj.full_name || obj.username || obj.name }}</h3>
-                    <div v-if="obj.id || obj.user_id" class="id-tag"><Hash size="12" />{{ obj.id || obj.user_id }}</div>
-                  </div>
-                  <div class="card-body">
-                    <div v-for="key in Object.keys(obj).filter(k => !['id', 'user_id', 'username', 'name', 'full_name'].includes(k))" :key="key" class="data-row">
-                      <strong>{{ key }}:</strong> <span>{{ obj[key] }}</span>
+               <template v-for="(obj, idx) in msg.parsedData" :key="idx">
+                 <!-- User Card Render -->
+                 <div v-if="isUserObj(obj)" class="user-dash-card clickable" @click="goToUser(obj.id || obj.user_id)">
+                    <div class="card-header">
+                      <div class="avatar">{{ getInitials(obj.full_name || obj.username) }}</div>
+                      <div class="id-tag"><Hash size="12" />{{ obj.id || obj.user_id }}</div>
                     </div>
-                  </div>
-               </div>
+                    <div class="card-body">
+                      <h3 class="name">{{ obj.full_name || obj.username }}</h3>
+                      <div class="username" v-if="obj.username">@{{ obj.username }}</div>
+                      <div class="email"><Mail size="14" /> {{ obj.email }}</div>
+                    </div>
+                    <div class="card-footer" v-if="obj.is_active !== undefined">
+                      <div :class="['status-pill', obj.is_active ? 'active' : 'inactive']">
+                        <CheckCircle2 v-if="obj.is_active" size="14" />
+                        <XCircle v-else size="14" />
+                        {{ obj.is_active ? 'Actif' : 'Inactif' }}
+                      </div>
+                    </div>
+                 </div>
+                 
+                 <!-- Item Card Render -->
+                 <div v-else-if="isItemObj(obj)" class="item-dash-card">
+                    <div class="status-dot-glow"></div>
+                    <div class="item-icon-wrapper"><Package size="20" /></div>
+                    <div class="item-info">
+                      <h4 class="name">{{ obj.name }}</h4>
+                      <p class="desc" v-if="obj.description">{{ obj.description }}</p>
+                      <div class="owner" v-if="obj.user_id || obj.owner">Propriétaire: #{{ obj.user_id || obj.owner }}</div>
+                      <div v-if="obj.categories" class="categories-tags">
+                        <span v-for="cat in (Array.isArray(obj.categories) ? obj.categories : [obj.categories])" :key="cat.id || cat" class="tag">
+                          <Tag size="10" /> {{ typeof cat === 'object' ? (cat.name || cat.id) : cat }}
+                        </span>
+                      </div>
+                    </div>
+                 </div>
+
+                 <!-- Generic Fallback Card Render -->
+                 <div v-else class="generic-dash-card" @click="obj.id || obj.user_id ? goToUser(obj.id || obj.user_id) : null">
+                    <div class="card-header" v-if="obj.username || obj.name || obj.full_name">
+                      <h3 class="name">{{ obj.full_name || obj.username || obj.name }}</h3>
+                      <div v-if="obj.id || obj.user_id" class="id-tag"><Hash size="12" />{{ obj.id || obj.user_id }}</div>
+                    </div>
+                    <div class="card-body">
+                      <div v-for="key in filteredKeys(obj)" :key="key" class="data-row">
+                        <strong>{{ key }}:</strong> 
+                        <span v-if="!Array.isArray(obj[key]) && typeof obj[key] !== 'object'">{{ obj[key] }}</span>
+                        <div v-else class="categories-tags" style="display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:2px;">
+                          <span v-for="(item, i) in (Array.isArray(obj[key]) ? obj[key] : [obj[key]])" :key="i" class="tag">
+                            {{ typeof item === 'object' ? (item.name || item.id || '[Objet]') : item }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                 </div>
+               </template>
             </div>
 
             <!-- Tree View UI -->
@@ -224,7 +293,9 @@ const goToUser = (id: number) => {
                  <h3>Taxonomie RAG Modélisée</h3>
                </div>
                <div class="tree-content">
-                  <pre class="json-viewer">{{ JSON.stringify(msg.parsedData, null, 2) }}</pre>
+                 <div v-for="(val, key) in msg.parsedData" :key="key" style="margin-bottom: 8px;">
+                   <CompetencyNode :node="{ name: key, ...val }" :depth="0" />
+                 </div>
                </div>
             </div>
           </div>
@@ -296,6 +367,9 @@ const goToUser = (id: number) => {
           placeholder="Posez votre question à l'assistant..."
           autocomplete="off"
         >
+        <button @click="resetHistory" class="reset-btn" title="Réinitialiser l'historique">
+          <Trash2 size="18" />
+        </button>
         <button @click="sendQuery()" :disabled="isTyping">Envoyer</button>
       </div>
     </div>
@@ -622,6 +696,25 @@ button:hover:not(:disabled) {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.reset-btn {
+  background: white;
+  color: #ef4444;
+  border: 1px solid #fee2e2;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reset-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  transform: translateY(-1px);
 }
 
 .typing span {

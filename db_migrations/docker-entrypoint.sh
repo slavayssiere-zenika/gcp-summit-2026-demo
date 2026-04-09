@@ -21,7 +21,10 @@ for SVC in $SERVICES; do
       --username="${DB_USER}" \
       --password="${DB_PASSWORD}" \
       --changeLogFile="changelogs/${SVC}/changelog.yaml" \
-      update
+      update || {
+        echo "❌ [FAILFAST] ERREUR CRITIQUE: La migration Liquibase pour la base de données '$SVC' a échoué!" >&2
+        exit 1
+      }
   else
     echo "Aucun changelog trouvé pour ${SVC}. Passage..."
   fi

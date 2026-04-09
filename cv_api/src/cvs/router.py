@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 import httpx
 import os
 import re
@@ -13,10 +15,11 @@ from src.auth import verify_jwt
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse
 
-router = APIRouter(prefix="/cvs", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
+router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 COMPETENCIES_API_URL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
+PROMPTS_API_URL = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
 
 # Initialize Gemini Client
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -27,6 +30,9 @@ else:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
 import urllib.parse
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str:
     """Download the CV content. If Google Docs, map to raw export endpoint."""
@@ -34,12 +40,10 @@ async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str
     hostname = parsed.hostname or ""
     
     if parsed.scheme not in ("http", "https"):
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
         
     forbidden_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
     if hostname in forbidden_hosts or hostname.endswith(".local") or hostname.endswith("_api"):
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Internal URLs are not allowed")
 
     if "docs.google.com/document/d/" in url:
@@ -60,7 +64,7 @@ async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str
         return resp.text
 
 @router.post("/import", response_model=CVResponse)
-async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Session = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
+async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
     # 1. Capture Authorization Context (Crucial per RULES[AGENTS.md])
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -71,25 +75,32 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
 
     # 2. Fetch Text from CV Link
     try:
+        logger.info(f"Downloading CV content from {req.url}")
         raw_text = await _fetch_cv_content(req.url, req.google_access_token)
-    except HTTPException:
+    except HTTPException as he:
+        logger.error(f"HTTPException while downloading CV: {he.detail}")
         raise
     except Exception as e:
+        logger.error(f"Failed downloading CV content: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
 
     if not client:
+        logger.error("GenAI Client not configured.")
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")
 
     # 3. LLM Parsing Pass (Structured Output)
     try:
+        logger.info("Fetching generic prompt for CV analysis")
         async with httpx.AsyncClient() as http_client:
-            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.extract_cv_info", headers=headers, timeout=5.0)
+            res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
             res_prompt.raise_for_status()
             prompt = res_prompt.json()["value"]
     except Exception as e:
+        logger.error(f"Cannot fetch generic prompt: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
     
     try:
+        logger.info("Calling Gemini to parse CV")
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
@@ -102,6 +113,9 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                         "first_name": {"type": "string"},
                         "last_name": {"type": "string"},
                         "email": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "current_role": {"type": "string"},
+                        "years_of_experience": {"type": "integer"},
                         "competencies": {
                             "type": "array",
                             "items": {
@@ -114,7 +128,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                             }
                         }
                     },
-                    "required": ["is_cv", "first_name", "last_name", "email", "competencies"]
+                    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies"]
                 }
             )
         )
@@ -124,15 +138,17 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
         structured_cv = json.loads(parsed_data)
         
         if not structured_cv.get("is_cv", False):
+            logger.warning("Document is not recognized as a CV")
             raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"LLM Parsing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
     email = structured_cv["email"]
     async with httpx.AsyncClient(timeout=30.0) as http_client:
         # Check if user exists
-        user_res = await http_client.get(f"{USERS_API_URL}/users/", params={"skip":0, "limit": 100}, headers=headers)
+        user_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/", params={"skip":0, "limit": 100}, headers=headers)
         user_id = None
         importer_id = None
         importer_username = token_payload.get("sub")
@@ -148,6 +164,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                 # Small optimization: If both are found, we don't need to break early since limit=100 is small.
 
         if not user_id:
+            logger.info("User not found, creating new user...")
             # Create User
             new_u = {
                 "username": f"{structured_cv['first_name'][0].lower()}{structured_cv['last_name'].lower()}",
@@ -157,14 +174,16 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                 "full_name": f"{structured_cv['first_name']} {structured_cv['last_name']}",
                 "password": "zenikacv123"
             }
-            create_res = await http_client.post(f"{USERS_API_URL}/users/", json=new_u, headers=headers)
+            create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
             if create_res.status_code >= 400:
+                logger.error(f"User creation failed: status={create_res.status_code}, detail={create_res.text}")
                 raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
             user_id = create_res.json()["id"]
+            logger.info(f"User created with ID {user_id}")
 
         # 5. Provisioning Competencies API dependencies
         # Fetch current existing flat tree to avoid redundant insertions
-        comp_res = await http_client.get(f"{COMPETENCIES_API_URL}/competencies/?limit=1000", headers=headers)
+        comp_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers)
         comp_data = comp_res.json()
         all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
         
@@ -176,6 +195,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
             return None
 
         assigned_count = 0
+        logger.info(f"Processing {len(structured_cv.get('competencies', []))} competencies")
         for comp in structured_cv.get("competencies", []):
             name = comp["name"]
             parent = comp.get("parent")
@@ -187,7 +207,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                 if parent:
                     p_id = find_comp_id(all_comps, parent)
                     if not p_id:
-                        p_res = await http_client.post(f"{COMPETENCIES_API_URL}/competencies/", json={"name": parent, "description": "Auto-identified from CV"}, headers=headers)
+                        p_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=headers)
                         if p_res.status_code < 400:
                             p_id = p_res.json()["id"]
                             all_comps.append(p_res.json()) # quick cache patch
@@ -196,26 +216,35 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
                 leaf_data = {"name": name, "description": "Candidate CV Skill"}
                 if p_id: leaf_data["parent_id"] = p_id
                 
-                c_res = await http_client.post(f"{COMPETENCIES_API_URL}/competencies/", json=leaf_data, headers=headers)
+                c_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=headers)
                 if c_res.status_code < 400:
                     c_id = c_res.json()["id"]
                     all_comps.append(c_res.json())
             
             # 6. Assign Node to User
             if c_id:
-                assign_res = await http_client.post(f"{COMPETENCIES_API_URL}/competencies/user/{user_id}/assign/{c_id}", headers=headers)
+                assign_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/{c_id}", headers=headers)
                 if assign_res.status_code < 400:
                     assigned_count += 1
 
     # 7. LLM Embedding Pass (Vector Dimension Matrix)
+    comp_keywords = [c.get("name") for c in structured_cv.get("competencies", []) if c.get("name")]
+    
+    distilled_content = (
+        f"Role: {structured_cv.get('current_role', 'Unknown')}\n"
+        f"Experience: {structured_cv.get('years_of_experience', 0)} years\n"
+        f"Summary: {structured_cv.get('summary', '')}\n"
+        f"Competencies: {', '.join(comp_keywords)}\n"
+    )
+    
     try:
         emb_res = client.models.embed_content(
             model='gemini-embedding-001',
-            contents=raw_text[:10000] # Cap 10k to prevent token limits on heavy CVs
+            contents=distilled_content
         )
         vector_data = emb_res.embeddings[0].values
     except Exception as e:
-        print(f"Embedding failed: {e}")
+        logger.error(f"Embedding failed: {e}", exc_info=True)
         vector_data = None
 
     # 8. PostGreSQL Physical Save
@@ -224,13 +253,18 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
         source_url=req.url,
         source_tag=req.source_tag,
         extracted_competencies=structured_cv.get("competencies", []),
+        current_role=structured_cv.get("current_role"),
+        years_of_experience=structured_cv.get("years_of_experience"),
+        summary=structured_cv.get("summary"),
+        competencies_keywords=comp_keywords,
         raw_content=raw_text,
         semantic_embedding=vector_data,
         imported_by_id=importer_id
     )
     db.add(cv_record)
-    db.commit()
+    await db.commit()
 
+    logger.info(f"Successfully processed CV for {structured_cv.get('first_name')}, assigned {assigned_count} competencies.")
     return CVResponse(
         message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
         user_id=user_id,
@@ -238,7 +272,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Sess
     )
 
 @router.get("/search", response_model=List[SearchCandidateResponse])
-async def search_candidates(query: str, limit: int = 5, request: Request = None, db: Session = Depends(get_db)):
+async def search_candidates(query: str, limit: int = 5, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
     Recherche sémantique (RAG) du meilleur candidat via pgvector cosine distance.
     L'agent interroge cette route lorsqu'il cherche des consultants par mots-clés ou description de projet.
@@ -246,6 +280,22 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
     if not client:
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")
         
+    # 0. Pre-filtrage AI: Extract mandatory skills from query
+    try:
+        filter_prompt = f"Extract a JSON list of strictly required technical competencies from this search query. Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are strictly required.\nQuery: '{query}'"
+        filter_res = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=filter_prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        import json
+        required_skills = json.loads(filter_res.text)
+        if not isinstance(required_skills, list):
+            required_skills = []
+    except Exception as e:
+        logger.warning(f"Skill extraction failed, proceeding without pre-filter: {e}")
+        required_skills = []
+
     try:
         # 1. Convert Prompt Query into 3072-D Matrix
         emb_res = client.models.embed_content(
@@ -257,12 +307,17 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
         raise HTTPException(status_code=400, detail=f"Embedding search query failed: {e}")
 
     # 2. Vector Postgres Search Operator (Cosine Distance <=>)
-    query_results = db.query(
+    stmt = select(
         CVProfile, 
         CVProfile.semantic_embedding.cosine_distance(search_vector).label('distance')
-    ).filter(CVProfile.semantic_embedding.is_not(None))\
-     .order_by('distance')\
-     .limit(limit * 2).all()
+    ).filter(CVProfile.semantic_embedding.is_not(None))
+    
+    if required_skills:
+        from sqlalchemy import cast, String
+        for skill in required_skills:
+            stmt = stmt.filter(cast(CVProfile.competencies_keywords, String).ilike(f'%{skill}%'))
+
+    query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
                 
     mapped_results = []
     seen_users = set()
@@ -286,7 +341,7 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
     async with httpx.AsyncClient(timeout=10.0) as http_client:
         for res in mapped_results:
             try:
-                u_res = await http_client.get(f"{USERS_API_URL}/users/{res['user_id']}", headers=headers_downstream)
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)
                 if u_res.status_code == 200:
                     u_data = u_res.json()
                     res["full_name"] = u_data.get("full_name")
@@ -299,21 +354,38 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
     return mapped_results
 
 @router.get("/user/{user_id}", response_model=CVProfileResponse)
-async def get_user_cv(user_id: int, request: Request = None, db: Session = Depends(get_db)):
+async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
     Récupére le lien source (Google Doc) original du CV associé au collaborateur.
     """
-    profile = db.query(CVProfile).filter(CVProfile.user_id == user_id).first()
+    profile = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id))).scalars().first()
     if not profile:
         raise HTTPException(status_code=404, detail="Aucun CV trouvé pour cet utilisateur.")
         
     return CVProfileResponse(
         user_id=profile.user_id,
-        source_url=profile.source_url
+        source_url=profile.source_url,
+        source_tag=profile.source_tag,
+        imported_by_id=profile.imported_by_id
     )
 
+@router.get("/users/tag/{tag}", response_model=List[CVProfileResponse])
+async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession = Depends(get_db)):
+    """
+    Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
+    """
+    profiles = (await db.execute(select(CVProfile).filter(CVProfile.source_tag == tag))).scalars().all()
+    return [
+        CVProfileResponse(
+            user_id=p.user_id,
+            source_url=p.source_url,
+            source_tag=p.source_tag,
+            imported_by_id=p.imported_by_id
+        ) for p in profiles
+    ]
+
 @router.post("/recalculate_tree")
-async def recalculate_competencies_tree(request: Request, db: Session = Depends(get_db)):
+async def recalculate_competencies_tree(request: Request, db: AsyncSession = Depends(get_db)):
     """
     (Admin Only) Lit tous les CVs de la base et donne à Gemini la mission de synthétiser 
     le modèle hiérarchique optimal pour l'entreprise (Catégories -> Spécialités -> Compétences).
@@ -335,7 +407,7 @@ async def recalculate_competencies_tree(request: Request, db: Session = Depends(
     if not client:
         raise HTTPException(status_code=500, detail="Gemini SDK non configuré (Google API Key manquante).")
 
-    profiles = db.query(CVProfile).all()
+    profiles = (await db.execute(select(CVProfile))).scalars().all()
     if not profiles:
         raise HTTPException(status_code=404, detail="Aucun CV dans la base pour générer un arbre.")
 
@@ -343,7 +415,7 @@ async def recalculate_competencies_tree(request: Request, db: Session = Depends(
     try:
         async with httpx.AsyncClient() as http_client:
             headers_downstream = {"Authorization": auth_header}
-            res_prompt = await http_client.get("http://prompts_api:8000/prompts/cv_api.generate_taxonomy_tree", headers=headers_downstream, timeout=5.0)
+            res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.generate_taxonomy_tree", headers=headers_downstream, timeout=5.0)
             res_prompt.raise_for_status()
             instruction = res_prompt.json()["value"]
     except Exception as e:
@@ -352,7 +424,7 @@ async def recalculate_competencies_tree(request: Request, db: Session = Depends(
     try:
         async with httpx.AsyncClient() as http_client:
             headers = {"Authorization": auth_header}
-            comp_res = await http_client.get(f"{COMPETENCIES_API_URL}/competencies/?limit=1000", headers=headers)
+            comp_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers)
             comp_data = comp_res.json()
             all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
             

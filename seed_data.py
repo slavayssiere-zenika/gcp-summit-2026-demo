@@ -99,7 +99,7 @@ def random_string(length=8):
 def create_category(name, description):
     # Pre-check existence
     try:
-        categories = httpx.get(f"{ITEMS_API}/items/categories", headers=AUTH_HEADERS).json()
+        categories = httpx.get(f"{ITEMS_API}/categories", headers=AUTH_HEADERS).json()
         for c in categories:
             if c['name'] == name:
                 print(f"  - Category {name} already exists. Skipping.")
@@ -108,7 +108,7 @@ def create_category(name, description):
 
     data = {"name": name, "description": description}
     try:
-        response = httpx.post(f"{ITEMS_API}/items/categories", json=data, headers=AUTH_HEADERS)
+        response = httpx.post(f"{ITEMS_API}/categories", json=data, headers=AUTH_HEADERS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -122,7 +122,7 @@ def create_competency(name, description, parent_id=None):
         data["parent_id"] = parent_id
         
     try:
-        response = httpx.post(f"{COMPETENCIES_API}/competencies/", json=data, headers=AUTH_HEADERS)
+        response = httpx.post(f"{COMPETENCIES_API}/", json=data, headers=AUTH_HEADERS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -131,7 +131,7 @@ def create_competency(name, description, parent_id=None):
 
 def assign_competency(user_id, comp_id):
     try:
-        response = httpx.post(f"{COMPETENCIES_API}/competencies/user/{user_id}/assign/{comp_id}", headers=AUTH_HEADERS)
+        response = httpx.post(f"{COMPETENCIES_API}/user/{user_id}/assign/{comp_id}", headers=AUTH_HEADERS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -140,7 +140,7 @@ def assign_competency(user_id, comp_id):
 
 def import_cv(url):
     try:
-        response = httpx.post(f"{CV_API}/cvs/import", json={"url": url}, headers=AUTH_HEADERS, timeout=60.0)
+        response = httpx.post(f"{CV_API}/import", json={"url": url}, headers=AUTH_HEADERS, timeout=60.0)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -155,7 +155,7 @@ def create_user(first, last, allowed_category_ids=None):
     
     # Check if user exists by email or username search
     try:
-        search_res = httpx.get(f"{USERS_API}/users/", params={"skip": 0, "limit": 100}, headers=AUTH_HEADERS)
+        search_res = httpx.get(f"{USERS_API}/", params={"skip": 0, "limit": 100}, headers=AUTH_HEADERS)
         if search_res.status_code == 200:
             data = search_res.json()
             users_list = data.get("items", []) if isinstance(data, dict) else data
@@ -175,7 +175,7 @@ def create_user(first, last, allowed_category_ids=None):
         "password": "zenika123",
         "allowed_category_ids": allowed_category_ids
     }
-    response = httpx.post(f"{USERS_API}/users/", json=data, headers=AUTH_HEADERS)
+    response = httpx.post(f"{USERS_API}/", json=data, headers=AUTH_HEADERS)
     if response.status_code >= 400:
         print(f"  ❌ Error creating user {username}: {response.status_code} - {response.text}")
         response.raise_for_status()
@@ -190,7 +190,7 @@ def create_item(user_id, category_ids):
         "user_id": user_id,
         "category_ids": category_ids
     }
-    response = httpx.post(f"{ITEMS_API}/items/", json=data, headers=AUTH_HEADERS)
+    response = httpx.post(f"{ITEMS_API}/", json=data, headers=AUTH_HEADERS)
     response.raise_for_status()
     return response.json()
 
@@ -225,7 +225,7 @@ def main():
     print("\n🔐 Authenticating Admin securely to retrieve JWT...")
     try:
         login_res = httpx.post(
-            f"{USERS_API}/users/login", 
+            f"{USERS_API}/login", 
             json={"email": "admin@zenika.com", "password": "admin"}
         )
         if login_res.status_code == 200:
@@ -259,7 +259,7 @@ def main():
             "allowed_category_ids": [cat['id']]
         }
         try:
-            res = httpx.post(f"{USERS_API}/users/", json=cat_user_data, headers=AUTH_HEADERS)
+            res = httpx.post(f"{USERS_API}/", json=cat_user_data, headers=AUTH_HEADERS)
             if res.status_code in [200, 201]:
                 print(f"    ↳ Created manager user: {clean_name} (password: {name})")
         except Exception as e:
@@ -278,7 +278,7 @@ def main():
         conn.close()
         
         login_res = httpx.post(
-            f"{USERS_API}/users/login", 
+            f"{USERS_API}/login", 
             json={"email": "admin@zenika.com", "password": "admin"}
         )
         if login_res.status_code == 200:
@@ -347,6 +347,7 @@ def main():
     print("\n📄 Loading External AI Prompts into Gateway...")
     prompt_files = {
         "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
+        "agent_api.capabilities_instruction": "agent_api/agent_api.capabilities_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt"
     }
@@ -354,7 +355,7 @@ def main():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-            res = httpx.put(f"{PROMPTS_API}/prompts/{key}", json={"value": content}, headers=AUTH_HEADERS)
+            res = httpx.put(f"{PROMPTS_API}/{key}", json={"value": content}, headers=AUTH_HEADERS)
             if res.status_code < 400:
                 print(f"  - Successfully seeded prompt '{key}'")
             else:
@@ -380,6 +381,30 @@ def main():
         res = import_cv(url)
         if res:
             print(f"    ↳ Successfully imported CV mapping to User ID {res.get('user_id')} (Mapped {res.get('competencies_assigned')} competencies)")
+
+    
+    print("\n📁 Seeding Drive Folders for CV Intake...")
+    try:
+        import psycopg2
+        db_url = get_db_url("drive")
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        # Seed the Niort folder
+        cur.execute("SELECT id FROM drive_folders WHERE google_folder_id = '1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin'")
+        if not cur.fetchone():
+            from datetime import datetime, timezone
+            cur.execute("""
+                INSERT INTO drive_folders (google_folder_id, tag, created_at)
+                VALUES ('1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin', 'Niort', %s)
+            """, (datetime.now(timezone.utc),))
+            conn.commit()
+            print("  - Inserted Drive mapping for 'Niort'.")
+        else:
+            print("  - Drive mapping 'Niort' already exists.")
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"  - Error seeding drive folder: {e}")
 
     print("\n✨ Done! Zenika Seed process complete.")
 

@@ -9,7 +9,8 @@ import {
   ChevronRight, 
   AlertCircle,
   Clock,
-  Fingerprint
+  Fingerprint,
+  MessageSquare
 } from 'lucide-vue-next'
 import axios from 'axios'
 
@@ -25,7 +26,7 @@ const error = ref<string | null>(null)
 
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('/items-api/items/categories')
+    const response = await axios.get('/items-api/categories')
     categories.value = response.data.items || []
   } catch (err) {
     console.error('Failed to fetch categories:', err)
@@ -40,12 +41,51 @@ const getCategoryName = (id: number) => {
   return cat ? cat.name : `Catégorie #${id}`
 }
 
-onMounted(() => {
-  fetchCategories()
-})
-
 const user = authService.state.user
 const jwtToken = ref(localStorage.getItem('access_token') || 'Token introuvable')
+
+const personalPrompt = ref('')
+const isSavingPrompt = ref(false)
+const promptSaveSuccess = ref(false)
+const promptSaveError = ref(false)
+
+const fetchPersonalPrompt = async () => {
+  try {
+    // using cookies for auth, proxy passes it, or send Bearer explicitly
+    const token = localStorage.getItem('access_token')
+    const response = await axios.get('/prompts-api/user/me', {
+       headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    personalPrompt.value = response.data.value || ''
+  } catch (err) {
+    console.error('Failed to fetch personal prompt:', err)
+  }
+}
+
+const savePersonalPrompt = async () => {
+  isSavingPrompt.value = true
+  promptSaveSuccess.value = false
+  promptSaveError.value = false
+  try {
+    const token = localStorage.getItem('access_token')
+    await axios.put('/prompts-api/user/me', { value: personalPrompt.value }, {
+       headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    promptSaveSuccess.value = true
+    setTimeout(() => promptSaveSuccess.value = false, 3000)
+  } catch (err) {
+    console.error('Failed to save personal prompt:', err)
+    promptSaveError.value = true
+    setTimeout(() => promptSaveError.value = false, 3000)
+  } finally {
+    isSavingPrompt.value = false
+  }
+}
+
+onMounted(() => {
+  fetchCategories()
+  fetchPersonalPrompt()
+})
 </script>
 
 <template>
@@ -128,6 +168,33 @@ const jwtToken = ref(localStorage.getItem('access_token') || 'Token introuvable'
           
           <div v-if="error" class="error-toast">
             {{ error }}
+          </div>
+        </div>
+      </section>
+
+      <!-- Personal Prompt Card -->
+      <section class="profile-card prompt-card">
+        <div class="card-header">
+          <MessageSquare class="icon" />
+          <h2>Instructions Personnelles</h2>
+        </div>
+        
+        <div class="prompt-section">
+          <p class="section-desc">Définissez vos instructions personnelles qui seront injectées dans le comportement de l'Agent lorsque vous interagirez avec lui :</p>
+          
+          <textarea 
+            v-model="personalPrompt" 
+            placeholder="Ex: Réponds-moi toujours en utilisant un ton très professionnel, et n'oublie pas de préciser mes compétences Cloud lors de l'analyse..."
+            class="prompt-textarea"
+            rows="6"
+          ></textarea>
+          
+          <div class="prompt-actions">
+            <button @click="savePersonalPrompt" :disabled="isSavingPrompt" class="save-btn">
+              {{ isSavingPrompt ? 'Enregistrement...' : 'Sauvegarder' }}
+            </button>
+            <span v-if="promptSaveSuccess" class="toast-success">Instructions sauvegardées !</span>
+            <span v-if="promptSaveError" class="toast-error">Erreur lors de la sauvegarde.</span>
           </div>
         </div>
       </section>
@@ -384,6 +451,71 @@ h1 {
   font-size: 0.85rem;
   word-break: break-all;
   border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+/* Prompt Card Styles */
+.prompt-card {
+  grid-column: 1 / -1;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  margin-bottom: 1rem;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: var(--zenika-red);
+  box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.1);
+}
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.save-btn {
+  background-color: var(--zenika-red);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.save-btn:hover:not(:disabled) {
+  background-color: #c2152f;
+  transform: translateY(-1px);
+}
+
+.save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.toast-success {
+  color: #059669;
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: fadeIn 0.3s;
+}
+
+.toast-error {
+  color: #dc2626;
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: fadeIn 0.3s;
 }
 
 @media (max-width: 768px) {

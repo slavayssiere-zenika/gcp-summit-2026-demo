@@ -14,7 +14,7 @@ test_mcp_tools.py ....................                                   [100%]
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
-test_integration.py: 15 warnings
+test_integration.py: 16 warnings
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/sqlalchemy/sql/schema.py:3624: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
     return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
 
@@ -23,4 +23,4 @@ test_integration.py: 15 warnings
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 36 passed, 16 warnings in 1.39s ========================
+======================= 36 passed, 17 warnings in 1.58s ========================

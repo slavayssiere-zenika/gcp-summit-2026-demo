@@ -41,6 +41,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=users-api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
@@ -48,6 +49,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - GOOGLE_SECRET_ID=${GOOGLE_SECRET_ID}
       - GOOGLE_SECRET_KEY=${GOOGLE_SECRET_KEY}
+      - ROOT_PATH=/users-api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -67,6 +69,7 @@ services:
     command: ["python", "/app/mcp_app.py"]
     environment:
       - USERS_API_URL=http://users_api:8000
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=users_mcp
     depends_on:
@@ -81,11 +84,13 @@ services:
     ports:
       - "8001:8001"
     environment:
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=items-api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/items
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/items-api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -106,6 +111,7 @@ services:
     environment:
       - USERS_API_URL=http://users_api:8000
       - ITEMS_API_URL=http://items_api:8001
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=items_mcp
     depends_on:
@@ -120,12 +126,14 @@ services:
     ports:
       - "8003:8003"
     environment:
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=competencies-api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/competencies
       - REDIS_URL=redis://redis:6379/3
       - USERS_API_URL=http://users_api:8000
       - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/comp-api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -146,6 +154,7 @@ services:
     environment:
       - USERS_API_URL=http://users_api:8000
       - COMPETENCIES_API_URL=http://competencies_api:8003
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=competencies_mcp
     depends_on:
@@ -159,14 +168,17 @@ services:
     ports:
       - "8004:8004"
     environment:
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=cv-api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/cv
       - REDIS_URL=redis://redis:6379/4
       - USERS_API_URL=http://users_api:8000
       - COMPETENCIES_API_URL=http://competencies_api:8003
+      - PROMPTS_API_URL=http://prompts_api:8000
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/cv-api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -186,10 +198,55 @@ services:
     command: ["python", "/app/mcp_app.py"]
     environment:
       - CV_API_URL=http://cv_api:8004
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=cv_mcp
     depends_on:
       - cv_api
+    networks:
+      - monitoring_net
+
+  drive_api:
+    build: ./drive_api
+    container_name: drive_api
+    hostname: drive_api
+    ports:
+      - "8006:8006"
+    environment:
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=drive-api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/drive
+      - REDIS_URL=redis://redis:6379/6
+      - USERS_API_URL=http://users_api:8000
+      - CV_API_URL=http://cv_api:8004
+      - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/drive-api
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      monitoring_net:
+        aliases:
+          - drive-api
+
+  drive_mcp:
+    build: ./drive_api
+    container_name: drive_mcp
+    hostname: drive_mcp
+    command: ["python", "/app/mcp_app.py"]
+    environment:
+      - DRIVE_API_URL=http://drive_api:8006
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=drive_mcp
+      - PORT=8000
+    depends_on:
+      - drive_api
     networks:
       - monitoring_net
 
@@ -207,16 +264,20 @@ services:
       - GEMINI_MODEL=gemini-2.5-flash
       - USERS_API_URL=http://users_api:8000
       - ITEMS_API_URL=http://items_api:8001
+      - PROMPTS_API_URL=http://prompts_api:8000
       - USERS_MCP_URL=http://users_mcp:8000
       - ITEMS_MCP_URL=http://items_mcp:8000
       - COMPETENCIES_MCP_URL=http://competencies_mcp:8000
       - CV_MCP_URL=http://cv_mcp:8000
+      - DRIVE_MCP_URL=http://drive_mcp:8000
       - LOKI_MCP_URL=http://loki_mcp:8080/sse
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/1
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=agent-api
       - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -235,6 +296,8 @@ services:
       competencies_mcp:
         condition: service_started
       cv_mcp:
+        condition: service_started
+      drive_mcp:
         condition: service_started
       loki_mcp:
         condition: service_started
@@ -410,12 +473,14 @@ services:
     ports:
       - "8005:8000"
     environment:
+      - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=prompts_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/prompts
       - REDIS_URL=redis://redis:6379/5
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/prompts-api
     depends_on:
       db_migrations:
         condition: service_completed_successfully

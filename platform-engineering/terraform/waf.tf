@@ -3,6 +3,72 @@ resource "google_compute_security_policy" "waf" {
   name        = "waf-${terraform.workspace}"
   description = "WAF policy for ${terraform.workspace} level protection"
 
+  adaptive_protection_config {
+    layer_7_ddos_defense_config {
+      enable = true
+    }
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1001
+    preview  = true
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
+      }
+    }
+    description = "OWASP SQLi protection (Soft Launch)"
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1002
+    preview  = true
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('xss-v33-stable')"
+      }
+    }
+    description = "OWASP XSS protection (Soft Launch)"
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1003
+    preview  = true
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('lfi-v33-stable')"
+      }
+    }
+    description = "OWASP LFI protection (Soft Launch)"
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1004
+    preview  = true
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('rce-v33-stable')"
+      }
+    }
+    description = "OWASP RCE protection (Soft Launch)"
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1005
+    preview  = true
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('scannerdetection-v33-stable')"
+      }
+    }
+    description = "OWASP Scanner Detection (Soft Launch)"
+  }
+
   # Règle par défaut : autoriser (ou on peut refuser et whitelist, selon les besoins)
   # Pour un LB public, on laisse passer et on log, ou on applique des règles pré-packagées.
   rule {

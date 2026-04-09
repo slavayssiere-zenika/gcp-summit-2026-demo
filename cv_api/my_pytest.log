@@ -1,0 +1,54 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- /Users/sebastien.lavayssiere/Code/test-open-code/test_env/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/sebastien.lavayssiere/Code/test-open-code/cv_api
+plugins: mock-3.15.1, cov-7.1.0, langsmith-0.7.23, asyncio-1.3.0, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 20 items
+
+test_main.py::test_health FAILED                                         [  5%]
+test_main.py::test_get_spec_success PASSED                               [ 10%]
+test_main.py::test_get_spec_fail PASSED                                  [ 15%]
+test_main.py::test_get_user_cv PASSED                                    [ 20%]
+test_main.py::test_search_candidates PASSED                              [ 25%]
+test_main.py::test_import_and_analyze_cv PASSED                          [ 30%]
+test_main.py::test_recalculate_tree PASSED                               [ 35%]
+test_main.py::test_fetch_cv_content_internal_url PASSED                  [ 40%]
+test_main.py::test_fetch_cv_content_invalid_scheme PASSED                [ 45%]
+test_main.py::test_import_cv_no_auth PASSED                              [ 50%]
+test_main.py::test_import_cv_genai_not_configured PASSED                 [ 55%]
+test_main.py::test_import_cv_prompt_fail PASSED                          [ 60%]
+test_main.py::test_search_candidates_no_client PASSED                    [ 65%]
+test_main.py::test_search_candidates_embed_fail PASSED                   [ 70%]
+test_main.py::test_recalculate_tree_no_auth PASSED                       [ 75%]
+test_main.py::test_recalculate_tree_bad_token PASSED                     [ 80%]
+test_main.py::test_recalculate_tree_not_admin PASSED                     [ 85%]
+test_main.py::test_recalculate_tree_no_client PASSED                     [ 90%]
+test_main.py::test_recalculate_tree_no_profiles PASSED                   [ 95%]
+test_main.py::test_import_cv_not_a_cv_boolean_check PASSED               [100%]
+
+=================================== FAILURES ===================================
+_________________________________ test_health __________________________________
+
+    def test_health():
+        response = client.get("/health")
+>       assert response.status_code == 200
+E       assert 503 == 200
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+test_main.py:29: AssertionError
+=============================== warnings summary ===============================
+../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+test_main.py::test_import_and_analyze_cv
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py:264: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    db.add(cv_record)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test_main.py::test_health - assert 503 == 200
+=================== 1 failed, 19 passed, 2 warnings in 2.37s ===================

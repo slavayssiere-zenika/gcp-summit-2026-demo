@@ -12,9 +12,13 @@ class ExtractedCompetency(BaseModel):
     parent: Optional[str] = None # Its parent category (e.g. Langages Backend)
 
 class ExtractedProfile(BaseModel):
-    first_name: str
-    last_name: str
-    email: str
+    is_cv: bool
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    summary: Optional[str] = None
+    current_role: Optional[str] = None
+    years_of_experience: Optional[int] = None
     competencies: List[ExtractedCompetency]
 
 class CVResponse(BaseModel):

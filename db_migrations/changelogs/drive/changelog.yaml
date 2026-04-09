@@ -65,3 +65,16 @@ databaseChangeLog:
                   name: "last_processed_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+
+  - changeSet:
+      id: "3"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "file_name"
+                  type: "varchar"
+                  constraints:
+                    nullable: true

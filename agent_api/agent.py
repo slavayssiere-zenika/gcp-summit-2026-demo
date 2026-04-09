@@ -79,10 +79,23 @@ async def recalculate_competencies_tree() -> dict:
     result = await mcp.call_tool("recalculate_competencies_tree", {})
     return format_mcp_result(result, "tree")
 
+async def get_users_by_tag(tag: str) -> dict:
+    """
+    Récupère les identifiants et les liens des CV des utilisateurs associés à un tag spécifique (ex: localisation 'Niort').
+    Utiliser cet outil UNIQUEMENT pour identifier des utilisateurs par localisation ou tag.
+    
+    Args:
+        tag (str): La localisation ou le tag spécifique (ex: 'Niort').
+    """
+    mcp = await get_cv_mcp()
+    result = await mcp.call_tool("get_users_by_tag", {"tag": tag})
+    return format_mcp_result(result, "users_by_tag")
+
 CV_TOOLS = [
     analyze_cv,
     search_best_candidates,
-    recalculate_competencies_tree
+    recalculate_competencies_tree,
+    get_users_by_tag
 ]
 
 # --- Drive Tools ---
@@ -558,17 +571,40 @@ GCP_LOGGING_TOOLS = [
 ]
 
 
-async def create_agent():
+async def create_agent(session_id: str | None = None):
     import httpx
     try:
+        prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
         async with httpx.AsyncClient() as client:
-            res = await client.get("http://prompts_api:8000/prompts/agent_api.assistant_system_instruction", timeout=5.0)
+            res = await client.get(f"{prompts_api_url}/prompts/agent_api.assistant_system_instruction", timeout=5.0)
             res.raise_for_status()
             instruction_text = res.json()["value"]
+            
+            # Fetch capabilities
+            res_cap = await client.get(f"{prompts_api_url}/prompts/agent_api.capabilities_instruction", timeout=5.0)
+            if res_cap.status_code == 200:
+                capabilities_text = res_cap.json().get("value", "")
+                if capabilities_text:
+                    instruction_text += f"\n\n--- CAPACITÉS DE L'AGENT ---\n{capabilities_text}\n------------------------------------------------------------"
     except Exception as e:
         print(f"Error fetching system prompt from prompts_api: {e}")
         instruction_text = "Tu es un assistant IA. Réponds brièvement."
         
+    if session_id and session_id != "anon":
+        try:
+            from mcp_client import auth_header_var
+            auth_header = auth_header_var.get()
+            headers = {"Authorization": auth_header} if auth_header else {}
+            
+            async with httpx.AsyncClient() as client:
+                res = await client.get(f"{prompts_api_url}/prompts/user_{session_id}", headers=headers, timeout=5.0)
+                if res.status_code == 200:
+                    user_prompt = res.json().get("value", "")
+                    if user_prompt:
+                        instruction_text += f"\n\n--- INSTRUCTIONS SPÉCIFIQUES DE L'UTILISATEUR ({session_id}) ---\n{user_prompt}\n------------------------------------------------------------"
+        except Exception as e:
+            print(f"Error fetching personal prompt for {session_id}: {e}")
+            
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     # Choix dynamique des outils de log
@@ -598,7 +634,7 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     session_id = session_id or str(uuid.uuid4())
     
     session_service = get_session_service()
-    agent = await create_agent()
+    agent = await create_agent(session_id)
     runner = Runner(app_name="zenika_assistant", agent=agent, session_service=session_service)
     
     # Explicitly create the session if it doesn't exist

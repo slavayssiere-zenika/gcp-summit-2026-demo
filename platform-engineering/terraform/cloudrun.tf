@@ -63,26 +63,34 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       name    = "api"
       image   = local.mcp_images[each.key] # géré par Terraform
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
       ports {
         container_port = 8080 # Le trafic Cloud Run arrive ici, GCP injecte le $PORT=8080 automatiquement
       }
-      startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
-        failure_threshold     = 5
-        http_get {
-          path = "/health"
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+
+          }
         }
       }
-      liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
-        failure_threshold     = 3
-        http_get {
-          path = "/health"
+      dynamic "liveness_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 10
+          failure_threshold     = 3
+          http_get {
+            path = "/health"
+
+          }
         }
       }
       resources {
@@ -92,15 +100,27 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
       env {
         name  = "DATABASE_URL"
-        value = "postgresql://${replace(google_service_account.cr_sa[each.key].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/${each.key}?sslmode=require"
+        value = "postgresql://${replace(google_service_account.cr_sa[each.key].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/${each.key}"
+      }
+      env {
+        name  = "ROOT_PATH"
+        value = each.key == "competencies" ? "/comp-api" : "/${each.key}-api"
       }
       env {
         name  = "USE_IAM_AUTH"
         value = "true"
       }
       env {
+        name  = "ALLOYDB_INSTANCE_URI"
+        value = "projects/${var.project_id}/locations/${var.region}/clusters/${google_alloydb_cluster.main.cluster_id}/instances/${google_alloydb_instance.primary.instance_id}"
+      }
+      env {
         name  = "REDIS_URL"
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+      }
+      env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
       }
       env {
         name = "SECRET_KEY"
@@ -165,6 +185,30 @@ resource "google_cloud_run_v2_service" "mcp_services" {
           }
         }
       }
+
+      dynamic "env" {
+        for_each = each.key == "cv" ? [1] : []
+        content {
+          name  = "PROMPTS_API_URL"
+          value = "http://api.internal.zenika/prompts-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = contains(["cv", "competencies"], each.key) ? [1] : []
+        content {
+          name  = "USERS_API_URL"
+          value = "http://api.internal.zenika/users-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "cv" ? [1] : []
+        content {
+          name  = "COMPETENCIES_API_URL"
+          value = "http://api.internal.zenika/comp-api/"
+        }
+      }
     }
 
     # Conteneur Sidecar (MCP)
@@ -172,25 +216,33 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       name    = "mcp"
       image   = local.mcp_images[each.key] # géré par Terraform
       command = ["python"]
-      args    = ["mcp_app.py"]
-      startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
-        failure_threshold     = 5
-        http_get {
-          path = "/health"
-          port = 8081
+      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081"]
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+            port = 8081
+
+          }
         }
       }
-      liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
-        failure_threshold     = 3
-        http_get {
-          path = "/health"
-          port = 8081
+      dynamic "liveness_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 10
+          failure_threshold     = 3
+          http_get {
+            path = "/health"
+            port = 8081
+
+          }
         }
       }
       resources {
@@ -199,6 +251,10 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         }
       }
 
+      env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
+      }
       env {
         name  = "PORT"
         value = "8081" # Overrides standard PORT to prevent :8080 collisions
@@ -218,9 +274,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.jwt_secret_access,
-    google_secret_manager_secret_iam_member.gemini_secret_access,
-    google_secret_manager_secret_iam_member.admin_password_access,
+    time_sleep.wait_for_iam_propagation,
     null_resource.run_db_migrations_job
   ]
 }
@@ -250,26 +304,34 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       name    = "api"
       image   = var.image_prompts
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
       ports {
         container_port = 8080
       }
-      startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
-        failure_threshold     = 5
-        http_get {
-          path = "/health"
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+
+          }
         }
       }
-      liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
-        failure_threshold     = 3
-        http_get {
-          path = "/health"
+      dynamic "liveness_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 10
+          failure_threshold     = 3
+          http_get {
+            path = "/health"
+
+          }
         }
       }
       resources {
@@ -288,15 +350,27 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       }
       env {
         name  = "DATABASE_URL"
-        value = "postgresql://${replace(google_service_account.cr_sa["prompts"].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/prompts?sslmode=require"
+        value = "postgresql://${replace(google_service_account.cr_sa["prompts"].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/prompts"
+      }
+      env {
+        name  = "ROOT_PATH"
+        value = "/prompts-api"
       }
       env {
         name  = "USE_IAM_AUTH"
         value = "true"
       }
       env {
+        name  = "ALLOYDB_INSTANCE_URI"
+        value = "projects/${var.project_id}/locations/${var.region}/clusters/${google_alloydb_cluster.main.cluster_id}/instances/${google_alloydb_instance.primary.instance_id}"
+      }
+      env {
         name  = "REDIS_URL"
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+      }
+      env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
       }
       env {
         name = "SECRET_KEY"
@@ -318,8 +392,7 @@ resource "google_cloud_run_v2_service" "prompts_api" {
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.jwt_secret_access,
-    google_secret_manager_secret_iam_member.gemini_secret_access,
+    time_sleep.wait_for_iam_propagation,
     null_resource.run_db_migrations_job
   ]
 }
@@ -346,26 +419,34 @@ resource "google_cloud_run_v2_service" "drive_api" {
       name    = "api"
       image   = var.image_drive
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
       ports {
         container_port = 8080
       }
-      startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
-        failure_threshold     = 5
-        http_get {
-          path = "/health"
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+
+          }
         }
       }
-      liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
-        failure_threshold     = 3
-        http_get {
-          path = "/health"
+      dynamic "liveness_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 10
+          failure_threshold     = 3
+          http_get {
+            path = "/health"
+
+          }
         }
       }
       resources {
@@ -375,11 +456,19 @@ resource "google_cloud_run_v2_service" "drive_api" {
       }
       env {
         name  = "DATABASE_URL"
-        value = "postgresql://${replace(google_service_account.cr_sa["drive"].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/drive?sslmode=require"
+        value = "postgresql://${replace(google_service_account.cr_sa["drive"].email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/drive"
+      }
+      env {
+        name  = "ROOT_PATH"
+        value = "/drive-api"
       }
       env {
         name  = "USE_IAM_AUTH"
         value = "true"
+      }
+      env {
+        name  = "ALLOYDB_INSTANCE_URI"
+        value = "projects/${var.project_id}/locations/${var.region}/clusters/${google_alloydb_cluster.main.cluster_id}/instances/${google_alloydb_instance.primary.instance_id}"
       }
       env {
         name  = "REDIS_URL"
@@ -394,6 +483,10 @@ resource "google_cloud_run_v2_service" "drive_api" {
         value = "http://api.internal.zenika/users-api/"
       }
       env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -403,16 +496,71 @@ resource "google_cloud_run_v2_service" "drive_api" {
         }
       }
     }
+
+    # Conteneur Sidecar (MCP)
+    containers {
+      name    = "mcp"
+      image   = var.image_drive
+      command = ["python"]
+      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081"]
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+            port = 8081
+
+          }
+        }
+      }
+      dynamic "liveness_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 10
+          failure_threshold     = 3
+          http_get {
+            path = "/health"
+            port = 8081
+
+          }
+        }
+      }
+      resources {
+        limits = {
+          memory = "256Mi"
+        }
+      }
+
+      env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
+      }
+      env {
+        name  = "PORT"
+        value = "8081"
+      }
+      env {
+        name  = "DRIVE_API_URL"
+        value = "http://localhost:8080"
+      }
+    }
   }
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].resources[0].limits["cpu"]
+      template[0].containers[0].resources[0].limits["cpu"],
+      template[0].containers[1].resources[0].limits["cpu"]
     ]
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.jwt_secret_access,
+    time_sleep.wait_for_iam_propagation,
     null_resource.run_db_migrations_job
   ]
 }
@@ -439,26 +587,34 @@ resource "google_cloud_run_v2_service" "agent_api" {
       name    = "api"
       image   = var.image_agent
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
       ports {
         container_port = 8080
       }
-      startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
-        failure_threshold     = 5
-        http_get {
-          path = "/health"
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+
+          }
         }
       }
-      liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
-        failure_threshold     = 3
-        http_get {
-          path = "/health"
+      dynamic "liveness_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 10
+          failure_threshold     = 3
+          http_get {
+            path = "/health"
+
+          }
         }
       }
       resources {
@@ -474,6 +630,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
             version = "latest"
           }
         }
+      }
+      env {
+        name  = "ROOT_PATH"
+        value = "/api"
       }
       # L'agent a besoin des URLs des Cloud Run.
       # Remarque: avec l'ingress INTERNAL_LOAD_BALANCER, l'agent peut quand même
@@ -513,6 +673,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/1"
       }
       env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -522,61 +686,16 @@ resource "google_cloud_run_v2_service" "agent_api" {
         }
       }
     }
-
-    # Conteneur Sidecar (MCP)
-    containers {
-      name    = "mcp"
-      image   = var.image_drive
-      command = ["python"]
-      args    = ["mcp_app.py"]
-      startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
-        failure_threshold     = 5
-        http_get {
-          path = "/health"
-          port = 8081
-        }
-      }
-      liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
-        failure_threshold     = 3
-        http_get {
-          path = "/health"
-          port = 8081
-        }
-      }
-      resources {
-        limits = {
-          memory = "256Mi"
-        }
-      }
-
-      env {
-        name  = "PORT"
-        value = "8081"
-      }
-      env {
-        name  = "DRIVE_API_URL"
-        value = "http://localhost:8080"
-      }
-    }
-
   }
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].resources[0].limits["cpu"],
-      template[0].containers[1].resources[0].limits["cpu"]
+      template[0].containers[0].resources[0].limits["cpu"]
     ]
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.jwt_secret_access,
-    google_secret_manager_secret_iam_member.gemini_secret_access,
+    time_sleep.wait_for_iam_propagation,
     null_resource.run_db_migrations_job
   ]
 }
@@ -660,6 +779,25 @@ resource "google_project_iam_member" "agent_logging_viewer" {
   project = var.project_id
   role    = "roles/logging.viewer"
   member  = "serviceAccount:${google_service_account.cr_sa["agent"].email}"
+}
+
+# ==============================================================
+# Timer de propagation IAM (Evite les crashs Cloud Run / DB)
+# ==============================================================
+resource "time_sleep" "wait_for_iam_propagation" {
+  depends_on = [
+    google_secret_manager_secret_iam_member.jwt_secret_access,
+    google_secret_manager_secret_iam_member.gemini_secret_access,
+    google_secret_manager_secret_iam_member.admin_password_access,
+    google_secret_manager_secret_iam_member.google_secret_id_access,
+    google_secret_manager_secret_iam_member.google_secret_key_access,
+    google_project_iam_member.otel_trace_writer,
+    google_project_iam_member.otel_metric_writer,
+    google_project_iam_member.alloydb_client,
+    google_project_iam_member.alloydb_databaseUser,
+    google_project_iam_member.agent_logging_viewer
+  ]
+  create_duration = "45s"
 }
 
 # ==============================================================
