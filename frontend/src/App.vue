@@ -49,22 +49,22 @@ const handleLogout = async () => {
               <RouterLink to="/admin/deduplication" active-class="dropdown-active">Déduplication</RouterLink>
               <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
               <div class="dropdown-divider"></div>
-              <a href="/users-api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
+              <a href="/users_api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
                 <BookOpen size="14" /> Swagger Users
               </a>
-              <a href="/items-api/docs" target="_blank" class="nav-pill swagger-link" title="Items API Swagger">
+              <a href="/items_api/docs" target="_blank" class="nav-pill swagger-link" title="Items API Swagger">
                 <BookOpen size="14" /> Swagger Items
               </a>
-              <a href="/comp-api/docs" target="_blank" class="nav-pill swagger-link" title="Competencies API Swagger">
+              <a href="/comp_api/docs" target="_blank" class="nav-pill swagger-link" title="Competencies API Swagger">
                 <BookOpen size="14" /> Swagger Compétences
               </a>
-              <a href="/cv-api/docs" target="_blank" class="nav-pill swagger-link" title="CV API Swagger">
+              <a href="/cv_api/docs" target="_blank" class="nav-pill swagger-link" title="CV API Swagger">
                 <BookOpen size="14" /> Swagger CV
               </a>
-              <a href="/prompts-api/docs" target="_blank" class="nav-pill swagger-link" title="Prompts API Swagger">
+              <a href="/prompts_api/docs" target="_blank" class="nav-pill swagger-link" title="Prompts API Swagger">
                 <BookOpen size="14" /> Swagger Instructions IA
               </a>
-              <a href="/drive-api/docs" target="_blank" class="nav-pill swagger-link" title="Drive API Swagger">
+              <a href="/drive_api/docs" target="_blank" class="nav-pill swagger-link" title="Drive API Swagger">
                 <BookOpen size="14" /> Swagger Drive
               </a>
               <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">

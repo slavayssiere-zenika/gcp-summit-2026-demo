@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
 from database import Base

@@ -25,5 +25,6 @@ class DriveSyncState(Base):
     file_name = Column(String, nullable=True)
     revision_id = Column(String, nullable=True)
     status = Column(Enum(DriveSyncStatus, native_enum=False), default=DriveSyncStatus.PENDING, index=True)
+    user_id = Column(Integer, nullable=True)
     modified_time = Column(DateTime, nullable=True)
     last_processed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

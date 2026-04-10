@@ -146,6 +146,33 @@ async def list_tools() -> list[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="get_candidate_rag_context",
+            description="Récupère les informations vectorisées et distillées (résumé, missions, rôle) pour un candidat. Utile pour comprendre pourquoi un profil correspond à une recherche ou pour générer une synthèse.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "L'ID de l'utilisateur (candidat)"
+                    }
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="get_most_experienced_consultants",
+            description="Récupère le classement des consultants les plus expérimentés (basé sur les années d'expérience).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Nombre de profils à retourner (défaut 5)."
+                    }
+                }
+            }
         )
     ]
 
@@ -254,6 +281,28 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if arguments.get("user_id"): params["user_id"] = arguments["user_id"]
                     
                     response = await client.post(f"{API_BASE_URL}/reanalyze", params=params, headers=headers, timeout=300.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_candidate_rag_context":
+                user_id = arguments.get("user_id")
+                if not user_id:
+                    return [TextContent(type="text", text="Error: Missing user_id argument.")]
+                try:
+                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/details", headers=headers, timeout=20.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_most_experienced_consultants":
+                limit = arguments.get("limit", 5)
+                try:
+                    response = await client.get(f"{API_BASE_URL}/ranking/experience", params={"limit": limit}, headers=headers, timeout=20.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:

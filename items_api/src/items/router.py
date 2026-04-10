@@ -14,14 +14,14 @@ from src.items.schemas import (
     ItemCreate, ItemUpdate, ItemResponse, UserInfo, PaginationResponse, ItemStatsResponse,
     CategoryCreate, CategoryResponse
 )
-
 from src.auth import verify_jwt
 
 router = APIRouter(prefix="", tags=["items"], dependencies=[Depends(verify_jwt)])
+public_router = APIRouter(prefix="", tags=["items_public"])
 
 import os
 
-USERS_API_URL = os.getenv("USERS_API_URL", "http://users-api:8000")
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
 
 
@@ -98,6 +98,7 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
         id=item.id,
         name=item.name,
         description=item.description,
+        metadata_json=item.metadata_json,
         user_id=item.user_id,
         created_at=item.created_at,
         user=user,
@@ -198,6 +199,7 @@ async def create_item(
     db_item = Item(
         name=item.name,
         description=item.description,
+        metadata_json=item.metadata_json,
         user_id=item.user_id,
         categories=categories
     )
@@ -374,25 +376,49 @@ class UserMergeRequest(BaseModel):
     source_id: int
     target_id: int
 
+@public_router.post("/pubsub/user-events")
+async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Handle GCP Pub/Sub Push Notifications.
+    """
+    import base64
+    import json
+    payload = await request.json()
+    message = payload.get("message")
+    if not message or "data" not in message:
+        return {"status": "ignored"}
+
+    try:
+        data_str = base64.b64decode(message["data"]).decode("utf-8")
+        event_data = json.loads(data_str)
+        event_type = event_data.get("event")
+        data = event_data.get("data", {})
+        
+        if event_type == "user.merged":
+            source_id = data.get("source_id")
+            target_id = data.get("target_id")
+            if source_id and target_id:
+                from sqlalchemy import update
+                stmt = update(Item).where(Item.user_id == source_id).values(user_id=target_id)
+                await db.execute(stmt)
+                await db.commit()
+                # Invalidate cache
+                delete_cache_pattern(f"items:user:{source_id}:*")
+                delete_cache_pattern(f"items:user:{target_id}:*")
+        
+        return {"status": "processed"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 @router.post("/internal/users/merge")
 async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """
-    Internal endpoint to merge user data.
-    Updates items.user_id = target_id where user_id = source_id.
+    Internal endpoint to merge user data (Legacy).
     """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header:
-        raise HTTPException(status_code=401, detail="Missing Authorization via items merge")
-        
     from sqlalchemy import update
     stmt = update(Item).where(Item.user_id == req.source_id).values(user_id=req.target_id)
     await db.execute(stmt)
     await db.commit()
-    
-    # Invalidate cache for users involved
     delete_cache_pattern(f"items:user:{req.source_id}:*")
     delete_cache_pattern(f"items:user:{req.target_id}:*")
-    delete_cache_pattern("items:list:*")
-    delete_cache_pattern("items:search:*")
-    
     return {"message": f"Successfully migrated items from user {req.source_id} to {req.target_id}"}

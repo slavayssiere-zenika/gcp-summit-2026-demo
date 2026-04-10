@@ -26,7 +26,12 @@ class FileStateResponse(BaseModel):
     file_name: Optional[str]
     folder_id: Optional[int]
     status: DriveSyncStatus
+    user_id: Optional[int] = None
     modified_time: Optional[datetime]
     last_processed_at: Optional[datetime]
     
     model_config = {"from_attributes": True}
+
+class FileUpdate(BaseModel):
+    user_id: Optional[int] = None
+    status: Optional[DriveSyncStatus] = None

@@ -144,3 +144,25 @@ async def get_google_token():
     if not token:
         raise HTTPException(status_code=500, detail="Impossible de générer le token Google ADC.")
     return {"access_token": token}
+from src.schemas import FileUpdate
+
+@router.patch("/files/{file_id}", response_model=FileStateResponse)
+async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = Depends(get_db)):
+    """
+    Updates a file's state (user_id and/or status).
+    Used by other services to fix identity assignments.
+    """
+    stmt = select(DriveSyncState).filter(DriveSyncState.google_file_id == file_id)
+    file_state = (await db.execute(stmt)).scalars().first()
+    
+    if not file_state:
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    if update_data.user_id is not None:
+        file_state.user_id = update_data.user_id
+    if update_data.status is not None:
+        file_state.status = update_data.status
+        
+    await db.commit()
+    await db.refresh(file_state)
+    return file_state

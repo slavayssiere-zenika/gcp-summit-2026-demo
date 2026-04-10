@@ -99,7 +99,8 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "username": {"type": "string", "description": "Username"},
                     "email": {"type": "string", "description": "Email address"},
-                    "full_name": {"type": "string", "description": "Full name (optional)"}
+                    "full_name": {"type": "string", "description": "Full name (optional)"},
+                    "is_anonymous": {"type": "boolean", "description": "Is this an anonymous/provisional profile?", "default": false}
                 },
                 "required": ["username", "email"]
             }
@@ -114,7 +115,8 @@ async def list_tools() -> list[Tool]:
                     "username": {"type": "string", "description": "New username (optional)"},
                     "email": {"type": "string", "description": "New email (optional)"},
                     "full_name": {"type": "string", "description": "New full name (optional)"},
-                    "is_active": {"type": "boolean", "description": "Active status (optional)"}
+                    "is_active": {"type": "boolean", "description": "Active status (optional)"},
+                    "is_anonymous": {"type": "boolean", "description": "Anonymous status (optional)"}
                 },
                 "required": ["user_id"]
             }
@@ -174,11 +176,17 @@ async def list_tools() -> list[Tool]:
             description="Merge a source user into a target user",
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "source_id": {"type": "integer", "description": "The ID of the duplicate user to be merged and deactivated"},
-                    "target_id": {"type": "integer", "description": "The ID of the master user to keep"}
-                },
                 "required": ["source_id", "target_id"]
+            }
+        ),
+        Tool(
+            name="search_anonymous_users",
+            description="Search for users marked as anonymous/provisional inside the platform.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Maximum results", "default": 10}
+                }
             }
         )
     ]
@@ -237,7 +245,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response = await client.post(f"{API_BASE_URL}/", json={
                     "username": arguments["username"],
                     "email": arguments["email"],
-                    "full_name": arguments.get("full_name")
+                    "full_name": arguments.get("full_name"),
+                    "is_anonymous": arguments.get("is_anonymous", False)
                 })
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
@@ -286,6 +295,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 source_id = arguments["source_id"]
                 target_id = arguments["target_id"]
                 response = await client.post(f"{API_BASE_URL}/merge", json={"source_id": source_id, "target_id": target_id})
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "search_anonymous_users":
+                limit = arguments.get("limit", 10)
+                response = await client.get(f"{API_BASE_URL}/search", params={"is_anonymous": True, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

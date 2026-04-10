@@ -78,3 +78,16 @@ databaseChangeLog:
                   type: "varchar"
                   constraints:
                     nullable: true
+
+  - changeSet:
+      id: "4"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    nullable: true

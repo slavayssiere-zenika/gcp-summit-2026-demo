@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
-import { User, Activity, Mail, Award, CheckCircle2, FileText } from 'lucide-vue-next'
+import { User, Activity, Mail, Award, CheckCircle2, FileText, Briefcase } from 'lucide-vue-next'
 
 const route = useRoute()
 const userId = route.params.id
@@ -10,7 +10,9 @@ const userId = route.params.id
 const userProfile = ref<any>(null)
 const competencies = ref<any[]>([])
 const cvData = ref<any>(null)
+const missions = ref<any[]>([])
 const loading = ref(true)
+const loadingMissions = ref(false)
 const error = ref('')
 
 onMounted(async () => {
@@ -30,6 +32,14 @@ onMounted(async () => {
       const cvRes = await axios.get(`/cv-api/cvs/user/${userId}`)
       cvData.value = cvRes.data
     } catch(e) {}
+
+    // Fetch Missions
+    loadingMissions.value = true
+    try {
+      const missionRes = await axios.get(`/cv-api/user/${userId}/missions`)
+      missions.value = missionRes.data.missions || []
+    } catch(e) {}
+    loadingMissions.value = false
   } catch (err: any) {
     error.value = err.response?.data?.detail || err.message || 'Utilisateur introuvable.'
   } finally {
@@ -91,6 +101,36 @@ onMounted(async () => {
            <div v-for="skill in competencies" :key="skill.id" class="skill-tag">
              <CheckCircle2 size="16" class="skill-check" />
              <span>{{ skill.name }}</span>
+           </div>
+        </div>
+      </div>
+
+      <!-- Missions Card -->
+      <div class="glass-card missions-card">
+        <div class="skills-header">
+           <Briefcase size="28" color="var(--zenika-red)" />
+           <h2>Portefeuille de Missions</h2>
+        </div>
+        
+        <div v-if="loadingMissions" class="loading-state mini">
+           <div class="spinner small"></div>
+           <p>Récupération de l'historique...</p>
+        </div>
+        <div v-else-if="missions.length === 0" class="empty-skills">
+           <p>Aucune mission n'a été extraite de vos CVs pour le moment.</p>
+        </div>
+        <div v-else class="missions-list">
+           <div v-for="(mission, index) in missions" :key="index" class="mission-item">
+              <div class="mission-top">
+                <h3>{{ mission.title }}</h3>
+                <span class="company">{{ mission.company || 'Zenika' }}</span>
+              </div>
+              <p class="desc">{{ mission.description }}</p>
+              <div class="mission-tags" v-if="mission.competencies && mission.competencies.length > 0">
+                <span v-for="skill in mission.competencies" :key="skill" class="mini-tag">
+                  {{ skill }}
+                </span>
+              </div>
            </div>
         </div>
       </div>
@@ -267,6 +307,81 @@ onMounted(async () => {
 
 .skill-check {
   color: var(--zenika-red);
+}
+
+.missions-card {
+  grid-column: 1 / -1;
+  margin-top: 1rem;
+}
+
+.missions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.mission-item {
+  background: rgba(255,255,255,0.4);
+  padding: 1.5rem;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.04);
+}
+
+.mission-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.mission-top h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.company {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--zenika-red);
+  background: rgba(227, 25, 55, 0.08);
+  padding: 4px 10px;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+
+.desc {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.mission-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mini-tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  background: white;
+  padding: 2px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.loading-state.mini {
+  padding: 2rem;
+}
+
+.spinner.small {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
 }
 
 .loading-state {

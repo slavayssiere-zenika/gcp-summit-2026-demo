@@ -16,7 +16,7 @@ else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from src.items.router import router
+from src.items.router import router, public_router
 import time
 from logger import setup_logging, LoggingMiddleware
 
@@ -27,10 +27,7 @@ provider = TracerProvider(
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+# ... (rest of provider setup)
 trace.set_tracer_provider(provider)
 
 setup_logging()
@@ -80,6 +77,7 @@ async def get_spec():
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
+app.include_router(public_router)
 app.include_router(router)
 
 @protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])

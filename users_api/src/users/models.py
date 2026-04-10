@@ -22,3 +22,4 @@ class User(Base):
     picture_url = Column(String, nullable=True)
     google_id = Column(String, nullable=True)
     merged_into_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    is_anonymous = Column(Boolean, default=False, nullable=False)

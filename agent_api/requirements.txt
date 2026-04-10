@@ -6,7 +6,7 @@ opentelemetry-sdk>=1.36.0,<1.39.0
 opentelemetry-exporter-otlp-proto-grpc>=1.36.0,<1.39.0
 opentelemetry-instrumentation-fastapi>=0.40b0
 mcp[sse,fastapi]>=1.0.0
-google-adk>=1.28.0
+google-adk==1.28.1
 google-genai>=1.0.0
 litellm>=1.0.0
 google-cloud-storage>=2.14.0

@@ -213,6 +213,18 @@ resource "google_compute_url_map" "default" {
         }
       }
     }
+
+    # SPA routing for /admin to avoid 404s on refresh
+    route_rules {
+      priority = 90
+      match_rules { prefix_match = "/admin" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
   }
 }
 

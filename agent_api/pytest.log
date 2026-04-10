@@ -5,15 +5,97 @@ plugins: mock-3.15.1, cov-7.1.0, langsmith-0.7.23, asyncio-1.3.0, anyio-4.13.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collected 41 items
 
-test_agent_logic.py ........                                             [ 19%]
+test_agent_logic.py .......F                                             [ 19%]
 test_main.py ..FF.....F......                                            [ 58%]
 test_mcp.py ......                                                       [ 73%]
 test_session.py ...........                                              [100%]
 
 =================================== FAILURES ===================================
+__________________________ test_run_agent_query_logic __________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11512a9c0>
+
+    @pytest.mark.asyncio
+    async def test_run_agent_query_logic(mocker):
+        # Mocking ADK dependencies
+        mock_agent = MagicMock()
+    
+        # Mock session
+        mock_session_service = AsyncMock()
+        mock_session_service.get_session.return_value = MagicMock()
+    
+        class MockRunner:
+            def __init__(self, *args, **kwargs):
+                pass
+            async def run_async(self, *args, **kwargs):
+                mock_event = MagicMock(author="assistant")
+                mock_event.content.parts = [MagicMock(text="Hello result")]
+                yield mock_event
+    
+                # Simulate a tool call event for coverage
+                tool_event = MagicMock(author="tool")
+                tool_event.content.parts = [MagicMock(text='{"result": "{\"tool_data\": 1}"}')]
+                yield tool_event
+    
+        with patch("agent.get_session_service", return_value=mock_session_service), \
+             patch("agent.create_agent", return_value=mock_agent), \
+             patch("google.adk.runners.Runner", new=MockRunner):
+    
+>           result = await run_agent_query("hello")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_agent_logic.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:856: in run_agent_query
+    sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py:261: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x115136490>
+o = <MagicMock name='mock.tool_call.args' id='4648777584'>
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type MagicMock is not JSON serializable
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py:180: TypeError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-10 17:08:11,102", "levelname": "INFO", "name": "agent", "message": "--- EVENT: author=assistant role=<magicmock name='mock.content.role' id='4649338592'> ---"}
+{"asctime": "2026-04-10 17:08:11,103", "levelname": "INFO", "name": "agent", "message": "Captured thought: <MagicMock name='mock.thought' id='4648777248'>..."}
+------------------------------ Captured log call -------------------------------
+INFO     agent:agent.py:837 --- EVENT: author=assistant role=<magicmock name='mock.content.role' id='4649338592'> ---
+INFO     agent:agent.py:846 Captured thought: <MagicMock name='mock.thought' id='4648777248'>...
 ____________________________ test_get_spec_success _____________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x118ef2be0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11520caf0>
 
     def test_get_spec_success(mocker):
         mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
@@ -24,12 +106,12 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:31: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 18:09:32,637", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0009, "trace_id": "2cecbee41e83f3dfa03ce30e6835d62a", "span_id": "6aefe7d0bb0d2d86"}
+{"asctime": "2026-04-10 17:08:11,335", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0008, "trace_id": "80996231028eb2bff3303edd2e910555", "span_id": "b56bcd4ca9e5e3d0"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 ______________________________ test_get_spec_fail ______________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x118fddb50>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11521a550>
 
     def test_get_spec_fail(mocker):
         mocker.patch("builtins.open", side_effect=Exception("Not found"))
@@ -40,7 +122,7 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:37: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 18:09:32,791", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0008, "trace_id": "45bf6ab09bc7caed61e8fb12d7c3bc10", "span_id": "8107659a3ce3858c"}
+{"asctime": "2026-04-10 17:08:11,349", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/spec", "http.status_code": 401, "http.duration_s": 0.0005, "trace_id": "aad42dc2131f07360e5fa4f3c380a80f", "span_id": "fa5fd60c63dae192"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 ______________________________ test_mcp_registry _______________________________
@@ -53,7 +135,7 @@ E        +  where 401 = <Response [401 Unauthorized]>.status_code
 
 test_main.py:89: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-09 18:09:32,939", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/mcp/registry", "http.status_code": 401, "http.duration_s": 0.0006, "trace_id": "fc0c34656b8190ae5ba90a1c22fc30ee", "span_id": "536dbfc80517485b"}
+{"asctime": "2026-04-10 17:08:11,466", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/mcp/registry", "http.status_code": 401, "http.duration_s": 0.0011, "trace_id": "97e52f7f8bb34789b03d15c6808ec210", "span_id": "955dbbbda3653b95"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 =============================== warnings summary ===============================
@@ -79,9 +161,9 @@ main.py:58
           
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
-test_session.py::test_save_all
-  /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:2247: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
-    def __init__(self, name, parent):
+test_mcp.py::test_mcp_sse_client_call_tool
+  /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1151: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    _safe_super(CallableMixin, self).__init__(
   Enable tracemalloc to get traceback where the object was allocated.
   See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
 
@@ -91,10 +173,11 @@ _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
 =========================== short test summary info ============================
+FAILED test_agent_logic.py::test_run_agent_query_logic - TypeError: Object of...
 FAILED test_main.py::test_get_spec_success - assert 401 == 200
 FAILED test_main.py::test_get_spec_fail - assert 401 == 200
 FAILED test_main.py::test_mcp_registry - assert 401 == 200
-=================== 3 failed, 38 passed, 4 warnings in 0.65s ===================
+=================== 4 failed, 37 passed, 4 warnings in 0.82s ===================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -116,7 +199,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
 >
 
 During handling of the above exception, another exception occurred:
@@ -142,7 +225,7 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 0.8194118950160663)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.1602235311406894)
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -163,8 +246,8 @@ Traceback (most recent call last):
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
-	details = "failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv6:%5B::1%5D:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
 >
 
 During handling of the above exception, another exception occurred:

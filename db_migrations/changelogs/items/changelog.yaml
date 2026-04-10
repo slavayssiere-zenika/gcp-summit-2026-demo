@@ -68,3 +68,15 @@ databaseChangeLog:
                     primaryKey: true
                     foreignKeyName: "fk_item_category_category"
                     references: "categories(id)"
+  - changeSet:
+      id: "2"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "items"
+            columns:
+              - column:
+                  name: "metadata_json"
+                  type: "jsonb"
+                  constraints:
+                    nullable: true

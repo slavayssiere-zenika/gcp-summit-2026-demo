@@ -7,8 +7,243 @@ collected 41 items
 
 test_integration.py ................                                     [ 39%]
 test_main.py ........                                                    [ 58%]
-test_mcp_tools.py .................                                      [100%]
+test_mcp_tools.py .............F...                                      [100%]
 
+=================================== FAILURES ===================================
+___________________________ test_mcp_app_tools_list ____________________________
+
+    def test_mcp_app_tools_list():
+>       resp = client.get("/mcp/tools")
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_mcp_tools.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../test_env/lib/python3.13/site-packages/starlette/testclient.py:473: in get
+    return super().get(
+../test_env/lib/python3.13/site-packages/httpx/_client.py:1053: in get
+    return self.request(
+../test_env/lib/python3.13/site-packages/starlette/testclient.py:445: in request
+    return super().request(
+../test_env/lib/python3.13/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../test_env/lib/python3.13/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../test_env/lib/python3.13/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../test_env/lib/python3.13/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../test_env/lib/python3.13/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../test_env/lib/python3.13/site-packages/starlette/testclient.py:348: in handle_request
+    raise exc
+../test_env/lib/python3.13/site-packages/starlette/testclient.py:345: in handle_request
+    portal.call(self.app, scope, receive, send)
+../test_env/lib/python3.13/site-packages/anyio/from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../test_env/lib/python3.13/site-packages/anyio/from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../test_env/lib/python3.13/site-packages/fastapi/applications.py:1159: in __call__
+    await super().__call__(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/applications.py:107: in __call__
+    await self.middleware_stack(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../test_env/lib/python3.13/site-packages/opentelemetry/instrumentation/asgi/__init__.py:795: in __call__
+    await self.app(scope, otel_receive, otel_send)
+../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../test_env/lib/python3.13/site-packages/opentelemetry/instrumentation/fastapi/__init__.py:307: in __call__
+    await self.app(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/routing.py:716: in __call__
+    await self.middleware_stack(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/routing.py:736: in app
+    await route.handle(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/routing.py:290: in handle
+    await self.app(scope, receive, send)
+../test_env/lib/python3.13/site-packages/fastapi/routing.py:134: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../test_env/lib/python3.13/site-packages/fastapi/routing.py:120: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../test_env/lib/python3.13/site-packages/fastapi/routing.py:674: in app
+    raw_response = await run_endpoint_function(
+../test_env/lib/python3.13/site-packages/fastapi/routing.py:328: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mcp_app.py:23: in get_tools
+    tools = await list_tools()
+            ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @server.list_tools()
+    async def list_tools() -> list[Tool]:
+        return [
+            Tool(
+                name="list_users",
+                description="List all users with pagination",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "skip": {"type": "integer", "description": "Number of users to skip", "default": 0},
+                        "limit": {"type": "integer", "description": "Maximum number of users to return", "default": 10}
+                    }
+                }
+            ),
+            Tool(
+                name="get_user",
+                description="Get a user by ID",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "integer", "description": "The user ID"}
+                    },
+                    "required": ["user_id"]
+                }
+            ),
+            Tool(
+                name="get_users_bulk",
+                description="Get multiple users by their IDs",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_ids": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "description": "List of user IDs to retrieve"
+                        }
+                    },
+                    "required": ["user_ids"]
+                }
+            ),
+            Tool(
+                name="create_user",
+                description="Create a new user",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "username": {"type": "string", "description": "Username"},
+                        "email": {"type": "string", "description": "Email address"},
+                        "full_name": {"type": "string", "description": "Full name (optional)"},
+>                       "is_anonymous": {"type": "boolean", "description": "Is this an anonymous/provisional profile?", "default": false}
+                                                                                                                                   ^^^^^
+                    },
+                    "required": ["username", "email"]
+                }
+            ),
+            Tool(
+                name="update_user",
+                description="Update a user",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "integer", "description": "The user ID"},
+                        "username": {"type": "string", "description": "New username (optional)"},
+                        "email": {"type": "string", "description": "New email (optional)"},
+                        "full_name": {"type": "string", "description": "New full name (optional)"},
+                        "is_active": {"type": "boolean", "description": "Active status (optional)"},
+                        "is_anonymous": {"type": "boolean", "description": "Anonymous status (optional)"}
+                    },
+                    "required": ["user_id"]
+                }
+            ),
+            Tool(
+                name="delete_user",
+                description="Delete a user",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "integer", "description": "The user ID"}
+                    },
+                    "required": ["user_id"]
+                }
+            ),
+            Tool(
+                name="health_check",
+                description="Check if the API is healthy",
+                inputSchema={"type": "object", "properties": {}}
+            ),
+            Tool(
+                name="search_users",
+                description="Search users by username, email or full name",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"},
+                        "limit": {"type": "integer", "description": "Maximum number of results", "default": 10}
+                    },
+                    "required": ["query"]
+                }
+            ),
+            Tool(
+                name="toggle_user_status",
+                description="Activate or deactivate a user",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "integer", "description": "The user ID"},
+                        "is_active": {"type": "boolean", "description": "Set user active status"}
+                    },
+                    "required": ["user_id", "is_active"]
+                }
+            ),
+            Tool(
+                name="get_user_stats",
+                description="Get statistics about users",
+                inputSchema={"type": "object", "properties": {}}
+            ),
+            Tool(
+                name="get_user_duplicates",
+                description="Get a list of potential duplicate users based on name similarity",
+                inputSchema={"type": "object", "properties": {}}
+            ),
+            Tool(
+                name="merge_users",
+                description="Merge a source user into a target user",
+                inputSchema={
+                    "type": "object",
+                    "required": ["source_id", "target_id"]
+                }
+            ),
+            Tool(
+                name="search_anonymous_users",
+                description="Search for users marked as anonymous/provisional inside the platform.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "description": "Maximum results", "default": 10}
+                    }
+                }
+            )
+        ]
+E       NameError: name 'false' is not defined
+
+mcp_server.py:103: NameError
 =============================== warnings summary ===============================
 ../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
@@ -40,4 +275,6 @@ test_integration.py::test_get_me
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 41 passed, 13 warnings in 2.82s ========================
+=========================== short test summary info ============================
+FAILED test_mcp_tools.py::test_mcp_app_tools_list - NameError: name 'false' i...
+================== 1 failed, 40 passed, 13 warnings in 4.97s ===================

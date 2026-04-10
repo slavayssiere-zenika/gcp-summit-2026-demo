@@ -105,3 +105,24 @@ databaseChangeLog:
                   type: "jsonb"
                   constraints:
                     nullable: true
+  - changeSet:
+      id: "6"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "is_anonymous"
+                  type: "boolean"
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: "7"
+      author: "antigravity"
+      changes:
+        - dropColumn:
+            tableName: "cv_profiles"
+            columnName: "is_anonymous"

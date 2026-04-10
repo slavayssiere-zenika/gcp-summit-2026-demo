@@ -3,14 +3,44 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network, Trash2 } from 'lucide-vue-next'
+import { 
+  Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network, Trash2, 
+  Eye, Cpu, Terminal, PlayCircle, Database, FileCode, RefreshCw 
+} from 'lucide-vue-next'
 import CompetencyNode from '@/components/CompetencyNode.vue'
 import { authService } from '@/services/auth'
 
 const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_name);
 const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
 const techKeys = ['semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 'username', 'name', 'full_name'];
-const filteredKeys = (obj: any) => Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_'));
+const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
+
+const treeify = (items: any[]) => {
+  if (!items || !Array.isArray(items)) return [];
+  const map: any = {};
+  const roots: any[] = [];
+  
+  // Clone and initialize
+  items.forEach(item => {
+    if (item && typeof item === 'object') {
+      map[item.id] = { ...item, sub_competencies: [] };
+    }
+  });
+  
+  // Link parents and children
+  items.forEach(item => {
+    if (item && typeof item === 'object') {
+      const node = map[item.id];
+      if (item.parent_id && map[item.parent_id]) {
+        map[item.parent_id].sub_competencies.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+  });
+  return roots;
+}
+
 
 const route = useRoute()
 const router = useRouter()
@@ -27,7 +57,17 @@ interface Message {
   parsedData?: any[]
   displayType?: string
   typing?: boolean
+  // New Expert/Pagination fields
+  steps?: any[]
+  thoughts?: string
+  rawResponse?: string
+  activeTab?: 'preview' | 'expert'
+  pagination?: {
+    currentPage: number
+    itemsPerPage: number
+  }
 }
+
 
 const messages = ref<Message[]>([
   {
@@ -66,25 +106,50 @@ const sendQuery = async (queryOverride?: string) => {
     let displayType = 'text_only'
     let parsedData = null
     const toolData = response.data.data || null
+    const steps = response.data.steps || []
 
+    // Robust JSON extraction
     try {
-      const cleanStr = replyText.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim()
-      const jsonObj = JSON.parse(cleanStr)
-      
-      if (jsonObj.reply && jsonObj.display_type) {
-         replyText = jsonObj.reply
-         displayType = jsonObj.display_type
-         if (displayType === 'profile') displayType = 'cards'
+      // Find JSON block even with surrounding text
+      const jsonMatch = replyText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const cleanStr = jsonMatch[0].trim()
+        const jsonObj = JSON.parse(cleanStr)
+        
+        if (jsonObj.reply && jsonObj.display_type) {
+           replyText = jsonObj.reply
+           displayType = jsonObj.display_type
+           if (displayType === 'profile') displayType = 'cards'
 
-         if (jsonObj.display_type === 'tree') {
-           parsedData = jsonObj.data
-         } else if (jsonObj.data) {
-           parsedData = Array.isArray(jsonObj.data) ? jsonObj.data : [jsonObj.data]
-         }
+           if (jsonObj.display_type === 'tree') {
+             parsedData = jsonObj.data
+           } else if (jsonObj.data) {
+             parsedData = Array.isArray(jsonObj.data) ? jsonObj.data : [jsonObj.data]
+           }
+        }
       }
     } catch (e) {
-      // Keep as standard raw text
+      console.warn("Soft fail on JSON parsing", e)
     }
+
+    // Fallback: If no parsedData from markdown, use toolData
+    if (!parsedData && toolData) {
+      if (typeof toolData === 'object' && toolData.items) {
+        parsedData = toolData.items
+      } else if (Array.isArray(toolData)) {
+        parsedData = toolData
+      } else {
+        parsedData = [toolData]
+      }
+      if (displayType === 'text_only') displayType = 'cards'
+    }
+
+    // SPECIAL: If dataType is competency, transform to tree
+    if (toolData && toolData.dataType === 'competency' && Array.isArray(parsedData)) {
+       parsedData = treeify(parsedData)
+       displayType = 'tree'
+    }
+
 
     if (response.data.response) {
       messages.value.push({
@@ -92,12 +157,21 @@ const sendQuery = async (queryOverride?: string) => {
         content: replyText,
         data: toolData,
         parsedData: parsedData,
-        displayType: displayType
+        displayType: displayType,
+        steps: steps,
+        thoughts: response.data.thoughts || '',
+        rawResponse: response.data.response,
+        activeTab: 'preview',
+        pagination: {
+          currentPage: 1,
+          itemsPerPage: 10
+        }
       })
     } else {
       messages.value.push({
         role: 'assistant',
-        content: JSON.stringify(response.data, null, 2)
+        content: JSON.stringify(response.data, null, 2),
+        activeTab: 'expert'
       })
     }
   } catch (error: any) {
@@ -154,7 +228,13 @@ const fetchHistory = async () => {
     isTyping.value = true
     const response = await axios.get('/api/history')
     if (response.data && response.data.history && response.data.history.length > 0) {
-      messages.value = response.data.history
+      messages.value = response.data.history.map((msg: Message) => {
+        // Apply treeify for historical competency messages
+        if (msg.data && msg.data.dataType === 'competency' && Array.isArray(msg.parsedData) && msg.displayType === 'tree') {
+          msg.parsedData = treeify(msg.parsedData);
+        }
+        return msg;
+      });
       setTimeout(() => scrollToBottom(), 100)
     }
   } catch(e) {
@@ -182,8 +262,26 @@ const resetHistory = async () => {
   }
 }
 
+const handleInternalLink = (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  const link = target.closest('a');
+  if (link) {
+    const href = link.getAttribute('href');
+    if (href && href.startsWith('user:')) {
+      e.preventDefault();
+      const userId = parseInt(href.split(':')[1]);
+      if (!isNaN(userId)) {
+        goToUser(userId);
+      }
+    }
+  }
+}
+
 onMounted(() => {
   window.addEventListener('search-user', handleSearchEvent)
+  if (chatContainer.value) {
+    chatContainer.value.addEventListener('click', handleInternalLink)
+  }
   
   // Check for search query in URL on mount
   if (route.query.q) {
@@ -203,6 +301,9 @@ watch(() => route.query.q, (newQ) => {
 
 onUnmounted(() => {
   window.removeEventListener('search-user', handleSearchEvent)
+  if (chatContainer.value) {
+    chatContainer.value.removeEventListener('click', handleInternalLink)
+  }
 })
 
 const getInitials = (name: string) => {
@@ -212,6 +313,18 @@ const getInitials = (name: string) => {
 
 const goToUser = (id: number) => {
   router.push({ name: 'user-detail', params: { id: id.toString() } })
+}
+
+const getPaginatedData = (msg: Message) => {
+  if (!msg.parsedData || !msg.pagination) return []
+  const start = (msg.pagination.currentPage - 1) * msg.pagination.itemsPerPage
+  const end = start + msg.pagination.itemsPerPage
+  return msg.parsedData.slice(start, end)
+}
+
+const totalPages = (msg: Message) => {
+  if (!msg.parsedData || !msg.pagination) return 0
+  return Math.ceil(msg.parsedData.length / msg.pagination.itemsPerPage)
 }
 </script>
 
@@ -234,25 +347,48 @@ const goToUser = (id: number) => {
 
       <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.role]">
         <div v-if="msg.role === 'assistant'" class="assistant-content">
-          <div class="text-content" v-html="md.render(msg.content)"></div>
-          
-          <!-- Modern JSON Parsed Dashboard -->
-          <div v-if="msg.parsedData && (msg.displayType === 'tree' || msg.parsedData.length > 0)" class="dashboard-content">
-            <!-- Table UI -->
-            <div v-if="msg.displayType === 'table'" class="data-table-container">
-              <table class="zen-table">
-                <thead>
-                  <tr>
-                    <th v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_'))" :key="key">{{ key.toUpperCase() }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, idx) in msg.parsedData" :key="idx" @click="row.id || row.user_id ? goToUser(row.id || row.user_id) : null" :class="{ 'clickable-row': row.id || row.user_id }">
-                    <td v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_'))" :key="key">{{ row[key] }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <!-- Multi-View Tabs -->
+          <div v-if="(msg.displayType && msg.displayType !== 'text_only') || (msg.steps && msg.steps.length > 0) || (msg.thoughts && msg.thoughts.length > 0)" class="message-tabs">
+            <button 
+              :class="['tab-btn', { active: msg.activeTab === 'preview' }]" 
+              @click="msg.activeTab = 'preview'"
+            >
+              <Eye size="14" /> Aperçu
+            </button>
+            <button 
+              :class="['tab-btn', { active: msg.activeTab === 'expert' }]" 
+              @click="msg.activeTab = 'expert'"
+            >
+              <Cpu size="14" /> Expert
+            </button>
+          </div>
+
+          <div v-if="msg.activeTab === 'preview' || !msg.activeTab" class="tab-pane">
+            <div class="text-content" v-html="md.render(msg.content)"></div>
+            
+            <!-- Modern JSON Parsed Dashboard -->
+            <div v-if="msg.parsedData && (msg.displayType === 'tree' || msg.parsedData.length > 0)" class="dashboard-content">
+              <!-- Table UI -->
+              <div v-if="msg.displayType === 'table'" class="data-table-container">
+                <table class="zen-table">
+                  <thead>
+                    <tr>
+                      <th v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_'))" :key="key">{{ key.toUpperCase() }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in getPaginatedData(msg)" :key="idx" @click="row.id || row.user_id ? goToUser(row.id || row.user_id) : null" :class="{ 'clickable-row': row.id || row.user_id }">
+                      <td v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_'))" :key="key">{{ row[key] }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <!-- Pagination UI -->
+                <div v-if="totalPages(msg) > 1" class="pagination-controls">
+                  <button :disabled="msg.pagination.currentPage === 1" @click="msg.pagination.currentPage--">Précédent</button>
+                  <span class="page-info">Page {{ msg.pagination.currentPage }} sur {{ totalPages(msg) }}</span>
+                  <button :disabled="msg.pagination.currentPage === totalPages(msg)" @click="msg.pagination.currentPage++">Suivant</button>
+                </div>
+              </div>
 
             <!-- Dynamic Cards UI (Inferred Types) -->
             <div v-else-if="msg.displayType === 'cards'" class="generic-grid">
@@ -287,7 +423,7 @@ const goToUser = (id: number) => {
                       <div class="owner" v-if="obj.user_id || obj.owner">Propriétaire: #{{ obj.user_id || obj.owner }}</div>
                       <div v-if="obj.categories" class="categories-tags">
                         <span v-for="cat in (Array.isArray(obj.categories) ? obj.categories : [obj.categories])" :key="cat.id || cat" class="tag">
-                          <Tag size="10" /> {{ typeof cat === 'object' ? (cat.name || cat.id) : cat }}
+                          <Tag size="10" /> {{ (cat && typeof cat === 'object') ? (cat.name || cat.id) : cat }}
                         </span>
                       </div>
                     </div>
@@ -305,7 +441,7 @@ const goToUser = (id: number) => {
                         <span v-if="!Array.isArray(obj[key]) && typeof obj[key] !== 'object'">{{ obj[key] }}</span>
                         <div v-else class="categories-tags" style="display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:2px;">
                           <span v-for="(item, i) in (Array.isArray(obj[key]) ? obj[key] : [obj[key]])" :key="i" class="tag">
-                            {{ typeof item === 'object' ? (item.name || item.id || '[Objet]') : item }}
+                            {{ (item && typeof item === 'object') ? (item.name || item.id || '[Objet]') : item }}
                           </span>
                         </div>
                       </div>
@@ -318,11 +454,14 @@ const goToUser = (id: number) => {
             <div v-else-if="msg.displayType === 'tree'" class="tree-grid">
                <div class="tree-header">
                  <Network size="20" class="tree-icon" /> 
-                 <h3>Taxonomie RAG Modélisée</h3>
+                 <h3>Taxonomie des Compétences</h3>
                </div>
                <div class="tree-content">
-                 <div v-for="(val, key) in msg.parsedData" :key="key" style="margin-bottom: 8px;">
-                   <CompetencyNode :node="{ name: key, ...val }" :depth="0" />
+                 <div v-for="(node, idx) in (Array.isArray(msg.parsedData) ? msg.parsedData : Object.entries(msg.parsedData).map(([k, v]) => ({ name: k, ...v })))" 
+                      :key="idx" 
+                      style="margin-bottom: 8px;"
+                 >
+                   <CompetencyNode :node="node" :depth="0" />
                  </div>
                </div>
                
@@ -340,52 +479,46 @@ const goToUser = (id: number) => {
                </div>
             </div>
           </div>
+        </div>
 
-          <!-- Legacy Tool Data Dashboard (Fallback) -->
-          <div v-else-if="msg.data && msg.data.items" class="dashboard-content">
-            <div v-if="msg.data.dataType === 'user'" class="user-grid">
-              <div 
-                v-for="user in msg.data.items" 
-                :key="user.id" 
-                class="user-dash-card clickable"
-                @click="goToUser(user.id)"
-              >
-                <div class="card-header">
-                  <div class="avatar">{{ getInitials(user.full_name || user.username) }}</div>
-                  <div class="id-tag"><Hash size="12" />{{ user.id }}</div>
-                </div>
-                <div class="card-body">
-                  <h3 class="name">{{ user.full_name || user.username }}</h3>
-                  <div class="username">@{{ user.username }}</div>
-                  <div class="email"><Mail size="14" /> {{ user.email }}</div>
-                </div>
-                <div class="card-footer">
-                  <div :class="['status-pill', user.is_active ? 'active' : 'inactive']">
-                    <CheckCircle2 v-if="user.is_active" size="14" />
-                    <XCircle v-else size="14" />
-                    {{ user.is_active ? 'Actif' : 'Inactif' }}
-                  </div>
-                </div>
+          <!-- Expert View Tab -->
+          <div v-else-if="msg.activeTab === 'expert'" class="tab-pane expert-mode">
+            <!-- Chain of Thought (Thoughts) -->
+            <div v-if="msg.thoughts" class="thought-section">
+              <div class="expert-header">
+                <RefreshCw size="18" class="spin" style="color: #6366f1;" /> <span>Raisonnement de l'IA (CoT)</span>
               </div>
+              <div class="thought-bubble" v-html="md.render(msg.thoughts)">
+              </div>
+            </div>
+
+            <div class="expert-header" :style="{ marginTop: msg.thoughts ? '2rem' : '0' }">
+              <Terminal size="18" /> <span>Exécution des microservices (MCP)</span>
             </div>
             
-            <!-- Item Grid -->
-            <div v-else-if="msg.data.dataType === 'item'" class="item-grid">
-              <div v-for="item in msg.data.items" :key="item.id" class="item-dash-card">
-                <div class="status-dot-glow"></div>
-                <div class="item-icon-wrapper"><Package size="20" /></div>
-                <div class="item-info">
-                  <h4 class="name">{{ item.name }}</h4>
-                  <p class="desc">{{ item.description }}</p>
-                  <div class="owner">Propriétaire: #{{ item.user_id }}</div>
-                  <div v-if="item.categories" class="categories-tags">
-                    <span v-for="cat in item.categories" :key="cat.id" class="tag">
-                      <Tag size="10" /> {{ cat.name }}
-                    </span>
+            <div class="steps-timeline">
+              <div v-for="(step, idx) in msg.steps" :key="idx" :class="['step-item', step.type]">
+                <div class="step-icon">
+                  <PlayCircle v-if="step.type === 'call'" size="14" />
+                  <Database v-else size="14" />
+                </div>
+                <div class="step-details">
+                  <div class="step-title">
+                    <strong v-if="step.type === 'call'">APPEL OUTIL: {{ step.tool }}</strong>
+                    <strong v-else>RÉSULTAT BRUT</strong>
                   </div>
+                  <pre class="step-payload">{{ JSON.stringify(step.args || step.data, null, 2) }}</pre>
                 </div>
               </div>
+              <div v-if="!msg.steps || msg.steps.length === 0" class="no-steps">
+                Aucun appel d'outil n'a été enregistré pour cette réponse.
+              </div>
             </div>
+
+            <div v-if="msg.rawResponse" class="expert-header" style="margin-top: 2rem;">
+              <FileCode size="18" /> <span>Réponse brute de l'IA (JSON)</span>
+            </div>
+            <pre v-if="msg.rawResponse" class="json-viewer">{{ msg.rawResponse }}</pre>
           </div>
         </div>
         
@@ -427,6 +560,162 @@ const goToUser = (id: number) => {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.message-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  padding: 0.4rem 1rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #e2e8f0;
+}
+
+.tab-btn.active {
+  background: var(--zenika-red);
+  border-color: var(--zenika-red);
+  color: white;
+  box-shadow: 0 4px 10px rgba(227, 25, 55, 0.2);
+}
+
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-top: 1px solid #edf2f7;
+  background: #f8fafc;
+}
+
+.pagination-controls button {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+  background: white;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e0;
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* Expert Mode Styles */
+.expert-mode {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.expert-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.steps-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step-item {
+  display: flex;
+  gap: 12px;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.step-item.call {
+  border-left: 4px solid var(--zenika-red);
+}
+
+.step-item.result {
+  border-left: 4px solid #10b981;
+}
+
+.step-icon {
+  margin-top: 2px;
+  color: #475569;
+}
+
+.step-details {
+  flex: 1;
+  overflow: hidden;
+}
+
+.step-title {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.step-payload {
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #fff;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid #f1f5f9;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.thought-section {
+  margin-bottom: 1.5rem;
+}
+
+.thought-bubble {
+  background: #f0f4ff;
+  border-left: 4px solid #6366f1;
+  padding: 1rem;
+  border-radius: 0 12px 12px 0;
+  font-size: 0.9rem;
+  color: #312e81;
+  font-style: italic;
+  white-space: pre-wrap;
 }
 
 .chat-container {

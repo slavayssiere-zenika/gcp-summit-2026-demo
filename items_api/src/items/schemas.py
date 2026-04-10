@@ -40,6 +40,7 @@ class CategoryResponse(CategoryBase):
 class ItemBase(BaseModel):
     name: str
     description: Optional[str] = None
+    metadata_json: Optional[dict] = None
 
 
 class ItemCreate(ItemBase):
@@ -50,6 +51,7 @@ class ItemCreate(ItemBase):
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    metadata_json: Optional[dict] = None
     category_ids: Optional[List[int]] = None
 
 
@@ -57,6 +59,7 @@ class ItemResponse(ItemBase):
     id: int
     user_id: int
     created_at: datetime
+    metadata_json: Optional[dict] = None
     user: Optional[UserInfo] = None
     categories: List[CategoryResponse] = []
 

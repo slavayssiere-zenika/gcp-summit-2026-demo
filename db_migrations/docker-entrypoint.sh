@@ -16,13 +16,25 @@ for SVC in $SERVICES; do
   URL="jdbc:postgresql://${DB_HOST}:5432/${SVC}"
   
   if [ -f "/liquibase/changelogs/${SVC}/changelog.yaml" ]; then
+    echo "🔍 Vérification de l'état pour $SVC..."
     liquibase \
       --url="${URL}" \
       --username="${DB_USER}" \
       --password="${DB_PASSWORD}" \
       --changeLogFile="changelogs/${SVC}/changelog.yaml" \
+      --log-level=INFO \
+      status
+
+    echo "🚀 Application des migrations pour $SVC..."
+    liquibase \
+      --url="${URL}" \
+      --username="${DB_USER}" \
+      --password="${DB_PASSWORD}" \
+      --changeLogFile="changelogs/${SVC}/changelog.yaml" \
+      --log-level=INFO \
       update || {
         echo "❌ [FAILFAST] ERREUR CRITIQUE: La migration Liquibase pour la base de données '$SVC' a échoué!" >&2
+        echo "💡 Conseil: Vérifiez les logs détaillés ci-dessus pour identifier la cause exacte (ex: erreur de syntaxe, doublon, problème de connexion)." >&2
         exit 1
       }
   else
