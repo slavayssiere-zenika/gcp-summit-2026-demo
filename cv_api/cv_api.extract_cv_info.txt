@@ -19,5 +19,8 @@ The JSON object must contain the following top-level keys:
     *   **"description"**: (string) A brief description of the mission.
     *   **"competencies"**: (array of strings) The technical skills and tools specifically used during THIS mission.
 
+10. **"is_anonymous"**: (boolean) Detect if the CV is anonymous. A CV is anonymous if the real name is replaced by a trigram (e.g., ABC, XYZ) or if no identifying name is provided. Set to true if anonymous, false otherwise.
+11. **"trigram"**: (string) If "is_anonymous" is true and a 3-letter trigram (e.g., ABC) is found instead of a name, extract it. Otherwise, return `null`.
+
 ** Strict Output Requirements:**
 *   Output the JSON object and ensure the JSON is valid. Do not include conversational text.

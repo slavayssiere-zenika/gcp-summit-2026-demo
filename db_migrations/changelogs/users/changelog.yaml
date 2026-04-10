@@ -83,3 +83,27 @@ databaseChangeLog:
                     nullable: true
                     foreignKeyName: "fk_users_merged_into"
                     references: "users(id)"
+  - changeSet:
+      id: "4"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "users"
+            columns:
+              - column:
+                  name: "is_anonymous"
+                  type: "boolean"
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: "5"
+      author: "antigravity"
+      changes:
+        - sql:
+            sql: "UPDATE users SET email = CAST(id AS VARCHAR) || '@zenika.com' WHERE email IS NULL OR email = ''"
+        - addNotNullConstraint:
+            tableName: "users"
+            columnName: "email"
+            columnDataType: "varchar"

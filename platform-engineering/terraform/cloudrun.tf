@@ -17,9 +17,9 @@ data "google_secret_manager_secret" "google_secret_key" {
 
 
 
-# Service Account mutualisé pour simplifier, ou un par service
+# Service Account par service
 resource "google_service_account" "cr_sa" {
-  for_each   = toset(["users", "items", "competencies", "cv", "prompts", "agent", "drive"])
+  for_each   = toset(local.cr_sa_keys)
   account_id = "sa-${each.value}-${terraform.workspace}-v2"
 }
 
@@ -28,6 +28,7 @@ resource "google_service_account" "cr_sa" {
 # ==============================================================
 locals {
   mcp_services = ["users", "items", "competencies", "cv"]
+  cr_sa_keys   = ["users", "items", "competencies", "cv", "prompts", "agent", "drive"]
   mcp_images = {
     "users"        = var.image_users
     "items"        = var.image_items
@@ -196,6 +197,22 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         }
       }
 
+      dynamic "env" {
+        for_each = each.key == "users" ? [1] : []
+        content {
+          name  = "GCP_PROJECT_ID"
+          value = var.project_id
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "users" ? [1] : []
+        content {
+          name  = "USER_EVENTS_TOPIC"
+          value = google_pubsub_topic.user_events.name
+        }
+      }
+
       # Alimentation exclusive pour l'API CV responsable des embeddings RAG
       dynamic "env" {
         for_each = each.key == "cv" ? [1] : []
@@ -231,6 +248,14 @@ resource "google_cloud_run_v2_service" "mcp_services" {
         content {
           name  = "COMPETENCIES_API_URL"
           value = "http://api.internal.zenika/comp-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = each.key == "cv" ? [1] : []
+        content {
+          name  = "ITEMS_API_URL"
+          value = "http://api.internal.zenika/items-api/"
         }
       }
 
@@ -736,19 +761,19 @@ resource "google_cloud_run_v2_service" "agent_api" {
 # Droits IAM pour l'accès aux Secrets
 # ==============================================================
 resource "google_secret_manager_secret_iam_member" "jwt_secret_access" {
-  for_each  = google_service_account.cr_sa
+  for_each  = toset(local.cr_sa_keys)
   project   = data.google_secret_manager_secret.jwt_secret.project
   secret_id = data.google_secret_manager_secret.jwt_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${each.value.email}"
+  member    = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "gemini_secret_access" {
-  for_each  = google_service_account.cr_sa
+  for_each  = toset(local.cr_sa_keys)
   project   = data.google_secret_manager_secret.gemini_api_key.project
   secret_id = data.google_secret_manager_secret.gemini_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${each.value.email}"
+  member    = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "admin_password_access" {
@@ -777,31 +802,31 @@ resource "google_secret_manager_secret_iam_member" "google_secret_key_access" {
 # Droits IAM spécifiques pour le Tracing et Monitoring
 # ==============================================================
 resource "google_project_iam_member" "otel_trace_writer" {
-  for_each = google_service_account.cr_sa
+  for_each = toset(local.cr_sa_keys)
   project  = var.project_id
   role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${each.value.email}"
+  member   = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
 resource "google_project_iam_member" "otel_metric_writer" {
-  for_each = google_service_account.cr_sa
+  for_each = toset(local.cr_sa_keys)
   project  = var.project_id
   role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${each.value.email}"
+  member   = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
 resource "google_project_iam_member" "alloydb_client" {
-  for_each = google_service_account.cr_sa
+  for_each = toset(local.cr_sa_keys)
   project  = var.project_id
   role     = "roles/alloydb.client"
-  member   = "serviceAccount:${each.value.email}"
+  member   = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
 resource "google_project_iam_member" "alloydb_databaseUser" {
-  for_each = google_service_account.cr_sa
+  for_each = toset(local.cr_sa_keys)
   project  = var.project_id
   role     = "roles/alloydb.databaseUser"
-  member   = "serviceAccount:${each.value.email}"
+  member   = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
 # ==============================================================
@@ -840,10 +865,10 @@ resource "time_sleep" "wait_for_iam_propagation" {
 # Mettre "allUsers" permet donc au Load Balancer de router la requête sans jeton IAM.
 
 resource "google_cloud_run_v2_service_iam_member" "mcp_invoker" {
-  for_each = google_cloud_run_v2_service.mcp_services
-  project  = each.value.project
-  location = each.value.location
-  name     = each.value.name
+  for_each = toset(local.mcp_services)
+  project  = google_cloud_run_v2_service.mcp_services[each.key].project
+  location = google_cloud_run_v2_service.mcp_services[each.key].location
+  name     = google_cloud_run_v2_service.mcp_services[each.key].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }

@@ -41,6 +41,16 @@ const categories = [
       "Vérifie l'état de santé du Load Balancer et des API en ligne.",
       "As-tu accès à la documentation de l'API Compétences ?"
     ]
+  },
+  {
+    title: "Intelligence Sémantique & RAG",
+    icon: BrainCircuit,
+    color: "#F59E0B",
+    examples: [
+      "Explique pourquoi ce candidat correspond à ma recherche Kubernetes.",
+      "Fais-moi un résumé des missions marquantes de ce consultant.",
+      "Quels sont les points forts extraits du CV de cette personne ?"
+    ]
   }
 ]
 </script>

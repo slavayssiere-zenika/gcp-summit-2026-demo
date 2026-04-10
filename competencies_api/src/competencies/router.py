@@ -26,7 +26,7 @@ from src.auth import verify_jwt
 
 router = APIRouter(prefix="", tags=["competencies"], dependencies=[Depends(verify_jwt)])
 
-USERS_API_URL = os.getenv("USERS_API_URL", "http://users-api:8000")
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
 
 

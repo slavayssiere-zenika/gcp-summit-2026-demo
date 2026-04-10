@@ -27,7 +27,7 @@ test_integration.py::test_get_competency_stats
     created_at=datetime.utcnow()
 
 test_main.py::test_openapi_json
-  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/openapi/utils.py:252: UserWarning: Duplicate Operation ID proxy_mcp_mcp__path__put for function proxy_mcp at /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/main.py
+  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/openapi/utils.py:252: UserWarning: Duplicate Operation ID proxy_mcp_mcp__path__post for function proxy_mcp at /Users/sebastien.lavayssiere/Code/test-open-code/competencies_api/main.py
     warnings.warn(message, stacklevel=1)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -35,4 +35,4 @@ test_main.py::test_openapi_json
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================= 32 passed, 25 warnings in 1.00s ========================
+======================= 32 passed, 25 warnings in 1.80s ========================

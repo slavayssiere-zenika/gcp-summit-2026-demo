@@ -43,16 +43,16 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=users-api
+      - OTEL_SERVICE_NAME=users_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
       - GOOGLE_SECRET_ID=${GOOGLE_SECRET_ID}
       - GOOGLE_SECRET_KEY=${GOOGLE_SECRET_KEY}
-      - ROOT_PATH=/users-api
-      - CV_API_URL=http://cv-api:8004
-      - ITEMS_API_URL=http://items-api:8001
-      - COMPETENCIES_API_URL=http://competencies-api:8003
+      - ROOT_PATH=/users_api
+      - CV_API_URL=http://cv_api:8004
+      - ITEMS_API_URL=http://items_api:8001
+      - COMPETENCIES_API_URL=http://competencies_api:8003
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -63,7 +63,7 @@ services:
     networks:
       monitoring_net:
         aliases:
-          - users-api
+          - users_api
 
   users_mcp:
     build: ./users_api
@@ -89,11 +89,11 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=items-api
+      - OTEL_SERVICE_NAME=items_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/items
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
-      - ROOT_PATH=/items-api
+      - ROOT_PATH=/items_api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -104,7 +104,7 @@ services:
     networks:
       monitoring_net:
         aliases:
-          - items-api
+          - items_api
 
   items_mcp:
     build: ./items_api
@@ -112,8 +112,8 @@ services:
     hostname: items_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - USERS_API_URL=http://users_api:8000
-      - ITEMS_API_URL=http://items_api:8001
+      - USERS_API_URL=http://users-api:8000
+      - ITEMS_API_URL=http://items-api:8001
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=items_mcp
@@ -131,7 +131,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=competencies-api
+      - OTEL_SERVICE_NAME=competencies_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/competencies
       - REDIS_URL=redis://redis:6379/3
       - USERS_API_URL=http://users_api:8000
@@ -147,7 +147,7 @@ services:
     networks:
       monitoring_net:
         aliases:
-          - competencies-api
+          - competencies_api
 
   competencies_mcp:
     build: ./competencies_api
@@ -155,8 +155,8 @@ services:
     hostname: competencies_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - USERS_API_URL=http://users_api:8000
-      - COMPETENCIES_API_URL=http://competencies_api:8003
+      - USERS_API_URL=http://users-api:8000
+      - COMPETENCIES_API_URL=http://competencies-api:8003
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=competencies_mcp
@@ -173,7 +173,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=cv-api
+      - OTEL_SERVICE_NAME=cv_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/cv
       - REDIS_URL=redis://redis:6379/4
       - USERS_API_URL=http://users_api:8000
@@ -192,7 +192,7 @@ services:
     networks:
       monitoring_net:
         aliases:
-          - cv-api
+          - cv_api
 
   cv_mcp:
     build: ./cv_api
@@ -200,7 +200,7 @@ services:
     hostname: cv_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - CV_API_URL=http://cv_api:8004
+      - CV_API_URL=http://cv-api:8004
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=cv_mcp
@@ -218,7 +218,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=drive-api
+      - OTEL_SERVICE_NAME=drive_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/drive
       - REDIS_URL=redis://redis:6379/6
       - USERS_API_URL=http://users_api:8000
@@ -235,7 +235,7 @@ services:
     networks:
       monitoring_net:
         aliases:
-          - drive-api
+          - drive_api
 
   drive_mcp:
     build: ./drive_api
@@ -243,7 +243,7 @@ services:
     hostname: drive_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - DRIVE_API_URL=http://drive_api:8006
+      - DRIVE_API_URL=http://drive-api:8006
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=drive_mcp
@@ -254,12 +254,12 @@ services:
       - monitoring_net
 
   # The Intelligent Agent (renamed from web)
-  agent-api:
+  agent_api:
     build:
       context: .
       dockerfile: agent_api/Dockerfile
-    container_name: agent-api
-    hostname: agent-api
+    container_name: agent_api
+    hostname: agent_api
     volumes:
       - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
     environment:
@@ -278,7 +278,7 @@ services:
       - REDIS_URL=redis://redis:6379/1
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=agent-api
+      - OTEL_SERVICE_NAME=agent_api
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/api
     depends_on:
@@ -317,7 +317,7 @@ services:
     ports:
       - "8002:8080"
     depends_on:
-      - agent-api
+      - agent_api
       - users_api
       - items_api
       - prompts_api
@@ -393,7 +393,12 @@ services:
     depends_on:
       - postgres_exporter
       - redis_exporter
-      - agent-api
+      - agent_api
+      - users_api
+      - items_api
+      - prompts_api
+      - competencies_api
+      - cv_api
     networks:
       - monitoring_net
 
@@ -429,9 +434,12 @@ services:
       - prometheus
       - tempo
       - loki
-    links:
-      - tempo
-      - loki
+      - agent_api
+      - users_api
+      - items_api
+      - prompts_api
+      - competencies_api
+      - cv_api
     networks:
       - monitoring_net
 
@@ -494,7 +502,7 @@ services:
     networks:
       monitoring_net:
         aliases:
-          - prompts-api
+          - prompts_api
 
 volumes:
   postgres_data:

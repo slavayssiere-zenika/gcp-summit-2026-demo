@@ -148,37 +148,188 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
         return {"history": []}
         
     history = []
+    current_assistant_msg = None
+    
     for event in getattr(session, "events", []):
-        author = getattr(event, "author", "unknown")
-        if author in ("user", "assistant"):
-            content = getattr(event, "content", "")
-            if hasattr(content, "parts"):
-                content_text = "".join(getattr(p, "text", "") for p in content.parts if hasattr(p, "text"))
-            else:
-                content_text = str(content)
-                
-            display_type = "text_only"
-            data = None
-            if author == "assistant":
-                try:
-                    clean_str = content_text.replace("```json", "").replace("```", "").strip()
-                    json_obj = json.loads(clean_str)
-                    if "reply" in json_obj and "display_type" in json_obj:
-                        content_text = json_obj["reply"]
-                        display_type = json_obj["display_type"]
-                        if display_type == "profile":
-                            display_type = "cards"
-                        data = json_obj.get("data")
-                except Exception:
-                    pass
-                    
-            history.append({
-                "role": author,
-                "content": content_text,
-                "displayType": display_type,
-                "data": data
-            })
+        author = getattr(event, "author", None)
+        content = getattr(event, "content", "")
+        role = getattr(content, "role", None) if content else None
+        
+        # Normalize role
+        author_val = (author or "").lower()
+        role_val = (role or "").lower()
+        
+        is_assistant = any(x in ["assistant", "model", "assistant_zenika"] for x in [author_val, role_val])
+        is_tool = any(x in ["tool", "function"] for x in [author_val, role_val])
+        is_user = any(x in ["user"] for x in [author_val, role_val])
+        
+        # Extract parts if available
+        parts = []
+        if hasattr(content, "parts"):
+            parts = list(content.parts) if content.parts else []
+            content_text = "".join((getattr(p, "text", "") or "") for p in parts if hasattr(p, "text"))
+        else:
+            content_text = str(content)
             
+            
+        # 1. Process EVERY event exhaustively for metadata
+        if current_assistant_msg:
+            # a) Scan Parts
+            for part in parts:
+                # Thoughts
+                thought_val = getattr(part, 'thought', None)
+                if thought_val:
+                    if current_assistant_msg["thoughts"]:
+                        current_assistant_msg["thoughts"] += "\n" + str(thought_val)
+                    else:
+                        current_assistant_msg["thoughts"] = str(thought_val)
+                
+                # Tool Calls
+                tcall = getattr(part, 'tool_call', None) or getattr(part, 'function_call', None)
+                if tcall:
+                    calls = tcall if isinstance(tcall, list) else [tcall]
+                    for call in calls:
+                        name = getattr(call, 'name', 'unknown')
+                        args = getattr(call, 'args', {})
+                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                        if sig not in current_assistant_seen_steps:
+                            current_assistant_msg["steps"].append({
+                                "type": "call",
+                                "tool": name,
+                                "args": args
+                            })
+                            current_assistant_seen_steps.add(sig)
+                
+                # Tool Results
+                fres = getattr(part, 'function_response', None)
+                raw_text = getattr(part, 'text', None)
+                
+                res_to_process = None
+                if fres:
+                    res_to_process = getattr(fres, 'response', fres)
+                elif raw_text and role_val in ["tool", "user"]:
+                    try: res_to_process = json.loads(raw_text)
+                    except: pass
+                
+                if res_to_process is not None:
+                    if hasattr(res_to_process, 'model_dump'): res_to_process = res_to_process.model_dump()
+                    elif hasattr(res_to_process, 'dict'): res_to_process = res_to_process.dict()
+                    
+                    # Unwrap MCP 'result' JSON string
+                    if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
+                        try: res_to_process = json.loads(res_to_process["result"])
+                        except: pass
+                    
+                    sig = f"result:{json.dumps(res_to_process, sort_keys=True)}"
+                    if sig not in current_assistant_seen_steps:
+                        current_assistant_msg["data"] = res_to_process
+                        current_assistant_msg["steps"].append({"type": "result", "data": res_to_process})
+                        current_assistant_seen_steps.add(sig)
+            
+            # b) Scan Event Methods
+            if hasattr(event, 'actions') and event.actions:
+                for action in event.actions:
+                    tc = getattr(action, 'tool_call', None)
+                    if tc:
+                        name = getattr(tc, 'name', "unknown")
+                        args = getattr(tc, 'args', {})
+                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                        if sig not in current_assistant_seen_steps:
+                            current_assistant_msg["steps"].append({"type": "call", "tool": name, "args": args})
+                            current_assistant_seen_steps.add(sig)
+            
+            if hasattr(event, 'get_function_calls'):
+                for fc in (event.get_function_calls() or []):
+                    name = getattr(fc, 'name', "unknown")
+                    args = getattr(fc, 'args', {})
+                    sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                    if sig not in current_assistant_seen_steps:
+                        current_assistant_msg["steps"].append({"type": "call", "tool": name, "args": args})
+                        current_assistant_seen_steps.add(sig)
+
+            if hasattr(event, 'get_function_responses'):
+                for fr in (event.get_function_responses() or []):
+                    res_data = getattr(fr, 'response', fr)
+                    if hasattr(res_data, 'model_dump'): res_data = res_data.model_dump()
+                    elif hasattr(res_data, 'dict'): res_data = res_data.dict()
+                    
+                    # Unwrap MCP 'result' JSON string
+                    if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
+                        try: res_data = json.loads(res_data["result"])
+                        except: pass
+                    
+                    sig = f"result:{json.dumps(res_data, sort_keys=True)}"
+                    if sig not in current_assistant_seen_steps:
+                        current_assistant_msg["data"] = res_data
+                        current_assistant_msg["steps"].append({"type": "result", "data": res_data})
+                        current_assistant_seen_steps.add(sig)
+            
+
+
+        # 2. Main turn logic
+        if is_user:
+            history.append({
+                "role": "user",
+                "content": content_text
+            })
+            current_assistant_msg = None 
+            
+        elif is_assistant:
+            if current_assistant_msg is None:
+                current_assistant_msg = {
+                    "role": "assistant",
+                    "content": "",
+                    "displayType": "text_only",
+                    "data": None,
+                    "parsedData": [],
+                    "steps": [],
+                    "thoughts": "",
+                    "rawResponse": "",
+                    "activeTab": "preview",
+                    "pagination": {"currentPage": 1, "itemsPerPage": 10}
+                }
+                current_assistant_seen_steps = set()
+                history.append(current_assistant_msg)
+            
+            if content_text:
+                current_assistant_msg["content"] += content_text
+                # rawResponse should contain the full textual history of the turn for the expert mode
+                current_assistant_msg["rawResponse"] += content_text
+                
+                # Try to extract dashboard JSON if present in the text
+                try:
+                    json_match = re.search(r'\{[\s\S]*\}', current_assistant_msg["content"])
+                    if json_match:
+                        json_obj = json.loads(json_match.group(0))
+                        if "reply" in json_obj and "display_type" in json_obj:
+                            current_assistant_msg["content"] = json_obj["reply"]
+                            current_assistant_msg["displayType"] = json_obj["display_type"]
+                            if current_assistant_msg["displayType"] == "profile":
+                                current_assistant_msg["displayType"] = "cards"
+                            
+                            if "data" in json_obj:
+                                current_assistant_msg["data"] = json_obj["data"]
+                except: pass
+
+            # Re-evaluate parsedData and displayType fallback
+            if current_assistant_msg.get("data"):
+                d = current_assistant_msg["data"]
+                
+                # Competency detection
+                if isinstance(d, dict) and d.get("dataType") == "competency":
+                    current_assistant_msg["displayType"] = "tree"
+                # Fallback to cards if we have data but no type
+                elif current_assistant_msg["displayType"] == "text_only":
+                    current_assistant_msg["displayType"] = "cards"
+
+                # Update parsedData
+                if isinstance(d, dict) and "items" in d:
+                    current_assistant_msg["parsedData"] = d["items"]
+                elif isinstance(d, list):
+                    current_assistant_msg["parsedData"] = d
+                else:
+                    current_assistant_msg["parsedData"] = [d]
+
             
     return {"history": history}
 

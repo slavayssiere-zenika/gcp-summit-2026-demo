@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import { 
   RefreshCw, 
@@ -25,6 +25,7 @@ const selectedUser = ref<any>(null)
 const userSearchQuery = ref('')
 const userResults = ref<any[]>([])
 const isSearchingUsers = ref(false)
+const logContainer = ref<HTMLElement | null>(null)
 
 const searchUsers = async () => {
   if (userSearchQuery.value.length < 2) {
@@ -169,6 +170,47 @@ const applyTree = async () => {
     isTreeLoading.value = false
   }
 }
+
+const pollingInterval = ref<any>(null)
+
+const checkTaskStatus = async () => {
+  try {
+    const resp = await axios.get('/cv-api/reanalyze/status')
+    const data = resp.data
+    
+    if (data.status === 'running') {
+      isLoading.value = true
+      logs.value = [...(data.logs || [])].reverse() // Invert for display
+      if (!pollingInterval.value) {
+        pollingInterval.value = setInterval(checkTaskStatus, 3000)
+      }
+    } else {
+      isLoading.value = false
+      if (pollingInterval.value) {
+        clearInterval(pollingInterval.value)
+        pollingInterval.value = null
+      }
+      if (data.status === 'completed') {
+        logs.value = [...(data.logs || [])].reverse()
+        // If it was running and now it's done, show success
+        if (isLoading.value) {
+            successMessage.value = data.message
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to check task status', e)
+  }
+}
+
+onMounted(() => {
+  checkTaskStatus()
+})
+onUnmounted(() => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+  }
+})
 </script>
 
 <template>
@@ -281,10 +323,16 @@ const applyTree = async () => {
       <div class="glass-panel logs-panel full-width">
         <div class="panel-header">
           <h3><Search size="20" /> Journal d'Exécution</h3>
+          <div v-if="isLoading" class="active-badge pulse">Opération en cours...</div>
         </div>
-        <div class="logs-container">
+        <div class="logs-container" ref="logContainer">
           <div v-if="logs.length === 0" class="empty-logs">Aucune opération en cours.</div>
-          <div v-for="(log, i) in logs" :key="i" class="log-entry" :class="{ 'error-log': log.includes('ERREUR') || log.includes('ÉCHEC') }">
+          <div v-for="(log, i) in logs" :key="i" class="log-entry" 
+               :class="{ 
+                 'error-log': log.includes('ERREUR') || log.includes('ÉCHEC'),
+                 'warn-log': log.includes('⚠️'),
+                 'success-log': log.includes('TERMINÉ') || log.includes('Finished')
+               }">
             {{ log }}
           </div>
         </div>
@@ -612,11 +660,34 @@ const applyTree = async () => {
 }
 
 .log-entry {
-  padding: 4px 0;
+  padding: 6px 0;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  line-height: 1.4;
 }
 
-.error-log { color: #f87171; }
+.error-log { color: #f87171; font-weight: 600; }
+.warn-log { color: #fbbf24; background: rgba(251, 191, 36, 0.1); padding: 8px; border-radius: 4px; border-left: 3px solid #fbbf24; margin: 4px 0; }
+.success-log { color: #34d399; }
+
+.active-badge {
+  font-size: 0.75rem;
+  background: rgba(227, 25, 55, 0.1);
+  color: var(--zenika-red);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pulse {
+  animation: pulse-soft 2s infinite;
+}
+
+@keyframes pulse-soft {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
 
 .tree-grid {
   background: white;

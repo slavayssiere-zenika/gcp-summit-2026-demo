@@ -101,9 +101,11 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "name": {"type": "string", "description": "Item name"},
                     "description": {"type": "string", "description": "Item description (optional)"},
-                    "user_id": {"type": "integer", "description": "ID of the user who owns this item"}
+                    "user_id": {"type": "integer", "description": "ID of the user who owns this item"},
+                    "category_ids": {"type": "array", "items": {"type": "integer"}, "description": "List of category IDs"},
+                    "metadata_json": {"type": "object", "description": "Rich metadata (JSONB) for missions, etc."}
                 },
-                "required": ["name", "user_id"]
+                "required": ["name", "user_id", "category_ids"]
             }
         ),
         Tool(
@@ -130,7 +132,9 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "item_id": {"type": "integer", "description": "The item ID"},
                     "name": {"type": "string", "description": "New name (optional)"},
-                    "description": {"type": "string", "description": "New description (optional)"}
+                    "description": {"type": "string", "description": "New description (optional)"},
+                    "category_ids": {"type": "array", "items": {"type": "integer"}, "description": "New category IDs (optional)"},
+                    "metadata_json": {"type": "object", "description": "New metadata (optional)"}
                 },
                 "required": ["item_id"]
             }
@@ -213,11 +217,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "create_item":
-                response = await client.post(f"{API_BASE_URL}/", json={
+                payload = {
                     "name": arguments["name"],
                     "description": arguments.get("description"),
-                    "user_id": arguments["user_id"]
-                })
+                    "user_id": arguments["user_id"],
+                    "category_ids": arguments.get("category_ids", []),
+                    "metadata_json": arguments.get("metadata_json")
+                }
+                response = await client.post(f"{API_BASE_URL}/", json=payload)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

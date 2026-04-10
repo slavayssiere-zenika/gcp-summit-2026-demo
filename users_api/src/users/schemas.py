@@ -14,13 +14,14 @@ class PaginationResponse(BaseModel, Generic[T]):
 
 class UserBase(BaseModel):
     username: str
-    email: str
+    email: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     full_name: Optional[str] = None
     role: str = "user"
     allowed_category_ids: List[int] = []
     picture_url: Optional[str] = None
+    is_anonymous: bool = False
 
 
 class UserCreate(UserBase):
@@ -50,13 +51,14 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
+    is_anonymous: Optional[bool] = None
     role: Optional[str] = None
     allowed_category_ids: Optional[List[int]] = None
-
 
 class UserResponse(UserBase):
     id: int
     is_active: bool
+    is_anonymous: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

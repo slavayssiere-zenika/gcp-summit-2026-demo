@@ -220,13 +220,17 @@ class DriveService:
                     logger.info(f"CV trouvé (Nom: '{state.file_name}', Tag: {folder.tag}). Appel de l'API CV...")
                     res = await http_client.post(f"{CV_API_URL.rstrip('/')}/import", json=payload, headers=headers)
                     if res.status_code < 400:
+                        data = res.json()
                         state.status = DriveSyncStatus.IMPORTED_CV
+                        state.user_id = data.get("user_id")
                         processed_count += 1
+                        logger.info(f"File {state.google_file_id} ({state.file_name}) imported successfully. Assigned user_id: {state.user_id}")
                     else:
                         # Assuming 400 with a specific error if it's not a CV or failed parsing
                         error_detail = res.json().get("detail", "")
                         if "LLM Parsing failed" in error_detail or "Not a CV" in error_detail:
                             state.status = DriveSyncStatus.IGNORED_NOT_CV
+                            logger.info(f"File {state.google_file_id} ignored (Not a CV or parsing error)")
                         else:
                             state.status = DriveSyncStatus.ERROR
                             logger.error(f"Failed to import '{state.file_name}' ({state.google_file_id}): {error_detail}")

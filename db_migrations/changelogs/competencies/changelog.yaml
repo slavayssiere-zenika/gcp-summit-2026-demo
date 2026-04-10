@@ -124,4 +124,4 @@ databaseChangeLog:
         - sql:
             sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_competency_name_lower ON competencies (LOWER(name))"
   - include:
-      file: "db_migrations/changelogs/competencies/003-add-competency-aliases.yaml"
+      file: "changelogs/competencies/003-add-competency-aliases.yaml"

@@ -4,24 +4,43 @@ import sys
 import argparse
 import subprocess
 import json
+import re
+import yaml
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def parse_simple_yaml(filepath):
-    config = {}
+# Configuration du logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+class DeploymentError(Exception):
+    """Exception levée lors d'un échec de déploiement."""
+    pass
+
+def load_config(filepath):
+    """Charge la configuration YAML de manière robuste."""
     with open(filepath, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if ":" in line:
-                key, val = line.split(":", 1)
-                key = key.strip()
-                val = val.strip().split("#")[0].strip()
-                if val.startswith('"') and val.endswith('"'):
-                    val = val[1:-1]
-                elif val.isdigit():
-                    val = int(val)
-                config[key] = val
-    return config
+        try:
+            return yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            logger.error(f"Erreur lors de la lecture du fichier YAML {filepath}: {exc}")
+            raise DeploymentError(f"Format YAML invalide : {exc}")
+
+def check_binary_dependencies():
+    """Vérifie que les outils nécessaires sont installés."""
+    dependencies = ["terraform", "gcloud", "gsutil"]
+    missing = []
+    for dep in dependencies:
+        if subprocess.run(["which", dep], capture_output=True).returncode != 0:
+            missing.append(dep)
+    
+    if missing:
+        raise DeploymentError(f"Dépendances manquantes : {', '.join(missing)}")
+    logger.info("[+] Toutes les dépendances binaires sont satisfaites.")
 
 TERRAFORM_DIR = os.path.join(os.path.dirname(__file__), "terraform")
 
@@ -32,13 +51,65 @@ PERSISTENT_RESOURCES = [
     "google_dns_record_set.api_a"
 ]
 
-def run_cmd(cmd, check=True):
-    print(f"[*] Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=TERRAFORM_DIR)
+def run_cmd(cmd, check=True, capture_output=False, live=False):
+    logger.info(f"[*] Running: {' '.join(cmd)}")
+    
+    if live:
+        # Mode live : on affiche en temps réel tout en capturant dans un buffer
+        process = subprocess.Popen(
+            cmd, cwd=TERRAFORM_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        full_output = []
+        for line in iter(process.stdout.readline, ""):
+            print(line, end="", flush=True)
+            full_output.append(line)
+        process.stdout.close()
+        return_code = process.wait()
+        
+        # On simule un objet simulate CompletedProcess pour la compatibilité
+        from argparse import Namespace
+        result = Namespace(returncode=return_code, stdout="".join(full_output), stderr="".join(full_output))
+    elif capture_output:
+        result = subprocess.run(cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True)
+    else:
+        result = subprocess.run(cmd, cwd=TERRAFORM_DIR)
+        
     if check and result.returncode != 0:
-        print(f"[!] Error executing: {' '.join(cmd)}")
-        sys.exit(result.returncode)
+        err_msg = f"[!] Error executing: {' '.join(cmd)}"
+        logger.error(err_msg)
+        if capture_output and hasattr(result, 'stderr') and result.stderr:
+            logger.error(result.stderr)
+        raise DeploymentError(err_msg)
     return result
+
+def parse_and_fix_409s(output):
+    # Pattern pour extraire l'adresse de la ressource et son ID GCP
+    # Exemple: with google_service_account.cr_sa["agent"],
+    # et resourceName: "projects/.../serviceAccounts/..."
+    
+    fixes_applied = 0
+    # On découpe par bloc d'erreur pour être sûr de l'association adresse/ID
+    error_blocks = output.split('Error: ')
+    for block in error_blocks:
+        if "409" in block or "alreadyExists" in block:
+            addr_match = re.search(r'with ([\w\.\[\]\"]+),', block)
+            id_match = re.search(r'"resourceName": "([^"]+)"', block)
+            if addr_match and id_match:
+                addr = addr_match.group(1)
+                res_id = id_match.group(1)
+                print(f"[*] Self-Healing: Détection du conflit 409 pour {addr}. Tentative d'import de {res_id}...")
+                import_res = subprocess.run(["terraform", "import", addr, res_id], cwd=TERRAFORM_DIR, capture_output=True, text=True)
+                if import_res.returncode == 0:
+                    print(f"    -> Import réussi pour {addr}.")
+                    fixes_applied += 1
+                else:
+                    print(f"    -> [!] Échec de l'import pour {addr}: {import_res.stderr.strip()}")
+    
+    return fixes_applied > 0
 
 def get_tf_args():
     api_key = os.environ.get("GOOGLE_API_KEY")
@@ -110,15 +181,39 @@ def deploy(env, base_domain, project_id, config, force=False):
     else:
         print(f"[*] DNS '{front_domain}' does not resolve yet. Skipping import of network resources to prevent timeouts.")
 
+    # Systematic import of the drive service account (should not be deleted)
+    import_persistent_resource(env, 'google_service_account.cr_sa["drive"]', f"projects/{project_id}/serviceAccounts/sa-drive-{env}-v2@{project_id}.iam.gserviceaccount.com")
+
     if force:
         print("[!] FORCE MODE: Bypassing prevent_destroy logic to allow replacements.")
         toggle_prevent_destroy(disable=True)
 
-    cmd = ["terraform", "apply"] + get_tf_args()
     try:
-        run_cmd(cmd)
+        apply_cmd = ["terraform", "apply", "-auto-approve"] + get_tf_args()
         
-        # Post-deploy: Déploiement du Frontend
+        max_retries = 2
+        success = False
+        for attempt in range(max_retries):
+            print(f"[*] Terraform Apply - Tentative {attempt + 1}/{max_retries}...")
+            # On utilise le nouveau mode 'live' pour voir les logs en temps réel tout en capturant
+            res = run_cmd(apply_cmd, check=False, live=True)
+            
+            if res.returncode == 0:
+                success = True
+                break
+                
+            # En cas d'échec, on tente le self-healing sur la sortie capturée (stdout contient aussi stderr ici)
+            if parse_and_fix_409s(res.stdout):
+                print("[*] Corrections de type 'import' appliquées. Relance de l'apply...")
+                continue
+            else:
+                print(f"[!] Échec définitif de l'apply.")
+                sys.exit(res.returncode)
+
+        if not success:
+            sys.exit(1)
+
+    # Post-deploy: Déploiement du Frontend
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
         
         # 1. Obtenir le nom du bucket de destination
@@ -413,8 +508,8 @@ def deploy(env, base_domain, project_id, config, force=False):
                 if not login_success:
                     print("[-] Authentication flow totally failed after all attempts.")
                     
-                # --- CHECK 5: API MICROSERVICES ---
-                print(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
+                # --- CHECK 5/5: API MICROSERVICES ---
+                logger.info(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
                 # On teste toutes les routes déclarées dans le Load Balancer (lb.tf)
                 api_routes = [
                     "/api/health",         # agent_api
@@ -426,27 +521,28 @@ def deploy(env, base_domain, project_id, config, force=False):
                     "/drive-api/health"    # drive_api
                 ]
                 
-                for route in api_routes:
+                def check_route(route):
                     api_url = f"https://{api_dns_name}{route}"
                     req_get = urllib.request.Request(api_url, method="GET")
                     try:
                         resp = urllib.request.urlopen(req_get, timeout=35, context=ctx_to_use)
-                        print(f"  [+] {route:<15} -> OK (HTTP {resp.status})")
+                        return f"  [+] {route:<15} -> OK (HTTP {resp.status})"
                     except urllib.error.HTTPError as e:
-                        # Si l'API renvoie 404, 401 ou 403, cela prouve que le conteneur Cloud Run tourne
-                        # et que le Load Balancer achemine le trafic avec succès.
-                        # Les erreurs graves sont les 500/502/503/504 (Server/Proxy Error)
                         if e.code < 500:
-                            print(f"  [+] {route:<15} -> OK (HTTP {e.code} - App Responded)")
+                            return f"  [+] {route:<15} -> OK (HTTP {e.code} - App Responded)"
                         else:
-                            print(f"  [-] {route:<15} -> FAIL (HTTP {e.code} Server/Proxy Error)")
+                            return f"  [-] {route:<15} -> FAIL (HTTP {e.code} Server/Proxy Error)"
                     except Exception as e:
-                        print(f"  [-] {route:<15} -> FAIL ({type(e).__name__}: {e})")
-                        
+                        return f"  [-] {route:<15} -> FAIL ({type(e).__name__}: {e})"
+
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = {executor.submit(check_route, route): route for route in api_routes}
+                    for future in as_completed(futures):
+                        logger.info(future.result())
             else:
-                print(f"[-] Sanity Test FAIL: DNS resolution timeout. {front_dns_name} doesn't match {lb_ip}")
+                logger.error(f"[-] Sanity Test FAIL: DNS resolution timeout. {front_dns_name} doesn't match {lb_ip}")
         else:
-            print("[!] Skipping Sanity check. Missing terraform outputs (lb_ip or admin_password).")
+            logger.warning("[!] Skipping Sanity check. Missing terraform outputs (lb_ip or admin_password).")
 
     finally:
         if force:
@@ -456,7 +552,7 @@ def plan(env):
     init_tf()
     set_workspace(env)
     
-    print(f"[*] Generating dry-run (terraform plan) for environment '{env}'...")
+    logger.info(f"[*] Generating dry-run (terraform plan) for environment '{env}'...")
     cmd = ["terraform", "plan"] + get_tf_args()
     run_cmd(cmd)
 
@@ -465,13 +561,13 @@ def destroy(env, force=False):
     set_workspace(env)
 
     if force:
-        print("[!] FORCE MODE: Protected resources WILL BE DESTROYED.")
+        logger.warning("[!] FORCE MODE: Protected resources WILL BE DESTROYED.")
         toggle_prevent_destroy(disable=True)
     else:
         # To honor "prevent_destroy" on DNS and SSL certs without blocking the whole destruction:
         # We remove them from the state so Terraform ignores them during destroy.
         # They will remain orphaned in GCP (which is the goal) and re-imported upon the next deploy.
-        print("[*] Ejecting persistent resources from Terraform state to preserve them...")
+        logger.info("[*] Ejecting persistent resources from Terraform state to preserve them...")
         for res in PERSISTENT_RESOURCES:
             run_cmd(["terraform", "state", "rm", res], check=False)
 
@@ -484,9 +580,10 @@ def destroy(env, force=False):
                 run_cmd(["terraform", "state", "rm", line], check=False)
 
     print(f"[*] Destroying all other components for environment '{env}'...")
-    cmd = ["terraform", "destroy"] + get_tf_args()
+    cmd = ["terraform", "destroy", "-auto-approve"] + get_tf_args()
+    
     try:
-        run_cmd(cmd)
+        run_cmd(cmd, live=True)
     finally:
         if force:
             toggle_prevent_destroy(disable=False)
@@ -499,25 +596,35 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    # Load YAML Configuration
-    config_path = os.path.join(os.path.dirname(__file__), "envs", f"{args.env}.yaml")
-    if not os.path.exists(config_path):
-        print(f"[!] Configuration file not found: {config_path}")
+    try:
+        check_binary_dependencies()
+        
+        # Load YAML Configuration
+        config_path = os.path.join(os.path.dirname(__file__), "envs", f"{args.env}.yaml")
+        if not os.path.exists(config_path):
+            logger.error(f"[!] Configuration file not found: {config_path}")
+            sys.exit(1)
+            
+        config = load_config(config_path)
+            
+        # Dump it as auto.tfvars.json for Terraform to ingest automatically
+        tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")
+        with open(tfvars_path, "w") as f:
+            json.dump(config, f, indent=2)
+
+        project_id = config.get("project_id", "slavayssiere-sandbox-462015")
+        base_domain = config.get("base_domain", "slavayssiere-zenika.com")
+
+        if args.action == "deploy":
+            deploy(args.env, base_domain, project_id, config, force=args.force)
+        elif args.action == "destroy":
+            destroy(args.env, force=args.force)
+        elif args.action == "plan":
+            plan(args.env)
+            
+    except DeploymentError as e:
+        logger.error(f"DEPLOYMENT FAILED: {e}")
         sys.exit(1)
-        
-    config = parse_simple_yaml(config_path)
-        
-    # Dump it as auto.tfvars.json for Terraform to ingest automatically
-    tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")
-    with open(tfvars_path, "w") as f:
-        json.dump(config, f, indent=2)
-
-    project_id = config.get("project_id", "slavayssiere-sandbox-462015")
-    base_domain = config.get("base_domain", "slavayssiere-zenika.com")
-
-    if args.action == "deploy":
-        deploy(args.env, base_domain, project_id, config, force=args.force)
-    elif args.action == "destroy":
-        destroy(args.env, force=args.force)
-    elif args.action == "plan":
-        plan(args.env)
+    except Exception as e:
+        logger.error(f"UNEXPECTED ERROR: {e}")
+        sys.exit(1)

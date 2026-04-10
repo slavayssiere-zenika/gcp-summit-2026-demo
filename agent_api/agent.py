@@ -107,12 +107,68 @@ async def get_user_cv(user_id: int) -> dict:
     result = await mcp.call_tool("get_user_cv", {"user_id": user_id})
     return format_mcp_result(result, "cv_profile")
 
+async def get_user_missions(user_id: int) -> dict:
+    """
+    Récupère la liste des missions (projets, expériences) d'un consultant avec les compétences associées à chaque mission.
+    Utiliser cet outil dès que l'utilisateur demande des détails sur l'expérience, les projets, ou un résumé basé sur les missions.
+    
+    Args:
+        user_id (int): L'identifiant de l'utilisateur cible.
+    """
+    mcp = await get_cv_mcp()
+    result = await mcp.call_tool("get_user_missions", {"user_id": user_id})
+    return format_mcp_result(result, "missions")
+
+async def get_candidate_rag_context(user_id: int) -> dict:
+    """
+    Récupère les informations vectorisées et distillées (résumé, missions, rôle) pour un candidat.
+    Outil INDISPENSABLE pour générer une synthèse claire, justifier un profil ou comprendre le parcours d'un consultant de manière sémantique.
+    
+    Args:
+        user_id (int): L'identifiant de l'utilisateur (candidat).
+    """
+    mcp = await get_cv_mcp()
+    result = await mcp.call_tool("get_candidate_rag_context", {"user_id": user_id})
+    return format_mcp_result(result, "rag_context")
+
+async def global_reanalyze_cvs(tag: Optional[str] = None, user_id: Optional[int] = None) -> dict:
+    """
+    (Admin Only) Relance l'analyse complète des CVs pour extraire à nouveau les compétences et missions (utilise Gemini).
+    Utile après une mise à jour de la taxonomie ou pour corriger un import.
+    
+    Args:
+        tag (str, optional): Filtre par tag (ex: 'Niort').
+        user_id (int, optional): Filtre par ID utilisateur spécifique.
+    """
+    mcp = await get_cv_mcp()
+    payload = {}
+    if tag: payload["tag"] = tag
+    if user_id: payload["user_id"] = user_id
+    result = await mcp.call_tool("global_reanalyze_cvs", payload)
+    return format_mcp_result(result, "reanalyze")
+
+async def get_most_experienced_consultants(limit: int = 5) -> dict:
+    """
+    Récupère le classement des consultants les plus expérimentés basés sur les années d'expérience extraites de leurs CVs.
+    Utiliser cet outil UNIQUEMENT pour répondre à des questions sur l'expérience globale, l'expertise ou qui est le 'plus expérimenté'.
+    
+    Args:
+        limit (int): Le nombre maximum de profils à retenir (défaut 5).
+    """
+    mcp = await get_cv_mcp()
+    result = await mcp.call_tool("get_most_experienced_consultants", {"limit": limit})
+    return format_mcp_result(result, "experience_ranking")
+
 CV_TOOLS = [
     analyze_cv,
     search_best_candidates,
     recalculate_competencies_tree,
     get_users_by_tag,
-    get_user_cv
+    get_user_cv,
+    get_user_missions,
+    get_candidate_rag_context,
+    global_reanalyze_cvs,
+    get_most_experienced_consultants
 ]
 
 # --- Drive Tools ---
@@ -197,21 +253,27 @@ async def get_user(user_id: int) -> dict:
     result = await mcp.call_tool("get_user", {"user_id": user_id})
     return format_mcp_result(result, "user")
 
-async def create_user(username: str, email: str, full_name: Optional[str] = None) -> dict:
+async def create_user(username: str, email: str, full_name: Optional[str] = None, is_anonymous: bool = False) -> dict:
     """
     Crée un nouvel utilisateur dans le système.
-
+    
     Args:
         username (str): Le nom d'utilisateur unique.
         email (str): L'adresse email de l'utilisateur.
         full_name (str, optional): Le nom complet de l'utilisateur.
+        is_anonymous (bool, optional): Marquer le profil comme anonyme/provisoire.
     """
     mcp = await get_users_mcp()
-    result = await mcp.call_tool("create_user", {"username": username, "email": email, "full_name": full_name})
+    result = await mcp.call_tool("create_user", {
+        "username": username, 
+        "email": email, 
+        "full_name": full_name,
+        "is_anonymous": is_anonymous
+    })
     return format_mcp_result(result, "user")
 
 async def update_user(user_id: int, username: Optional[str] = None, email: Optional[str] = None, 
-                full_name: Optional[str] = None, is_active: Optional[bool] = None) -> dict:
+                full_name: Optional[str] = None, is_active: Optional[bool] = None, is_anonymous: Optional[bool] = None) -> dict:
     """
     Met à jour les informations d'un utilisateur existant.
 
@@ -221,12 +283,14 @@ async def update_user(user_id: int, username: Optional[str] = None, email: Optio
         email (str, optional): Nouvelle adresse email.
         full_name (str, optional): Nouveau nom complet.
         is_active (bool, optional): État d'activation du compte.
+        is_anonymous (bool, optional): Changer le statut d'anonymisation.
     """
     params = {"user_id": user_id}
     if username is not None: params["username"] = username
     if email is not None: params["email"] = email
     if full_name is not None: params["full_name"] = full_name
     if is_active is not None: params["is_active"] = is_active
+    if is_anonymous is not None: params["is_anonymous"] = is_anonymous
     mcp = await get_users_mcp()
     result = await mcp.call_tool("update_user", params)
     return format_mcp_result(result, "user")
@@ -294,9 +358,33 @@ async def get_users_bulk(user_ids: list[int]) -> dict:
     result = await mcp.call_tool("get_users_bulk", {"user_ids": user_ids})
     return format_mcp_result(result, "users_bulk")
 
+async def merge_users(source_id: int, target_id: int) -> dict:
+    """
+    Fusionne un utilisateur (source) dans un autre (cible). 
+    Le profil source est désactivé et toutes ses données (CV, items, compétences) sont transférées vers le profil cible.
+    Utiliser cet outil UNIQUEMENT pour corriger des doublons ou rattacher un profil anonyme à un collaborateur réel.
+    
+    Args:
+        source_id (int): L'ID de l'utilisateur à fusionner (et supprimer/désactiver).
+        target_id (int): L'ID de l'utilisateur maître à conserver.
+    """
+    mcp = await get_users_mcp()
+    result = await mcp.call_tool("merge_users", {"source_id": source_id, "target_id": target_id})
+    return format_mcp_result(result, "merge")
+
+async def search_anonymous_users(limit: int = 10) -> dict:
+    """
+    Recherche les profils marqués comme anonymes ou provisoires dans le système.
+    Utile pour identifier les CVs importés qui n'ont pas encore été rattachés à un collaborateur réel.
+    """
+    mcp = await get_users_mcp()
+    result = await mcp.call_tool("search_anonymous_users", {"limit": limit})
+    return format_mcp_result(result, "anonymous_users")
+
 USERS_TOOLS = [
     list_users, get_user, create_user, update_user, delete_user, 
-    search_users, toggle_user_status, get_user_stats, health_check_users, get_users_bulk
+    search_users, toggle_user_status, get_user_stats, health_check_users, get_users_bulk,
+    merge_users, search_anonymous_users
 ]
 
 # --- Items Tools ---
@@ -576,10 +664,13 @@ async def loki_metric_aggregator(query: str) -> dict:
     """
     import httpx
     import os
+    from opentelemetry.propagate import inject
     try:
         loki_url = os.getenv("LOKI_URL", "http://loki:3100")
+        headers = {}
+        inject(headers)
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(f"{loki_url}/loki/api/v1/query", params={"query": query})
+            res = await client.get(f"{loki_url}/loki/api/v1/query", params={"query": query}, headers=headers)
             if res.status_code == 200:
                 data = res.json()
                 return {"result": str(data)}
@@ -716,6 +807,7 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     
     response_parts = []
     last_tool_data = None
+    steps = []  # Liste pour capturer l'historique des outils (mode expert)
     
     # The new_message must be a structured Content object, not a plain string
     new_message = types.Content(
@@ -723,62 +815,147 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
         parts=[types.Part(text=query)]
     )
     
+    steps = []
+    seen_steps = set()
+    thoughts = []
+    
     async for event in runner.run_async(
         user_id="user_1",
         session_id=session_id,
         new_message=new_message
     ):
-        # Log event for debugging
-        author = getattr(event, 'author', 'unknown')
-        logger.debug(f"ADK Event: {type(event)} author={author}")
+        # 1. Detect roles
+        author = getattr(event, 'author', None)
+        has_content = hasattr(event, 'content') and event.content is not None
+        role = getattr(event.content, 'role', None) if has_content else None
         
-        # Capture structured data from tool results
-        if author == 'tool' and hasattr(event, 'content'):
-            if hasattr(event.content, 'parts'):
-                for part in event.content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        try:
-                            # Our tools return {"result": "JSON_STRING"}
-                            raw_data = json.loads(part.text)
-                            if isinstance(raw_data, dict) and "result" in raw_data:
-                                try:
-                                    last_tool_data = json.loads(raw_data["result"])
-                                except:
-                                    last_tool_data = raw_data["result"]
-                            else:
-                                last_tool_data = raw_data
-                        except:
-                            pass
+        author_val = str(author or "").lower()
+        role_val = str(role or "").lower()
+        is_assistant = any(x in ["assistant", "model", "assistant_zenika"] for x in [author_val, role_val])
+        is_tool = any(x in ["tool", "function"] for x in [author_val, role_val])
+        
+        logger.info(f"--- EVENT: author={author_val} role={role_val} ---")
 
-        if hasattr(event, 'content') and event.content:
-            # Only add non-tool responses to the text (to avoid JSON in chat bubbles)
-            if author != 'tool':
-                if isinstance(event.content, str):
-                    response_parts.append(event.content)
-                elif hasattr(event.content, 'parts'):
-                    for part in event.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            response_parts.append(part.text)
+        # 2. Process EVERYTHING in EVERY event (Exhaustive Scan)
+        if has_content:
+            parts = list(event.content.parts) if hasattr(event.content, 'parts') else []
+            for i, part in enumerate(parts):
+                # a) Capture Thoughts
+                thought_val = getattr(part, 'thought', None)
+                if thought_val:
+                    logger.info(f"Captured thought: {str(thought_val)[:50]}...")
+                    thoughts.append(str(thought_val))
+                
+                # b) Capture Tool Calls (Assistant requesting tool)
+                tcall = getattr(part, 'tool_call', None) or getattr(part, 'function_call', None)
+                if tcall:
+                    calls = tcall if isinstance(tcall, list) else [tcall]
+                    for call in calls:
+                        name = getattr(call, 'name', 'unknown')
+                        args = getattr(call, 'args', {})
+                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                        if sig not in seen_steps:
+                            logger.info(f"Captured tool call (part): {name}")
+                            steps.append({"type": "call", "tool": name, "args": args})
+                            seen_steps.add(sig)
+                
+                # c) Capture Tool Results (Tool providing data)
+                fres = getattr(part, 'function_response', None)
+                raw_text = getattr(part, 'text', None)
+                
+                if fres:
+                    res_data = getattr(fres, 'response', fres)
+                    if hasattr(res_data, 'model_dump'): res_data = res_data.model_dump()
+                    elif hasattr(res_data, 'dict'): res_data = res_data.dict()
+                    
+                    # Unwrap MCP 'result' JSON string
+                    if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
+                        try: res_data = json.loads(res_data["result"])
+                        except: pass
+                    
+                    sig = f"result:{json.dumps(res_data, sort_keys=True)}"
+                    if sig not in seen_steps:
+                        last_tool_data = res_data
+                        steps.append({"type": "result", "data": res_data})
+                        seen_steps.add(sig)
+                        logger.info(f"Captured tool data (fres)")
+                elif raw_text and role_val in ["tool", "user"]:
+                    # Try to parse JSON from tool results embedded in text
+                    try:
+                        data_obj = json.loads(raw_text)
+                        if isinstance(data_obj, dict) and "result" in data_obj:
+                            try: data_obj = json.loads(data_obj["result"])
+                            except: data_obj = data_obj["result"]
+                        
+                        sig = f"result:{json.dumps(data_obj, sort_keys=True)}"
+                        if sig not in seen_steps:
+                            last_tool_data = data_obj
+                            steps.append({"type": "result", "data": data_obj})
+                            seen_steps.add(sig)
+                            logger.info(f"Captured tool data (json_text)")
+                    except: pass
+
+        # 3. Capture alternative Event-level metadata
+        if hasattr(event, 'actions') and event.actions:
+            for action in event.actions:
+                tc = getattr(action, 'tool_call', None)
+                if tc:
+                    name = getattr(tc, 'name', "unknown")
+                    args = getattr(tc, 'args', {})
+                    sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                    if sig not in seen_steps:
+                        logger.info(f"Captured tool call (action): {name}")
+                        steps.append({"type": "call", "tool": name, "args": args})
+                        seen_steps.add(sig)
+        
+        if hasattr(event, 'get_function_calls'):
+            for fc in (event.get_function_calls() or []):
+                name = getattr(fc, 'name', "unknown")
+                args = getattr(fc, 'args', {})
+                sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                if sig not in seen_steps:
+                    logger.info(f"Captured tool call (event_method): {name}")
+                    steps.append({"type": "call", "tool": name, "args": args})
+                    seen_steps.add(sig)
+
+        if hasattr(event, 'get_function_responses'):
+            for fr in (event.get_function_responses() or []):
+                res_data = getattr(fr, 'response', fr)
+                if hasattr(res_data, 'model_dump'): res_data = res_data.model_dump()
+                elif hasattr(res_data, 'dict'): res_data = res_data.dict()
+                
+                # Unwrap MCP 'result' JSON string
+                if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
+                    try: res_data = json.loads(res_data["result"])
+                    except: pass
+                
+                sig = f"result:{json.dumps(res_data, sort_keys=True)}"
+                if sig not in seen_steps:
+                    last_tool_data = res_data
+                    steps.append({"type": "result", "data": res_data})
+                    seen_steps.add(sig)
+                    logger.info(f"Captured tool data (event_method)")
+
+        # 4. Aggregate final response text (only if it's the model speaking to user)
+        if has_content and is_assistant:
+            if isinstance(event.content, str):
+                response_parts.append(event.content)
+            elif hasattr(event.content, 'parts'):
+                for part in event.content.parts:
+                    itcall = getattr(part, 'tool_call', None) or getattr(part, 'function_call', None)
+                    ithought = getattr(part, 'thought', None)
+                    itext = getattr(part, 'text', None)
+                    if itext and not itcall and not ithought:
+                        response_parts.append(itext)
     
     response_text = "".join(response_parts)
-    
-    try:
-        from google.adk.events.event import Event
-        final_content = types.Content(role="assistant", parts=[types.Part(text=response_text)])
-        final_event = Event(author="assistant", content=final_content, partial=False)
-        session = await session_service.get_session(
-            app_name="zenika_assistant", 
-            user_id="user_1", 
-            session_id=session_id
-        )
-        if session:
-            await session_service.append_event(session, final_event)
-    except Exception as e:
-        logger.error(f"Failed to append final response to history: {e}")
+    thought_text = "\n".join(thoughts)
     
     return {
         "response": response_text,
+        "thoughts": thought_text,
         "data": last_tool_data,
+        "steps": steps, # Nouveau champ pour le mode expert
         "source": "adk_agent",
         "session_id": session_id
     }

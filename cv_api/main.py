@@ -16,7 +16,7 @@ else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from src.cvs.router import router
+from src.cvs.router import router, public_router
 from logger import setup_logging, LoggingMiddleware
 
 provider = TracerProvider(
@@ -74,6 +74,7 @@ async def get_spec():
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
+app.include_router(public_router)
 app.include_router(router)
 
 @protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])

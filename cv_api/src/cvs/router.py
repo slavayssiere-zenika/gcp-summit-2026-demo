@@ -12,18 +12,26 @@ from typing import Optional, List
 from google import genai
 from google.genai import types
 from opentelemetry.propagate import inject
+import base64
+import random
+import string
+import urllib.parse
+import logging
 
 from database import get_db
 from src.auth import verify_jwt
 from src.cvs.models import CVProfile
-from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse, UserMergeRequest
+from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
+from .task_state import task_state_manager
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
+public_router = APIRouter(prefix="", tags=["CV_Public"])
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 COMPETENCIES_API_URL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
 PROMPTS_API_URL = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
 DRIVE_API_URL = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
+ITEMS_API_URL = os.getenv("ITEMS_API_URL", "http://items_api:8001")
 
 # Initialize Gemini Client
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -32,9 +40,6 @@ if not GEMINI_API_KEY:
     client = None
 else:
     client = genai.Client(api_key=GEMINI_API_KEY)
-
-import urllib.parse
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -153,16 +158,19 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                                     "title": {"type": "string"},
                                     "company": {"type": "string"},
                                     "description": {"type": "string"},
+                                    "is_sensitive": {"type": "boolean", "description": "True if the project involves sensitive sectors like Defense, High Finance or confidential clients"},
                                     "competencies": {
                                         "type": "array",
                                         "items": {"type": "string"}
                                     }
                                 },
-                                "required": ["title", "competencies"]
+                                "required": ["title", "competencies", "is_sensitive"]
                             }
-                        }
+                        },
+                        "is_anonymous": {"type": "boolean"},
+                        "trigram": {"type": "string"}
                     },
-                    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies", "missions"]
+                    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies", "missions", "is_anonymous"]
                 }
             )
         )
@@ -178,38 +186,81 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     except Exception as e:
         logger.error(f"LLM Parsing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
-    email = structured_cv["email"]
+    # 4. Identity Sanitization & Fallback Resolution
+    def sanitize_field(val: Any) -> Optional[str]:
+        if val is None: return None
+        s = str(val).strip()
+        if s.lower() in ("null", "none", "", "unknown"): return None
+        return s
+
+    raw_email = sanitize_field(structured_cv.get("email"))
+    first_name = sanitize_field(structured_cv.get("first_name"))
+    last_name = sanitize_field(structured_cv.get("last_name"))
+    is_anonymous = structured_cv.get("is_anonymous", False)
+    trigram = sanitize_field(structured_cv.get("trigram"))
+    
+    # Regex Validation
+    EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    def is_valid_email(e: Optional[str]) -> bool:
+        return bool(e and re.match(EMAIL_REGEX, e))
+
+    def normalize_str(s: str) -> str:
+        if not s: return ""
+        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
+
+    # Apply User Falling Rules
+    if not is_valid_email(raw_email):
+        if first_name and last_name:
+            # Rule 1: Construct {first}.{last}@zenika.com
+            clean_f = normalize_str(first_name).replace(" ", "")
+            clean_l = normalize_str(last_name).replace(" ", "")
+            email = f"{clean_f}.{clean_l}@zenika.com"
+            logger.info(f"Invalid/Missing email in CV. Generated: {email}")
+        else:
+            # Rule 2: Random identity + Anonymization
+            is_anonymous = True
+            trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
+            first_name = "Anon"
+            last_name = trigram
+            email = f"anon.{trigram.lower()}@anonymous.zenika.com"
+            logger.warning(f"Total identity absence. Generated random: {email}")
+    else:
+        email = raw_email
+
+    ext_full_norm = f"{normalize_str(first_name)} {normalize_str(last_name)}"
+
     async with httpx.AsyncClient(timeout=30.0) as http_client:
         user_id = None
         importer_id = None
 
-        # 1. Resolve target user by email (avoids pagination limits)
-        search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
-        if search_res.status_code == 200:
-            for u in search_res.json().get("items", []):
-                if u.get("email", "").lower() == email.lower():
-                    user_id = u["id"]
-                    logger.info(f"User matched exactly by email: {email} -> ID: {user_id}")
-                    break
+        # 1. Resolve target user by email (Strict fallback used as key)
+        if email:
+            search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
+            if search_res.status_code == 200:
+                for u in search_res.json().get("items", []):
+                    if u.get("email", "").lower() == email.lower():
+                        # Name check: ensure the found user name matches the CV extracted name
+                        u_full_norm = normalize_str(u.get("full_name") or f"{u.get('first_name')} {u.get('last_name')}")
+                        if ext_full_norm and ext_full_norm.strip(): # Don't match on empty
+                            if ext_full_norm not in u_full_norm and u_full_norm not in ext_full_norm:
+                                logger.warning(f"Email {email} found but name mismatch: Extracted '{ext_full_norm}' vs System '{u_full_norm}'. Detaching.")
+                                continue
+                        
+                        user_id = u["id"]
+                        logger.info(f"User matched by identity: {email} -> ID: {user_id}")
+                        break
         
-        # 2. Semantic Fallback: if email wasn't found (e.g. personal vs pro email)
-        if not user_id:
-            first_n = structured_cv.get('first_name', '')
-            last_n = structured_cv.get('last_name', '')
-            if first_n and last_n:
-                logger.info(f"Email {email} not found. Attempting semantic fallback on {first_n} {last_n}.")
-                search_q = f"{first_n} {last_n}"
-                name_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": search_q, "limit": 10}, headers=headers)
-                if name_res.status_code == 200:
-                    def normalize_str(s: str) -> str:
-                        if not s: return ""
-                        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
-                    
-                    for u in name_res.json().get("items", []):
-                        if normalize_str(u.get("first_name")) == normalize_str(first_n) and normalize_str(u.get("last_name")) == normalize_str(last_n):
-                            user_id = u["id"]
-                            logger.info(f"User matched semantically by name -> ID: {user_id}")
-                            break
+        # 2. Semantic Fallback: if identity email wasn't found or name mismatched
+        if not user_id and first_name and last_name:
+            logger.info(f"Identity {email} not matched in system. Attempting semantic fallback on name: {first_name} {last_name}.")
+            search_q = f"{first_name} {last_name}"
+            name_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": search_q, "limit": 10}, headers=headers)
+            if name_res.status_code == 200:
+                for u in name_res.json().get("items", []):
+                    if normalize_str(u.get("first_name")) == normalize_str(first_name) and normalize_str(u.get("last_name")) == normalize_str(last_name):
+                        user_id = u["id"]
+                        logger.info(f"User matched semantically by name -> ID: {user_id}")
+                        break
 
         # 3. Resolve internal importer properly
         importer_username = token_payload.get("sub")
@@ -221,21 +272,68 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         importer_id = u["id"]
                         break
 
+        # 4. Final Metadata & Heuristic Anonymization
+        filename = os.path.basename(url).lower()
+        if not is_anonymous:
+            if "annonym" in filename or "anon" in filename or "abc" in filename:
+                logger.info("Anonymity detected based on filename.")
+                is_anonymous = True
+                if first_name != "Anon":
+                    trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
+                    first_name = "Anon"
+                    last_name = trigram
+                    email = f"anon.{trigram.lower()}@anonymous.zenika.com"
+
+        # Response metadata for the caller
+        extracted_info = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "is_anonymous": is_anonymous
+        }
+
+        if user_id and is_anonymous:
+            # On vérifie si l'utilisateur actuel est déjà anonyme
+            # S'il ne l'est pas, on "détache" en forçant la création d'un nouveau user anonyme
+            user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+            if user_info_res.status_code == 200:
+                user_data = user_info_res.json()
+                if not user_data.get("is_anonymous", False):
+                    warn_msg = f"🛡️ CV anonyme détecté sur un compte réel (User {user_id}). DÉTACHEMENT du profil."
+                    logger.info(warn_msg)
+                    await task_state_manager.update_progress(new_log=warn_msg)
+                    user_id = None # Forces creation of a new anonymous user below
+                else:
+                    logger.info(f"CV is anonymous and User {user_id} is already anonymous. Keeping link.")
+
         if not user_id:
-            logger.info("User not found, creating new user...")
+            logger.info(f"User not found, creating {'anonymous ' if is_anonymous else ''}user...")
             # Create User
             new_u = {
-                "username": f"{structured_cv['first_name'][0].lower()}{structured_cv['last_name'].lower()}",
+                "username": f"{first_name[0].lower()}{last_name.lower()}{random.randint(100, 999)}",
                 "email": email,
-                "first_name": structured_cv['first_name'],
-                "last_name": structured_cv['last_name'],
-                "full_name": f"{structured_cv['first_name']} {structured_cv['last_name']}",
-                "password": "zenikacv123"
+                "first_name": first_name,
+                "last_name": last_name,
+                "full_name": f"{first_name} {last_name}",
+                "password": "zenikacv123",
+                "is_anonymous": is_anonymous
             }
             create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+            
+            # Handle Email Conflict (Uniqueness Constraint)
+            if create_res.status_code == 409 or (create_res.status_code >= 400 and "already exists" in create_res.text.lower()):
+                # If email is taken but it's not the same person (detachment case), we create a conflict entry
+                host = email.split('@')[1] if '@' in email else "zenika.com"
+                prefix = email.split('@')[0] if '@' in email else "conflict"
+                conflict_email = f"{prefix}.conflict.{random.randint(1000, 9999)}@{host}"
+                logger.warning(f"Email conflict for {email}. Detaching identity via {conflict_email}")
+                new_u["email"] = conflict_email
+                create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+
             if create_res.status_code >= 400:
                 logger.error(f"User creation failed: status={create_res.status_code}, detail={create_res.text}")
                 raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
+            
             user_id = create_res.json()["id"]
             logger.info(f"User created with ID {user_id}")
 
@@ -297,6 +395,50 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                 if assign_res.status_code < 400:
                     assigned_count += 1
 
+        # 6.5. Offload Missions to Items API (Phase 2 & 4)
+        logger.info(f"Offloading {len(structured_cv.get('missions', []))} missions to Items API")
+        
+        # Ensure categories exist
+        cat_res = await http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=headers)
+        categories = cat_res.json() if cat_res.status_code == 200 else []
+        
+        def find_cat_id(name):
+            for c in categories:
+                if c["name"].lower() == name.lower(): return c["id"]
+            return None
+
+        mission_cat_id = find_cat_id("Missions")
+        if not mission_cat_id:
+            m_res = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences extracted from CVs"}, headers=headers)
+            if m_res.status_code < 400: mission_cat_id = m_res.json()["id"]
+
+        sensitive_cat_id = find_cat_id("Restricted")
+        if not sensitive_cat_id:
+            s_res = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive or confidential missions"}, headers=headers)
+            if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
+
+        for m in structured_cv.get("missions", []):
+            try:
+                cat_ids = [mission_cat_id] if mission_cat_id else []
+                if m.get("is_sensitive") and sensitive_cat_id:
+                    cat_ids.append(sensitive_cat_id)
+                
+                item_data = {
+                    "name": m["title"],
+                    "description": m.get("description", ""),
+                    "user_id": user_id,
+                    "category_ids": cat_ids,
+                    "metadata_json": {
+                        "company": m.get("company"),
+                        "competencies": m.get("competencies", []),
+                        "is_sensitive": m.get("is_sensitive", False),
+                        "source": "CV Analysis"
+                    }
+                }
+                await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=headers)
+            except Exception as e:
+                logger.error(f"Failed to offload mission '{m['title']}': {e}")
+
     # 7. LLM Embedding Pass (Vector Dimension Matrix)
     comp_keywords = [c.get("name") for c in structured_cv.get("competencies", []) if c.get("name")]
     
@@ -319,7 +461,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
 
     # 8. PostGreSQL Physical Save
     from sqlalchemy import delete
-    await db.execute(delete(CVProfile).where(CVProfile.source_url == url).where(CVProfile.user_id == user_id))
+    # Critical: Clear any existing profile for this URL to handle identity changes
+    await db.execute(delete(CVProfile).where(CVProfile.source_url == url))
     
     cv_record = CVProfile(
         user_id=user_id,
@@ -342,7 +485,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     return CVResponse(
         message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
         user_id=user_id,
-        competencies_assigned=assigned_count
+        competencies_assigned=assigned_count,
+        extracted_info=extracted_info
     )
 
 @router.get("/search", response_model=List[SearchCandidateResponse])
@@ -421,6 +565,7 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
                     res["email"] = u_data.get("email")
                     res["username"] = u_data.get("username")
                     res["is_active"] = u_data.get("is_active")
+                    res["is_anonymous"] = u_data.get("is_anonymous", False)
             except Exception as e:
                 print(f"HTTP Enrichment failed for user {res['user_id']}: {e}")
 
@@ -435,12 +580,25 @@ async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = 
     if not profiles:
         raise HTTPException(status_code=404, detail="Aucun CV trouvé pour cet utilisateur.")
         
+    # Fetch user details for anonymity status
+    is_anon = False
+    auth_header = request.headers.get("Authorization") if request else None
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+    async with httpx.AsyncClient(timeout=5.0) as http_client:
+        try:
+            u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
+            if u_res.status_code == 200:
+                is_anon = u_res.json().get("is_anonymous", False)
+        except: pass
+
     return [
         CVProfileResponse(
             user_id=p.user_id,
             source_url=p.source_url,
             source_tag=p.source_tag,
-            imported_by_id=p.imported_by_id
+            imported_by_id=p.imported_by_id,
+            is_anonymous=is_anon
         ) for p in profiles
     ]
 
@@ -450,7 +608,7 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
     Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
     Sans redondance par utilisateur (déduplication).
     """
-    profiles = (await db.execute(select(CVProfile).filter(CVProfile.source_tag == tag).order_by(CVProfile.created_at.desc()))).scalars().all()
+    profiles = (await db.execute(select(CVProfile).filter(CVProfile.source_tag.ilike(tag)).order_by(CVProfile.created_at.desc()))).scalars().all()
     
     seen_users = set()
     unique_profiles = []
@@ -458,16 +616,31 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
     for p in profiles:
         if p.user_id not in seen_users:
             seen_users.add(p.user_id)
-            unique_profiles.append(
-                CVProfileResponse(
-                    user_id=p.user_id,
-                    source_url=p.source_url,
-                    source_tag=p.source_tag,
-                    imported_by_id=p.imported_by_id
-                )
-            )
-            
-    return unique_profiles
+            unique_profiles.append(p)
+    # Group by user for bulk enrichment
+    user_ids = list(seen_users)
+    user_anon_map = {}
+    auth_header = request.headers.get("Authorization") if request else None
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+    
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        for u_id in user_ids:
+            try:
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers_downstream)
+                if u_res.status_code == 200:
+                    user_anon_map[u_id] = u_res.json().get("is_anonymous", False)
+            except: pass
+
+    return [
+        CVProfileResponse(
+            user_id=p.user_id,
+            source_url=p.source_url,
+            source_tag=p.source_tag,
+            imported_by_id=p.imported_by_id,
+            is_anonymous=user_anon_map.get(p.user_id, False)
+        ) for p in unique_profiles
+    ]
 
 @router.get("/user/{user_id}/missions")
 async def get_user_missions(user_id: int, db: AsyncSession = Depends(get_db)):
@@ -480,6 +653,89 @@ async def get_user_missions(user_id: int, db: AsyncSession = Depends(get_db)):
     
     # On renvoie les missions du CV le plus récent
     return {"user_id": user_id, "missions": profiles[0].missions or []}
+
+@router.get("/user/{user_id}/details", response_model=CVFullProfileResponse)
+async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Récupère le profil sémantique complet d'un utilisateur (RAG Context).
+    """
+    profile = (await db.execute(
+        select(CVProfile)
+        .filter(CVProfile.user_id == user_id)
+        .order_by(CVProfile.created_at.desc())
+    )).scalars().first()
+    
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profil sémantique introuvable pour cet utilisateur.")
+        
+    # Fetch user details for anonymity status
+    is_anon = False
+    
+    # Propagate Authorization and Tracing (Rule 3 & 4)
+    auth_header = request.headers.get("Authorization")
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+
+    async with httpx.AsyncClient(timeout=5.0) as http_client:
+        try:
+            u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+            if u_res.status_code == 200:
+                is_anon = u_res.json().get("is_anonymous", False)
+        except Exception as e:
+            logger.warning(f"Failed to fetch user anonymity status for {user_id}: {e}")
+
+    return CVFullProfileResponse(
+        user_id=profile.user_id,
+        summary=profile.summary,
+        current_role=profile.current_role,
+        years_of_experience=profile.years_of_experience,
+        competencies_keywords=profile.competencies_keywords or [],
+        missions=profile.missions or [],
+        is_anonymous=is_anon
+    )
+
+@router.get("/ranking/experience", response_model=List[RankedExperienceResponse])
+async def get_consultants_experience_ranking(limit: int = 5, request: Request = None, db: AsyncSession = Depends(get_db)):
+    """
+    Retourne la liste des consultants les plus expérimentés basés sur les années d'expérience extraites des CVs.
+    """
+    # 1. Query candidates by years_of_experience descending
+    stmt = (
+        select(CVProfile)
+        .filter(CVProfile.years_of_experience.is_not(None))
+        .order_by(CVProfile.years_of_experience.desc())
+        .limit(limit)
+    )
+    
+    profiles = (await db.execute(stmt)).scalars().all()
+    
+    # 2. Enrich with User details
+    auth_header = request.headers.get("Authorization") if request else None
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+    
+    results = []
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        for p in profiles:
+            item = {
+                "user_id": p.user_id,
+                "years_of_experience": p.years_of_experience,
+                "current_role": p.current_role,
+                "is_anonymous": False
+            }
+            try:
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{p.user_id}", headers=headers_downstream)
+                if u_res.status_code == 200:
+                    u_data = u_res.json()
+                    item["full_name"] = u_data.get("full_name")
+                    item["email"] = u_data.get("email")
+                    item["is_anonymous"] = u_data.get("is_anonymous", False)
+            except Exception as e:
+                logger.warning(f"Failed to enrich user info for {p.user_id}: {e}")
+            
+            results.append(RankedExperienceResponse(**item))
+            
+    return results
 
 @router.post("/recalculate_tree")
 async def recalculate_competencies_tree(
@@ -568,6 +824,14 @@ async def recalculate_competencies_tree(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur Gemini: {str(e)}")
 
+@router.get("/reanalyze/status")
+async def get_reanalyze_status():
+    """Récupère le statut de la dernière tâche de réanalyse."""
+    status = await task_state_manager.get_latest_status()
+    if not status:
+        return {"status": "idle", "message": "Aucune tâche lancée récemment."}
+    return status
+
 @router.post("/reanalyze")
 async def reanalyze_cvs(
     request: Request,
@@ -577,33 +841,43 @@ async def reanalyze_cvs(
     token_payload: dict = Depends(verify_jwt)
 ):
     """
-    (Admin Only) Relance l'analyse des CVs correspondant aux filtres.
-    Efface les assignations de compétences existantes pour ces utilisateurs.
+    (Admin Only) Relance le pipeline d'extraction Gemini sur un ensemble de CVs.
+    Identifie également les erreurs d'assignation d'identité.
     """
     if token_payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
     
+    # Vérifier si une tâche est déjà en cours
+    if await task_state_manager.is_task_running():
+        return {"message": "Une tâche de réanalyse est déjà en cours.", "status": "running"}
+
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
     inject(headers)
 
     # 1. Fetch CVs to re-process
     stmt = select(CVProfile)
+    f_type = "all"
+    f_val = ""
     if tag:
         stmt = stmt.filter(CVProfile.source_tag == tag)
+        f_type = "tag"
+        f_val = tag
     if user_id:
         stmt = stmt.filter(CVProfile.user_id == user_id)
+        f_type = "user"
+        f_val = str(user_id)
         
     cvs = (await db.execute(stmt)).scalars().all()
     if not cvs:
         return {"message": "Aucun CV trouvé pour ces filtres.", "count": 0}
 
+    # Initialiser l'état dans Redis
+    await task_state_manager.initialize_task(len(cvs), f_type, f_val)
+
     # Dedoublonner les user_ids pour nettoyer les compétences une seule fois par utilisateur
     user_ids_to_clear = {cv.user_id for cv in cvs}
     
-    processed_count = 0
-    errors = []
-
     async def generate():
         async with httpx.AsyncClient(timeout=60.0) as http_client:
             # 1.5 Get Google token
@@ -612,24 +886,32 @@ async def reanalyze_cvs(
                 tok_res = await http_client.get(f"{DRIVE_API_URL.rstrip('/')}/tokens/google", headers=headers, timeout=5.0)
                 if tok_res.status_code == 200:
                     google_access_token = tok_res.json().get("access_token")
-                    yield json.dumps({"status": "info", "message": "Successfully acquired Google Access Token."}) + "\n"
+                    msg = "Successfully acquired Google Access Token."
+                    await task_state_manager.update_progress(new_log=msg)
+                    yield json.dumps({"status": "info", "message": msg}) + "\n"
                 else:
-                    yield json.dumps({"status": "warn", "message": f"Could not fetch Google Token (status {tok_res.status_code}). Proceeding as public."}) + "\n"
+                    msg = f"Could not fetch Google Token (status {tok_res.status_code}). Proceeding as public."
+                    await task_state_manager.update_progress(new_log=msg)
+                    yield json.dumps({"status": "warn", "message": msg}) + "\n"
             except Exception as e:
-                yield json.dumps({"status": "error", "message": f"Error fetching Google Token: {str(e)}"}) + "\n"
+                msg = f"Error fetching Google Token: {str(e)}"
+                await task_state_manager.update_progress(new_log=msg)
+                yield json.dumps({"status": "error", "message": msg}) + "\n"
 
             # 2. Clear user competencies
             for uid in user_ids_to_clear:
                 try:
                     clear_res = await http_client.delete(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{uid}/clear", headers=headers)
                     clear_res.raise_for_status()
-                    yield json.dumps({"status": "info", "message": f"Cleared competencies for user {uid}"}) + "\n"
+                    msg = f"Cleared competencies for user {uid}"
+                    await task_state_manager.update_progress(new_log=msg)
+                    yield json.dumps({"status": "info", "message": msg}) + "\n"
                 except Exception as e:
-                    yield json.dumps({"status": "error", "message": f"Failed to clear competencies for user {uid}: {str(e)}"}) + "\n"
+                    msg = f"Failed to clear competencies for user {uid}: {str(e)}"
+                    await task_state_manager.update_progress(new_log=msg, error_msg=msg)
+                    yield json.dumps({"status": "error", "message": msg}) + "\n"
 
             # 3. Process each CV
-            processed_count = 0
-            errors = []
             total_cvs = len(cvs)
             
             for index, cv in enumerate(cvs):
@@ -638,9 +920,21 @@ async def reanalyze_cvs(
                     s_tag = cv.source_tag
                     u_id = cv.user_id
                     
-                    yield json.dumps({"status": "processing", "message": f"Processing CV {index+1}/{total_cvs} (User ID: {u_id})...", "url": url}) + "\n"
+                    msg = f"Processing CV {index+1}/{total_cvs} (User ID: {u_id})..."
+                    await task_state_manager.update_progress(new_log=msg)
+                    yield json.dumps({"status": "processing", "message": msg, "url": url}) + "\n"
                     
-                    await _process_cv_core(
+                    # 3.1 Fetch current user name for identity check
+                    user_name = "Inconnu"
+                    try:
+                        u_info = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers)
+                        if u_info.status_code == 200:
+                            u_data = u_info.json()
+                            user_name = u_data.get("full_name") or u_data.get("username")
+                    except: pass
+
+                    # 3.2 Re-process
+                    process_res = await _process_cv_core(
                         url=url,
                         google_access_token=google_access_token,
                         source_tag=s_tag,
@@ -648,18 +942,55 @@ async def reanalyze_cvs(
                         token_payload=token_payload,
                         db=db
                     )
-                    processed_count += 1
-                    yield json.dumps({"status": "success", "message": f"Finished re-processing CV {index+1}/{total_cvs}", "url": url}) + "\n"
+                    
+                    # 3.3 Identity Verification logic
+                    ext = process_res.extracted_info
+                    if ext and not ext.get("is_anonymous"):
+                        def normalize(s):
+                            if not s: return ""
+                            return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
+                        
+                        ext_full = f"{normalize(ext.get('first_name'))} {normalize(ext.get('last_name'))}"
+                        cur_full = normalize(user_name)
+                        
+                        # Simple inclusion/match check
+                        if ext_full not in cur_full and cur_full not in ext_full:
+                            new_u_id = process_res.user_id
+                            warn_msg = f"⚠️ ALERTE IDENTITÉ CV #{cv.id}: Extrait='{ext.get('first_name')} {ext.get('last_name')}' (ID:{new_u_id}) vs Actuel='{user_name}' (ID:{u_id})"
+                            
+                            # Update Drive API to fix the link in Scanner page
+                            doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+                            if doc_id_match:
+                                g_id = doc_id_match.group(1)
+                                try:
+                                    await http_client.patch(
+                                        f"{DRIVE_API_URL.rstrip('/')}/files/{g_id}", 
+                                        json={"user_id": new_u_id},
+                                        headers=headers
+                                    )
+                                    warn_msg += " -> Synchronisation Drive effectuée."
+                                except Exception as e:
+                                    logger.error(f"Failed to sync drive identity for {g_id}: {e}")
+                                    warn_msg += f" (Synchro Drive échouée)"
+                            
+                            await task_state_manager.update_progress(new_log=warn_msg, mismatch_inc=1)
+                            yield json.dumps({"status": "warn", "message": warn_msg}) + "\n"
+
+                    msg_fin = f"Finished re-processing CV {index+1}/{total_cvs}"
+                    await task_state_manager.update_progress(processed_inc=1, new_log=msg_fin)
+                    yield json.dumps({"status": "success", "message": msg_fin, "url": url}) + "\n"
+
                 except Exception as e:
-                    err_msg = str(e)
-                    errors.append(f"CV {cv.id}: {err_msg}")
+                    err_msg = f"CV {cv.id}: {str(e)}"
+                    await task_state_manager.update_progress(error_inc=1, new_log=f"ERREUR: {err_msg}", error_msg=err_msg)
                     yield json.dumps({"status": "error", "message": f"Failed CV {index+1}/{total_cvs}: {err_msg}"}) + "\n"
 
+            final_status = await task_state_manager.get_latest_status()
             yield json.dumps({
                 "status": "completed", 
-                "message": f"Réanalyse terminée. {processed_count} CVs traités avec succès.",
-                "count": processed_count,
-                "errors": errors
+                "message": f"Réanalyse terminée. {final_status['processed_count']} succès, {final_status['error_count']} erreurs, {final_status['mismatch_count']} alertes.",
+                "count": final_status["processed_count"],
+                "errors": final_status["errors"]
             }) + "\n"
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
@@ -683,3 +1014,40 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
 
     await db.commit()
     return {"message": f"Successfully migrated CVs from user {req.source_id} to {req.target_id}"}
+
+
+@public_router.post("/pubsub/user-events")
+async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Handle GCP Pub/Sub Push Notifications for CV API.
+    """
+    try:
+        payload = await request.json()
+        message = payload.get("message")
+        if not message or "data" not in message:
+            return {"status": "ignored"}
+
+        data_str = base64.b64decode(message["data"]).decode("utf-8")
+        event_data = json.loads(data_str)
+        event_type = event_data.get("event")
+        data = event_data.get("data", {})
+        
+        if event_type == "user.merged":
+            source_id = data.get("source_id")
+            target_id = data.get("target_id")
+            if source_id and target_id:
+                from sqlalchemy import update
+                # Update profiles owned by the user
+                stmt = update(CVProfile).where(CVProfile.user_id == source_id).values(user_id=target_id)
+                await db.execute(stmt)
+                
+                # Update profiles imported BY the user
+                stmt2 = update(CVProfile).where(CVProfile.imported_by_id == source_id).values(imported_by_id=target_id)
+                await db.execute(stmt2)
+                
+                await db.commit()
+        
+        return {"status": "processed"}
+    except Exception as e:
+        logger.error(f"Error processing Pub/Sub event: {e}")
+        return {"status": "error", "detail": str(e)}

@@ -32,6 +32,7 @@ class CVResponse(BaseModel):
     message: str
     user_id: int
     competencies_assigned: int
+    extracted_info: Optional[dict] = None
 
 class SearchCandidateResponse(BaseModel):
     user_id: int
@@ -46,7 +47,25 @@ class CVProfileResponse(BaseModel):
     source_url: str
     source_tag: Optional[str] = None
     imported_by_id: Optional[int] = None
+    is_anonymous: bool = False
+
+class CVFullProfileResponse(BaseModel):
+    user_id: int
+    summary: Optional[str] = None
+    current_role: Optional[str] = None
+    years_of_experience: Optional[int] = None
+    competencies_keywords: List[str] = []
+    missions: List[ExtractedMission] = []
+    is_anonymous: bool = False
 
 class UserMergeRequest(BaseModel):
     source_id: int
     target_id: int
+
+class RankedExperienceResponse(BaseModel):
+    user_id: int
+    years_of_experience: int
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    current_role: Optional[str] = None
+    is_anonymous: bool = False

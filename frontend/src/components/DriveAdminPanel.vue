@@ -120,6 +120,14 @@
                 <span class="status-badge" :class="file.status.toLowerCase()">
                   {{ formatStatus(file.status) }}
                 </span>
+                <router-link 
+                  v-if="file.status === 'IMPORTED_CV' && file.user_id != null" 
+                  :to="`/user/${file.user_id}`" 
+                  class="btn-icon btn-user-link" 
+                  title="Voir le profil"
+                >
+                  <User class="icon-xs" />
+                </router-link>
               </td>
               <td class="text-sm">{{ formatDate(file.last_processed_at || file.modified_time) }}</td>
             </tr>
@@ -138,7 +146,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw
+  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User
 } from 'lucide-vue-next'
 
 const folders = ref<any[]>([])
@@ -499,6 +507,23 @@ onUnmounted(() => {
 .status-badge.imported_cv { background: rgba(16, 185, 129, 0.15); color: #059669; }
 .status-badge.ignored_not_cv { background: rgba(107, 114, 128, 0.15); color: #4b5563; }
 .status-badge.error { background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+.btn-user-link {
+  margin-left: 0.5rem;
+  color: var(--primary-color);
+  background: rgba(227, 25, 55, 0.1);
+  vertical-align: middle;
+}
+
+.btn-user-link:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.icon-xs {
+  width: 14px;
+  height: 14px;
+}
 
 .btn-retry {
   background: var(--surface-light);
