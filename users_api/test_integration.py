@@ -98,18 +98,30 @@ def test_login_logout(client):
 def test_get_me(client):
     # Valid via mock token in dependency override for integration tests? No, get_me extracts token from cookies manually!
     client.post("/", json={"username": "me_user", "email": "me@example.com", "password": "pwd"})
-    # Login to get cookie
-    login_resp = client.post("/login", json={"email": "me@example.com", "password": "pwd"})
-    cookies = login_resp.cookies
     
-    me_resp = client.get("/me", cookies=cookies)
-    assert me_resp.status_code == 200
-    assert me_resp.json()["username"] == "me_user"
+    from src.auth import verify_jwt
+    from conftest import app, override_verify_jwt
+    app.dependency_overrides.pop(verify_jwt, None)
     
-    # Missing cookie
-    client.cookies.clear()
-    no_cookie_resp = client.get("/me")
-    assert no_cookie_resp.status_code == 401
+    try:
+        # Login to get cookie
+        login_resp = client.post("/login", json={"email": "me@example.com", "password": "pwd"})
+        # We need to explicitly extract the token becausehttpx test client does not perfectly persist across requests in some cases
+        access_token = login_resp.cookies.get("access_token")
+        
+        # We must set the cookie on the client as requested by deprecation warning
+        client.cookies.set("access_token", access_token)
+        
+        me_resp = client.get("/me")
+        assert me_resp.status_code == 200
+        assert me_resp.json()["username"] == "me_user"
+        
+        # Missing cookie
+        client.cookies.clear()
+        no_cookie_resp = client.get("/me")
+        assert no_cookie_resp.status_code == 401
+    finally:
+        app.dependency_overrides[verify_jwt] = override_verify_jwt
 
 def test_get_user_stats(client):
     resp = client.get("/stats")

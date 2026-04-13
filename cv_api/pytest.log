@@ -5,346 +5,135 @@ plugins: mock-3.15.1, cov-7.1.0, langsmith-0.7.23, asyncio-1.3.0, anyio-4.13.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collected 28 items
 
-test_main.py .....F........FFF...                                        [ 71%]
+test_main.py ....F.F.....FFFFF...                                        [ 71%]
 test_mcp_app.py ....                                                     [ 85%]
 test_mcp_tools.py ....                                                   [100%]
 
 =================================== FAILURES ===================================
-__________________________ test_import_and_analyze_cv __________________________
+____________________________ test_search_candidates ____________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1190ea690>
+mock_genai = <MagicMock name='client' id='4749999280'>
+mock_httpx = <AsyncMock name='AsyncClient().__aenter__()' id='4751846304'>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b3c6c40>
 
-    def test_import_and_analyze_cv(mocker):
-        # Setup Mocks
+    def test_search_candidates(mock_genai, mock_httpx, mocker):
+        mock_db = AsyncMock()
+        # Mock Gemini embedding
+        emb_res = MagicMock()
+        emb_res.embeddings = [MagicMock(values=[0.1, 0.2, 0.3])]
+        mock_genai.models.embed_content.return_value = emb_res
+    
+        # Mock Database cosine response
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(MagicMock(user_id=1), 0.1), (MagicMock(user_id=2), 0.4)]
+        mock_db.execute.return_value = mock_result
+        app.dependency_overrides[get_db] = lambda: mock_db
+    
+        # Mock HTTPX enrichment
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"full_name": "Test User", "email": "test@zenika.com", "username": "test", "is_active": True}
+        mock_httpx.get.return_value = mock_resp
+    
+        response = client.get("/search?query=test")
+>       assert response.status_code == 200
+E       assert 401 == 200
+E        +  where 401 = <Response [401 Unauthorized]>.status_code
+
+test_main.py:100: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-13 14:28:50,921", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/search?query=test", "http.status_code": 401, "http.duration_s": 0.0019, "trace_id": "32d97db43a66a716ef1ed798b9d6ef1c", "span_id": "9543b45a915af413"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+____________________________ test_recalculate_tree _____________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b2bc160>
+
+    def test_recalculate_tree(mocker):
         mock_db = AsyncMock()
         app.dependency_overrides[get_db] = lambda: mock_db
+    
+        mock_profile = MagicMock(raw_content="My CV content")
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_profile]
+        mock_db.execute.return_value = mock_result
+    
+        mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
     
         mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
         client_instance = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = client_instance
     
-        # Mocking _fetch_cv_content
-        mocker.patch("src.cvs.router._fetch_cv_content", return_value="Dummy CV Text")
-    
-        # Mocking Gemini Client
         mock_genai = mocker.patch("src.cvs.router.client")
-        mock_genai.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "competencies": [{"name": "Python", "parent": "Lang"}]}'
-        mock_genai.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
+        mock_genai.models.generate_content.return_value.text = '{"some": "tree"}'
     
-        # Mock HTTP responses
-        mock_resp_prompts = MagicMock()
-        mock_resp_prompts.json.return_value = {"value": "Prompt"}
+        mock_resp_prompts = MagicMock(status_code=200)
+        mock_resp_prompts.json.return_value = {"value": "Prompt {{EXISTING_COMPETENCIES}}"}
     
-        mock_resp_users = MagicMock()
-        mock_resp_users.status_code = 200
-        mock_resp_users.json.return_value = {"items": [], "id": 1} # user doesn't exist
+        mock_resp_comps = MagicMock(status_code=200)
+        mock_resp_comps.json.return_value = {"items": [{"name": "Java"}]}
     
-        mock_resp_comps = MagicMock()
-        mock_resp_comps.status_code = 200
-        mock_resp_comps.json.return_value = {"items": []}
-    
-        mock_resp_create = MagicMock()
-        mock_resp_create.status_code = 200
-        mock_resp_create.json.return_value = {"id": 1}
-    
-        def get_side_effect(*args, **kwargs):
+        def side_effect(*args, **kwargs):
             url = args[0] if args else kwargs.get("url", "")
             if "prompts_api" in url:
                 return mock_resp_prompts
-            if "/users/" in url:
-                return mock_resp_users
             if "/competencies/" in url:
                 return mock_resp_comps
             return MagicMock(status_code=200)
     
-        def post_side_effect(*args, **kwargs):
-            url = args[0] if args else kwargs.get("url", "")
-            if "/users/" in url or "/competencies/" in url:
-                return mock_resp_create
-            return MagicMock(status_code=200)
+        client_instance.get.side_effect = side_effect
     
-        client_instance.get.side_effect = get_side_effect
-        client_instance.post.side_effect = post_side_effect
-    
-        # Make Request
->       response = client.post("/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        response = client.post("/recalculate_tree", headers={"Authorization": "Bearer token"})
+        assert response.status_code == 200
+>       assert response.json() == {"tree": {"some": "tree"}}
+E       AssertionError: assert {'tree': {'so...ost_usd': {}}} == {'tree': {'some': 'tree'}}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'usage': {'estimated_cost_usd': {}}}
+E         Use -v to get more diff
 
-test_main.py:160: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-../test_env/lib/python3.13/site-packages/starlette/testclient.py:546: in post
-    return super().post(
-../test_env/lib/python3.13/site-packages/httpx/_client.py:1144: in post
-    return self.request(
-../test_env/lib/python3.13/site-packages/starlette/testclient.py:445: in request
-    return super().request(
-../test_env/lib/python3.13/site-packages/httpx/_client.py:825: in request
-    return self.send(request, auth=auth, follow_redirects=follow_redirects)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-../test_env/lib/python3.13/site-packages/httpx/_client.py:914: in send
-    response = self._send_handling_auth(
-../test_env/lib/python3.13/site-packages/httpx/_client.py:942: in _send_handling_auth
-    response = self._send_handling_redirects(
-../test_env/lib/python3.13/site-packages/httpx/_client.py:979: in _send_handling_redirects
-    response = self._send_single_request(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-../test_env/lib/python3.13/site-packages/httpx/_client.py:1014: in _send_single_request
-    response = transport.handle_request(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-../test_env/lib/python3.13/site-packages/starlette/testclient.py:348: in handle_request
-    raise exc
-../test_env/lib/python3.13/site-packages/starlette/testclient.py:345: in handle_request
-    portal.call(self.app, scope, receive, send)
-../test_env/lib/python3.13/site-packages/anyio/from_thread.py:334: in call
-    return cast(T_Retval, self.start_task_soon(func, *args).result())
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py:456: in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py:401: in __get_result
-    raise self._exception
-../test_env/lib/python3.13/site-packages/anyio/from_thread.py:259: in _call_func
-    retval = await retval_or_awaitable
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-../test_env/lib/python3.13/site-packages/fastapi/applications.py:1159: in __call__
-    await super().__call__(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/applications.py:107: in __call__
-    await self.middleware_stack(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
-    raise exc
-../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
-    await self.app(scope, receive, _send)
-../test_env/lib/python3.13/site-packages/opentelemetry/instrumentation/asgi/__init__.py:795: in __call__
-    await self.app(scope, otel_receive, otel_send)
-../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
-    raise exc
-../test_env/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
-    await self.app(scope, receive, _send)
-../test_env/lib/python3.13/site-packages/opentelemetry/instrumentation/fastapi/__init__.py:307: in __call__
-    await self.app(scope, receive, send)
-../test_env/lib/python3.13/site-packages/prometheus_fastapi_instrumentator/middleware.py:177: in __call__
-    raise exc
-../test_env/lib/python3.13/site-packages/prometheus_fastapi_instrumentator/middleware.py:175: in __call__
-    await self.app(scope, receive, send_wrapper)
-../test_env/lib/python3.13/site-packages/starlette/middleware/base.py:191: in __call__
-    with recv_stream, send_stream, collapse_excgroups():
-                                   ^^^^^^^^^^^^^^^^^^^^
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py:162: in __exit__
-    self.gen.throw(value)
-../test_env/lib/python3.13/site-packages/starlette/_utils.py:87: in collapse_excgroups
-    raise exc
-../test_env/lib/python3.13/site-packages/starlette/middleware/base.py:193: in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-logger.py:46: in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-../test_env/lib/python3.13/site-packages/starlette/middleware/base.py:168: in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-../test_env/lib/python3.13/site-packages/starlette/middleware/base.py:144: in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-../test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py:63: in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
-    raise exc
-../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
-    await app(scope, receive, sender)
-../test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
-    await self.app(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/routing.py:716: in __call__
-    await self.middleware_stack(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/routing.py:736: in app
-    await route.handle(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/routing.py:290: in handle
-    await self.app(scope, receive, send)
-../test_env/lib/python3.13/site-packages/fastapi/routing.py:134: in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
-    raise exc
-../test_env/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
-    await app(scope, receive, sender)
-../test_env/lib/python3.13/site-packages/fastapi/routing.py:120: in app
-    response = await f(request)
-               ^^^^^^^^^^^^^^^^
-../test_env/lib/python3.13/site-packages/fastapi/routing.py:674: in app
-    raw_response = await run_endpoint_function(
-../test_env/lib/python3.13/site-packages/fastapi/routing.py:328: in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-src/cvs/router.py:85: in import_and_analyze_cv
-    return await _process_cv_core(
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-url = 'http://docs.google.com/document/d/123/edit', google_access_token = None
-source_tag = None
-headers = {'Authorization': 'Bearer token', 'traceparent': '00-be79856e4752e5e90d75e3feb66eaab5-50a90473a59eaa0d-01'}
-token_payload = {'role': 'admin', 'sub': 'test'}
-db = <AsyncMock id='4716822944'>
-
-    async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession) -> CVResponse:
-        # 2. Fetch Text from CV Link
-        try:
-            logger.info(f"Downloading CV content from {url}")
-            raw_text = await _fetch_cv_content(url, google_access_token)
-        except HTTPException as he:
-            logger.error(f"HTTPException while downloading CV: {he.detail}")
-            raise
-        except Exception as e:
-            logger.error(f"Failed downloading CV content: {e}", exc_info=True)
-            raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
-    
-        if not client:
-            logger.error("GenAI Client not configured.")
-            raise HTTPException(status_code=500, detail="GenAI Client not configured.")
-    
-        # 3. LLM Parsing Pass (Structured Output)
-        try:
-            logger.info("Fetching generic prompt for CV analysis")
-            async with httpx.AsyncClient() as http_client:
-                res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
-                res_prompt.raise_for_status()
-                prompt = res_prompt.json()["value"]
-        except Exception as e:
-            logger.error(f"Cannot fetch generic prompt: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
-    
-        try:
-            logger.info("Calling Gemini to parse CV")
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=[prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema={
-                        "type": "object",
-                        "properties": {
-                            "is_cv": {"type": "boolean"},
-                            "first_name": {"type": "string"},
-                            "last_name": {"type": "string"},
-                            "email": {"type": "string"},
-                            "summary": {"type": "string"},
-                            "current_role": {"type": "string"},
-                            "years_of_experience": {"type": "integer"},
-                            "competencies": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "name": {"type": "string"},
-                                        "parent": {"type": "string"},
-                                        "aliases": {
-                                            "type": "array",
-                                            "items": {"type": "string"}
-                                        }
-                                    },
-                                    "required": ["name"]
-                                }
-                            },
-                            "missions": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "title": {"type": "string"},
-                                        "company": {"type": "string"},
-                                        "description": {"type": "string"},
-                                        "is_sensitive": {"type": "boolean", "description": "True if the project involves sensitive sectors like Defense, High Finance or confidential clients"},
-                                        "competencies": {
-                                            "type": "array",
-                                            "items": {"type": "string"}
-                                        }
-                                    },
-                                    "required": ["title", "competencies", "is_sensitive"]
-                                }
-                            },
-                            "is_anonymous": {"type": "boolean"},
-                            "trigram": {"type": "string"}
-                        },
-                        "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies", "missions", "is_anonymous"]
-                    }
-                )
-            )
-            parsed_data = response.text
-            # LLM returns a JSON string matching schema
-            structured_cv = json.loads(parsed_data)
-    
-            if not structured_cv.get("is_cv", False):
-                logger.warning("Document is not recognized as a CV")
-                raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"LLM Parsing failed: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
-        # 4. Identity Sanitization & Fallback Resolution
->       def sanitize_field(val: Any) -> Optional[str]:
-                                ^^^
-E       NameError: name 'Any' is not defined
-
-src/cvs/router.py:190: NameError
+test_main.py:202: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-10 17:08:13,726", "levelname": "INFO", "name": "src.cvs.router", "message": "Downloading CV content from http://docs.google.com/document/d/123/edit", "trace_id": "be79856e4752e5e90d75e3feb66eaab5", "span_id": "50a90473a59eaa0d"}
-{"asctime": "2026-04-10 17:08:13,726", "levelname": "INFO", "name": "src.cvs.router", "message": "Fetching generic prompt for CV analysis", "trace_id": "be79856e4752e5e90d75e3feb66eaab5", "span_id": "50a90473a59eaa0d"}
-{"asctime": "2026-04-10 17:08:13,727", "levelname": "INFO", "name": "src.cvs.router", "message": "Calling Gemini to parse CV", "trace_id": "be79856e4752e5e90d75e3feb66eaab5", "span_id": "50a90473a59eaa0d"}
-{"asctime": "2026-04-10 17:08:13,727", "levelname": "ERROR", "name": "middleware.http", "message": "HTTP Request Failed", "exc_info": "Traceback (most recent call last):\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/logger.py\", line 46, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py\", line 716, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py\", line 736, in app\n    await route.handle(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py\", line 290, in handle\n    await self.app(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 134, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 120, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 674, in app\n    raw_response = await run_endpoint_function(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n    )\n    ^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 328, in run_endpoint_function\n    return await dependant.call(**values)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py\", line 85, in import_and_analyze_cv\n    return await _process_cv_core(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n    ...<6 lines>...\n    )\n    ^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py\", line 190, in _process_cv_core\n    def sanitize_field(val: Any) -> Optional[str]:\n                            ^^^\nNameError: name 'Any' is not defined. Did you mean: 'any'?", "http.method": "POST", "http.url": "http://testserver/import", "http.status_code": 500, "http.duration_s": 0.0039, "error": "name 'Any' is not defined", "trace_id": "be79856e4752e5e90d75e3feb66eaab5", "span_id": "50a90473a59eaa0d"}
+{"asctime": "2026-04-13 14:28:51,018", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 200, "http.duration_s": 0.0042, "trace_id": "6c9191d49d0e3749408eb82d74ee57d8", "span_id": "375a7086ce362319"}
 ------------------------------ Captured log call -------------------------------
-INFO     src.cvs.router:router.py:97 Downloading CV content from http://docs.google.com/document/d/123/edit
-INFO     src.cvs.router:router.py:112 Fetching generic prompt for CV analysis
-INFO     src.cvs.router:router.py:122 Calling Gemini to parse CV
-ERROR    middleware.http:logger.py:61 HTTP Request Failed
-Traceback (most recent call last):
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/logger.py", line 46, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
-    await route.handle(scope, receive, send)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
-    await self.app(scope, receive, send)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 134, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 120, in app
-    response = await f(request)
-               ^^^^^^^^^^^^^^^^
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 674, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ...<3 lines>...
-    )
-    ^
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 328, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py", line 85, in import_and_analyze_cv
-    return await _process_cv_core(
-           ^^^^^^^^^^^^^^^^^^^^^^^
-    ...<6 lines>...
-    )
-    ^
-  File "/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py", line 190, in _process_cv_core
-    def sanitize_field(val: Any) -> Optional[str]:
-                            ^^^
-NameError: name 'Any' is not defined. Did you mean: 'any'?
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+_______________________ test_search_candidates_no_client _______________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b4a9630>
+
+    def test_search_candidates_no_client(mocker):
+        mocker.patch("src.cvs.router.client", None)
+        response = client.get("/search?query=test")
+>       assert response.status_code == 500
+E       assert 401 == 500
+E        +  where 401 = <Response [401 Unauthorized]>.status_code
+
+test_main.py:241: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-13 14:28:51,060", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/search?query=test", "http.status_code": 401, "http.duration_s": 0.001, "trace_id": "29f9dbb281468cccf519ead62304a88d", "span_id": "0c4fbe91cca3d350"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+______________________ test_search_candidates_embed_fail _______________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b6f9a90>
+
+    def test_search_candidates_embed_fail(mocker):
+        mock_genai = mocker.patch("src.cvs.router.client")
+        mock_genai.models.embed_content.side_effect = Exception("embed error")
+        response = client.get("/search?query=test")
+>       assert response.status_code == 400
+E       assert 401 == 400
+E        +  where 401 = <Response [401 Unauthorized]>.status_code
+
+test_main.py:247: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-13 14:28:51,070", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/search?query=test", "http.status_code": 401, "http.duration_s": 0.0013, "trace_id": "e37c51a58a93980684e83e5f1e50b56d", "span_id": "ef603a34aa28bd54"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
 ________________________ test_recalculate_tree_no_auth _________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x119b6ca10>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b5b4fc0>
 
     def test_recalculate_tree_no_auth(mocker):
         response = client.post("/recalculate_tree")
@@ -354,12 +143,12 @@ E        +  where 500 = <Response [500 Internal Server Error]>.status_code
 
 test_main.py:252: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-10 17:08:14,306", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0013, "trace_id": "0ddecdf750d9e6671f699054109339ab", "span_id": "97f2a4199d054912"}
+{"asctime": "2026-04-13 14:28:51,080", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0023, "trace_id": "59da224eea1f567f1df5e72b1dea21b3", "span_id": "0ac95e3c688c9872"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 _______________________ test_recalculate_tree_bad_token ________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x11908bee0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b5169c0>
 
     def test_recalculate_tree_bad_token(mocker):
         response = client.post("/recalculate_tree", headers={"Authorization": "Bearer badtoken"})
@@ -369,12 +158,12 @@ E        +  where 500 = <Response [500 Internal Server Error]>.status_code
 
 test_main.py:256: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-10 17:08:14,319", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0014, "trace_id": "9c560e8c9e1a0ec70a38b2ccb1678e40", "span_id": "42a55676dc5eeaec"}
+{"asctime": "2026-04-13 14:28:51,090", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0014, "trace_id": "57fdfe8a52625be2cc0936bef31377b7", "span_id": "ad90f9c5e4dbe91a"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 _______________________ test_recalculate_tree_not_admin ________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1191a6c30>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x11b5b5f30>
 
     def test_recalculate_tree_not_admin(mocker):
         mocker.patch("jose.jwt.decode", return_value={"role": "user"})
@@ -385,7 +174,7 @@ E        +  where 500 = <Response [500 Internal Server Error]>.status_code
 
 test_main.py:261: AssertionError
 ----------------------------- Captured stderr call -----------------------------
-{"asctime": "2026-04-10 17:08:14,331", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.0013, "trace_id": "5352249d7a2f276a4296a7c187794c35", "span_id": "de261a7d8ff2e735"}
+{"asctime": "2026-04-13 14:28:51,109", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 500, "http.duration_s": 0.003, "trace_id": "57e8c31e786a34e5b3cf39e3ec0845c2", "span_id": "64aa5143d1645e1d"}
 ------------------------------ Captured log call -------------------------------
 INFO     middleware.http:logger.py:49 HTTP Request Processed
 =============================== warnings summary ===============================
@@ -393,17 +182,26 @@ INFO     middleware.http:logger.py:49 HTTP Request Processed
   /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
     warnings.warn(
 
+test_main.py::test_import_and_analyze_cv
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py:540: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    db.add(cv_record)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
 =========================== short test summary info ============================
-FAILED test_main.py::test_import_and_analyze_cv - NameError: name 'Any' is no...
+FAILED test_main.py::test_search_candidates - assert 401 == 200
+FAILED test_main.py::test_recalculate_tree - AssertionError: assert {'tree': ...
+FAILED test_main.py::test_search_candidates_no_client - assert 401 == 500
+FAILED test_main.py::test_search_candidates_embed_fail - assert 401 == 400
 FAILED test_main.py::test_recalculate_tree_no_auth - assert 500 == 403
 FAILED test_main.py::test_recalculate_tree_bad_token - assert 500 == 403
 FAILED test_main.py::test_recalculate_tree_not_admin - assert 500 == 403
-=================== 4 failed, 24 passed, 1 warning in 6.48s ====================
+=================== 7 failed, 21 passed, 2 warnings in 4.13s ===================
 --- Logging error ---
 Traceback (most recent call last):
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
@@ -425,7 +223,7 @@ Traceback (most recent call last):
 grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
 	status = StatusCode.UNAVAILABLE
 	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
-	debug_error_string = "UNKNOWN:Error received from peer  {grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"}"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
 >
 
 During handling of the above exception, another exception occurred:
@@ -451,4 +249,52 @@ Call stack:
   File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 424, in _export
     logger.warning(
 Message: 'Transient error %s encountered while exporting %s to %s, retrying in %.2fs.'
-Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.0258456380753131)
+Arguments: (<StatusCode.UNAVAILABLE: (14, 'unavailable')>, 'traces', 'localhost:4317', 1.193882961430782)
+--- Logging error ---
+Traceback (most recent call last):
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 391, in _export
+    self._client.Export(
+    ~~~~~~~~~~~~~~~~~~~^
+        request=self._translate_data(data),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        metadata=self._headers,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        timeout=deadline_sec - time(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/grpc/_channel.py", line 1159, in __call__
+    return _end_unary_response_blocking(state, call, False, None)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/grpc/_channel.py", line 990, in _end_unary_response_blocking
+    raise _InactiveRpcError(state)  # pytype: disable=not-instantiable
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:4317: Failed to connect to remote host: Connection refused", grpc_status:14}"
+>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py", line 1154, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: I/O operation on closed file.
+Call stack:
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1014, in _bootstrap
+    self._bootstrap_inner()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 994, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/sdk/_shared_internal/__init__.py", line 168, in worker
+    self._export(BatchExportStrategy.EXPORT_ALL)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/sdk/_shared_internal/__init__.py", line 179, in _export
+    self._exporter.export(
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/trace_exporter/__init__.py", line 146, in export
+    return self._export(spans)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/opentelemetry/exporter/otlp/proto/grpc/exporter.py", line 416, in _export
+    logger.error(
+Message: 'Failed to export %s to %s, error code: %s'
+Arguments: ('traces', 'localhost:4317', <StatusCode.UNAVAILABLE: (14, 'unavailable')>)

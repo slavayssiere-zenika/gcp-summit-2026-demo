@@ -40,14 +40,25 @@ from fastapi import Request
 security = HTTPBearer(auto_error=False)
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
-    token = None
+    # 1. Try token from Authorization header if present
     if credentials:
-        token = credentials.credentials
+        try:
+            payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+            return payload
+        except JWTError:
+            # If header token is invalid, we don't fail yet, we'll try the cookie
+            pass
     
+    # 2. Try token from HTTP-Only cookie
+    token = request.cookies.get("access_token")
     if not token:
-        token = request.cookies.get("access_token")
-
-    if not token:
+        # Check if we were provided a credentials object that failed
+        if credentials:
+             raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token invalide ou expiré",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalide ou manquant",

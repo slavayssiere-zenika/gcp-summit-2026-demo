@@ -99,10 +99,11 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "username": {"type": "string", "description": "Username"},
                     "email": {"type": "string", "description": "Email address"},
+                    "password": {"type": "string", "description": "User password"},
                     "full_name": {"type": "string", "description": "Full name (optional)"},
-                    "is_anonymous": {"type": "boolean", "description": "Is this an anonymous/provisional profile?", "default": false}
+                    "is_anonymous": {"type": "boolean", "description": "Is this an anonymous/provisional profile?", "default": False}
                 },
-                "required": ["username", "email"]
+                "required": ["username", "email", "password"]
             }
         ),
         Tool(
@@ -245,6 +246,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response = await client.post(f"{API_BASE_URL}/", json={
                     "username": arguments["username"],
                     "email": arguments["email"],
+                    "password": arguments.get("password", ""),
                     "full_name": arguments.get("full_name"),
                     "is_anonymous": arguments.get("is_anonymous", False)
                 })

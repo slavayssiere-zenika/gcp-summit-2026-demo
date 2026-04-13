@@ -6,6 +6,8 @@ import threading
 import os
 import contextvars
 from opentelemetry.propagate import inject
+from metrics import AGENT_TOOL_CALLS_TOTAL
+
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
@@ -33,6 +35,7 @@ class MCPHttpClient:
 
     async def call_tool(self, tool_name: str, arguments: dict) -> List[Any]:
         import time
+        AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info(f"[MCP-HTTP] Calling tool '{tool_name}' on {self.url} with args: {arguments}")
         start_time = time.time()
         
@@ -87,12 +90,19 @@ class MCPSseClient:
         from contextlib import AsyncExitStack
         
         import time
+        AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info(f"[MCP-SSE] Calling tool '{tool_name}' on {self.url} with args: {arguments}")
         start_time = time.time()
         
         try:
             async with AsyncExitStack() as stack:
-                streams = await stack.enter_async_context(sse_client(self.url))
+                headers = {}
+                inject(headers)
+                auth = auth_header_var.get(None)
+                if auth:
+                    headers["Authorization"] = auth
+                
+                streams = await stack.enter_async_context(sse_client(self.url, headers=headers))
                 session = await stack.enter_async_context(ClientSession(*streams))
                 await session.initialize()
                 res = await session.call_tool(tool_name, arguments)
@@ -121,11 +131,12 @@ items_mcp_client: Optional[MCPHttpClient] = None
 competencies_mcp_client: Optional[MCPHttpClient] = None
 cv_mcp_client: Optional[MCPHttpClient] = None
 drive_mcp_client: Optional[MCPHttpClient] = None
+market_mcp_client: Optional[MCPHttpClient] = None
 loki_mcp_client: Optional[MCPSseClient] = None
 _mcp_lock = threading.Lock()
 
 def init_mcp_clients():
-    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client
+    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, market_mcp_client, loki_mcp_client
     import os
     
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))
@@ -133,10 +144,10 @@ def init_mcp_clients():
     comps_url = os.getenv("COMPETENCIES_MCP_URL", os.getenv("COMPETENCIES_API_URL", "http://competencies_mcp:8000"))
     cv_url = os.getenv("CV_MCP_URL", os.getenv("CV_API_URL", "http://cv_mcp:8000"))
     drive_url = os.getenv("DRIVE_MCP_URL", "http://drive_mcp:8000")
+    market_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
     loki_url = os.getenv("LOKI_MCP_URL", "http://loki_mcp:8080/sse")
 
     with _mcp_lock:
-        global loki_mcp_client
         if users_mcp_client is None:
             users_mcp_client = MCPHttpClient(users_url)
         if items_mcp_client is None:
@@ -147,6 +158,8 @@ def init_mcp_clients():
             cv_mcp_client = MCPHttpClient(cv_url)
         if drive_mcp_client is None:
             drive_mcp_client = MCPHttpClient(drive_url)
+        if market_mcp_client is None:
+            market_mcp_client = MCPHttpClient(market_url)
         if loki_mcp_client is None:
             loki_mcp_client = MCPSseClient(loki_url)
 
@@ -173,3 +186,7 @@ async def get_cv_mcp() -> MCPHttpClient:
 async def get_drive_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return drive_mcp_client
+
+async def get_market_mcp() -> MCPHttpClient:
+    init_mcp_clients()
+    return market_mcp_client

@@ -66,13 +66,18 @@ interface Message {
     currentPage: number
     itemsPerPage: number
   }
+  usage?: {
+    total_input_tokens: number
+    total_output_tokens: number
+    estimated_cost_usd: number
+  }
 }
 
 
 const messages = ref<Message[]>([
   {
     role: 'assistant',
-    content: "Bonjour ! Je suis l'assistant intelligent de Zenika. Je peux orchestrer vos services **Users**, **Items** et **Competencies** pour répondre à vos besoins."
+    content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements."
   }
 ])
 
@@ -165,7 +170,8 @@ const sendQuery = async (queryOverride?: string) => {
         pagination: {
           currentPage: 1,
           itemsPerPage: 10
-        }
+        },
+        usage: response.data.usage
       })
     } else {
       messages.value.push({
@@ -254,7 +260,7 @@ const resetHistory = async () => {
     messages.value = [
       {
         role: 'assistant',
-        content: "Bonjour ! Je suis l'assistant intelligent de Zenika. Je peux orchestrer vos services **Users**, **Items** et **Competencies** pour répondre à vos besoins."
+        content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements."
       }
     ]
   } catch(e) {
@@ -333,20 +339,28 @@ const totalPages = (msg: Message) => {
     <div class="chat-container" ref="chatContainer">
       <!-- Project Introduction -->
       <div class="welcome-section">
-        <h2>Bienvenue sur l'Agent Zenika</h2>
+        <h2>Assistant Opérationnel Zenika</h2>
         <p>
-          Cette console est une plateforme d'expérimentation pour l'orchestration de microservices via des agents intelligents. 
-          Grâce au protocole <strong>MCP (Model Context Protocol)</strong>, l'assistant Gemini peut interagir en temps réel avec nos APIs 
-          pour gérer les profils utilisateurs, le catalogue d'objets et la cartographie des compétences.
+          L'Assistant Zenika simplifie la recherche et la gestion des données de l'entreprise. En langage naturel, vous pouvez interroger l'agent pour identifier les meilleurs profils, analyser les cartographies de compétences ou gérer le catalogue d'équipements.
         </p>
         <div class="quick-tips">
-          <span>💡 Essayez : "Liste les items de Bob"</span>
-          <span>💡 Essayez : "Quelles compétences a Alice ?"</span>
+          <span>💡 Essayez : "Trouve les consultants spécialisés en Java avec plus de 5 ans d'expérience."</span>
+          <span>💡 Essayez : "Recherche les compétences d'Alice et donne-moi un résumé."</span>
         </div>
       </div>
 
       <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.role]">
         <div v-if="msg.role === 'assistant'" class="assistant-content">
+          <!-- FinOps Cost Display (Floating Badge) -->
+          <div v-if="msg.usage" class="usage-container">
+            <div class="cost-badge" title="Coût estimé de cet appel à l'IA">
+              <Database size="12" />
+              <span>{{ msg.usage.total_input_tokens + msg.usage.total_output_tokens }} tokens</span>
+              <span class="cost-divider">|</span>
+              <span class="cost-value">${{ msg.usage.estimated_cost_usd.toFixed(6) }}</span>
+            </div>
+          </div>
+
           <!-- Multi-View Tabs -->
           <div v-if="(msg.displayType && msg.displayType !== 'text_only') || (msg.steps && msg.steps.length > 0) || (msg.thoughts && msg.thoughts.length > 0)" class="message-tabs">
             <button 
@@ -361,6 +375,7 @@ const totalPages = (msg: Message) => {
             >
               <Cpu size="14" /> Expert
             </button>
+
           </div>
 
           <div v-if="msg.activeTab === 'preview' || !msg.activeTab" class="tab-pane">
@@ -453,8 +468,13 @@ const totalPages = (msg: Message) => {
             <!-- Tree View UI -->
             <div v-else-if="msg.displayType === 'tree'" class="tree-grid">
                <div class="tree-header">
-                 <Network size="20" class="tree-icon" /> 
-                 <h3>Taxonomie des Compétences</h3>
+                 <div style="display: flex; align-items: center; gap: 8px;">
+                   <Network size="20" class="tree-icon" /> 
+                   <h3>Taxonomie des Compétences</h3>
+                 </div>
+                 <div v-if="msg.usage?.estimated_cost_usd" class="tree-cost-badge">
+                   Coût du recalcule : ${{ Number(msg.usage.estimated_cost_usd).toFixed(4) }}
+                 </div>
                </div>
                <div class="tree-content">
                  <div v-for="(node, idx) in (Array.isArray(msg.parsedData) ? msg.parsedData : Object.entries(msg.parsedData).map(([k, v]) => ({ name: k, ...v })))" 
@@ -596,6 +616,29 @@ const totalPages = (msg: Message) => {
   box-shadow: 0 4px 10px rgba(227, 25, 55, 0.2);
 }
 
+.cost-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-left: auto; /* Push to the right */
+  border-left: 3px solid #10b981;
+}
+
+.cost-divider {
+  opacity: 0.3;
+}
+
+.cost-value {
+  color: #059669;
+}
+
 .pagination-controls {
   display: flex;
   justify-content: center;
@@ -721,25 +764,25 @@ const totalPages = (msg: Message) => {
 .chat-container {
   flex: 1;
   overflow-y: auto;
-  padding: 2.5rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .welcome-section {
   background: linear-gradient(135deg, rgba(227, 25, 55, 0.03) 0%, rgba(255, 255, 255, 1) 100%);
-  padding: 2rem;
+  padding: 1.5rem;
   border-radius: 20px;
   border: 1px solid rgba(227, 25, 55, 0.1);
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .welcome-section h2 {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 800;
   color: var(--zenika-red);
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   letter-spacing: -0.5px;
 }
 
@@ -1023,6 +1066,24 @@ button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
+.usage-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.cost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(26, 32, 44, 0.03);
+  padding: 0.4rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  color: #4a5568;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1167,6 +1228,16 @@ button:disabled {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+}
+
+.tree-cost-badge {
+  background: rgba(227, 25, 55, 0.1);
+  color: var(--zenika-red);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-left: auto; /* Placer à droite */
 }
 
 .json-viewer {

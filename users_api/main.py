@@ -15,6 +15,8 @@ elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
 else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import extract
 from opentelemetry.trace import set_span_in_context
@@ -107,7 +109,9 @@ async def seed_admin():
             await asyncio.sleep(5)
 
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+RedisInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
 
 
 @app.get("/health")
@@ -116,6 +120,10 @@ async def health(response: Response):
         return {"status": "healthy"}
     response.status_code = 503
     return {"status": "unhealthy"}
+    
+@app.get("/version")
+async def get_version():
+    return {"version": os.getenv("APP_VERSION", "unknown")}
 
 from src.auth import verify_jwt
 from fastapi import APIRouter, Depends

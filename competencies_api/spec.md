@@ -60,17 +60,23 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
-- **GET** `/spec` : Get Spec
+- **GET** `/version` : Get Version
 - **GET** `/` : List Competencies
 - **POST** `/` : Create Competency
+- **GET** `/search` : Search Competencies
 - **GET** `/{competency_id}` : Get Competency
 - **PUT** `/{competency_id}` : Update Competency
 - **DELETE** `/{competency_id}` : Delete Competency
+- **GET** `/{competency_id}/users` : List Competency Users
 - **POST** `/bulk_tree` : Bulk Import Tree
+- **POST** `/stats/counts` : Get Competency Stats
 - **POST** `/user/{user_id}/assign/{competency_id}` : Assign Competency To User
 - **DELETE** `/user/{user_id}/remove/{competency_id}` : Remove Competency From User
 - **GET** `/user/{user_id}` : List User Competencies
+- **POST** `/internal/users/merge` : Merge Users
+- **DELETE** `/user/{user_id}/clear` : Clear User Competencies
+- **GET** `/spec` : Get Spec
 - **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp

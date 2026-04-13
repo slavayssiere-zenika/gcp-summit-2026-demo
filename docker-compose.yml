@@ -181,6 +181,7 @@ services:
       - PROMPTS_API_URL=http://prompts_api:8000
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
+      - MARKET_MCP_URL=http://market_mcp:8008
       - ROOT_PATH=/cv-api
     depends_on:
       db_migrations:
@@ -253,6 +254,18 @@ services:
     networks:
       - monitoring_net
 
+  market_mcp:
+    build: ./market_mcp
+    container_name: market_mcp
+    hostname: market_mcp
+    ports:
+      - "8008:8008"
+    environment:
+      - GCP_PROJECT_ID=slavayssiere-zenika
+      - MCP_PORT=8008
+    networks:
+      - monitoring_net
+
   # The Intelligent Agent (renamed from web)
   agent_api:
     build:
@@ -273,6 +286,7 @@ services:
       - COMPETENCIES_MCP_URL=http://competencies_mcp:8000
       - CV_MCP_URL=http://cv_mcp:8000
       - DRIVE_MCP_URL=http://drive_mcp:8000
+      - MARKET_MCP_URL=http://market_mcp:8008
       - LOKI_MCP_URL=http://loki_mcp:8080/sse
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/1

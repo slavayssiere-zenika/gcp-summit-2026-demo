@@ -46,12 +46,13 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 
 - **GET** `/metrics` : Metrics
 - **GET** `/` : Root
+- **POST** `/login` : Login
+- **POST** `/logout` : Logout
+- **GET** `/me` : Get Me
+- **GET** `/health` : Health
+- **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
 - **POST** `/query` : Query
 - **GET** `/history` : Get History
 - **DELETE** `/history` : Delete History
-- **POST** `/login` : Login
-- **POST** `/logout` : Logout
-- **GET** `/me` : Get Me
 - **GET** `/mcp/registry` : Mcp Registry
-- **GET** `/health` : Health

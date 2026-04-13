@@ -28,6 +28,9 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 COPY . .
 
 ENV PYTHONPATH=/app
+ENV GEMINI_MODEL=gemini-3-flash-preview
+ENV GEMINI_PRO_MODEL=gemini-3-pro-preview
+ENV GEMINI_EMBEDDING_MODEL=text-embedding-005
 ENV PORT=8004
 EXPOSE 8004
 

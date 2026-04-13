@@ -1,42 +1,62 @@
-- permettre de donner des droits admin a des utilisateurs
-- permettre aux admin de mettre un user et ses CV en mode inactif
-- inclure un élément utilisant bigquery
+# 📅 Roadmap Hebdomadaire (Sprint 16 - 20 Avril)
 
-- ajouter la surveillance des SLI / SLO des apis
+## 🎯 Objectif : Consolidation Gouvernance & Intelligence BigQuery
 
-Idées :
+---
 
-1. L'approche "Métier" : Analyse des Gaps de Compétences (BigQuery + Looker)
-Au lieu de te limiter aux CV de tes consultants, intègre des données du marché pour faire du croisement analytique.
+### 🛡️ Phase 1 : Gouvernance & Sécurité Admin (Lundi)
+*Focalisation sur l'identité et les accès privilégiés.*
 
-L'idée : Charge un dataset d'offres d'emploi actuelles du marché (par exemple, des offres tech en France) ou un référentiel de compétences cible dans BigQuery.
+- [x] **Gestion Inactive** : Ajouter un flag `is_active` pour les utilisateurs et CVs afin de les exclure des recherches/staffing.
+- [ ] **Audit Trail** : Loguer les changements de statut utilisateur dans la base d'audit.
 
-L'action de l'Agent (via MCP) : Crée un outil MCP qui permet à l'agent d'interroger BigQuery pour croiser les données.
+---
 
-Exemple de prompt lors de la démo : "Compare les compétences de nos consultants stockées dans AlloyDB avec les tendances du marché dans BigQuery. Quelles sont les 3 compétences Data qui nous manquent le plus pour répondre aux appels d'offres actuels ?"
+### 📊 Phase 2 : Observabilité & SLOs (Mardi)
+*Passer d'une surveillance réactive à un engagement de niveau de service.*
 
-Le petit plus : Connecte Looker Studio à BigQuery pour afficher un dashboard visuel de ces "Skill Gaps" pendant que l'agent explique les résultats.
+- [x] **Définition SLIs** : Identifier les métriques de latence (p95) et taux d'erreur par micro-service.
+- [x] **Provisionnement SLO** : Créer les dashboards et alertes Cloud Monitoring via Terraform.
+- [x] **Health Monitoring** : Intégrer les métriques OTel dans un tableau de bord SLO global.
 
-2. L'approche "LLMOps / FinOps" : Observabilité du RAG
-Un vrai projet d'entreprise nécessite de surveiller les coûts et les performances de l'IA. BigQuery est parfait pour ça.
+---
 
-L'idée : Configure ton backend Cloud Run pour streamer toutes les métriques de l'agent vers BigQuery (requêtes utilisateurs, réponses générées, latence des outils MCP, nombre de tokens consommés, contexte récupéré dans AlloyDB).
+### 🏛️ Phase 3 : BigQuery Foundation & FinOps (Mercredi)
+*Mise en place de la brique analytique pour l'IA.*
 
-L'action de l'Agent (via MCP) : Donne à ton agent la capacité d'analyser ses propres performances en requêtant cette table BigQuery.
+- [x] **Pipeline BQ** : Créer le dataset et les tables `token_usage` et `agent_latency`.
+- [x] **Streaming Logs** : Exporter les métriques de consommation de l'IA (Gemini) vers BigQuery à chaque appel.
+- [x] **Outil Agent** : Créer un outil MCP `get_finops_report` pour que l'agent analyse ses propres coûts.
 
-Exemple de prompt lors de la démo : "Combien de tokens as-tu consommé cette semaine, et quel a été le coût estimé de tes requêtes d'embedding Gemini ?" Cela montre une maîtrise totale du cycle de vie de l'IA en production.
+---
 
+### 🌍 Phase 4 : Intelligence Marché & ROME (Jeudi)
+*Croisement des données internes vs externes.*
 
-Ratio :
+- [x] **Ingestion ROME** : Charger le référentiel ROME 4.0 et les tendances du marché dans BigQuery.
+- [ ] **Analyse de Gap** : Développer un outil MCP croisant AlloyDB et BigQuery pour identifier les compétences manquantes.
+- [x] **BigQuery MCP Server** : Unifier l'accès à BigQuery via un nouveau serveur MCP dédié.
 
+---
 
-Nom de l’api	Appels maximum autorisés	
-Référentiel des agences v1 1 appel / seconde	
-Marché du travail v1 10 appels / seconde	
-ROME 4.0 - Competences v1 1 appel / seconde
+### 🎨 Phase 5 : Pilotage & Démo (Vendredi)
+*Rendre la donnée visuelle et actionnable.*
 
-reprend l'idée 2 "2. Spécification Technique : Observabilité LLMOps & FinOps (Idée 2)" et genere moi le prompt pour antigravity, 
+- [ ] **Dashboard Looker** : Créer une visualisation "Skill Gap" connectée à BigQuery.
+- [ ] **Scénario de Démo** : Peaufiner les prompts de l'agent pour illustrer le FinOps et le Staffing Prédictif.
+- [ ] **Validation Finale** : Simulation de fin de sprint et revue de code.
 
-- code en python avec un docker pour le service mcp
+---
 
-- déploiement dans le cloud GCP via le projet platform-engineering
+### 📌 Backlog / Idées (Ancien Todo)
+- [ ] Intégration BigQuery ML pour la prédiction de disponibilité.
+- [ ] Dashboard de performance des outils MCP (latency vs success rate).
+- [ ] Automatisation des rapports hebdomadaires par email via Cloud Functions.
+- [ ] Code en python avec un docker pour le service mcp.
+- [ ] Déploiement dans le cloud GCP via le projet platform-engineering.
+
+### 🚀 Nouvelles Features Proposées
+- [ ] **Intégration d'Agendas (Google Calendar/Outlook)** : Connecter la Console avec les calendriers des consultants pour affiner de manière déterministe les disponibilités dans les réponses de l'agent.
+- [ ] **Interface ChatOps (Slack / Google Chat)** : Exporter l'Agent API sous la forme d'un Bot directement accessible en messagerie d'entreprise pour les commerciaux et managers.
+- [ ] **Notification Proactives & Actions Push** : Mettre en place un système d'alerte pour les "Skills Gap" dès qu'une opportunité du marché ne trouve plus de correspondance interne.
+- [ ] **Génération Automatique de Réponses (RFP Engine)** : Un agent spécialisé capable de générer des réponses techniques ou commerciales aux Appels d'Offres à partir des références passées, des CVs et des expertises de l'équipe disponible.

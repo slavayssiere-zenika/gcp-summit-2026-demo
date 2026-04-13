@@ -32,11 +32,12 @@ const searchUsers = async () => {
   }
 }
 
-const toggleRole = async (user: any) => {
-  const newRole = user.role === 'admin' ? 'user' : 'admin'
-  const actionText = newRole === 'admin' ? "promouvoir Admin" : "rétrograder"
+const setRole = async (user: any, newRole: string) => {
+  if (user.role === newRole) return
   
-  if (!confirm(`Voulez-vous vraiment ${actionText} l'utilisateur ${user.username} ?`)) {
+  const actionText = `changer le rôle de ${user.username} en ${newRole}`
+  
+  if (!confirm(`Voulez-vous vraiment ${actionText} ?`)) {
     return
   }
   
@@ -98,19 +99,36 @@ const toggleRole = async (user: any) => {
             <span class="user-email">{{ user.email }}</span>
           </div>
           
-          <div class="user-role-badge" :class="{'admin-role': user.role === 'admin'}">
+          <div class="user-role-badge" :class="{'admin-role': user.role === 'admin', 'rh-role': user.role === 'rh'}">
             {{ user.role }}
           </div>
           
-          <button 
-            @click="toggleRole(user)" 
-            class="toggle-role-btn" 
-            :class="{'demote-btn': user.role === 'admin', 'promote-btn': user.role !== 'admin'}"
-          >
-            <ShieldOff v-if="user.role === 'admin'" size="16" />
-            <Shield v-else size="16" />
-            {{ user.role === 'admin' ? 'Rétrograder' : 'Passer Admin' }}
-          </button>
+          <div class="role-actions">
+            <button 
+              @click="setRole(user, 'user')" 
+              class="role-btn" 
+              :class="{'active': user.role === 'user'}"
+              title="Passer en Utilisateur standard"
+            >
+              U
+            </button>
+            <button 
+              @click="setRole(user, 'rh')" 
+              class="role-btn rh-btn" 
+              :class="{'active': user.role === 'rh'}"
+              title="Passer en RH"
+            >
+              RH
+            </button>
+            <button 
+              @click="setRole(user, 'admin')" 
+              class="role-btn admin-btn" 
+              :class="{'active': user.role === 'admin'}"
+              title="Passer en Admin"
+            >
+              AD
+            </button>
+          </div>
         </div>
       </div>
       
@@ -291,35 +309,57 @@ const toggleRole = async (user: any) => {
   color: var(--zenika-red);
 }
 
-.toggle-role-btn {
+.user-role-badge.rh-role {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.role-actions {
   display: flex;
-  align-items: center;
   gap: 6px;
-  padding: 0.6rem 1rem;
+}
+
+.role-btn {
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
-  border: none;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.promote-btn {
-  background: #10b981;
+.role-btn:hover:not(.active) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.role-btn.active {
+  cursor: default;
+}
+
+.role-btn.active:not(.rh-btn):not(.admin-btn) {
+  background: #64748b;
   color: white;
-}
-.promote-btn:hover {
-  background: #059669;
+  border-color: #64748b;
 }
 
-.demote-btn {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+.role-btn.rh-btn.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
 }
-.demote-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
+
+.role-btn.admin-btn.active {
+  background: var(--zenika-red);
+  color: white;
+  border-color: var(--zenika-red);
 }
 
 .no-results {

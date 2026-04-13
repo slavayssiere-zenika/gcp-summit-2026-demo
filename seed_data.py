@@ -217,6 +217,17 @@ def main():
             print("  - Admin inserted directly via SQL.")
         else:
             print("  - Admin user already exists in DB.")
+
+        cur.execute("SELECT id FROM users WHERE email = 'sebastien.lavayssiere@zenika.com'")
+        if not cur.fetchone():
+            cur.execute("""
+                INSERT INTO users (username, email, first_name, last_name, full_name, hashed_password, role, is_active, created_at)
+                VALUES ('slavayssiere', 'sebastien.lavayssiere@zenika.com', 'Sébastien', 'Lavayssière', 'Sébastien Lavayssière', %s, 'admin', True, %s)
+            """, (admin_hash, datetime.now(timezone.utc)))
+            conn.commit()
+            print("  - Sébastien Lavayssière (slavayssiere) added as admin via SQL.")
+        else:
+            print("  - Sébastien Lavayssière already exists in DB.")
         cur.close()
         conn.close()
     except Exception as e:

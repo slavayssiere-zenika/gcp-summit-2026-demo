@@ -15,6 +15,8 @@ elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
 else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from src.router import router
 from logger import setup_logging, LoggingMiddleware
@@ -49,7 +51,9 @@ import asyncio
 import os
 import logging
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+RedisInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
 
 
 app.include_router(router)
@@ -94,6 +98,10 @@ async def health(response: Response):
         return {"status": "healthy"}
     response.status_code = 503
     return {"status": "unhealthy"}
+
+@app.get("/version")
+async def get_version():
+    return {"version": os.getenv("APP_VERSION", "unknown")}
 
 @protected_router.get("/spec")
 async def get_spec():

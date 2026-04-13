@@ -53,6 +53,15 @@ resource "google_compute_region_network_endpoint_group" "drive_neg" {
   }
 }
 
+resource "google_compute_region_network_endpoint_group" "market_neg" {
+  name                  = "neg-market-${terraform.workspace}"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+  cloud_run {
+    service = google_cloud_run_v2_service.market_mcp.name
+  }
+}
+
 # =========================================================
 # Backend Services
 # =========================================================
@@ -95,6 +104,16 @@ resource "google_compute_backend_service" "drive_backend" {
   security_policy       = google_compute_security_policy.waf.id
   backend {
     group = google_compute_region_network_endpoint_group.drive_neg.id
+  }
+}
+
+resource "google_compute_backend_service" "market_backend" {
+  name                  = "backend-market-${terraform.workspace}"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  security_policy       = google_compute_security_policy.waf.id
+  backend {
+    group = google_compute_region_network_endpoint_group.market_neg.id
   }
 }
 
@@ -207,6 +226,17 @@ resource "google_compute_url_map" "default" {
       priority = 80
       match_rules { prefix_match = "/drive-api/" }
       service = google_compute_backend_service.drive_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 85
+      match_rules { prefix_match = "/market-mcp/" }
+      service = google_compute_backend_service.market_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

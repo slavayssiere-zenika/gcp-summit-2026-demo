@@ -18,13 +18,27 @@ interface SpecTab {
 }
 
 const tabs: SpecTab[] = [
-  { id: 'agent', name: 'Agent API', url: '/api/spec', icon: Cpu },
-  { id: 'prompts', name: 'Prompts API', url: '/prompts-api/spec', icon: MessageSquare },
-  { id: 'users', name: 'Users API', url: '/users-api/spec', icon: KeyRound },
-  { id: 'items', name: 'Items API', url: '/items-api/spec', icon: Database },
-  { id: 'competencies', name: 'Competencies API', url: '/comp-api/spec', icon: Network },
-  { id: 'cv', name: 'CV API', url: '/cv-api/spec', icon: FileText }
+  { id: 'agent', name: 'Agent API', url: '/api/spec', versionUrl: '/api/version', icon: Cpu },
+  { id: 'prompts', name: 'Prompts API', url: '/prompts-api/spec', versionUrl: '/prompts-api/version', icon: MessageSquare },
+  { id: 'users', name: 'Users API', url: '/users-api/spec', versionUrl: '/users-api/version', icon: KeyRound },
+  { id: 'items', name: 'Items API', url: '/items-api/spec', versionUrl: '/items-api/version', icon: Database },
+  { id: 'competencies', name: 'Competencies API', url: '/comp-api/spec', versionUrl: '/comp-api/version', icon: Network },
+  { id: 'cv', name: 'CV API', url: '/cv-api/spec', versionUrl: '/cv-api/version', icon: FileText },
+  { id: 'drive', name: 'Drive API', url: '/drive-api/spec', versionUrl: '/drive-api/version', icon: Database },
+  { id: 'market', name: 'Market (MCP)', url: '/market-mcp/mcp/tools', versionUrl: '/market-mcp/version', icon: Network }
 ]
+
+const versions = ref<Record<string, string>>({})
+const fetchVersions = async () => {
+  tabs.forEach(async (tab) => {
+    try {
+      const res = await axios.get(tab.versionUrl)
+      versions.value[tab.id] = res.data.version
+    } catch (e) {
+      versions.value[tab.id] = 'indisponible'
+    }
+  })
+}
 
 const activeTabId = ref(tabs[0].id)
 const activeTab = computed(() => tabs.find(t => t.id === activeTabId.value) || tabs[0])
@@ -57,6 +71,7 @@ const selectTab = (id: string) => {
 
 onMounted(() => {
   fetchSpec()
+  fetchVersions()
 })
 </script>
 
@@ -90,6 +105,7 @@ onMounted(() => {
         <div class="card-title">
           <component :is="activeTab.icon" size="20" class="mini-icon" />
           <h3>Spécifications : {{ activeTab.name }}</h3>
+          <span v-if="versions[activeTabId]" class="version-badge">{{ versions[activeTabId] }}</span>
         </div>
         <button class="icon-btn" @click="fetchSpec" :disabled="loading" title="Actualiser le manifeste">
           <RefreshCw size="18" :class="{ 'spin': loading }" />
@@ -231,6 +247,17 @@ h3 {
   font-weight: 700;
   color: #1A1A1A;
   margin: 0;
+}
+
+.version-badge {
+  background: rgba(227, 25, 55, 0.1);
+  color: #E31937;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(227, 25, 55, 0.2);
+  margin-left: 8px;
 }
 
 .icon-btn {

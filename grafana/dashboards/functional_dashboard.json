@@ -1,0 +1,111 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Graphics --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Agent Queries Volume",
+      "type": "timeseries",
+      "datasource": "prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(agent_queries_total[5m])",
+          "legendFormat": "Queries/sec"
+        }
+      ]
+    },
+    {
+      "title": "Top Used Agent Tools",
+      "type": "barchart",
+      "datasource": "prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (tool_name) (increase(agent_tool_calls_total[1h]))",
+          "legendFormat": "{{tool_name}}"
+        }
+      ]
+    },
+    {
+      "title": "CV Extraction Success vs Failure",
+      "type": "piechart",
+      "datasource": "prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (status) (increase(cv_processing_total[24h]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "title": "New User Creations",
+      "type": "stat",
+      "datasource": "prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "increase(user_creations_total[24h])"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "title": "Login Success Rate",
+      "type": "gauge",
+      "datasource": "prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(user_logins_total{status=\"success\"}[5m])) / sum(rate(user_logins_total[5m])) * 100"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"] },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 90 },
+            { "color": "green", "value": 95 }
+          ]
+        }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["functional", "business"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Zenika Console - Functional Dashboard",
+  "uid": "functional-metrics",
+  "version": 1
+}

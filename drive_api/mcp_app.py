@@ -3,12 +3,16 @@ from pydantic import BaseModel
 import os
 import uvicorn
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 
 from mcp_server import list_tools, call_tool, mcp_auth_header_var
 
 app = FastAPI(title="Drive MCP Sidecar (HTTP Standard)")
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+RedisInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
 
 class ToolCallRequest(BaseModel):
     name: str

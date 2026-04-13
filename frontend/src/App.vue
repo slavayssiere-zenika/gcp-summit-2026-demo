@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Search, LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen, FileDown, ChevronDown, Settings } from 'lucide-vue-next'
+import { Search, LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen, FileDown, ChevronDown, Settings, BarChart } from 'lucide-vue-next'
 import { authService } from './services/auth'
 import { useRouter } from 'vue-router'
 
@@ -38,16 +38,20 @@ const handleLogout = async () => {
           </RouterLink>
 
           <!-- Administration Panel (Protected) -->
-          <div class="dropdown" v-if="authService.state.user?.role === 'admin'">
+          <div class="dropdown" v-if="authService.state.user?.role === 'admin' || authService.state.user?.role === 'rh'">
             <button class="nav-pill admin-pill dropdown-btn" :class="{ active: router.currentRoute.value.path.startsWith('/admin') }">
               <Settings size="16" /> Administration <ChevronDown size="14" />
             </button>
             <div class="dropdown-content">
-              <RouterLink to="/admin" active-class="dropdown-active">Configuration Service Drive</RouterLink>
-              <RouterLink to="/admin/users" active-class="dropdown-active">Gestion des Accès</RouterLink>
-              <RouterLink to="/admin/reanalysis" active-class="dropdown-active">Réanalyse Globale</RouterLink>
+              <template v-if="authService.state.user?.role === 'admin'">
+                <RouterLink to="/admin" active-class="dropdown-active">Configuration Service Drive</RouterLink>
+                <RouterLink to="/admin/users" active-class="dropdown-active">Gestion des Accès</RouterLink>
+                <RouterLink to="/admin/reanalysis" active-class="dropdown-active">Réanalyse Globale</RouterLink>
+              </template>
               <RouterLink to="/admin/deduplication" active-class="dropdown-active">Déduplication</RouterLink>
-              <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
+              <template v-if="authService.state.user?.role === 'admin'">
+                <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
+              </template>
               <div class="dropdown-divider"></div>
               <a href="/users_api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
                 <BookOpen size="14" /> Swagger Users
@@ -102,6 +106,12 @@ const handleLogout = async () => {
               </RouterLink>
               <RouterLink to="/specs" class="nav-pill" active-class="active">
                 <BookOpen size="16" /> Spécifications Interne
+              </RouterLink>
+              <RouterLink to="/infrastructure" class="nav-pill" active-class="active">
+                <Network size="16" /> Carte Infrastructure
+              </RouterLink>
+              <RouterLink to="/aiops" class="nav-pill" active-class="active">
+                <BarChart size="16" /> Indicateurs AIOps
               </RouterLink>
             </div>
           </div>

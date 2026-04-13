@@ -24,3 +24,7 @@ asyncpg>=0.29.0
 
 opentelemetry-exporter-gcp-trace>=1.6.0
 tenacity
+
+opentelemetry-instrumentation-httpx
+
+opentelemetry-instrumentation-redis

@@ -51,22 +51,42 @@
                 <td>
                   <span class="role-badge" :class="user.role">
                     <ShieldCheck v-if="user.role === 'admin'" size="14" />
+                    <Shield v-else-if="user.role === 'rh'" size="14" />
                     <UserIcon v-else size="14" />
-                    {{ user.role === 'admin' ? 'Administrateur' : 'Utilisateur' }}
+                    {{ user.role === 'admin' ? 'Administrateur' : (user.role === 'rh' ? 'RH' : 'Utilisateur') }}
                   </span>
                 </td>
                 <td>
                   <div class="quick-actions">
-                    <button 
-                      @click="toggleRole(user)" 
-                      class="btn-icon" 
-                      :class="user.role === 'admin' ? 'btn-warning' : 'btn-primary-ghost'"
-                      :title="user.role === 'admin' ? 'Retirer les droits Admin' : 'Donner les droits Admin'"
-                      :disabled="isUpdating === user.id"
-                    >
-                      <ShieldAlert v-if="user.role === 'admin'" size="16" />
-                      <ShieldCheck v-else size="16" />
-                    </button>
+                    <div class="role-selector">
+                      <button 
+                        @click="setRole(user, 'user')" 
+                        class="btn-mini" 
+                        :class="{ 'active': user.role === 'user' }"
+                        title="Utilisateur"
+                        :disabled="isUpdating === user.id"
+                      >
+                        U
+                      </button>
+                      <button 
+                        @click="setRole(user, 'rh')" 
+                        class="btn-mini btn-rh" 
+                        :class="{ 'active': user.role === 'rh' }"
+                        title="RH"
+                        :disabled="isUpdating === user.id"
+                      >
+                        RH
+                      </button>
+                      <button 
+                        @click="setRole(user, 'admin')" 
+                        class="btn-mini btn-admin" 
+                        :class="{ 'active': user.role === 'admin' }"
+                        title="Administrateur"
+                        :disabled="isUpdating === user.id"
+                      >
+                        AD
+                      </button>
+                    </div>
                     <button 
                       @click="toggleStatus(user)" 
                       class="btn-icon" 
@@ -102,7 +122,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import {
-  Users, RefreshCw, Network, ShieldCheck, ShieldAlert,
+  Users, RefreshCw, Network, ShieldCheck, ShieldAlert, Shield,
   User as UserIcon, CheckCircle2, XCircle, UserX, UserCheck, Loader2
 } from 'lucide-vue-next'
 
@@ -126,13 +146,13 @@ const fetchUsers = async () => {
   }
 }
 
-const toggleRole = async (user: any) => {
-  if (!confirm(`Confirmez-vous la modification de droits pour ${user.username} ?`)) return
+const setRole = async (user: any, newRole: string) => {
+  if (user.role === newRole) return
+  if (!confirm(`Confirmez-vous le passage au rôle ${newRole} pour ${user.username} ?`)) return
   
   isUpdating.value = user.id
   error.value = ''
   try {
-    const newRole = user.role === 'admin' ? 'user' : 'admin'
     await axios.put(`/auth/${user.id}`, { role: newRole })
     user.role = newRole
   } catch (err: any) {
@@ -317,6 +337,9 @@ onMounted(() => {
 .role-badge.admin {
   background: rgba(227, 25, 55, 0.1); color: var(--zenika-red); border: 1px solid rgba(227, 25, 55, 0.2);
 }
+.role-badge.rh {
+  background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2);
+}
 .role-badge.user {
   background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
 }
@@ -326,7 +349,7 @@ onMounted(() => {
   gap: 8px;
 }
 
-.btn-icon {
+.btn-icon, .btn-mini {
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -338,7 +361,43 @@ onMounted(() => {
   transition: all 0.2s;
   background: #f8fafc;
 }
-.btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-icon:disabled, .btn-mini:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.role-selector {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-mini {
+  width: 28px;
+  height: 28px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+}
+
+.btn-mini.active {
+  background: #94a3b8;
+  color: white;
+  border-color: #94a3b8;
+  cursor: default;
+}
+
+.btn-mini.btn-rh.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.btn-mini.btn-admin.active {
+  background: var(--zenika-red);
+  border-color: var(--zenika-red);
+}
+
+.btn-mini:hover:not(.active):not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
 
 .btn-primary-ghost { color: #3b82f6; border-color: #bfdbfe; }
 .btn-primary-ghost:hover:not(:disabled) { background: #eff6ff; }
