@@ -74,3 +74,58 @@ resource "google_monitoring_dashboard" "cloud_run_dashboard" {
     }
   })
 }
+
+resource "google_monitoring_dashboard" "functional_dashboard" {
+  dashboard_json = jsonencode({
+    displayName = "Zenika Console - Business Metrics (${terraform.workspace})"
+    gridLayout = {
+      columns = "2"
+      widgets = [
+        {
+          title = "Agent Query Volume (Queries/min)"
+          xyChart = {
+            dataSets = [{
+              timeSeriesQuery = {
+                prometheusQuery = "sum(rate(agent_queries_total[5m])) * 60"
+              }
+              plotType = "LINE"
+            }]
+          }
+        },
+        {
+          title = "CV Processing Success Rate"
+          xyChart = {
+            dataSets = [{
+              timeSeriesQuery = {
+                prometheusQuery = "sum by (status) (increase(cv_processing_total[1h]))"
+              }
+              plotType = "STACKED_BAR"
+            }]
+          }
+        },
+        {
+          title = "New User Accounts (Last 24h)"
+          xyChart = {
+            dataSets = [{
+              timeSeriesQuery = {
+                prometheusQuery = "increase(user_creations_total[24h])"
+              }
+              plotType = "LINE"
+            }]
+          }
+        },
+        {
+          title = "Login Success vs Failure"
+          xyChart = {
+            dataSets = [{
+              timeSeriesQuery = {
+                prometheusQuery = "sum by (status) (rate(user_logins_total[1h]))"
+              }
+              plotType = "LINE"
+            }]
+          }
+        }
+      ]
+    }
+  })
+}

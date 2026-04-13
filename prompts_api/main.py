@@ -18,6 +18,8 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
 from database import engine, Base
@@ -55,7 +57,9 @@ import os
 import logging
 
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+RedisInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
 
 
 # 5. Prometheus Instrumentator
@@ -69,6 +73,10 @@ async def health_check(response: Response):
         return {"status": "healthy"}
     response.status_code = 503
     return {"status": "unhealthy"}
+
+@app.get("/version")
+async def get_version():
+    return {"version": os.getenv("APP_VERSION", "unknown")}
 from src.prompts.router import verify_jwt
 from fastapi import APIRouter, Depends
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])

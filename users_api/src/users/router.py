@@ -15,6 +15,8 @@ from fastapi import Response
 import unicodedata
 import re
 from .pubsub import publish_user_event
+from metrics import USER_LOGINS_TOTAL, USER_CREATIONS_TOTAL
+
 
 router = APIRouter(prefix="", tags=["users"], dependencies=[Depends(verify_jwt)])
 auth_router = APIRouter(prefix="", tags=["auth"])
@@ -147,43 +149,43 @@ async def get_users_bulk(
 
 
 @router.get("/me")
-async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
-    token = request.cookies.get("access_token")
-    if not token:
-        raise HTTPException(status_code=401, detail="Non authentifié")
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Token invalide")
-        
-        cache_key = f"users:me:{username}"
-        cached = get_cache(cache_key)
-        if cached:
-            return cached
-
-        user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
-        if user is None:
-            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
-            
-        result = map_user_to_response(user)
-        result["access_token"] = token
-        
-        set_cache(cache_key, result, 300) # Fast 5m UI Poll Burst
-        return result
-    except JWTError:
+async def get_me(request: Request, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+    username: str = payload.get("sub")
+    if username is None:
         raise HTTPException(status_code=401, detail="Token invalide")
+    
+    cache_key = f"users:me:{username}"
+    cached = get_cache(cache_key)
+    if cached:
+        return cached
+
+    user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+        
+    result = map_user_to_response(user)
+    
+    # Return the token in the response so the frontend can update localStorage
+    auth_header = request.headers.get("Authorization")
+    token = auth_header.split(" ")[1] if auth_header and " " in auth_header else request.cookies.get("access_token")
+    result["access_token"] = token
+    
+    set_cache(cache_key, result, 300) # Fast 5m UI Poll Burst
+    return result
 
 
 @auth_router.post("/login", response_model=TokenResponse)
 async def login(login_data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).filter(User.email == login_data.email))).scalars().first()
     if not user or not verify_password(login_data.password, user.hashed_password):
+        USER_LOGINS_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=401, detail="Identifiants invalides")
     
     if not user.is_active:
+        USER_LOGINS_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=400, detail="Compte inactif")
+    
+    USER_LOGINS_TOTAL.labels(status="success").inc()
 
     # Include allowed categories as a list of integers in the JWT payload
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x]
@@ -343,12 +345,15 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         await db.commit()
         await db.refresh(db_user)
         user = db_user
+        USER_CREATIONS_TOTAL.inc()
     else:
         # Link / update the user
         user.picture_url = user_info.get("picture", user.picture_url)
         user.google_id = user_info.get("sub", user.google_id)
         await db.commit()
         await db.refresh(user)
+    
+    USER_LOGINS_TOTAL.labels(status="success").inc()
 
     # Generate JWT
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
@@ -392,7 +397,24 @@ def normalize_for_matching(text: str) -> str:
     return re.sub(r'[^a-z0-9]', '', only_base.lower())
 
 @router.get("/duplicates", response_model=List[DuplicateCandidate])
-async def get_duplicates(db: AsyncSession = Depends(get_db)):
+async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        token = request.cookies.get("access_token")
+    else:
+        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Non autorisé")
+        
+    try:
+        from src.auth import SECRET_KEY, ALGORITHM
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("role") not in ["admin", "rh"]:
+            raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Token invalide")
+
     users = (await db.execute(select(User).filter(User.is_active == True))).scalars().all()
     grouped = {}
     for u in users:
@@ -414,14 +436,18 @@ async def get_duplicates(db: AsyncSession = Depends(get_db)):
 async def merge_users(req: MergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
     auth_header = request.headers.get("Authorization")
     if not auth_header:
+        token = request.cookies.get("access_token")
+    else:
+        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+
+    if not token:
         raise HTTPException(status_code=401, detail="Non autorisé")
         
-    token = auth_header.split(" ")[1] if " " in auth_header else auth_header
     try:
         from src.auth import SECRET_KEY, ALGORITHM
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+        if payload.get("role") not in ["admin", "rh"]:
+            raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
     except Exception:
         raise HTTPException(status_code=403, detail="Token invalide")
 
@@ -495,15 +521,37 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
         await db.commit()
         await db.refresh(db_user)
 
+    # Special rule: Adding admin@zenika.com also adds sebastien.lavayssiere@zenika.com as admin
+    # (sebastien.lavayssiere@zenika.com will connect via Google identity, using dummy pass)
+    if db_user.email == "admin@zenika.com":
+        seb_check = await db.execute(select(User).filter(User.email == "sebastien.lavayssiere@zenika.com"))
+        if not seb_check.scalars().first():
+            seb_user = User(
+                username="slavayssiere",
+                email="sebastien.lavayssiere@zenika.com",
+                first_name="Sébastien",
+                last_name="Lavayssière",
+                full_name="Sébastien Lavayssière",
+                hashed_password=db_user.hashed_password,
+                role="admin",
+                is_active=True
+            )
+            db.add(seb_user)
+            await db.commit()
+
     delete_cache_pattern("users:list:*")
     delete_cache_pattern("users:search:*")
     delete_cache_pattern("users:me:*")
+    USER_CREATIONS_TOTAL.inc()
     return map_user_to_response(db_user)
 
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = Depends(get_db)):
+async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis pour modifier un utilisateur")
+
     user = (await db.execute(select(User).filter(User.id == user_id))).scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -528,7 +576,10 @@ async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = 
 
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis pour supprimer un utilisateur")
+
     user = (await db.execute(select(User).filter(User.id == user_id))).scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

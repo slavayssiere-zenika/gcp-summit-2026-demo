@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials
 import json
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,10 +20,11 @@ import urllib.parse
 import logging
 
 from database import get_db
-from src.auth import verify_jwt
+from src.auth import verify_jwt, security
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
 from .task_state import task_state_manager
+from metrics import CV_PROCESSING_TOTAL
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["CV_Public"])
@@ -35,6 +37,8 @@ ITEMS_API_URL = os.getenv("ITEMS_API_URL", "http://items_api:8001")
 
 # Initialize Gemini Client
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+MARKET_MCP_URL = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+
 if not GEMINI_API_KEY:
     print("WARNING: GOOGLE_API_KEY is missing. RAG embeddings will fail.")
     client = None
@@ -42,6 +46,48 @@ else:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
 logger = logging.getLogger(__name__)
+
+from typing import Any
+async def _log_finops(user_email: str, action: str, model: str, usage_metadata: Any, metadata: dict = None, auth_token: str = None):
+    """Utility to log consumption to BigQuery via Market MCP sidecar."""
+    if not usage_metadata:
+        return
+    
+    try:
+        # Robust token extraction (handles objects or dicts)
+        if hasattr(usage_metadata, 'prompt_token_count'):
+            input_tokens = getattr(usage_metadata, 'prompt_token_count', 0)
+        else:
+            input_tokens = usage_metadata.get('prompt_token_count', 0) if isinstance(usage_metadata, dict) else 0
+
+        if hasattr(usage_metadata, 'candidates_token_count'):
+            output_tokens = getattr(usage_metadata, 'candidates_token_count', 0)
+        else:
+            output_tokens = usage_metadata.get('candidates_token_count', 0) if isinstance(usage_metadata, dict) else 0
+        
+        async with httpx.AsyncClient() as http_client:
+            payload = {
+                "name": "log_ai_consumption",
+                "arguments": {
+                    "user_email": user_email,
+                    "action": action,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "metadata": metadata or {}
+                }
+            }
+            # We don't want FinOps logging to block or fail the main request if Market is down
+            try:
+                headers = {}
+                inject(headers)
+                if auth_token:
+                    headers["Authorization"] = f"Bearer {auth_token}"
+                await http_client.post(f"{MARKET_MCP_URL.rstrip('/')}/mcp/call", json=payload, headers=headers, timeout=2.0)
+            except Exception as ex:
+                logger.warning(f"Market MCP unreachable for FinOps: {ex}")
+    except Exception as e:
+        logger.error(f"FinOps logging analysis failed: {e}")
 
 async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str:
     """Download the CV content. If Google Docs, map to raw export endpoint."""
@@ -88,10 +134,11 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
         source_tag=req.source_tag,
         headers=headers,
         token_payload=token_payload,
-        db=db
+        db=db,
+        auth_token=auth_header.replace("Bearer ", "") if "Bearer " in auth_header else auth_header
     )
 
-async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession) -> CVResponse:
+async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None) -> CVResponse:
     # 2. Fetch Text from CV Link
     try:
         logger.info(f"Downloading CV content from {url}")
@@ -101,6 +148,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         raise
     except Exception as e:
         logger.error(f"Failed downloading CV content: {e}", exc_info=True)
+        CV_PROCESSING_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
 
     if not client:
@@ -121,7 +169,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     try:
         logger.info("Calling Gemini to parse CV")
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
             contents=[prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -178,6 +226,16 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         # LLM returns a JSON string matching schema
         structured_cv = json.loads(parsed_data)
         
+        # FinOps Logging (Safe extraction to avoid Pydantic validation mismatches)
+        user_caller = token_payload.get("sub", "unknown")
+        safe_meta = None
+        try:
+            safe_meta = response.usage_metadata
+        except Exception as e:
+            logger.warning(f"Metadata access failed for analyze_cv: {e}")
+            
+        await _log_finops(user_caller, "analyze_cv", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), safe_meta, {"cv_url": url}, auth_token=auth_token)
+        
         if not structured_cv.get("is_cv", False):
             logger.warning("Document is not recognized as a CV")
             raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
@@ -185,6 +243,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         raise
     except Exception as e:
         logger.error(f"LLM Parsing failed: {e}", exc_info=True)
+        CV_PROCESSING_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
     # 4. Identity Sanitization & Fallback Resolution
     def sanitize_field(val: Any) -> Optional[str]:
@@ -451,7 +510,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     
     try:
         emb_res = client.models.embed_content(
-            model='gemini-embedding-001',
+            model=os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-005"),
             contents=distilled_content
         )
         vector_data = emb_res.embeddings[0].values
@@ -482,6 +541,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     await db.commit()
 
     logger.info(f"Successfully processed CV for {structured_cv.get('first_name')}, assigned {assigned_count} competencies.")
+    CV_PROCESSING_TOTAL.labels(status="success").inc()
     return CVResponse(
         message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
         user_id=user_id,
@@ -490,7 +550,13 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     )
 
 @router.get("/search", response_model=List[SearchCandidateResponse])
-async def search_candidates(query: str, limit: int = 5, request: Request = None, db: AsyncSession = Depends(get_db)):
+async def search_candidates(
+    query: str, 
+    limit: int = 5, 
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """
     Recherche sémantique (RAG) du meilleur candidat via pgvector cosine distance.
     L'agent interroge cette route lorsqu'il cherche des consultants par mots-clés ou description de projet.
@@ -502,7 +568,7 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
     try:
         filter_prompt = f"Extract a JSON list of strictly required technical competencies from this search query. Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are strictly required.\nQuery: '{query}'"
         filter_res = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
             contents=filter_prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -516,10 +582,25 @@ async def search_candidates(query: str, limit: int = 5, request: Request = None,
     try:
         # 1. Convert Prompt Query into 3072-D Matrix
         emb_res = client.models.embed_content(
-            model='gemini-embedding-001',
+            model=os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-005"),
             contents=query
         )
         search_vector = emb_res.embeddings[0].values
+        
+        # FinOps Logging (Filter + Embedding) - Safe access to metadata
+        user_caller = token_payload.get("sub", "unknown")
+        
+        # Log generation tokens from filter (Safely)
+        f_meta = None
+        try:
+            f_meta = filter_res.usage_metadata
+        except Exception as e:
+            logger.warning(f"Metadata access failed for search filter: {e}")
+        await _log_finops(user_caller, "search_filter_extraction", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), f_meta, {"query": query}, auth_token=credentials.credentials)
+        
+        # Log embedding (rough estimate)
+        # We use a simple dict to avoid Pydantic validation issues with the official UsageMetadata type
+        await _log_finops(user_caller, "search_embedding", os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-005"), {"prompt_token_count": len(query)//4, "candidates_token_count": 0}, auth_token=credentials.credentials)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Embedding search query failed: {e}")
 
@@ -812,15 +893,38 @@ async def recalculate_competencies_tree(
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"),
             contents=[instruction, combined_text],
             config=types.GenerateContentConfig(
                 temperature=0.2,
                 response_mime_type="application/json",
             )
         )
+        
+        # FinOps Logging (Safe access)
+        user_caller = token_payload.get("sub", "unknown")
+        r_meta = None
+        try:
+            r_meta = response.usage_metadata
+        except Exception as e:
+            logger.warning(f"Metadata access failed for recalculate_tree: {e}")
+        auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
+        await _log_finops(user_caller, "recalculate_tree", os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"), r_meta, auth_token=auth_token)
+
+        estimated_cost_usd = 0
+        if r_meta:
+            input_tokens = getattr(r_meta, 'prompt_token_count', 0)
+            output_tokens = getattr(r_meta, 'candidates_token_count', 0)
+            # Prix Gemini Pro : ~1.25$ / 1M in, 5.00$ / 1M out
+            estimated_cost_usd = (input_tokens * 1.25 + output_tokens * 5.0) / 1000000
+
         # Parse JSON string from model implicitly as it's guaranteed to be valid by `response_mime_type`
-        return {"tree": json.loads(response.text)}
+        return {
+            "tree": json.loads(response.text),
+            "usage": {
+                "estimated_cost_usd": estimated_cost_usd
+            }
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur Gemini: {str(e)}")
 
@@ -853,6 +957,7 @@ async def reanalyze_cvs(
 
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
+    auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
     inject(headers)
 
     # 1. Fetch CVs to re-process
@@ -940,7 +1045,8 @@ async def reanalyze_cvs(
                         source_tag=s_tag,
                         headers=headers,
                         token_payload=token_payload,
-                        db=db
+                        db=db,
+                        auth_token=auth_token
                     )
                     
                     # 3.3 Identity Verification logic

@@ -82,6 +82,11 @@ variable "image_agent" {
   type        = string
 }
 
+variable "image_market" {
+  description = "Image for Market & FinOps MCP container"
+  type        = string
+}
+
 variable "image_db_migrations" {
   description = "Image for DB Migrations container"
   type        = string
@@ -92,6 +97,12 @@ variable "gemini_api_key" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "gemini_model" {
+  description = "Modèle Gemini par défaut à utiliser"
+  type        = string
+  default     = "gemini-3-flash-preview"
 }
 
 variable "slo_availability_goal" {
@@ -111,3 +122,15 @@ variable "slo_latency_threshold_ms" {
   type        = number
   default     = 500
 }
+
+# Versions par composant (automatiquement alimentés par manage_env.py)
+variable "agent_api_version" { type = string }
+variable "users_api_version" { type = string }
+variable "items_api_version" { type = string }
+variable "competencies_api_version" { type = string }
+variable "cv_api_version" { type = string }
+variable "prompts_api_version" { type = string }
+variable "drive_api_version" { type = string }
+variable "market_mcp_version" { type = string }
+variable "db_migrations_version" { type = string }
+variable "frontend_version" { type = string }

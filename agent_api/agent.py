@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 from google.genai import types
 from google.adk.agents import Agent
-from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp, get_drive_mcp
+from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp, get_drive_mcp, get_market_mcp
 
 logger = logging.getLogger(__name__)
 
@@ -253,24 +253,43 @@ async def get_user(user_id: int) -> dict:
     result = await mcp.call_tool("get_user", {"user_id": user_id})
     return format_mcp_result(result, "user")
 
-async def create_user(username: str, email: str, full_name: Optional[str] = None, is_anonymous: bool = False) -> dict:
+async def create_user(username: str, email: str, password: Optional[str] = None, full_name: Optional[str] = None, is_anonymous: bool = False) -> dict:
     """
     Crée un nouvel utilisateur dans le système.
     
     Args:
         username (str): Le nom d'utilisateur unique.
         email (str): L'adresse email de l'utilisateur.
+        password (str, optional): Le mot de passe de l'utilisateur (auto-généré si omis).
         full_name (str, optional): Le nom complet de l'utilisateur.
         is_anonymous (bool, optional): Marquer le profil comme anonyme/provisoire.
     """
+    import secrets
+    import string
+    
+    if not password:
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
     mcp = await get_users_mcp()
     result = await mcp.call_tool("create_user", {
         "username": username, 
         "email": email, 
+        "password": password,
         "full_name": full_name,
         "is_anonymous": is_anonymous
     })
-    return format_mcp_result(result, "user")
+    
+    formatted = format_mcp_result(result, "user")
+    try:
+        data = json.loads(formatted["result"])
+        if isinstance(data, dict):
+            data["_system_password_used"] = password
+        formatted["result"] = json.dumps(data)
+    except Exception:
+        pass
+        
+    return formatted
 
 async def update_user(user_id: int, username: Optional[str] = None, email: Optional[str] = None, 
                 full_name: Optional[str] = None, is_active: Optional[bool] = None, is_anonymous: Optional[bool] = None) -> dict:
@@ -722,6 +741,53 @@ GCP_LOGGING_TOOLS = [
 ]
 
 
+# --- Market & FinOps Tools ---
+
+async def get_top_market_skills(category: str, limit: int = 10) -> dict:
+    """
+    Récupère les compétences les plus demandées sur le marché pour une catégorie de métier.
+    
+    Args:
+        category (str): La catégorie métier (ex: 'Data Engineer').
+        limit (int): Nombre de résultats.
+    """
+    mcp = await get_market_mcp()
+    result = await mcp.call_tool("get_top_market_skills", {"category": category, "limit": limit})
+    return format_mcp_result(result, "market_skills")
+
+async def get_market_demand_volume(category: str) -> dict:
+    """
+    Évalue la tension du marché pour une catégorie métier.
+    """
+    mcp = await get_market_mcp()
+    result = await mcp.call_tool("get_market_demand_volume", {"category": category})
+    return format_mcp_result(result, "market_volume")
+
+async def get_finops_report(period: str = "daily", user_email: Optional[str] = None) -> dict:
+    """
+    Génère un rapport de consommation FinOps (coûts IA).
+    """
+    mcp = await get_market_mcp()
+    args = {"period": period}
+    if user_email: args["user_email"] = user_email
+    result = await mcp.call_tool("get_finops_report", args)
+    return format_mcp_result(result, "finops_report")
+
+async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
+    """
+    Récupère la topologie dynamique de l'infrastructure (services et liens) via les traces GCP.
+    """
+    mcp = await get_market_mcp()
+    result = await mcp.call_tool("get_infrastructure_topology", {"hours_lookback": hours_lookback})
+    return format_mcp_result(result, "infrastructure_topology")
+
+MARKET_TOOLS = [
+    get_top_market_skills,
+    get_market_demand_volume,
+    get_finops_report,
+    get_infrastructure_topology
+]
+
 async def create_agent(session_id: str | None = None):
     import httpx
     try:
@@ -756,7 +822,7 @@ async def create_agent(session_id: str | None = None):
         except Exception as e:
             print(f"Error fetching personal prompt for {session_id}: {e}")
             
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     
     # Choix dynamique des outils de log
     use_gcp_logging = os.getenv("USE_GCP_LOGGING", "false").lower() == "true"
@@ -771,8 +837,8 @@ async def create_agent(session_id: str | None = None):
             )
         ),
         instruction=instruction_text,
-        description="Assistant IA pour la gestion des utilisateurs, items et compétences. Et analyse des logs via Loki ou GCP.",
-        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *DRIVE_TOOLS, *log_tools]
+        description="Assistant IA pour la gestion des utilisateurs, items et compétences. Analyse des logs et du marché GCP/FinOps.",
+        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *DRIVE_TOOLS, *MARKET_TOOLS, *log_tools]
     )
     
     return agent
@@ -818,6 +884,10 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     steps = []
     seen_steps = set()
     thoughts = []
+    total_input_tokens = 0
+    total_output_tokens = 0
+    
+    model = agent.model
     
     async for event in runner.run_async(
         user_id="user_1",
@@ -947,9 +1017,53 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
                     itext = getattr(part, 'text', None)
                     if itext and not itcall and not ithought:
                         response_parts.append(itext)
+        
+        # 5. Capture Usage Metadata (FinOps)
+        # ADK/SDK events might have usage_metadata on the response or directly on the event
+        u = None
+        if hasattr(event, 'response') and event.response and hasattr(event.response, 'usage_metadata'):
+            u = event.response.usage_metadata
+        elif hasattr(event, 'usage_metadata'):
+            u = event.usage_metadata
+            
+        if u:
+            # Safe attribute extraction to handle different SDK versions/objects
+            # Use max() to avoid overcounting as the ADK usage_metadata might be cumulative in the stream
+            if hasattr(u, 'prompt_token_count'):
+                total_input_tokens = max(total_input_tokens, getattr(u, 'prompt_token_count', 0))
+            elif isinstance(u, dict):
+                total_input_tokens = max(total_input_tokens, u.get('prompt_token_count', 0))
+
+            if hasattr(u, 'candidates_token_count'):
+                total_output_tokens = max(total_output_tokens, getattr(u, 'candidates_token_count', 0))
+            elif isinstance(u, dict):
+                total_output_tokens = max(total_output_tokens, u.get('candidates_token_count', 0))
     
     response_text = "".join(response_parts)
     thought_text = "\n".join(thoughts)
+
+    # 6. Log Consumption to BigQuery via Market MCP
+    if total_input_tokens > 0 or total_output_tokens > 0:
+        try:
+            # We need the user email. In agent_api, session_id is often the user email or ID.
+            user_email = session_id if "@" in str(session_id) else f"{session_id}@zenika.com"
+            market_mcp = await get_market_mcp()
+            
+            # Explicitly pass auth token from context if available
+            from mcp_client import auth_header_var
+            auth_header = auth_header_var.get()
+            
+            await market_mcp.call_tool("log_ai_consumption", {
+                "user_email": user_email,
+                "action": "agent_query",
+                "model": model,
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+                "metadata": {"query": query[:100]}
+            })
+            logger.info(f"FinOps: Logged {total_input_tokens+total_output_tokens} tokens for {user_email}")
+        except Exception as e:
+            logger.error(f"Failed to log FinOps consumption: {e}")
     
     return {
         "response": response_text,
@@ -957,5 +1071,10 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
         "data": last_tool_data,
         "steps": steps, # Nouveau champ pour le mode expert
         "source": "adk_agent",
-        "session_id": session_id
+        "session_id": session_id,
+        "usage": {
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
+            "estimated_cost_usd": round(total_input_tokens * 0.000000075 + total_output_tokens * 0.0000003, 6)
+        }
     }

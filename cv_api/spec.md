@@ -52,9 +52,21 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
+- **GET** `/version` : Get Version
+- **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/import` : Import And Analyze Cv
 - **GET** `/search` : Search Candidates
 - **GET** `/user/{user_id}` : Get User Cv
 - **GET** `/users/tag/{tag}` : Get Users By Tag
+- **GET** `/user/{user_id}/missions` : Get User Missions
+- **GET** `/user/{user_id}/details` : Get User Cv Details
+- **GET** `/ranking/experience` : Get Consultants Experience Ranking
 - **POST** `/recalculate_tree` : Recalculate Competencies Tree
+- **GET** `/reanalyze/status` : Get Reanalyze Status
+- **POST** `/reanalyze` : Reanalyze Cvs
+- **POST** `/internal/users/merge` : Merge Users
 - **GET** `/spec` : Get Spec
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp

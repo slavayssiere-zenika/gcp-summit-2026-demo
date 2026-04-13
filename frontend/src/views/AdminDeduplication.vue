@@ -74,8 +74,8 @@ onMounted(() => {
         <h2>Déduplication des Utilisateurs</h2>
         <p>Administration centralisée des fusions de comptes pour assurer la cohérence des données RAG.</p>
       </div>
-      <div class="status-badge" v-if="authService.state.user?.role === 'admin'">
-        <ShieldCheck size="16" /> Admin
+      <div class="status-badge" v-if="authService.state.user?.role === 'admin' || authService.state.user?.role === 'rh'">
+        <ShieldCheck size="16" /> {{ authService.state.user?.role === 'admin' ? 'Admin' : 'RH' }}
       </div>
     </div>
 

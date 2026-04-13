@@ -10,37 +10,102 @@ FRONTEND_BUCKET="z-gcp-summit-frontend"
 # Docker registry prefix
 DOCKER_REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY}"
 
-echo "=== Préparation de l'environnement GCP ==="
+# Colors for Zenika Branding
+RED='\033[0;31m'
+GREY='\033[1;30m'
+RESET='\033[0m'
+GREEN='\033[0;32m'
+
+# Aide (vérifié avant tout autre traitement)
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  # show_help est défini plus bas, mais on peut le définir ici ou appeler un bloc dédié
+  # Pour simplifier, on s'assure que show_help est accessible ou on déplace sa définition
+  echo -e "${RED}Zenika Console - Déploiement GCP${RESET}"
+  echo ""
+  echo "Usage: $0 [SERVICE] [BUMP_TYPE]"
+  echo ""
+  echo "Services:"
+  echo -e "  all            Déploie tous les microservices applicatifs et le frontend"
+  echo -e "  users_api      Microservice Utilisateurs"
+  echo -e "  items_api      Microservice Items"
+  echo -e "  cv_api         Microservice CVs"
+  echo -e "  agent_api      Orchestrateur Agent"
+  echo -e "  frontend       Frontend Vue.js"
+  echo -e "  db_migrations  Migrations de base de données (non inclus dans 'all')"
+  echo -e "  db_init       Initialise la base de données via Cloud Run Job"
+  echo ""
+  echo "Bump Types (SemVer):"
+  echo "  patch (défaut), minor, major"
+  echo ""
+  echo "Exemples:"
+  echo "  $0 all minor"
+  echo "  $0 db_migrations"
+  exit 0
+fi
+
+echo -e "${RED}=== Préparation de l'environnement GCP ===${RESET}"
 gcloud config set project "$PROJECT_ID"
 gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
-# Génération de la version Sémantique depuis les tags Git
-LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+# ==============================================================================
+# Versioning Helpers
+# ==============================================================================
 
-# Extraction des parties major, minor, patch de vX.Y.Z
-if [[ $LATEST_TAG =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-  MAJOR="${BASH_REMATCH[1]}"
-  MINOR="${BASH_REMATCH[2]}"
-  PATCH="${BASH_REMATCH[3]}"
-else
-  MAJOR=0
-  MINOR=0
-  PATCH=0
-fi
+get_service_tag() {
+  local SERVICE=$1
+  local BUMP_TYPE=${2:-"none"}
+  local VERSION_FILE="${SERVICE}/VERSION"
+  
+  if [ ! -f "$VERSION_FILE" ]; then
+    echo "v0.0.1" > "$VERSION_FILE"
+  fi
+  
+  local CURRENT_VERSION=$(cat "$VERSION_FILE")
+  
+  # if BUMP_TYPE is "none", just return current
+  if [ "$BUMP_TYPE" == "none" ]; then
+    echo "$CURRENT_VERSION"
+    return
+  fi
 
-# Increment du patch pour le nouveau déploiement
-NEW_PATCH=$((PATCH + 1))
-TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+  # Extraction des parties major, minor, patch de vX.Y.Z
+  if [[ $CURRENT_VERSION =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    local MAJOR="${BASH_REMATCH[1]}"
+    local MINOR="${BASH_REMATCH[2]}"
+    local PATCH="${BASH_REMATCH[3]}"
+  else
+    local MAJOR=0
+    local MINOR=0
+    local PATCH=0
+  fi
 
-echo "-> Dernière version: $LATEST_TAG | Nouvelle version ciblée: $TAG"
+  case $BUMP_TYPE in
+    major)
+      MAJOR=$((MAJOR + 1))
+      MINOR=0
+      PATCH=0
+      ;;
+    minor)
+      MINOR=$((MINOR + 1))
+      PATCH=0
+      ;;
+    patch)
+      PATCH=$((PATCH + 1))
+      ;;
+  esac
 
-# Création du tag Git localement (s'il n'existe pas déjà)
-if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-  git tag "$TAG"
-  echo "-> Tag Git local $TAG créé avec succès."
-fi
-
-echo "-> Les images seront taggées avec : $TAG (et 'latest')"
+  local NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+  echo "$NEW_TAG" > "$VERSION_FILE"
+  
+  # Création du tag Git spécifique au service
+  local GIT_TAG="${SERVICE}-${NEW_TAG}"
+  if ! git rev-parse "$GIT_TAG" >/dev/null 2>&1; then
+    git tag "$GIT_TAG"
+    echo "-> Tag Git $GIT_TAG créé." >&2
+  fi
+  
+  echo "$NEW_TAG"
+}
 
 # ==============================================================================
 # Helper Functions
@@ -48,31 +113,26 @@ echo "-> Les images seront taggées avec : $TAG (et 'latest')"
 
 update_cloudrun() {
   local SERVICE=$1
+  local TAG=$2
   
-  local HTTP_CODE
-  HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "https://dev.zenika.slavayssiere.fr" || echo "000")
-  if [ "$HTTP_CODE" = "200" ]; then
-    echo "--- Déploiement de $SERVICE sur Cloud Run (dev) ---"
-    local CLEAN_NAME="${SERVICE//_/-}"
-    local SVC_NAME="${CLEAN_NAME}-dev"
-    local IMAGE_NAME="${DOCKER_REPO}/${SERVICE}:latest"
-    
-    local CMD_ARGS=(
-      "gcloud" "run" "services" "update" "$SVC_NAME"
-      "--region" "$REGION"
-      "--project" "$PROJECT_ID"
-      "--container" "api" "--image" "$IMAGE_NAME"
-      "--update-env-vars" "APP_VERSION=$TAG"
-    )
-    
-    if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" || "$SERVICE" == "drive_api" ]]; then
-      CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_NAME" )
-    fi
-    
-    "${CMD_ARGS[@]}"
-  else
-    echo "--- dev.zenika.slavayssiere.fr n'est pas prêt (HTTP $HTTP_CODE), saut du déploiement Cloud Run pour $SERVICE ---"
+  echo "--- Déploiement de $SERVICE sur Cloud Run (dev) ---"
+  local CLEAN_NAME="${SERVICE//_/-}"
+  local SVC_NAME="${CLEAN_NAME}-dev"
+  local IMAGE_URL="${DOCKER_REPO}/${SERVICE}:${TAG}"
+  
+  local CMD_ARGS=(
+    "gcloud" "run" "services" "update" "$SVC_NAME"
+    "--region" "$REGION"
+    "--project" "$PROJECT_ID"
+    "--container" "api" "--image" "$IMAGE_URL"
+    "--update-env-vars" "APP_VERSION=$TAG"
+  )
+  
+  if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" || "$SERVICE" == "drive_api" ]]; then
+    CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_URL" )
   fi
+  
+  "${CMD_ARGS[@]}" || echo "/!\ Échec partiel du déploiement Cloud Run pour $SERVICE"
 }
 
 run_db_init_job() {
@@ -85,13 +145,47 @@ run_db_init_job() {
       --project "$PROJECT_ID" \
       --wait
   else
-    echo "--- Cloud Run Job $JOB_NAME introuvable, impossible de l'exécuter ---"
+    echo -e "${RED}--- Cloud Run Job $JOB_NAME introuvable, impossible de l'exécuter ---${RESET}"
   fi
+}
+
+show_progress() {
+  local CURRENT=$1
+  local DONE_TASKS=()
+  local TODO_TASKS=()
+  local FOUND=false
+  
+  for task in "${ALL_TASKS[@]}"; do
+    if [ "$task" == "$CURRENT" ]; then
+      FOUND=true
+      continue
+    fi
+    if [ "$FOUND" = false ]; then
+      DONE_TASKS+=("$task")
+    else
+      TODO_TASKS+=("$task")
+    fi
+  done
+  
+  echo -e "\n${GREY}------------------------------------------------------------${RESET}"
+  echo -e "${RED}🚀 BUILDING: ${CURRENT}${RESET}"
+  
+  if [ ${#DONE_TASKS[@]} -gt 0 ]; then
+    echo -e "${GREEN}✅ COMPLETED: ${DONE_TASKS[*]}${RESET}"
+  fi
+  
+  if [ ${#TODO_TASKS[@]} -gt 0 ]; then
+    echo -e "${GREY}⏳ REMAINING: ${TODO_TASKS[*]}${RESET}"
+  fi
+  echo -e "${GREY}------------------------------------------------------------${RESET}\n"
 }
 
 build_and_push_standard() {
   local SERVICE=$1
-  echo "--- Building $SERVICE ---"
+  local BUMP=${2:-"patch"}
+  
+  local TAG=$(get_service_tag "$SERVICE" "$BUMP")
+  echo "--- Building $SERVICE ($TAG) ---"
   local IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
   
   # Build pour Cloud Run (nécessite amd64)
@@ -103,7 +197,7 @@ build_and_push_standard() {
   docker push "${IMAGE_NAME}:latest"
   
   if [ "$SERVICE" != "db_migrations" ]; then
-    update_cloudrun "$SERVICE"
+    update_cloudrun "$SERVICE" "$TAG"
   else
     # Chaine automatiquement avec le init_job
     run_db_init_job
@@ -116,7 +210,7 @@ build_and_push_standard() {
       gcloud run jobs update "$JOB_NAME" \
         --region "$REGION" \
         --project "$PROJECT_ID" \
-        --image "${IMAGE_NAME}:latest"
+        --image "${IMAGE_NAME}:${TAG}"
       
       echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
       gcloud run jobs execute "$JOB_NAME" \
@@ -130,19 +224,25 @@ build_and_push_standard() {
 }
 
 build_and_push_agent() {
+  local BUMP=${1:-"patch"}
+  local TAG=$(get_service_tag "agent_api" "$BUMP")
+  
   # Cas particulier de l'Agent API (build context à la racine)
-  echo "--- Building agent_api ---"
+  echo "--- Building agent_api ($TAG) ---"
   local AGENT_IMAGE_NAME="${DOCKER_REPO}/agent_api"
   docker build --platform linux/amd64 -t "${AGENT_IMAGE_NAME}:${TAG}" -t "${AGENT_IMAGE_NAME}:latest" -f "agent_api/Dockerfile" .
   echo "--- Pushing agent_api ---"
   docker push "${AGENT_IMAGE_NAME}:${TAG}"
   docker push "${AGENT_IMAGE_NAME}:latest"
   
-  update_cloudrun "agent_api"
+  update_cloudrun "agent_api" "$TAG"
 }
 
 build_and_upload_frontend() {
-  echo "=== Traitement du Frontend ==="
+  local BUMP=${1:-"patch"}
+  local TAG=$(get_service_tag "frontend" "$BUMP")
+
+  echo "=== Traitement du Frontend ($TAG) ==="
   if [ ! -d "frontend" ]; then
     echo "Dossier frontend introuvable"
     exit 1
@@ -186,32 +286,55 @@ build_and_upload_frontend() {
 # ==============================================================================
 # Main logic
 # ==============================================================================
-SERVICES=("db_migrations" "users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api")
+# Liste des services applicatifs (déployés par 'all')
+APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "market_mcp")
+# Liste de tous les services possibles pour la validation
+VALID_SERVICES=("db_migrations" "db_init" "agent_api" "frontend" "${APP_MICROSERVICES[@]}")
+
 TARGET_SERVICE="${1:-all}"
+
 # Normalize input (e.g. agent-api -> agent_api)
 TARGET_SERVICE=${TARGET_SERVICE//-/_}
 
+BUMP_TYPE="${2:-patch}"
+
 if [ "$TARGET_SERVICE" = "all" ]; then
-  # 1. Build and Push des Microservices
-  for SERVICE in "${SERVICES[@]}"; do
-    build_and_push_standard "$SERVICE"
-  done
-  build_and_push_agent
+  # Définition des tâches pour le mode 'all'
+  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_api" "frontend")
   
-  # 2. Build and Upload du Frontend
-  build_and_upload_frontend
-elif [[ " ${SERVICES[*]} " == *" $TARGET_SERVICE "* ]]; then
-  build_and_push_standard "$TARGET_SERVICE"
+  # 1. Build and Push des Microservices Applicatifs
+  for SERVICE in "${APP_MICROSERVICES[@]}"; do
+    show_progress "$SERVICE"
+    build_and_push_standard "$SERVICE" "$BUMP_TYPE"
+  done
+
+  # 2. Build Agent
+  show_progress "agent_api"
+  build_and_push_agent "$BUMP_TYPE"
+  
+  # 3. Build and Upload du Frontend
+  show_progress "frontend"
+  build_and_upload_frontend "$BUMP_TYPE"
+
+elif [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
+  # S'il n'y a qu'une tâche, ALL_TASKS contient juste celle-ci
+  ALL_TASKS=("$TARGET_SERVICE")
+  show_progress "$TARGET_SERVICE"
+  build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
 elif [ "$TARGET_SERVICE" = "db_init" ]; then
   run_db_init_job
 elif [ "$TARGET_SERVICE" = "agent_api" ]; then
-  build_and_push_agent
+  ALL_TASKS=("agent_api")
+  show_progress "agent_api"
+  build_and_push_agent "$BUMP_TYPE"
 elif [ "$TARGET_SERVICE" = "frontend" ]; then
-  build_and_upload_frontend
+  ALL_TASKS=("frontend")
+  show_progress "frontend"
+  build_and_upload_frontend "$BUMP_TYPE"
 else
-  echo "Erreur : Service '$1' inconnu."
-  echo "Services valides : all, db_init, ${SERVICES[*]}, agent_api, frontend"
+  echo -e "${RED}Erreur : Service '$1' inconnu.${RESET}"
+  echo "Utilisez --help pour voir la liste des services disponibles."
   exit 1
 fi
 
-echo "=== Déploiement terminé avec succès ! ==="
+echo -e "\n${GREEN}=== Déploiement terminé avec succès ! ===${RESET}"

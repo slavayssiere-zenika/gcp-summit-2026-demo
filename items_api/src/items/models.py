@@ -32,8 +32,9 @@ class Item(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     user_id = Column(Integer, nullable=False, index=True)
+    from sqlalchemy import JSON
     from sqlalchemy.dialects.postgresql import JSONB
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

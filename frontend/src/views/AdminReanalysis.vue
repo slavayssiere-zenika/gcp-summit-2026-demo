@@ -132,17 +132,20 @@ const triggerReanalysis = async () => {
 // Reuse logic from Admin.vue for tree recalculation
 const isTreeLoading = ref(false)
 const treeResult = ref<any>(null)
+const treeCost = ref<number | null>(null)
 
 const triggerRemapping = async () => {
   if (confirm("Générer la nouvelle taxonomie écrasera votre affichage actuel. Êtes-vous sûr ?")) {
     isTreeLoading.value = true
     error.value = ''
     treeResult.value = null
+    treeCost.value = null
     addLog("Calcul de la nouvelle taxonomie via Gemini...")
     
     try {
       const resp = await axios.post('/cv-api/recalculate_tree')
       treeResult.value = resp.data.tree || resp.data
+      treeCost.value = resp.data.usage?.estimated_cost_usd || null
       addLog("Nouvelle taxonomie générée avec succès.")
     } catch (e: any) {
       error.value = e.response?.data?.detail || e.message || "Erreur lors du calcul de l'arbre"
@@ -342,10 +345,15 @@ onUnmounted(() => {
     <!-- Tree Preview Section -->
     <div class="tree-grid fade-in-up" v-if="treeResult">
       <div class="tree-header">
-         <Network size="24" class="tree-icon" /> 
-         <div>
-           <h3>Nouvel Arbre de Compétences Généré</h3>
-           <span class="subtitle-tag">Ceci est une prévisualisation de la taxonomie fusionnée.</span>
+         <div style="display: flex; align-items: center; gap: 1.25rem;">
+           <Network size="24" class="tree-icon" /> 
+           <div>
+             <h3>Nouvel Arbre de Compétences Généré</h3>
+             <span class="subtitle-tag">Ceci est une prévisualisation de la taxonomie fusionnée.</span>
+           </div>
+         </div>
+         <div v-if="treeCost" class="tree-cost-badge">
+           Coût de l'opération : ${{ Number(treeCost).toFixed(4) }}
          </div>
       </div>
       <div class="tree-content">
@@ -714,6 +722,16 @@ onUnmounted(() => {
 
 .tree-header h3 { font-size: 1.4rem; color: #1e293b; margin: 0; }
 .subtitle-tag { font-size: 0.85rem; color: #64748b; }
+
+.tree-cost-badge {
+  background: rgba(227, 25, 55, 0.1);
+  color: var(--zenika-red);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-left: auto;
+}
 
 .json-viewer {
   background: #0f172a;

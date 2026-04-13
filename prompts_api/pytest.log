@@ -21,4 +21,4 @@ src/prompts/schemas.py:14
 _______________ coverage: platform darwin, python 3.13.7-final-0 _______________
 
 Coverage JSON written to file coverage.json
-======================== 21 passed, 2 warnings in 5.67s ========================
+======================== 21 passed, 2 warnings in 3.83s ========================

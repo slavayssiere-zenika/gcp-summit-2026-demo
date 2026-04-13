@@ -28,7 +28,7 @@ resource "google_service_account" "cr_sa" {
 # ==============================================================
 locals {
   mcp_services = ["users", "items", "competencies", "cv"]
-  cr_sa_keys   = ["users", "items", "competencies", "cv", "prompts", "agent", "drive"]
+  cr_sa_keys   = ["users", "items", "competencies", "cv", "prompts", "agent", "drive", "market"]
   mcp_images = {
     "users"        = var.image_users
     "items"        = var.image_items
@@ -122,6 +122,15 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
+      }
+      env {
+        name = "APP_VERSION"
+        value = lookup({
+          "users"        = var.users_api_version
+          "items"        = var.items_api_version
+          "competencies" = var.competencies_api_version
+          "cv"           = var.cv_api_version
+        }, each.key, "unknown")
       }
       env {
         name = "SECRET_KEY"
@@ -266,6 +275,14 @@ resource "google_cloud_run_v2_service" "mcp_services" {
           value = "http://api.internal.zenika/drive-api/"
         }
       }
+
+      dynamic "env" {
+        for_each = each.key == "cv" ? [1] : []
+        content {
+          name  = "MARKET_MCP_URL"
+          value = "http://api.internal.zenika/market-mcp/"
+        }
+      }
     }
 
     # Conteneur Sidecar (MCP)
@@ -315,6 +332,15 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       env {
         name  = "PORT"
         value = "8081" # Overrides standard PORT to prevent :8080 collisions
+      }
+      env {
+        name = "APP_VERSION"
+        value = lookup({
+          "users"        = var.users_api_version
+          "items"        = var.items_api_version
+          "competencies" = var.competencies_api_version
+          "cv"           = var.cv_api_version
+        }, each.key, "unknown")
       }
       env {
         name  = "${upper(each.key)}_API_URL"
@@ -428,6 +454,10 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
+      }
+      env {
+        name  = "APP_VERSION"
+        value = var.prompts_api_version
       }
       env {
         name = "SECRET_KEY"
@@ -544,6 +574,10 @@ resource "google_cloud_run_v2_service" "drive_api" {
         value = "gcp"
       }
       env {
+        name  = "APP_VERSION"
+        value = var.drive_api_version
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -601,6 +635,10 @@ resource "google_cloud_run_v2_service" "drive_api" {
       env {
         name  = "PORT"
         value = "8081"
+      }
+      env {
+        name  = "APP_VERSION"
+        value = var.drive_api_version
       }
       env {
         name  = "DRIVE_API_URL"
@@ -689,6 +727,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
         }
       }
       env {
+        name  = "GEMINI_MODEL"
+        value = var.gemini_model
+      }
+      env {
         name  = "ROOT_PATH"
         value = "/api"
       }
@@ -718,6 +760,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
         value = "http://api.internal.zenika/drive-api/"
       }
       env {
+        name  = "MARKET_MCP_URL"
+        value = "http://api.internal.zenika/market-mcp/"
+      }
+      env {
         name  = "USE_GCP_LOGGING"
         value = "true"
       }
@@ -732,6 +778,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
       env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
+      }
+      env {
+        name  = "APP_VERSION"
+        value = var.agent_api_version
       }
       env {
         name = "SECRET_KEY"
@@ -754,6 +804,97 @@ resource "google_cloud_run_v2_service" "agent_api" {
   depends_on = [
     time_sleep.wait_for_iam_propagation,
     null_resource.run_db_migrations_job
+  ]
+}
+
+# ==============================================================
+# Standalone services (Standalone MCP)
+# ==============================================================
+resource "google_cloud_run_v2_service" "market_mcp" {
+  name     = "market-mcp-${terraform.workspace}"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+
+  template {
+    service_account = google_service_account.cr_sa["market"].email
+    scaling {
+      min_instance_count = var.cloudrun_min_instances
+      max_instance_count = var.cloudrun_max_instances
+    }
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.main.id
+        subnetwork = google_compute_subnetwork.main.id
+        tags       = ["cr-egress"]
+      }
+    }
+    containers {
+      name    = "api"
+      image   = var.image_market
+      command = ["python"]
+      args    = ["mcp_app.py"]
+      ports {
+        container_port = 8080
+      }
+      startup_probe {
+        initial_delay_seconds = 10
+        timeout_seconds       = 3
+        period_seconds        = 5
+        failure_threshold     = 10
+        http_get {
+          path = "/health"
+        }
+      }
+      liveness_probe {
+        initial_delay_seconds = 15
+        timeout_seconds       = 3
+        period_seconds        = 10
+        failure_threshold     = 3
+        http_get {
+          path = "/health"
+        }
+      }
+      resources {
+        limits = {
+          memory = "1024Mi"
+        }
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "TRACE_EXPORTER"
+        value = "gcp"
+      }
+      env {
+        name  = "REDIS_URL"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+      }
+      env {
+        name  = "APP_VERSION"
+        value = var.market_mcp_version
+      }
+      env {
+        name = "SECRET_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.jwt_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].resources[0].limits["cpu"]
+    ]
+  }
+
+  depends_on = [
+    time_sleep.wait_for_iam_propagation
   ]
 }
 
@@ -829,6 +970,25 @@ resource "google_project_iam_member" "alloydb_databaseUser" {
   member   = "serviceAccount:${google_service_account.cr_sa[each.key].email}"
 }
 
+# BigQuery roles for Market service
+resource "google_project_iam_member" "market_bq_admin" {
+  project = var.project_id
+  role    = "roles/bigquery.admin"
+  member  = "serviceAccount:${google_service_account.cr_sa["market"].email}"
+}
+
+resource "google_project_iam_member" "market_bq_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.cr_sa["market"].email}"
+}
+
+resource "google_project_iam_member" "market_trace_user" {
+  project = var.project_id
+  role    = "roles/cloudtrace.user"
+  member  = "serviceAccount:${google_service_account.cr_sa["market"].email}"
+}
+
 # ==============================================================
 # Droits IAM spécifiques pour l'Agent (Logging)
 # ==============================================================
@@ -893,6 +1053,14 @@ resource "google_cloud_run_v2_service_iam_member" "drive_invoker" {
   project  = google_cloud_run_v2_service.drive_api.project
   location = google_cloud_run_v2_service.drive_api.location
   name     = google_cloud_run_v2_service.drive_api.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "market_invoker" {
+  project  = google_cloud_run_v2_service.market_mcp.project
+  location = google_cloud_run_v2_service.market_mcp.location
+  name     = google_cloud_run_v2_service.market_mcp.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }

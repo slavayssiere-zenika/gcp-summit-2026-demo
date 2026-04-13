@@ -10,7 +10,7 @@ apis=("agent_api" "competencies_api" "cv_api" "drive_api" "items_api" "prompts_a
 
 for api in "${apis[@]}"; do
     echo "Lancement des tests pour $api..."
-    (cd "$api" && SECRET_KEY="testsecret" PYTHONPATH=. ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1) &
+    (cd "$api" && OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none OTEL_LOGS_EXPORTER=none SECRET_KEY="testsecret" PYTHONPATH=. ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1) &
     pids+=("$api:$!")
 done
 

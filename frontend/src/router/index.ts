@@ -87,6 +87,16 @@ const router = createRouter({
       path: '/help',
       name: 'help',
       component: () => import('../views/Help.vue')
+    },
+    {
+      path: '/infrastructure',
+      name: 'infrastructure',
+      component: () => import('../views/InfraMap.vue')
+    },
+    {
+      path: '/aiops',
+      name: 'aiops',
+      component: () => import('../views/AiOps.vue')
     }
   ]
 })
@@ -102,8 +112,15 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
     next()
   } else if (!authService.state.isAuthenticated) {
     next({ name: 'login' })
-  } else if (to.meta.adminOnly && authService.state.user?.role !== 'admin') {
-    next({ name: 'home' })
+  } else if (to.meta.adminOnly) {
+    const role = authService.state.user?.role
+    if (role === 'admin') {
+      next()
+    } else if (role === 'rh' && (to.path === '/admin' || to.path === '/admin/deduplication')) {
+      next()
+    } else {
+      next({ name: 'home' })
+    }
   } else {
     next()
   }

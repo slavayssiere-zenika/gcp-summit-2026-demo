@@ -4,6 +4,12 @@ resource "google_compute_network" "main" {
   auto_create_subnetworks = false
 }
 
+resource "google_project_service" "cloudtrace" {
+  project            = var.project_id
+  service            = "cloudtrace.googleapis.com"
+  disable_on_destroy = false
+}
+
 # Subnetwork pour le Load Balancer serverless et usage interne
 resource "google_compute_subnetwork" "main" {
   name          = "subnet-${terraform.workspace}"
@@ -117,5 +123,23 @@ resource "google_compute_firewall" "allow_redis_egress" {
   }
 
   destination_ranges = ["${google_compute_global_address.private_ip_alloc.address}/${google_compute_global_address.private_ip_alloc.prefix_length}"]
+  target_tags        = ["cr-egress"]
+}
+
+# 5. Règle "Allow" Egress vers Google APIs (HTTPS Port 443).
+# Indispensable pour que les SDK (Cloud Trace, Logging, etc.) puissent fonctionner 
+# quand Direct VPC Egress est activé pour tout le trafic.
+resource "google_compute_firewall" "allow_google_apis_egress" {
+  name      = "fw-allow-google-apis-egress-${terraform.workspace}"
+  network   = google_compute_network.main.id
+  direction = "EGRESS"
+  priority  = 1000
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"]
+  }
+
+  destination_ranges = ["0.0.0.0/0"] # Ou utiliser les plages Google API via Private Google Access
   target_tags        = ["cr-egress"]
 }

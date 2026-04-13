@@ -9,6 +9,26 @@ import yaml
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+def discover_versions():
+    """Scans for VERSION files in component directories and returns a mapping."""
+    versions = {}
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    components = [
+        "agent_api", "users_api", "items_api", "competencies_api", 
+        "cv_api", "prompts_api", "drive_api", "market_mcp", 
+        "db_migrations", "frontend"
+    ]
+    
+    for comp in components:
+        v_file = os.path.join(base_dir, comp, "VERSION")
+        if os.path.exists(v_file):
+            with open(v_file, "r") as f:
+                versions[f"{comp}_version"] = f.read().strip()
+        else:
+            versions[f"{comp}_version"] = "v0.0.1"
+            
+    return versions
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -238,11 +258,11 @@ def deploy(env, base_domain, project_id, config, force=False):
             print(f"[*] No archives found in gs://{SOURCE_ARCHIVES_BUCKET}/. Skipping frontend sync.")
             return
             
-        # Sort by date (second column generally) and pick latest
-        # Or simpler: the highest version number/name if sort by date is fuzzy. Let's rely on standard sorted which sorts by string including date/time in ISO.
-        lines.sort()
-        latest_line = lines[-1]
-        latest_archive_url = latest_line.split()[-1]
+        # Sort by filename (which includes the timestamp for correct temporal ordering) 
+        # instead of sorting by the full line which starts with varying file sizes.
+        urls = [line.split()[-1] for line in lines if line.split()]
+        urls.sort()
+        latest_archive_url = urls[-1]
         
         print(f"[*] Latest archive identified: {latest_archive_url}")
         
@@ -605,18 +625,25 @@ if __name__ == "__main__":
             logger.error(f"[!] Configuration file not found: {config_path}")
             sys.exit(1)
             
+        # Auto-discover component versions
+        final_config = discover_versions()
+        
+        # Load YAML Configuration
         config = load_config(config_path)
+        
+        # YAML overrides auto-discovery
+        final_config.update(config)
             
         # Dump it as auto.tfvars.json for Terraform to ingest automatically
         tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")
         with open(tfvars_path, "w") as f:
-            json.dump(config, f, indent=2)
+            json.dump(final_config, f, indent=2)
 
-        project_id = config.get("project_id", "slavayssiere-sandbox-462015")
-        base_domain = config.get("base_domain", "slavayssiere-zenika.com")
+        project_id = final_config.get("project_id", "slavayssiere-sandbox-462015")
+        base_domain = final_config.get("base_domain", "slavayssiere-zenika.com")
 
         if args.action == "deploy":
-            deploy(args.env, base_domain, project_id, config, force=args.force)
+            deploy(args.env, base_domain, project_id, final_config, force=args.force)
         elif args.action == "destroy":
             destroy(args.env, force=args.force)
         elif args.action == "plan":

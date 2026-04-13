@@ -21,9 +21,13 @@ else:
 from opentelemetry.propagate import inject, extract
 from opentelemetry.trace import SpanKind
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 from prometheus_fastapi_instrumentator import Instrumentator
+from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
 
-from agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS, DRIVE_TOOLS
+
+from agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS, DRIVE_TOOLS, MARKET_TOOLS, get_infrastructure_topology
 import inspect
 from logger import setup_logging, LoggingMiddleware
 
@@ -52,7 +56,9 @@ app = FastAPI(
 )
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
-FastAPIInstrumentor.instrument_app(app, excluded_urls="metrics,health")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+RedisInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
 
 
 @app.on_event("startup")
@@ -117,6 +123,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
         span.set_attribute("session.id", computed_session_id)
         
         try:
+            AGENT_QUERIES_TOTAL.inc()
             result = await run_agent_query(request.query, computed_session_id)
             span.set_attribute("agent.source", result.get("source", "unknown"))
             return result
@@ -161,7 +168,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
         
         is_assistant = any(x in ["assistant", "model", "assistant_zenika"] for x in [author_val, role_val])
         is_tool = any(x in ["tool", "function"] for x in [author_val, role_val])
-        is_user = any(x in ["user"] for x in [author_val, role_val])
+        is_user = any(x in ["user"] for x in [author_val, role_val]) and not is_tool and not is_assistant
         
         # Extract parts if available
         parts = []
@@ -172,7 +179,34 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
             content_text = str(content)
             
             
-        # 1. Process EVERY event exhaustively for metadata
+        # 1. Main turn logic (Grouping/Initialization)
+        if is_user:
+            # Avoid adding empty user messages that might come from system/tool noise
+            if content_text.strip():
+                history.append({
+                    "role": "user",
+                    "content": content_text
+                })
+                current_assistant_msg = None 
+            
+        elif is_assistant and current_assistant_msg is None:
+            current_assistant_msg = {
+                "role": "assistant",
+                "content": "",
+                "displayType": "text_only",
+                "data": None,
+                "parsedData": [],
+                "steps": [],
+                "thoughts": "",
+                "rawResponse": "",
+                "activeTab": "preview",
+                "pagination": {"currentPage": 1, "itemsPerPage": 10}
+            }
+            current_assistant_seen_steps = set()
+            history.append(current_assistant_msg)
+
+
+        # 2. Process EVERY event exhaustively for metadata (Chain of Thought, Tool Calls, Results)
         if current_assistant_msg:
             # a) Scan Parts
             for part in parts:
@@ -264,52 +298,59 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                         current_assistant_msg["steps"].append({"type": "result", "data": res_data})
                         current_assistant_seen_steps.add(sig)
             
-
-
-        # 2. Main turn logic
-        if is_user:
-            history.append({
-                "role": "user",
-                "content": content_text
-            })
-            current_assistant_msg = None 
             
-        elif is_assistant:
-            if current_assistant_msg is None:
-                current_assistant_msg = {
-                    "role": "assistant",
-                    "content": "",
-                    "displayType": "text_only",
-                    "data": None,
-                    "parsedData": [],
-                    "steps": [],
-                    "thoughts": "",
-                    "rawResponse": "",
-                    "activeTab": "preview",
-                    "pagination": {"currentPage": 1, "itemsPerPage": 10}
-                }
-                current_assistant_seen_steps = set()
-                history.append(current_assistant_msg)
-            
-            if content_text:
-                current_assistant_msg["content"] += content_text
-                # rawResponse should contain the full textual history of the turn for the expert mode
-                current_assistant_msg["rawResponse"] += content_text
+            # c) Extract Usage/Tokens (FinOps)
+            u = None
+            if hasattr(event, 'response') and event.response and hasattr(event.response, 'usage_metadata'):
+                u = event.response.usage_metadata
+            elif hasattr(event, 'usage_metadata'):
+                u = event.usage_metadata
                 
-                # Try to extract dashboard JSON if present in the text
-                try:
-                    json_match = re.search(r'\{[\s\S]*\}', current_assistant_msg["content"])
-                    if json_match:
-                        json_obj = json.loads(json_match.group(0))
-                        if "reply" in json_obj and "display_type" in json_obj:
-                            current_assistant_msg["content"] = json_obj["reply"]
-                            current_assistant_msg["displayType"] = json_obj["display_type"]
-                            if current_assistant_msg["displayType"] == "profile":
-                                current_assistant_msg["displayType"] = "cards"
-                            
-                            if "data" in json_obj:
-                                current_assistant_msg["data"] = json_obj["data"]
-                except: pass
+            if u:
+                if "usage" not in current_assistant_msg:
+                    current_assistant_msg["usage"] = {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0}
+                
+                # ADK usage_metadata can be cumulative or turn-based
+                it = getattr(u, 'prompt_token_count', 0) or (u.get('prompt_token_count', 0) if isinstance(u, dict) else 0)
+                ot = getattr(u, 'candidates_token_count', 0) or (u.get('candidates_token_count', 0) if isinstance(u, dict) else 0)
+                
+                # We track the max seen for the turn as it's typically cumulative in GenerateContentResponse
+                current_assistant_msg["usage"]["total_input_tokens"] = max(current_assistant_msg["usage"]["total_input_tokens"], it)
+                current_assistant_msg["usage"]["total_output_tokens"] = max(current_assistant_msg["usage"]["total_output_tokens"], ot)
+                
+                # Recalculate estimated cost
+                ti = current_assistant_msg["usage"]["total_input_tokens"]
+                to = current_assistant_msg["usage"]["total_output_tokens"]
+                current_assistant_msg["usage"]["estimated_cost_usd"] = round(ti * 0.000000075 + to * 0.0000003, 6)
+
+        # 3. Process Content Text
+        if is_assistant and content_text:
+            full_raw = current_assistant_msg.get("_full_text_progress", "") + content_text
+            current_assistant_msg["_full_text_progress"] = full_raw
+            current_assistant_msg["rawResponse"] = full_raw
+            
+            # Robust JSON Dashboard Extraction (Non-Destructive)
+            try:
+                json_match = re.search(r'\{[\s\S]*\}', full_raw)
+                if json_match:
+                    json_str = json_match.group(0)
+                    json_obj = json.loads(json_str)
+                    if "reply" in json_obj and "display_type" in json_obj:
+                        # Replace the JSON block with its 'reply' text in the visible content
+                        reply = json_obj.get("reply", "")
+                        current_assistant_msg["content"] = full_raw.replace(json_str, reply).strip()
+                        current_assistant_msg["displayType"] = json_obj["display_type"]
+                        if current_assistant_msg["displayType"] == "profile":
+                            current_assistant_msg["displayType"] = "cards"
+                        
+                        if "data" in json_obj:
+                            current_assistant_msg["data"] = json_obj["data"]
+                    else:
+                        current_assistant_msg["content"] = full_raw
+                else:
+                    current_assistant_msg["content"] = full_raw
+            except: 
+                current_assistant_msg["content"] = full_raw
 
             # Re-evaluate parsedData and displayType fallback
             if current_assistant_msg.get("data"):
@@ -331,7 +372,18 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                     current_assistant_msg["parsedData"] = [d]
 
             
-    return {"history": history}
+    # Clean up internal progress field and empty ghost messages
+    final_history = []
+    for msg in history:
+        if isinstance(msg, dict):
+            msg.pop("_full_text_progress", None)
+            
+            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and not msg.get("data"):
+                continue # Skip completely empty ghost messages
+                
+            final_history.append(msg)
+            
+    return {"history": final_history}
 
 @protected_router.delete("/history")
 async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security)):
@@ -457,6 +509,13 @@ async def mcp_registry():
                 "status": "connected",
                 "version": "1.0",
                 "tools": get_tool_metadata(DRIVE_TOOLS)
+            },
+            {
+                "id": "market",
+                "name": "Market & FinOps Explorer",
+                "status": "connected",
+                "version": "1.0",
+                "tools": get_tool_metadata(MARKET_TOOLS)
             }
         ]
     }
@@ -465,6 +524,10 @@ async def mcp_registry():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+@app.get("/version")
+async def get_version():
+    return {"version": os.getenv("APP_VERSION", "unknown")}
 
 
 app.include_router(protected_router)

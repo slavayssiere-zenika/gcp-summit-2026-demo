@@ -58,9 +58,12 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/files` : List Files
 - **POST** `/retry-errors` : Retry Errors
 - **POST** `/sync` : Trigger Sync
-- **GET** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/tokens/google` : Get Google Token
+- **PATCH** `/files/{file_id}` : Update File
 - **GET** `/health` : Health
+- **GET** `/version` : Get Version
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec

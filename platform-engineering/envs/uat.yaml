@@ -13,5 +13,18 @@ image_cv: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-
 image_prompts: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/prompts_api:latest"
 image_agent: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_api:latest"
 image_db_migrations: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/db_migrations:latest"
+image_market: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/market_mcp:latest"
 image_drive: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest"
 admin_user: "sebastien.lavayssiere@zenika.com"
+
+# Versions (automatiquement mis à jour par manage_env.py si synchronisé)
+agent_api_version: "v0.0.1"
+users_api_version: "v0.0.1"
+items_api_version: "v0.0.1"
+competencies_api_version: "v0.0.1"
+cv_api_version: "v0.0.1"
+prompts_api_version: "v0.0.1"
+drive_api_version: "v0.0.1"
+market_mcp_version: "v0.0.1"
+db_migrations_version: "v0.0.1"
+frontend_version: "v0.0.1"
