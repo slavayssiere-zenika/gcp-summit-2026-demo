@@ -1,0 +1,110 @@
+Proposition de Mission : Lead Architecte Data & IA – Plateforme Smart Grid Temps Réel
+Référence : PR-2026-ZEN-STAFF-01
+
+Client : Secteur Énergie / GreenTech (Opérateur de réseau de distribution)
+
+Domaine : Big Data Temps Réel, GenAI & Architecture Réactive
+
+Date : 13 Avril 2026
+
+1. Contexte et Enjeux
+Le Client est un acteur majeur de la transition énergétique en Europe. Pour accompagner l'intégration massive des énergies renouvelables (solaire, éolien) et des véhicules électriques, il déploie une nouvelle génération de compteurs intelligents et de capteurs IoT sur l'ensemble de son réseau (Smart Grid).
+
+L'infrastructure actuelle, historiquement basée sur un cluster Apache Hadoop on-premise, n'est plus en mesure d'absorber la volumétrie croissante (plusieurs pétaoctets de données de télémétrie par mois) ni de fournir des analyses en temps réel. De plus, les opérateurs réseau font face à une surcharge cognitive pour diagnostiquer les incidents et optimiser la distribution.
+
+Pour répondre à ces défis, le Client lance le programme "GridMind". L'objectif est de migrer vers une architecture Cloud Native événementielle sur Google Cloud Platform (GCP), d'unifier les traitements transactionnels et analytiques, et de doter les opérateurs d'agents conversationnels intelligents (GenAI) capables de diagnostiquer les pannes de manière autonome en croisant les données réseau et l'historique de maintenance.
+
+2. Description du Besoin
+Le Client recherche un(e) Expert(e) Backend & Data (niveau Staff/Principal Engineer) disposant d'une dizaine d'années d'expérience pour assumer le rôle de Lead Architecte et Tech Lead "Hands-on" sur ce programme stratégique.
+
+La mission exige une double expertise rare : une maîtrise absolue de l'ingénierie logicielle backend (Software Craftsmanship, JVM, architectures réactives) et une solide expérience en Data Engineering à grande échelle, couplée à une capacité à intégrer des workflows d'Intelligence Artificielle (LLMs/Agents).
+
+Problématiques identifiées :
+Ingestion Temps Réel Haute Performance : Traiter des millions d'événements IoT par seconde avec une latence sub-seconde et une empreinte mémoire optimisée.
+
+Convergence Data/IA : Exposer la donnée froide (entrepôt) et chaude (flux) à un écosystème d'agents IA capables d'exécuter des actions de remédiation sur le réseau.
+
+Excellence Technique : Imposer des standards de qualité de code (TDD, DDD) au sein de plusieurs Feature Teams et rationaliser une stack technologique hétérogène.
+
+3. Objectifs de la Mission
+En tant qu'Expert Technique, vous interviendrez en amont sur la conception et en aval sur la réalisation des socles critiques :
+
+Conception de l'Architecture Hybride : Définir et implémenter l'architecture événementielle (Kafka) et de traitement distribué (Spark/GCP) pour l'ingestion de la télémétrie.
+
+Développement des Socles "Low-Latency" : Construire le framework interne d'API réactives en s'appuyant sur Quarkus pour minimiser les coûts d'infrastructure Cloud (empreinte mémoire et temps de démarrage).
+
+Implémentation d'Agents IA : Concevoir des workflows multi-agents (via LangGraph et Gemini) capables d'interroger les bases de données (Snowflake, Elasticsearch) pour assister les opérateurs en salle de contrôle.
+
+Craftsmanship & Mentoring : Diffuser la culture du "Clean Architecture", mener des revues de code complexes, et accompagner la montée en compétence des développeurs seniors et data engineers de l'équipe.
+
+4. Environnement Technique
+Vous évoluerez dans un écosystème technologique à l'état de l'art, nécessitant une expertise transverse :
+
+Langages : Java 21 (pattern matching, virtual threads), Kotlin (pour certains DSL internes), Python (pour l'outillage Data/IA).
+
+Backend & Réactif : Quarkus, Spring Boot 3, Spring Reactor, Hibernate 6.
+
+Data & Streaming : Apache Kafka, Apache Spark (migration depuis Hadoop vers des clusters éphémères), Snowflake (Data Cloud), Elasticsearch (logs et recherche textuelle), PostgreSQL.
+
+Cloud & Infrastructure : Google Cloud Platform (BigQuery, Pub/Sub, GKE), Kubernetes, Helm, Docker.
+
+Intelligence Artificielle : LangChain, LangGraph, intégration des modèles OpenAI et Gemini, Ollama (pour les tests locaux et la confidentialité de certaines données sensibles).
+
+Frontend (interactions agents) : React, TypeScript.
+
+5. Méthodologie et Phases de la Mission
+La mission s'inscrira dans un cadre Agile à l'échelle (SAFe ou modèle Spotify), en lien direct avec la Direction Technique (CTO) et les architectes d'entreprise.
+
+Phase 1 : Audit et Cadrage Architecture (1 mois)
+Audit de l'existant (clusters Hadoop legacy, monolithes Java 8).
+
+Définition de la trajectoire de migration vers GCP (Data Lakehouse).
+
+Preuve de concept (PoC) sur les performances d'ingestion Kafka + Quarkus vs Spring WebFlux.
+
+Phase 2 : Construction du Socle Core & Data (En continu)
+Mise en place des pipelines de données (ETL/ELT) via Spark/Kotlin sur l'infrastructure Kubernetes (GKE).
+
+Développement des microservices critiques en Java 21 / Quarkus assurant le routage des événements IoT.
+
+Déploiement des clusters Kafka et configuration des règles de rétention/partitionnement.
+
+Phase 3 : Intégration IA / Agents Autonomes
+Modélisation de l'architecture d'agents (Agentic AI) avec LangGraph.
+
+Création d'outils (Tools) permettant aux LLMs de requêter de manière sécurisée Snowflake et PostgreSQL pour croiser les données de télémétrie et la documentation technique.
+
+Développement de l'interface conversationnelle pour les opérateurs réseau en React/TypeScript.
+
+Phase 4 : Industrialisation et FinOps
+Optimisation des requêtes et des coûts de calcul sur GCP et Snowflake.
+
+Automatisation des déploiements via Helm et opérateurs Kubernetes.
+
+Mise en place d'ateliers internes (Dojos, BBL) sur les bonnes pratiques Craft et l'utilisation avancée de l'IA générative dans le code.
+
+6. Livrables Attendus
+Architecture Decision Records (ADRs) documentant les choix structurants.
+
+Socle technique interne (librairies Quarkus/Spring mutualisées) testé et documenté.
+
+Pipelines de traitement de données Big Data en production sur GCP.
+
+Agent IA opérationnel intégré à l'interface de supervision du Smart Grid.
+
+Bilan d'optimisation des performances (latence, throughput, réduction des coûts Cloud).
+
+7. Profil Recherché
+Pour cette mission de haut vol, nous recherchons un(e) véritable "couteau suisse" technique alliant vision globale et expertise pointue :
+
+Expérience : Plus de 12 ans d'expérience cumulée en ingénierie logicielle et architecture de données.
+
+Expertise Backend : Niveau expert sur l'écosystème JVM (Java, Kotlin, Scala). Une expérience de contribution open source (notamment sur Quarkus) est un avantage décisif.
+
+Expertise Data : Maîtrise des paradigmes Big Data (Hadoop, Spark) et du streaming d'événements à haute fréquence (Kafka).
+
+Maîtrise Cloud : Excellente connaissance des infrastructures conteneurisées (Kubernetes, Helm, Openshift). Une certification GCP Professional Data Engineer est fortement valorisée.
+
+Sensibilité IA : Capacité démontrée à concevoir des applications s'interfaçant avec des LLMs via des frameworks d'orchestration modernes (LangChain, LangGraph).
+
+Savoir-être : Pédagogie, culture du Software Craftsmanship, exigence sur la qualité logicielle et capacité à fédérer des équipes techniques.

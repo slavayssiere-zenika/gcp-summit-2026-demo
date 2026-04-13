@@ -86,9 +86,11 @@ async def seed_admin():
             async with database.SessionLocal() as db:
                 # Check if users table exists and admin doesn't
                 res = await db.execute(text("SELECT id FROM users WHERE email = 'admin@zenika.com'"))
-                if not res.fetchone():
+                row = res.fetchone()
+                hashed_password = get_password_hash(admin_password)
+
+                if not row:
                     logger.info("Seeding admin user into database...")
-                    hashed_password = get_password_hash(admin_password)
                     admin_user = User(
                         username="admin",
                         email="admin@zenika.com",
@@ -103,6 +105,13 @@ async def seed_admin():
                     db.add(admin_user)
                     await db.commit()
                     logger.info("Admin user seeded successfully!")
+                else:
+                    logger.info("Syncing existing admin password with current environment variable...")
+                    await db.execute(
+                        text("UPDATE users SET hashed_password = :hp WHERE email = 'admin@zenika.com'"),
+                        {"hp": hashed_password}
+                    )
+                    await db.commit()
                 return
         except Exception as e:
             # users table might not exist yet if Liquibase hasn't finished

@@ -156,15 +156,15 @@ async def analyze_prompt(key: str, db: AsyncSession = Depends(get_db), admin: di
     
     try:
         # 1. Generate test cases
-        test_cases = generate_test_cases(original)
+        test_cases = await generate_test_cases(original)
         if not test_cases:
             raise HTTPException(status_code=500, detail="Failed to generate test cases.")
             
         # 2. Run promptfoo eval
-        eval_results = run_promptfoo_analysis(original, test_cases)
+        eval_results = await run_promptfoo_analysis(original, test_cases)
         
         # 3. Generate improved prompt
-        improved = improve_prompt_with_gemini(original, eval_results)
+        improved = await improve_prompt_with_gemini(original, eval_results)
         
         return schemas.AnalysisResponse(
             original_prompt=original,

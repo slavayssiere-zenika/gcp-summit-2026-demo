@@ -194,13 +194,25 @@ async def list_competency_users(competency_id: int, db: AsyncSession = Depends(g
     if cached:
         return cached
 
-    # Fetch user ids associated with this competency
+    # Fetch user ids associated with this competency and all its children
+    hierarchy = select(Competency.id).where(Competency.id == competency_id).cte(name='hierarchy', recursive=True)
+    comps_alias = select(Competency.id, Competency.parent_id).cte('comps_alias')
+    
+    # Alternatively a simpler approach since it's an Async API:
+    # Build recursive CTE to find all descendant IDs
+    from sqlalchemy.orm import aliased
+    comp_a = aliased(Competency)
+    hierarchy = select(Competency.id).where(Competency.id == competency_id).cte(name='hierarchy', recursive=True)
+    hierarchy = hierarchy.union_all(
+        select(comp_a.id).where(comp_a.parent_id == hierarchy.c.id)
+    )
+    
     results = (await db.execute(
         select(user_competency.c.user_id)
-        .where(user_competency.c.competency_id == competency_id)
+        .where(user_competency.c.competency_id.in_(select(hierarchy.c.id)))
     )).all()
     
-    user_ids = [r[0] for r in results]
+    user_ids = list(set([r[0] for r in results]))
     set_cache(cache_key, user_ids, CACHE_TTL)
     return user_ids
 

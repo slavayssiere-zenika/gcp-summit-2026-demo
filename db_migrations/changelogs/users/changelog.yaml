@@ -107,3 +107,15 @@ databaseChangeLog:
             tableName: "users"
             columnName: "email"
             columnDataType: "varchar"
+
+  - changeSet:
+      id: "6"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "users"
+            columns:
+              - column:
+                  name: "unavailability_periods"
+                  type: "json"
+                  defaultValue: "[]"

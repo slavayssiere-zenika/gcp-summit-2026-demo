@@ -52,6 +52,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/drive-api/, ''),
       },
+      '/missions-api': {
+        target: 'http://localhost:8009',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/missions-api/, ''),
+      },
     },
   },
 })

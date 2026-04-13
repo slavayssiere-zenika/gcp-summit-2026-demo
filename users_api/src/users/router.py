@@ -73,6 +73,7 @@ def map_user_to_response(user: User) -> dict:
         "role": user.role,
         "allowed_category_ids": allowed_ids,
         "picture_url": user.picture_url,
+        "unavailability_periods": user.unavailability_periods or [],
         "created_at": user.created_at.isoformat() if user.created_at else None
     }
 
@@ -189,19 +190,31 @@ async def login(login_data: LoginRequest, response: Response, db: AsyncSession =
 
     # Include allowed categories as a list of integers in the JWT payload
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x]
-    access_token = create_access_token(data={
+    token_data = {
         "sub": user.username,
         "allowed_category_ids": allowed_ids,
         "role": user.role
-    })
+    }
+    from src.auth import create_refresh_token
+    access_token = create_access_token(data=token_data)
+    refresh_token = create_refresh_token(data={"sub": user.username})
     
     # Set HTTP-Only cookie for the token
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        max_age=3600 * 24, # 24h
+        max_age=15 * 60, # 15 minutes
         samesite="lax",
+        secure=False # Set to True in production with HTTPS
+    )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=3600 * 24 * 7, # 7 d
+        samesite="strict",
         secure=False # Set to True in production with HTTPS
     )
 
@@ -212,10 +225,66 @@ async def login(login_data: LoginRequest, response: Response, db: AsyncSession =
         role=user.role
     )
 
+@auth_router.post("/refresh", response_model=TokenResponse)
+async def refresh_token_route(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    refresh_token_cookie = request.cookies.get("refresh_token")
+    if not refresh_token_cookie:
+        raise HTTPException(status_code=401, detail="Refresh token manquant")
+        
+    try:
+        from src.auth import SECRET_KEY, ALGORITHM
+        payload = jwt.decode(refresh_token_cookie, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Token de type invalide")
+        username: str = payload.get("sub")
+        if not username:
+             raise HTTPException(status_code=401, detail="Token invalide")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Refresh token expiré ou invalide")
+        
+    user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
+    if not user or not user.is_active:
+         raise HTTPException(status_code=401, detail="Compte inactif ou introuvable")
+         
+    allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
+    
+    token_data = {
+        "sub": user.username,
+        "allowed_category_ids": allowed_ids,
+        "role": user.role
+    }
+    from src.auth import create_refresh_token
+    new_access = create_access_token(data=token_data)
+    new_refresh = create_refresh_token(data={"sub": user.username})
+    
+    response.set_cookie(
+        key="access_token",
+        value=new_access,
+        httponly=True,
+        max_age=15 * 60,
+        samesite="lax",
+        secure=False
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh,
+        httponly=True,
+        max_age=3600 * 24 * 7,
+        samesite="strict",
+        secure=False
+    )
+    return TokenResponse(
+        access_token=new_access,
+        token_type="bearer",
+        username=user.username,
+        role=user.role
+    )
+
 
 @auth_router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
     return {"message": "Déconnexion réussie"}
 
 
@@ -241,11 +310,13 @@ async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSessio
              raise HTTPException(status_code=403, detail="Ce token n'appartient pas à un Service Account autorisé")
 
         # Give it a service account role in our system
+        from src.auth import create_refresh_token
         access_token = create_access_token(data={
             "sub": email,
             "role": "service_account",
             "allowed_category_ids": []
         })
+        refresh_token = create_refresh_token(data={"sub": email})
 
         return TokenResponse(
             access_token=access_token,
@@ -357,11 +428,13 @@ async def google_callback(request: Request, code: str, response: Response, db: A
 
     # Generate JWT
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
+    from src.auth import create_refresh_token
     access_token = create_access_token(data={
         "sub": user.username,
         "allowed_category_ids": allowed_ids,
         "role": user.role
     })
+    refresh_token = create_refresh_token(data={"sub": user.username})
     
     frontend_url = os.getenv("FRONTEND_URL", "/")
     redirect_response = RedirectResponse(frontend_url)
@@ -370,9 +443,17 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         key="access_token",
         value=access_token,
         httponly=True,
-        max_age=3600 * 24, # 24h
+        max_age=15 * 60, # 15 minutes
         samesite="lax",
         secure=False # Set to True in production with HTTPS
+    )
+    redirect_response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=3600 * 24 * 7, # 7 d
+        samesite="strict",
+        secure=False 
     )
     
     return redirect_response
@@ -381,6 +462,17 @@ async def google_callback(request: Request, code: str, response: Response, db: A
 @auth_router.get("/health")
 async def router_health():
     return {"status": "healthy"}
+
+@auth_router.post("/suspend/{email}")
+async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
+    result = await db.execute(select(User).where(User.username == email))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur inexistant.")
+    
+    user.is_active = False
+    await db.commit()
+    return {"status": "suspended", "email": email}
 
 from src.users.schemas import MergeRequest, DuplicateCandidate
 import httpx

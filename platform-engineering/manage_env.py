@@ -15,7 +15,7 @@ def discover_versions():
     base_dir = os.path.dirname(os.path.dirname(__file__))
     components = [
         "agent_api", "users_api", "items_api", "competencies_api", 
-        "cv_api", "prompts_api", "drive_api", "market_mcp", 
+        "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp", 
         "db_migrations", "frontend"
     ]
     
@@ -106,30 +106,17 @@ def run_cmd(cmd, check=True, capture_output=False, live=False):
         raise DeploymentError(err_msg)
     return result
 
-def parse_and_fix_409s(output):
-    # Pattern pour extraire l'adresse de la ressource et son ID GCP
-    # Exemple: with google_service_account.cr_sa["agent"],
-    # et resourceName: "projects/.../serviceAccounts/..."
-    
-    fixes_applied = 0
-    # On découpe par bloc d'erreur pour être sûr de l'association adresse/ID
-    error_blocks = output.split('Error: ')
-    for block in error_blocks:
-        if "409" in block or "alreadyExists" in block:
-            addr_match = re.search(r'with ([\w\.\[\]\"]+),', block)
-            id_match = re.search(r'"resourceName": "([^"]+)"', block)
-            if addr_match and id_match:
-                addr = addr_match.group(1)
-                res_id = id_match.group(1)
-                print(f"[*] Self-Healing: Détection du conflit 409 pour {addr}. Tentative d'import de {res_id}...")
-                import_res = subprocess.run(["terraform", "import", addr, res_id], cwd=TERRAFORM_DIR, capture_output=True, text=True)
-                if import_res.returncode == 0:
-                    print(f"    -> Import réussi pour {addr}.")
-                    fixes_applied += 1
-                else:
-                    print(f"    -> [!] Échec de l'import pour {addr}: {import_res.stderr.strip()}")
-    
-    return fixes_applied > 0
+def resource_exists_in_gcp(resource_type, name, project_id):
+    if resource_type == "dns_zone":
+        res = subprocess.run(["gcloud", "dns", "managed-zones", "describe", name, "--project", project_id, "--format=json"], capture_output=True)
+        return res.returncode == 0
+    elif resource_type == "ssl_cert":
+        res = subprocess.run(["gcloud", "compute", "ssl-certificates", "describe", name, "--global", "--project", project_id, "--format=json"], capture_output=True)
+        return res.returncode == 0
+    elif resource_type == "sa":
+        res = subprocess.run(["gcloud", "iam", "service-accounts", "describe", name, "--project", project_id, "--format=json"], capture_output=True)
+        return res.returncode == 0
+    return False
 
 def get_tf_args():
     api_key = os.environ.get("GOOGLE_API_KEY")
@@ -179,30 +166,21 @@ def deploy(env, base_domain, project_id, config, force=False):
     init_tf()
     set_workspace(env)
 
-    # DNS-based check: If domain resolves, it's highly likely persistent resources exist.
-    import socket
-    front_domain = f"{env}.{base_domain}"
-    
-    dns_resolves = False
-    try:
-        socket.gethostbyname(front_domain)
-        dns_resolves = True
-    except Exception:
-        pass
-
-    if dns_resolves:
-        print(f"[*] DNS '{front_domain}' resolves. Attempting to import persistent network resources...")
-        import_persistent_resource(env, "google_dns_managed_zone.env_zone", f"projects/{project_id}/managedZones/zone-{env}")
-        import_persistent_resource(env, "google_compute_managed_ssl_certificate.default", f"projects/{project_id}/global/sslCertificates/ssl-{env}")
-        
+    print("[*] Probing GCP to deterministically import persistent resources...")
+    zone_name = f"zone-{env}"
+    if resource_exists_in_gcp("dns_zone", zone_name, project_id):
+        import_persistent_resource(env, "google_dns_managed_zone.env_zone", f"projects/{project_id}/managedZones/{zone_name}")
         dns_name = f"{env}.{base_domain}."
-        import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/{dns_name}/A")
-        import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/zone-{env}/rrsets/api.{dns_name}/A")
-    else:
-        print(f"[*] DNS '{front_domain}' does not resolve yet. Skipping import of network resources to prevent timeouts.")
+        import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/{zone_name}/rrsets/{dns_name}/A")
+        import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/{zone_name}/rrsets/api.{dns_name}/A")
+    
+    ssl_name = f"ssl-{env}"
+    if resource_exists_in_gcp("ssl_cert", ssl_name, project_id):
+        import_persistent_resource(env, "google_compute_managed_ssl_certificate.default", f"projects/{project_id}/global/sslCertificates/{ssl_name}")
 
-    # Systematic import of the drive service account (should not be deleted)
-    import_persistent_resource(env, 'google_service_account.cr_sa["drive"]', f"projects/{project_id}/serviceAccounts/sa-drive-{env}-v2@{project_id}.iam.gserviceaccount.com")
+    sa_email = f"sa-drive-{env}-v2@{project_id}.iam.gserviceaccount.com"
+    if resource_exists_in_gcp("sa", sa_email, project_id):
+        import_persistent_resource(env, 'google_service_account.cr_sa["drive"]', f"projects/{project_id}/serviceAccounts/{sa_email}")
 
     if force:
         print("[!] FORCE MODE: Bypassing prevent_destroy logic to allow replacements.")
@@ -211,27 +189,12 @@ def deploy(env, base_domain, project_id, config, force=False):
     try:
         apply_cmd = ["terraform", "apply", "-auto-approve"] + get_tf_args()
         
-        max_retries = 2
-        success = False
-        for attempt in range(max_retries):
-            print(f"[*] Terraform Apply - Tentative {attempt + 1}/{max_retries}...")
-            # On utilise le nouveau mode 'live' pour voir les logs en temps réel tout en capturant
-            res = run_cmd(apply_cmd, check=False, live=True)
+        print(f"[*] Terraform Apply...")
+        res = run_cmd(apply_cmd, check=False, live=True)
             
-            if res.returncode == 0:
-                success = True
-                break
-                
-            # En cas d'échec, on tente le self-healing sur la sortie capturée (stdout contient aussi stderr ici)
-            if parse_and_fix_409s(res.stdout):
-                print("[*] Corrections de type 'import' appliquées. Relance de l'apply...")
-                continue
-            else:
-                print(f"[!] Échec définitif de l'apply.")
-                sys.exit(res.returncode)
-
-        if not success:
-            sys.exit(1)
+        if res.returncode != 0:
+            print(f"[!] Échec définitif de l'apply.")
+            sys.exit(res.returncode)
 
     # Post-deploy: Déploiement du Frontend
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
@@ -323,18 +286,34 @@ def deploy(env, base_domain, project_id, config, force=False):
             if not sync_dir.endswith("/"):
                 sync_dir += "/"
                 
-            subprocess.run(["gsutil", "-m", "rsync", "-r", "-d", sync_dir, f"gs://{target_bucket}/"], check=True)
-            print("[*] Frontend deployed successfully!")
+            rsync_res = subprocess.run(
+                ["gsutil", "-m", "rsync", "-r", "-d", sync_dir, f"gs://{target_bucket}/"],
+                capture_output=True, text=True
+            )
             
-            print("[*] Invalidating Cloud CDN Cache to serve the new Frontend immediately...")
-            res_cdn = subprocess.run([
-                "gcloud", "compute", "url-maps", "invalidate-cdn-cache",
-                f"lb-{env}", "--path", "/*", "--async", "--project", project_id
-            ], capture_output=True, text=True)
-            if res_cdn.returncode == 0:
-                print("    -> Cache invalidation request submitted successfully.")
+            if rsync_res.returncode != 0:
+                print(f"[!] Frontend sync failed:\\n{rsync_res.stderr}")
+                return
+                
+            print(rsync_res.stderr.strip()) # gsutil logs mostly to stderr
+            
+            output_lower = (rsync_res.stdout + rsync_res.stderr).lower()
+            
+            # Simple heuristic: if 'copying' or 'removing' is in the output, something was actually synced
+            if "copying " in output_lower or "removing " in output_lower:
+                print("[*] Frontend changes synced successfully!")
+                print("[*] Invalidating Cloud CDN Cache to serve the new Frontend immediately...")
+                res_cdn = subprocess.run([
+                    "gcloud", "compute", "url-maps", "invalidate-cdn-cache",
+                    f"lb-{env}", "--path", "/*", "--async", "--project", project_id
+                ], capture_output=True, text=True)
+                if res_cdn.returncode == 0:
+                    print("    -> Cache invalidation request submitted successfully.")
+                else:
+                    print(f"    -> [!] Could not invalidate cache: {res_cdn.stderr.strip()}")
             else:
-                print(f"    -> [!] Could not invalidate cache: {res_cdn.stderr.strip()}")
+                print("[*] No frontend changes detected. CDN cache invalidation skipped.")
+
             
         print("\n=======================================================")
         print(f"[*] Post-Deploy: Running Sanity Checks on {env}...")
@@ -464,7 +443,9 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
                                     "agent_api.capabilities_instruction": "agent_api/agent_api.capabilities_instruction.txt",
                                     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
-                                    "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt"
+                                    "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
+                                    "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
+                                    "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
                                 }
                                 
                                 base_dir = os.path.dirname(os.path.dirname(__file__))
@@ -538,7 +519,8 @@ def deploy(env, base_domain, project_id, config, force=False):
                     "/prompts-api/health", # prompts_api
                     "/comp-api/health",    # competencies_api
                     "/cv-api/health",      # cv_api
-                    "/drive-api/health"    # drive_api
+                    "/drive-api/health",   # drive_api
+                    "/missions-api/health" # missions_api
                 ]
                 
                 def check_route(route):

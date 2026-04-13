@@ -1,0 +1,105 @@
+Proposition de Mission : Développement Back-end Java - Application Métier Interne
+Référence : PR-2026-ZEN-JAVA-03
+
+Client : Secteur Tertiaire / Services aux Entreprises
+
+Domaine : Développement Back-end & Digitalisation interne
+
+Date : 13 Avril 2026
+
+1. Contexte et Enjeux
+Le Client est une entreprise de services en pleine transformation numérique de ses processus internes. Jusqu'à présent, la gestion du matériel informatique attribué aux collaborateurs (ordinateurs, téléphones, licences logicielles) était gérée via des fichiers Excel partagés et des échanges d'e-mails, entraînant des erreurs de saisie, des pertes de matériel et une facturation inexacte.
+
+Pour y remédier, la Direction des Systèmes d'Information (DSI) a décidé de créer une petite application web interne appelée "Asset Manager". Cette application permettra au service RH et au support informatique de suivre le cycle de vie du matériel en temps réel.
+
+L'application sera hébergée sur Google Cloud Platform (GCP). Cependant, le Client dispose déjà d'un Expert DevOps / Cloud en interne qui a préparé toute l'infrastructure ("Paved Road"). L'enjeu de cette mission est donc purement applicatif : il s'agit d'écrire la logique métier de l'application de manière propre, maintenable et testée.
+
+2. Description du Besoin
+Le Client recherche un(e) Développeur(se) Java (profil Junior) pour prendre en charge le développement du Back-end de cette nouvelle application.
+
+Vous intégrerez une équipe à taille humaine composée d'un Product Owner (qui définit les besoins), d'un développeur Front-end (qui fait l'interface utilisateur), de vous-même sur la partie Back-end, et d'un Expert DevOps en support.
+
+Votre rôle principal sera de traduire les règles de gestion (ex: "un collaborateur ne peut avoir qu'un seul ordinateur portable actif à la fois") en code Java. L'Expert DevOps s'occupera de la création de la base de données sur GCP, des pipelines de déploiement (CI/CD) et de la mise en ligne de votre code. Vous pourrez ainsi vous concentrer à 100% sur le développement.
+
+Problématiques identifiées :
+Qualité du code : Écrire un code simple, lisible et respectant les standards de l'industrie (Clean Code).
+
+Fiabilité : S'assurer que chaque nouvelle fonctionnalité fonctionne correctement grâce aux tests unitaires.
+
+Collaboration : Communiquer efficacement avec le développeur Front-end pour se mettre d'accord sur le format des données (JSON) échangées.
+
+3. Objectifs de la Mission
+La mission se concentre sur l'apprentissage, la rigueur et la production de valeur métier :
+
+Développement d'APIs REST : Créer les routes (endpoints) qui permettront au Front-end de lire, ajouter, modifier ou supprimer des équipements dans la base de données.
+
+Implémentation des règles métiers : Coder les vérifications et la logique interne (ex: calcul de l'amortissement du matériel, vérification des stocks).
+
+Rédaction des tests : Écrire des tests unitaires pour chaque bout de code produit afin de garantir qu'il n'y a pas de bugs.
+
+Documentation : Documenter le code et les APIs pour que les autres membres de l'équipe puissent les comprendre facilement.
+
+4. Environnement Technique
+L'environnement est volontairement standardisé pour faciliter la prise en main :
+
+Langage & Framework : Java 21, Spring Boot 3 (Spring Web, Spring Data JPA).
+
+Base de données : PostgreSQL (utilisation via l'ORM Hibernate pour ne pas avoir à écrire de requêtes SQL complexes).
+
+Outillage de développement : IntelliJ IDEA (ou Eclipse), Maven ou Gradle, Git.
+
+Tests : JUnit 5 et Mockito.
+
+Déploiement & Cloud (Géré par l'Expert DevOps) :
+
+Google Cloud Run (pour faire tourner l'application).
+
+Cloud SQL (pour héberger la base PostgreSQL).
+
+GitLab CI (pour automatiser les tests et le déploiement).
+
+5. Méthodologie et Phases de la Mission
+Phase 1 : Intégration et Découverte (2 à 3 semaines)
+Rencontre avec l'équipe et présentation du projet métier.
+
+Installation des outils de développement sur le poste de travail.
+
+Binômage (Pair-Programming) avec l'Expert DevOps pour comprendre comment lancer l'application sur le poste local et comment faire un "Commit" sur Git.
+
+Développement d'une première fonctionnalité très simple (ex: afficher la liste des catégories de matériel).
+
+Phase 2 : Développement Autonome (En continu)
+Prise en charge de tickets de développement (User Stories) au fur et à mesure.
+
+Création des Controllers, Services et Repositories dans Spring Boot.
+
+Participation aux réunions d'équipe (Daily meeting tous les matins de 15 minutes).
+
+L'Expert DevOps sera disponible pour toute aide technique (ex: problème de connexion à la base de données locale, aide sur Git).
+
+Phase 3 : Revues de code et Qualité
+Soumission du code pour relecture (Merge Request).
+
+Correction et amélioration du code en fonction des retours bienveillants de l'équipe.
+
+Suivi des résultats des tests automatiques.
+
+6. Livrables Attendus
+Un code source Java clair, commenté lorsque nécessaire, et structuré.
+
+Des classes de tests (JUnit) pour chaque service métier développé.
+
+Une documentation technique basique générée automatiquement (via Swagger / OpenAPI) pour le développeur Front-end.
+
+7. Profil Recherché
+Cette mission est particulièrement adaptée à un profil en début de carrière souhaitant consolider ses bases :
+
+Jeune diplômé(e) d'une école d'ingénieur ou d'une formation universitaire en informatique (Bac +3 à Bac +5).
+
+Connaissance académique ou première expérience (stage/alternance) en programmation orientée objet avec Java.
+
+Notions de base sur le framework Spring (comprendre les annotations @RestController, @Service, etc.).
+
+Envie d'apprendre, curiosité et esprit d'équipe.
+
+Aucune compétence requise sur l'administration système, les réseaux ou Google Cloud Platform (un véritable atout pour se concentrer sereinement sur le code).

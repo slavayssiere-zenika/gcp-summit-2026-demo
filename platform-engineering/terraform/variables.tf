@@ -67,6 +67,11 @@ variable "image_cv" {
   type        = string
 }
 
+variable "image_missions" {
+  description = "Image for Missions API container"
+  type        = string
+}
+
 variable "image_drive" {
   description = "Image for Drive API container"
   type        = string
@@ -129,8 +134,15 @@ variable "users_api_version" { type = string }
 variable "items_api_version" { type = string }
 variable "competencies_api_version" { type = string }
 variable "cv_api_version" { type = string }
+variable "missions_api_version" { type = string }
 variable "prompts_api_version" { type = string }
 variable "drive_api_version" { type = string }
 variable "market_mcp_version" { type = string }
 variable "db_migrations_version" { type = string }
 variable "frontend_version" { type = string }
+
+variable "finops_anomaly_threshold" {
+  description = "Seuil critique de tokens déclenchant le kill-switch utilisateur"
+  type        = number
+  default     = 500000
+}

@@ -360,7 +360,9 @@ def main():
         "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
         "agent_api.capabilities_instruction": "agent_api/agent_api.capabilities_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
-        "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt"
+        "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
+        "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
+        "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
     }
     for key, path in prompt_files.items():
         try:

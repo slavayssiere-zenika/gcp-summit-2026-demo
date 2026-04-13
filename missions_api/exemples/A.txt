@@ -1,0 +1,104 @@
+Proposition de Mission : Modernisation et Migration Cloud Native de la Plateforme Transactionnelle
+Référence : PR-2024-ZEN-GCP
+
+Client : Secteur Retail / E-commerce
+
+Domaine : Architecture Microservices & Cloud Computing
+
+Date : 22 Mai 2024
+
+1. Contexte et Enjeux
+Le Client, acteur majeur de la distribution omnicanale, opère actuellement une plateforme de gestion des commandes et des stocks reposant sur une architecture monolithique Java EE vieillissante, hébergée dans des centres de données on-premise.
+
+Bien que stable, cette infrastructure atteint ses limites en termes de scalabilité lors des pics de charge saisonniers (Soldes, Black Friday) et freine l'innovation métier en raison de cycles de déploiement trop longs (environ un déploiement par mois).
+
+Dans le cadre de sa stratégie "Cloud First", le Client a choisi Google Cloud Platform (GCP) pour héberger son futur écosystème. L'enjeu majeur de cette mission est de décommissionner progressivement le monolithe au profit d'une architecture distribuée, résiliente et hautement disponible, capable de supporter la croissance du trafic international tout en réduisant les coûts opérationnels (FinOps).
+
+2. Description du Besoin
+Le besoin porte sur l'intégration de consultants développeurs Java Seniors possédant une expertise confirmée sur les environnements Cloud GCP. La mission consiste à concevoir et développer les nouveaux services critiques (Paiement, Panier, Gestion des stocks en temps réel) en adoptant les standards du développement Cloud Native.
+
+Problématiques identifiées :
+Latence et Performance : Difficulté à maintenir des temps de réponse inférieurs à 200ms lors de la montée en charge.
+
+Intégrité des données : Besoin de synchronisation temps réel entre les stocks physiques et les stocks en ligne.
+
+Time-to-Market : Nécessité de passer à un modèle de déploiement continu (CI/CD) pour permettre plusieurs mises en production par jour.
+
+3. Objectifs de la Mission
+La mission se décompose en quatre objectifs prioritaires :
+
+Refactoring et Migration : Réécrire les modules métier clés en microservices Java (Spring Boot / Quarkus) et assurer leur déploiement sur Google Kubernetes Engine (GKE).
+
+Mise en place d'une architecture pilotée par les événements (EDA) : Utiliser les services de messagerie GCP pour découpler les services et assurer une scalabilité horizontale.
+
+Optimisation de la persistence : Migrer les données relationnelles lourdes vers des solutions managées plus performantes et implémenter des stratégies de cache distribué.
+
+Observabilité et Fiabilité : Implémenter un monitoring fin et une traçabilité distribuée pour garantir un taux de disponibilité de 99,99%.
+
+4. Environnement Technique
+Le projet s'inscrit dans une stack technologique moderne et exigeante :
+
+Langage & Frameworks : Java 17/21, Spring Boot 3.x, Spring Cloud GCP, Hibernate.
+
+Infrastructure GCP :
+
+Calcul : Google Kubernetes Engine (GKE) en mode Autopilot, Cloud Run pour les services éphémères.
+
+Data & Storage : Cloud SQL (PostgreSQL), AlloyDB pour les besoins à haute performance, et Google Cloud Storage.
+
+Messaging : Pub/Sub pour l'asynchronisme.
+
+Sécurité : Secret Manager, IAM, Identity-Aware Proxy (IAP).
+
+DevOps & Observabilité : Cloud Build, Terraform, GitHub Actions, Google Cloud Monitoring & Logging (Stackdriver).
+
+5. Méthodologie et Phases de la Mission
+La mission sera conduite selon une méthodologie Agile (Scrum) avec une forte culture DevOps.
+
+Phase 1 : Audit et Design (4 semaines)
+Analyse du code legacy et identification des contextes délimités (Bounded Contexts).
+
+Conception de l'architecture cible sur GCP (Schémas réseau, flux de données).
+
+Mise en place de la zone d'atterrissage (Landing Zone) via Terraform.
+
+Phase 2 : Développement et Implémentation (Phase itérative)
+Développement des microservices Java avec une approche Test-Driven Development (TDD).
+
+Mise en place des APIs REST et de la documentation via OpenAPI/Swagger.
+
+Intégration des services GCP via les SDKs Java officiels.
+
+Configuration de l'auto-scaling et des politiques de Self-healing sur GKE.
+
+Phase 3 : Tests de Charge et Sécurisation
+Réalisation de tests de performance (Chaos Engineering) pour valider la résilience sur GCP.
+
+Audit de sécurité des conteneurs et gestion des vulnérabilités.
+
+Phase 4 : Transfert de Compétences et Run
+Accompagnement des équipes internes à la prise en main de l'environnement GCP.
+
+Rédaction de la documentation technique et des playbooks opérationnels.
+
+6. Livrables Attendus
+Code source des microservices, documenté et testé (couverture > 80%).
+
+Scripts d'infrastructure as Code (Terraform) permettant de répliquer les environnements.
+
+Pipelines CI/CD automatisés (Build, Test, Deploy).
+
+Tableaux de bord d'observabilité sur Google Cloud Console.
+
+Rapports de performance et de consommation de ressources (Analyse FinOps).
+
+7. Profil Recherché
+Pour mener à bien cette mission, le consultant devra justifier de :
+
+Minimum 5 ans d'expérience en développement Java Backend.
+
+Une expérience significative sur les services managés Google Cloud Platform (Certification GCP Professional Cloud Developer appréciée).
+
+Une maîtrise approfondie de l'écosystème Kubernetes et Docker.
+
+Une capacité à travailler dans un environnement complexe avec des enjeux de haute disponibilité.

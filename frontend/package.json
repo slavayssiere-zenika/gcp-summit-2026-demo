@@ -9,11 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vueuse/head": "^2.0.0",
     "axios": "^1.6.0",
     "chart.js": "^4.5.1",
     "lucide-vue-next": "^0.300.0",
     "markdown-it": "^14.0.0",
     "mermaid": "^10.9.0",
+    "pinia": "^3.0.4",
     "vue": "^3.4.0",
     "vue-chartjs": "^5.3.3",
     "vue-router": "^4.2.0"

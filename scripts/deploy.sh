@@ -22,23 +22,25 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   # Pour simplifier, on s'assure que show_help est accessible ou on déplace sa définition
   echo -e "${RED}Zenika Console - Déploiement GCP${RESET}"
   echo ""
-  echo "Usage: $0 [SERVICE] [BUMP_TYPE]"
+  echo "Usage: $0 [SERVICE...] [BUMP_TYPE]"
   echo ""
   echo "Services:"
   echo -e "  all            Déploie tous les microservices applicatifs et le frontend"
   echo -e "  users_api      Microservice Utilisateurs"
   echo -e "  items_api      Microservice Items"
   echo -e "  cv_api         Microservice CVs"
+  echo -e "  missions_api   Microservice Missions"
   echo -e "  agent_api      Orchestrateur Agent"
   echo -e "  frontend       Frontend Vue.js"
   echo -e "  db_migrations  Migrations de base de données (non inclus dans 'all')"
   echo -e "  db_init       Initialise la base de données via Cloud Run Job"
   echo ""
   echo "Bump Types (SemVer):"
-  echo "  patch (défaut), minor, major"
+  echo "  patch (défaut), minor, major, none"
   echo ""
   echo "Exemples:"
   echo "  $0 all minor"
+  echo "  $0 users_api cv_api minor"
   echo "  $0 db_migrations"
   exit 0
 fi
@@ -128,7 +130,7 @@ update_cloudrun() {
     "--update-env-vars" "APP_VERSION=$TAG"
   )
   
-  if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" || "$SERVICE" == "drive_api" ]]; then
+  if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" || "$SERVICE" == "drive_api" || "$SERVICE" == "missions_api" ]]; then
     CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_URL" )
   fi
   
@@ -287,54 +289,72 @@ build_and_upload_frontend() {
 # Main logic
 # ==============================================================================
 # Liste des services applicatifs (déployés par 'all')
-APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "market_mcp")
+APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp")
 # Liste de tous les services possibles pour la validation
 VALID_SERVICES=("db_migrations" "db_init" "agent_api" "frontend" "${APP_MICROSERVICES[@]}")
 
-TARGET_SERVICE="${1:-all}"
+BUMP_TYPE="patch"
+TARGET_SERVICES=()
 
-# Normalize input (e.g. agent-api -> agent_api)
-TARGET_SERVICE=${TARGET_SERVICE//-/_}
+for arg in "$@"; do
+  if [[ "$arg" == "patch" || "$arg" == "minor" || "$arg" == "major" || "$arg" == "none" ]]; then
+    BUMP_TYPE="$arg"
+  else
+    # Normalize input (e.g. agent-api -> agent_api)
+    TARGET_SERVICES+=("${arg//-/_}")
+  fi
+done
 
-BUMP_TYPE="${2:-patch}"
-
-if [ "$TARGET_SERVICE" = "all" ]; then
-  # Définition des tâches pour le mode 'all'
-  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_api" "frontend")
-  
-  # 1. Build and Push des Microservices Applicatifs
-  for SERVICE in "${APP_MICROSERVICES[@]}"; do
-    show_progress "$SERVICE"
-    build_and_push_standard "$SERVICE" "$BUMP_TYPE"
-  done
-
-  # 2. Build Agent
-  show_progress "agent_api"
-  build_and_push_agent "$BUMP_TYPE"
-  
-  # 3. Build and Upload du Frontend
-  show_progress "frontend"
-  build_and_upload_frontend "$BUMP_TYPE"
-
-elif [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
-  # S'il n'y a qu'une tâche, ALL_TASKS contient juste celle-ci
-  ALL_TASKS=("$TARGET_SERVICE")
-  show_progress "$TARGET_SERVICE"
-  build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
-elif [ "$TARGET_SERVICE" = "db_init" ]; then
-  run_db_init_job
-elif [ "$TARGET_SERVICE" = "agent_api" ]; then
-  ALL_TASKS=("agent_api")
-  show_progress "agent_api"
-  build_and_push_agent "$BUMP_TYPE"
-elif [ "$TARGET_SERVICE" = "frontend" ]; then
-  ALL_TASKS=("frontend")
-  show_progress "frontend"
-  build_and_upload_frontend "$BUMP_TYPE"
-else
-  echo -e "${RED}Erreur : Service '$1' inconnu.${RESET}"
-  echo "Utilisez --help pour voir la liste des services disponibles."
-  exit 1
+if [ ${#TARGET_SERVICES[@]} -eq 0 ]; then
+  TARGET_SERVICES=("all")
 fi
+
+# Si "all" est dans la liste, on le place seul et on ignore le reste
+for svc in "${TARGET_SERVICES[@]}"; do
+  if [ "$svc" == "all" ]; then
+    TARGET_SERVICES=("all")
+    break
+  fi
+done
+
+if [ "${TARGET_SERVICES[0]}" = "all" ]; then
+  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_api" "frontend")
+else
+  ALL_TASKS=("${TARGET_SERVICES[@]}")
+fi
+
+for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
+  if [ "$TARGET_SERVICE" = "all" ]; then
+    # 1. Build and Push des Microservices Applicatifs
+    for SERVICE in "${APP_MICROSERVICES[@]}"; do
+      show_progress "$SERVICE"
+      build_and_push_standard "$SERVICE" "$BUMP_TYPE"
+    done
+
+    # 2. Build Agent
+    show_progress "agent_api"
+    build_and_push_agent "$BUMP_TYPE"
+    
+    # 3. Build and Upload du Frontend
+    show_progress "frontend"
+    build_and_upload_frontend "$BUMP_TYPE"
+
+  elif [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
+    show_progress "$TARGET_SERVICE"
+    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
+  elif [ "$TARGET_SERVICE" = "db_init" ]; then
+    run_db_init_job
+  elif [ "$TARGET_SERVICE" = "agent_api" ]; then
+    show_progress "agent_api"
+    build_and_push_agent "$BUMP_TYPE"
+  elif [ "$TARGET_SERVICE" = "frontend" ]; then
+    show_progress "frontend"
+    build_and_upload_frontend "$BUMP_TYPE"
+  else
+    echo -e "${RED}Erreur : Service '${TARGET_SERVICE}' inconnu.${RESET}"
+    echo "Utilisez --help pour voir la liste des services disponibles."
+    exit 1
+  fi
+done
 
 echo -e "\n${GREEN}=== Déploiement terminé avec succès ! ===${RESET}"

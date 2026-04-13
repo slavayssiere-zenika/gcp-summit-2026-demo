@@ -69,7 +69,7 @@ env_name = os.environ["ENV_VAL"]
 admin_user = os.environ.get("ADMIN_USER")
 
 master_db_url = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/postgres?sslmode=require"
-services = ["users", "items", "competencies", "cv", "prompts", "drive"]
+services = ["users", "items", "competencies", "cv", "prompts", "drive", "missions"]
 all_iam_services = services + ["agent"]
 
 async def main():

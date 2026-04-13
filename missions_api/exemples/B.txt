@@ -1,0 +1,99 @@
+Proposition de Mission : Développement d'un Backend API Serverless sur GCP
+Référence : PR-2024-ZEN-GCP-02
+
+Client : Secteur Logistique / Transport
+
+Domaine : Développement d'API & Déploiement Serverless
+
+Date : 22 Mai 2024
+
+1. Contexte et Enjeux
+Le Client, un acteur en forte croissance dans le domaine de la logistique du dernier kilomètre, opère la digitalisation de ses processus internes. Actuellement, la gestion des flottes de livreurs et le suivi des tournées s'effectuent via des outils hétérogènes et des processus partiellement manuels, ce qui limite la visibilité en temps réel pour le service client.
+
+Afin d'unifier son système d'information, le Client lance la création d'un nouveau portail interne (Web et Mobile) destiné aux gestionnaires de flottes. Dans ce cadre, la Direction des Systèmes d'Information (DSI) a fait le choix de Google Cloud Platform (GCP) pour héberger ce nouveau produit, en misant sur une approche 100% Serverless (sans gestion de serveurs) pour minimiser la charge d'exploitation (Ops) et accélérer la mise sur le marché.
+
+2. Description du Besoin
+Le Client recherche des développeurs Java pour intégrer une équipe produit de type Feature Team (composée d'un Product Owner, d'un Tech Lead, de développeurs Front-end et Back-end).
+
+La mission consistera à concevoir et développer le nouveau socle Back-end (APIs REST) qui alimentera les applications des gestionnaires. L'application sera développée en Java avec le framework Spring Boot, conteneurisée, puis déployée sur le service managé Google Cloud Run. Le besoin se concentre sur la production d'un code de qualité, facilement testable et évolutif, tout en s'appuyant sur les services gérés par GCP pour la base de données et le stockage.
+
+Problématiques identifiées :
+Centralisation de l'information : Créer une source de vérité unique pour les données de tournées.
+
+Simplicité d'exploitation : Construire une application qui nécessite le moins d'interventions d'infrastructure possible.
+
+Évolutivité : Permettre une montée en charge automatique lors des pics d'activité (fêtes de fin d'année) sans configuration complexe.
+
+3. Objectifs de la Mission
+La mission s'articule autour des objectifs suivants :
+
+Développement des fonctionnalités métier : Implémenter les APIs RESTful permettant la création de tournées, l'affectation des livreurs et la mise à jour des statuts de livraison.
+
+Intégration de la persistance des données : Modéliser et interfacer l'application avec une base de données relationnelle managée (Cloud SQL pour PostgreSQL).
+
+Conteneurisation et Déploiement : Packager l'application via Docker et configurer les déploiements sur Google Cloud Run.
+
+Qualité logicielle : Assurer la fiabilité du code par la rédaction de tests unitaires et de tests d'intégration automatisés.
+
+4. Environnement Technique
+Le projet s'appuie sur une pile technologique standardisée, moderne et accessible :
+
+Langage & Framework : Java 17, Spring Boot 3.x, Spring Data JPA, RESTful API.
+
+Infrastructure GCP (Serverless) :
+
+Calcul : Google Cloud Run (déploiement de conteneurs en mode serverless).
+
+Base de données : Cloud SQL (PostgreSQL).
+
+Stockage : Google Cloud Storage (pour le stockage des bons de livraison PDF).
+
+Outils & DevOps : Git, Docker, GitLab CI (ou Cloud Build) pour l'intégration continue, JUnit/Mockito pour les tests.
+
+5. Méthodologie et Phases de la Mission
+L'équipe fonctionne en méthodologie Agile, avec des sprints de deux semaines.
+
+Phase 1 : Embarquement et Setup (2 semaines)
+Prise de connaissance des règles métiers liées à la logistique.
+
+Appropriation de l'environnement de développement local (Docker Compose, base de données locale).
+
+Développement des premiers endpoints API (opérations CRUD basiques).
+
+Phase 2 : Développement des fonctionnalités (En continu)
+Rédaction du code métier en Java/Spring Boot selon les spécifications de l'équipe produit.
+
+Création et mise à jour du modèle de données (migrations de base de données via Liquibase ou Flyway).
+
+Connexion de l'application aux services GCP (écriture dans les buckets Cloud Storage, requêtes vers Cloud SQL).
+
+Phase 3 : Tests et Mise en Production
+Écriture des tests unitaires et participation aux revues de code (Pull Requests) pour garantir la maintenabilité.
+
+Création d'images Docker légères et sécurisées.
+
+Suivi des déploiements sur les environnements de recette (staging) puis de production via la CI/CD.
+
+6. Livrables Attendus
+APIs REST fonctionnelles, documentées (Swagger/OpenAPI) et déployées.
+
+Code source hébergé sur le dépôt de l'entreprise avec une couverture de tests appropriée.
+
+Fichiers de configuration associés (Dockerfile, fichiers de propriétés Spring Boot).
+
+Documentation technique des choix d'implémentation métier.
+
+7. Profil Recherché
+Pour cette mission, le consultant devra justifier du profil suivant :
+
+Minimum 2 à 3 ans d'expérience en développement Back-end avec Java.
+
+Très bonne maîtrise du framework Spring (Spring Boot, Spring Data).
+
+Connaissance pratique de SQL et des bases de données relationnelles (PostgreSQL, MySQL...).
+
+Compréhension des concepts d'API REST et du format JSON.
+
+Connaissance de base de Docker (savoir créer un Dockerfile simple).
+
+Bonus (non obligatoire) : Une première approche ou une forte curiosité pour les environnements Cloud (GCP, AWS ou Azure) et le concept de Serverless. Le client est prêt à accompagner le consultant dans sa montée en compétence sur Cloud Run.

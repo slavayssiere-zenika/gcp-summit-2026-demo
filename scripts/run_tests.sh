@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Configuration
-set -e
 
 echo "Démarrage des tests en parallèle..."
 

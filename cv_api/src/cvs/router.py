@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 import json
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 import httpx
 import os
 import re
@@ -22,9 +23,9 @@ import logging
 from database import get_db
 from src.auth import verify_jwt, security
 from src.cvs.models import CVProfile
-from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
+from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
 from .task_state import task_state_manager
-from metrics import CV_PROCESSING_TOTAL
+from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["CV_Public"])
@@ -163,14 +164,47 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             res_prompt.raise_for_status()
             prompt = res_prompt.json()["value"]
     except Exception as e:
-        logger.error(f"Cannot fetch generic prompt: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
+        logger.warning(f"Prompt cv_api.extract_cv_info indisponible (erreur: {e}). Fallback local.")
+        if os.path.exists("cv_api.extract_cv_info.txt"):
+            with open("cv_api.extract_cv_info.txt", "r", encoding="utf-8") as f:
+                prompt = f.read()
+        else:
+            logger.error("No fallback file cv_api.extract_cv_info.txt found.")
+            raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
     
     try:
         logger.info("Calling Gemini to parse CV")
-        response = client.models.generate_content(
+        
+        tree_context = ""
+        try:
+            async with httpx.AsyncClient() as http_client:
+                # On utilise limit=1000 pour être sûr d'avoir toutes les racines, mais on ne garde que le haut niveau
+                tree_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
+                if tree_res.status_code == 200:
+                    items = tree_res.json().get('items', [])
+                    
+                    def extract_mid_parents(nodes):
+                        parents = []
+                        for n in nodes:
+                            subs = n.get("sub_competencies", [])
+                            if subs:
+                                # A node is a mid-parent if it has a parent_id (not a root) AND has at least one child that is a leaf
+                                has_leaf_child = any(not s.get("sub_competencies") for s in subs)
+                                if has_leaf_child and n.get("parent_id") is not None and n.get("name"):
+                                    parents.append(n.get("name"))
+                                parents.extend(extract_mid_parents(subs))
+                        return parents
+                        
+                    parent_categories = extract_mid_parents(items)
+                    tree_context = f"\n\nHere is the official list of parent capability domains for this company. Please try to map CV skills to these broad categories directly:\n{json.dumps(parent_categories)}"
+        except Exception as e:
+            logger.warning(f"Failed to fetch competencies tree for context: {e}")
+            
+        final_prompt = prompt + tree_context
+
+        response = await client.aio.models.generate_content(
             model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
-            contents=[prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
+            contents=[final_prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema={
@@ -509,8 +543,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     )
     
     try:
-        emb_res = client.models.embed_content(
-            model=os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-005"),
+        emb_res = await client.aio.models.embed_content(
+            model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             contents=distilled_content
         )
         vector_data = emb_res.embeddings[0].values
@@ -549,13 +583,15 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         extracted_info=extracted_info
     )
 
-@router.get("/search", response_model=List[SearchCandidateResponse])
-async def search_candidates(
+async def _execute_search(
+    request: Request,
+    response: Response,
     query: str, 
-    limit: int = 5, 
-    db: AsyncSession = Depends(get_db),
-    token_payload: dict = Depends(verify_jwt),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    limit: int, 
+    skills: List[str],
+    db: AsyncSession,
+    token_payload: dict,
+    credentials: HTTPAuthorizationCredentials
 ):
     """
     Recherche sémantique (RAG) du meilleur candidat via pgvector cosine distance.
@@ -564,26 +600,31 @@ async def search_candidates(
     if not client:
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")
         
-    # 0. Pre-filtrage AI: Extract mandatory skills from query
-    try:
-        filter_prompt = f"Extract a JSON list of strictly required technical competencies from this search query. Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are strictly required.\nQuery: '{query}'"
-        filter_res = client.models.generate_content(
-            model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
-            contents=filter_prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json")
-        )
-        required_skills = json.loads(filter_res.text)
-        if not isinstance(required_skills, list):
+    # 0. Pre-filtrage AI (uniquement si non fourni par l'API appelante): Extract mandatory skills from query
+    filter_res = None
+    if skills is not None and len(skills) > 0:
+        required_skills = skills
+    else:
+        try:
+            filter_prompt = f"Extract a JSON list of strictly required technical competencies from this search query. Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are strictly required.\nQuery: '{query}'"
+            filter_res = await client.aio.models.generate_content(
+                model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
+                contents=filter_prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+            required_skills = json.loads(filter_res.text)
+            if not isinstance(required_skills, list):
+                required_skills = []
+        except Exception as e:
+            logger.warning(f"Skill extraction failed, proceeding without pre-filter: {e}")
             required_skills = []
-    except Exception as e:
-        logger.warning(f"Skill extraction failed, proceeding without pre-filter: {e}")
-        required_skills = []
 
     try:
         # 1. Convert Prompt Query into 3072-D Matrix
-        emb_res = client.models.embed_content(
-            model=os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-005"),
-            contents=query
+        safe_embed_query = query[:3000] if query and len(query) > 3000 else query
+        emb_res = await client.aio.models.embed_content(
+            model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
+            contents=safe_embed_query
         )
         search_vector = emb_res.embeddings[0].values
         
@@ -593,15 +634,18 @@ async def search_candidates(
         # Log generation tokens from filter (Safely)
         f_meta = None
         try:
-            f_meta = filter_res.usage_metadata
+            if filter_res:
+                f_meta = filter_res.usage_metadata
         except Exception as e:
             logger.warning(f"Metadata access failed for search filter: {e}")
-        await _log_finops(user_caller, "search_filter_extraction", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), f_meta, {"query": query}, auth_token=credentials.credentials)
+        if filter_res:
+            await _log_finops(user_caller, "search_filter_extraction", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), f_meta, {"query": query}, auth_token=credentials.credentials)
         
         # Log embedding (rough estimate)
         # We use a simple dict to avoid Pydantic validation issues with the official UsageMetadata type
-        await _log_finops(user_caller, "search_embedding", os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-005"), {"prompt_token_count": len(query)//4, "candidates_token_count": 0}, auth_token=credentials.credentials)
+        await _log_finops(user_caller, "search_embedding", os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"), {"prompt_token_count": len(query)//4, "candidates_token_count": 0}, auth_token=credentials.credentials)
     except Exception as e:
+        logger.error(f"Erreur d'embedding API Gemini (query length={len(query)}): {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Embedding search query failed: {e}")
 
     # 2. Vector Postgres Search Operator (Cosine Distance <=>)
@@ -610,12 +654,65 @@ async def search_candidates(
         CVProfile.semantic_embedding.cosine_distance(search_vector).label('distance')
     ).filter(CVProfile.semantic_embedding.is_not(None))
     
+    # Check missing embeddings anomaly
+    try:
+        missing_count_stmt = select(func.count(CVProfile.user_id)).filter(CVProfile.semantic_embedding.is_(None))
+        missing_count = (await db.execute(missing_count_stmt)).scalar() or 0
+        CV_MISSING_EMBEDDINGS.set(missing_count)
+        
+        if missing_count > 0:
+            logger.warning(f"Data Anomaly: {missing_count} CV profiles ignored due to missing embeddings!")
+            if response:
+                response.headers["X-Missing-Embeddings-Count"] = str(missing_count)
+    except Exception as e:
+        logger.error(f"Failed to calculate missing embeddings: {e}")
+    
+    fallback_scan = False
+    
     if required_skills:
-        from sqlalchemy import cast, String
-        for skill in required_skills:
-            stmt = stmt.filter(cast(CVProfile.competencies_keywords, String).ilike(f'%{skill}%'))
+        approved_user_ids = set()
+        auth_header = f"Bearer {credentials.credentials}" if credentials else ""
+        headers_downstream = {"Authorization": auth_header} if auth_header else {}
+        
+        try:
+            async with httpx.AsyncClient() as http_client:
+                for skill in required_skills:
+                    # 1. Search for this skill canonically
+                    search_res = await http_client.get(
+                        f"{COMPETENCIES_API_URL.rstrip('/')}/search", 
+                        params={"query": skill, "limit": 1}, 
+                        headers=headers_downstream
+                    )
+                    
+                    if search_res.status_code == 200:
+                        items = search_res.json().get("items", [])
+                        if items:
+                            canonical_id = items[0]["id"]
+                            # 2. Get users holding this skill OR any sub-skill
+                            users_res = await http_client.get(
+                                f"{COMPETENCIES_API_URL.rstrip('/')}/{canonical_id}/users",
+                                headers=headers_downstream
+                            )
+                            if users_res.status_code == 200:
+                                user_ids = users_res.json()
+                                approved_user_ids.update(user_ids)
+        except Exception as e:
+            logger.warning(f"Canonical competencies resolution failed: {e}")
+            
+        if approved_user_ids:
+            stmt_filtered = stmt.filter(CVProfile.user_id.in_(list(approved_user_ids)))
+            query_results = (await db.execute(stmt_filtered.order_by('distance').limit(limit * 2))).all()
+            if not query_results:
+                fallback_scan = True
+                query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
+        else:
+            fallback_scan = True
+            query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
+    else:
+        query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
 
-    query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
+    if response:
+        response.headers["X-Fallback-Full-Scan"] = str(fallback_scan).lower()
                 
     mapped_results = []
     seen_users = set()
@@ -637,7 +734,7 @@ async def search_candidates(
     inject(headers_downstream)  # Mandatory Trace Span Propagation (Agent.md Rule 4)
     
     async with httpx.AsyncClient(timeout=10.0) as http_client:
-        for res in mapped_results:
+        async def fetch_user(res):
             try:
                 u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)
                 if u_res.status_code == 200:
@@ -650,7 +747,35 @@ async def search_candidates(
             except Exception as e:
                 print(f"HTTP Enrichment failed for user {res['user_id']}: {e}")
 
+        # Run all users_api fetches concurrently
+        import asyncio
+        await asyncio.gather(*(fetch_user(res) for res in mapped_results))
+
     return mapped_results
+
+@router.get("/search", response_model=List[SearchCandidateResponse])
+async def search_candidates(
+    request: Request,
+    response: Response,
+    query: str, 
+    limit: int = 5, 
+    skills: List[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    return await _execute_search(request, response, query, limit, skills, db, token_payload, credentials)
+
+@router.post("/search", response_model=List[SearchCandidateResponse])
+async def search_candidates_post(
+    req_body: SearchCandidateRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    return await _execute_search(request, response, req_body.query, req_body.limit, req_body.skills, db, token_payload, credentials)
 
 @router.get("/user/{user_id}", response_model=List[CVProfileResponse])
 async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = Depends(get_db)):
@@ -848,7 +973,12 @@ async def recalculate_competencies_tree(
             res_prompt.raise_for_status()
             instruction = res_prompt.json()["value"]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
+        logger.warning(f"Prompt cv_api.generate_taxonomy_tree indisponible (erreur: {e}). Fallback local.")
+        if os.path.exists("cv_api.generate_taxonomy_tree.txt"):
+            with open("cv_api.generate_taxonomy_tree.txt", "r", encoding="utf-8") as f:
+                instruction = f.read()
+        else:
+            raise HTTPException(status_code=500, detail=f"Cannot fetch taxonomy prompt and no fallback: {e}")
 
     try:
         async with httpx.AsyncClient() as http_client:
@@ -892,7 +1022,7 @@ async def recalculate_competencies_tree(
         print(f"WARNING: Failed to inject existing competencies: {e}")
 
     try:
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"),
             contents=[instruction, combined_text],
             config=types.GenerateContentConfig(

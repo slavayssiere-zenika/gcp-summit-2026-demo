@@ -7,7 +7,7 @@ export DB_USER=${DB_USER:-postgres}
 export DB_PASSWORD=${DB_PASSWORD:-postgres}
 
 # Liste des bases de données de nos microservices
-SERVICES="users items competencies cv prompts drive"
+SERVICES="users items competencies cv prompts drive missions"
 
 echo "Démarrage des migrations Liquibase..."
 

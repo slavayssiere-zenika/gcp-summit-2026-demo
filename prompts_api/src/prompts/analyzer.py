@@ -11,7 +11,7 @@ def get_genai_client():
         raise ValueError("GOOGLE_API_KEY environment variable is missing.")
     return genai.Client(api_key=api_key)
 
-def generate_test_cases(prompt_value: str) -> list:
+async def generate_test_cases(prompt_value: str) -> list:
     """Uses Gemini to generate synthetic test cases for a given prompt."""
     client = get_genai_client()
     
@@ -25,7 +25,7 @@ def generate_test_cases(prompt_value: str) -> list:
     ]
     """
     
-    response = client.models.generate_content(
+    response = await client.aio.models.generate_content(
         model='gemini-2.5-flash',
         contents=prompt_value,
         config=types.GenerateContentConfig(
@@ -41,7 +41,7 @@ def generate_test_cases(prompt_value: str) -> list:
         print(f"Error parsing Gemini response: {e}")
         return []
 
-def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
+async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
     """Generates promptfooconfig, runs eval, and returns the result."""
     with tempfile.TemporaryDirectory() as tmpdir:
         prompt_file = os.path.join(tmpdir, "prompt.txt")
@@ -85,7 +85,8 @@ def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
             # Disable telemetry for cleaner logs
             env["PROMPTFOO_DISABLE_TELEMETRY"] = "1"
             
-            result = subprocess.run(
+            import asyncio
+            result = await asyncio.to_thread(subprocess.run,
                 ["promptfoo", "eval", "-c", config_file, "-o", output_file, "--no-progress-bar", "--no-table"],
                 cwd=tmpdir,
                 env=env,
@@ -107,7 +108,7 @@ def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
         except Exception as e:
             return {"error": str(e)}
 
-def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> str:
+async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> str:
     """Uses Gemini to suggest a better prompt based on evaluation."""
     client = get_genai_client()
     
@@ -131,7 +132,7 @@ def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> str:
     
     prompt = f"Original Prompt:\n{original_prompt}\n\nFeedback from Evaluation:\n{feedback_text}\n\nPlease provide the improved prompt."
     
-    response = client.models.generate_content(
+    response = await client.aio.models.generate_content(
         model='gemini-2.5-flash',
         contents=prompt,
         config=types.GenerateContentConfig(

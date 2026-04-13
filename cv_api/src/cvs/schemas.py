@@ -34,6 +34,11 @@ class CVResponse(BaseModel):
     competencies_assigned: int
     extracted_info: Optional[dict] = None
 
+class SearchCandidateRequest(BaseModel):
+    query: str
+    limit: int = 5
+    skills: Optional[List[str]] = None
+
 class SearchCandidateResponse(BaseModel):
     user_id: int
     similarity_score: float

@@ -84,6 +84,18 @@ const router = createRouter({
       meta: { adminOnly: true }
     },
     {
+      path: '/admin/availability',
+      name: 'admin-availability',
+      component: () => import('../views/AdminAvailability.vue'),
+      meta: { adminOnly: true }
+    },
+    {
+      path: '/admin/finops',
+      name: 'admin-finops',
+      component: () => import('../views/FinopsAdmin.vue'),
+      meta: { adminOnly: true }
+    },
+    {
       path: '/help',
       name: 'help',
       component: () => import('../views/Help.vue')
@@ -97,6 +109,17 @@ const router = createRouter({
       path: '/aiops',
       name: 'aiops',
       component: () => import('../views/AiOps.vue')
+    },
+    {
+      path: '/missions',
+      name: 'missions',
+      component: () => import('../views/MissionsList.vue')
+    },
+    {
+      path: '/missions/:id',
+      name: 'mission-detail',
+      component: () => import('../views/MissionDetail.vue'),
+      props: true
     }
   ]
 })
@@ -116,7 +139,7 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
     const role = authService.state.user?.role
     if (role === 'admin') {
       next()
-    } else if (role === 'rh' && (to.path === '/admin' || to.path === '/admin/deduplication')) {
+    } else if (role === 'rh' && (to.path === '/admin' || to.path === '/admin/deduplication' || to.path === '/admin/availability')) {
       next()
     } else {
       next({ name: 'home' })

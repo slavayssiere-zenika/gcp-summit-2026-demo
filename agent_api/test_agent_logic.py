@@ -117,10 +117,50 @@ async def test_loki_metric_aggregator(mocker):
     result = await loki_metric_aggregator("sum()")
     assert "success" in result["result"]
 
+
+class MockContent:
+    def __init__(self, parts):
+        self.parts = parts
+        self.role = "model"
+
+class MockUsage:
+    def __init__(self, prompt, cand):
+        self.prompt_token_count = prompt
+        self.candidates_token_count = cand
+
+class MockEvent:
+    def __init__(self, author, parts, calls=None, responses=None, actions=None, usage=None):
+        self.author = author
+        self.content = MockContent(parts)
+        self.actions = actions or []
+        self._calls = calls or []
+        self._responses = responses or []
+        self.usage_metadata = usage or MockUsage(10, 20)
+
+    def get_function_calls(self):
+        return self._calls
+
+    def get_function_responses(self):
+        return self._responses
+
+class MockPart:
+    def __init__(self, text=None, tool_call=None):
+        self.text = text
+        self.tool_call = tool_call
+        self.function_call = None
+        self.thought = None
+        self.function_response = None
+
+class MockToolCall:
+    def __init__(self, name, args):
+        self.name = name
+        self.args = args
+
 @pytest.mark.asyncio
 async def test_run_agent_query_logic(mocker):
     # Mocking ADK dependencies
     mock_agent = MagicMock()
+    mock_agent.model = "gemini-test"
     
     # Mock session
     mock_session_service = AsyncMock()
@@ -130,13 +170,16 @@ async def test_run_agent_query_logic(mocker):
         def __init__(self, *args, **kwargs):
             pass
         async def run_async(self, *args, **kwargs):
-            mock_event = MagicMock(author="assistant")
-            mock_event.content.parts = [MagicMock(text="Hello result")]
+            mock_event = MockEvent("assistant", [MockPart(text="Hello result")])
             yield mock_event
             
-            # Simulate a tool call event for coverage
-            tool_event = MagicMock(author="tool")
-            tool_event.content.parts = [MagicMock(text='{"result": "{\"tool_data\": 1}"}')]
+            tool_event = MockEvent(
+                "tool",
+                [
+                    MockPart(tool_call=MockToolCall("test_tool", {"a": 1})),
+                    MockPart(text='{"result": "{\\"tool_data\\": 1}"}')
+                ]
+            )
             yield tool_event
             
     with patch("agent.get_session_service", return_value=mock_session_service), \
@@ -144,5 +187,5 @@ async def test_run_agent_query_logic(mocker):
          patch("google.adk.runners.Runner", new=MockRunner):
         
         result = await run_agent_query("hello")
-        assert result["response"] == "Hello result"
+        assert result["response"].startswith("Hello result")
         assert result["source"] == "adk_agent"

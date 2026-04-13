@@ -56,6 +56,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/import` : Import And Analyze Cv
 - **GET** `/search` : Search Candidates
+- **POST** `/search` : Search Candidates Post
 - **GET** `/user/{user_id}` : Get User Cv
 - **GET** `/users/tag/{tag}` : Get Users By Tag
 - **GET** `/user/{user_id}/missions` : Get User Missions
@@ -66,7 +67,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/reanalyze` : Reanalyze Cvs
 - **POST** `/internal/users/merge` : Merge Users
 - **GET** `/spec` : Get Spec
-- **GET** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

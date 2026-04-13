@@ -12,6 +12,11 @@ resource "google_bigquery_table" "ai_usage" {
 
   deletion_protection = false
 
+  time_partitioning {
+    type  = "DAY"
+    field = "timestamp"
+  }
+
   schema = <<EOF
 [
   {

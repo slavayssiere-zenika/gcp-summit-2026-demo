@@ -59,11 +59,13 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/health` : Router Health
 - **GET** `/version` : Get Version
 - **POST** `/login` : Login
+- **POST** `/refresh` : Refresh Token Route
 - **POST** `/logout` : Logout
 - **POST** `/service-account/login` : Service Account Login
 - **GET** `/google/config` : Get Google Config
 - **GET** `/google/login` : Google Login
 - **GET** `/google/callback` : Google Callback
+- **POST** `/suspend/{email}` : Suspend User
 - **GET** `/stats` : Get User Stats
 - **GET** `/` : List Users
 - **POST** `/` : Create User
@@ -76,7 +78,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **PUT** `/{user_id}` : Update User
 - **DELETE** `/{user_id}` : Delete User
 - **GET** `/spec` : Get Spec
-- **GET** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

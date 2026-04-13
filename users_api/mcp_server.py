@@ -189,6 +189,17 @@ async def list_tools() -> list[Tool]:
                     "limit": {"type": "integer", "description": "Maximum results", "default": 10}
                 }
             }
+        ),
+        Tool(
+            name="get_user_availability",
+            description="Get the scheduled unavailability periods for a user",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "The user ID"}
+                },
+                "required": ["user_id"]
+            }
         )
     ]
 
@@ -305,6 +316,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response = await client.get(f"{API_BASE_URL}/search", params={"is_anonymous": True, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "get_user_availability":
+                response = await client.get(f"{API_BASE_URL}/{arguments['user_id']}")
+                response.raise_for_status()
+                user_data = response.json()
+                availability = user_data.get("unavailability_periods", [])
+                return [TextContent(type="text", text=json.dumps(availability))]
 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

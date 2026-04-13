@@ -20,6 +20,7 @@ interface SpecTab {
 const tabs: SpecTab[] = [
   { id: 'agent', name: 'Agent API', url: '/api/spec', versionUrl: '/api/version', icon: Cpu },
   { id: 'prompts', name: 'Prompts API', url: '/prompts-api/spec', versionUrl: '/prompts-api/version', icon: MessageSquare },
+  { id: 'missions', name: 'Missions API', url: '/missions-api/spec', versionUrl: '/missions-api/version', icon: BookOpen },
   { id: 'users', name: 'Users API', url: '/users-api/spec', versionUrl: '/users-api/version', icon: KeyRound },
   { id: 'items', name: 'Items API', url: '/items-api/spec', versionUrl: '/items-api/version', icon: Database },
   { id: 'competencies', name: 'Competencies API', url: '/comp-api/spec', versionUrl: '/comp-api/version', icon: Network },

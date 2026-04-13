@@ -1,3 +1,133 @@
+## Mise à jour automatique - 2026-04-13 23:43:17
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | 1615  | 372  |  77% |
+| competencies_api | 1126  | 314  |  72% |
+| cv_api           | 1648  | 564  |  66% |
+| drive_api        | 786   | 363  |  54% |
+| items_api        | 1094  | 242  |  78% |
+| prompts_api      | 593   | 116  |  80% |
+| users_api        | 1327  | 412  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/git-push.md` (M)
+- `.gitignore` (M)
+- `.pre-commit-config.yaml` (M)
+- `AGENTS.md` (M)
+- `agent_api/.coverage` (M)
+- `agent_api/VERSION` (M)
+- `agent_api/agent.py` (M)
+- `agent_api/main.py` (M)
+- `agent_api/mcp_client.py` (M)
+- `agent_api/spec.md` (M)
+- `agent_api/test_agent_logic.py` (M)
+- `agent_api/test_main.py` (M)
+- `bootstrap/services.tf` (M)
+- `competencies_api/.coverage` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/router.py` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/Dockerfile` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/__pycache__/test_main.cpython-313-pytest-9.0.2.pyc` (M)
+- `cv_api/metrics.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `cv_api/src/cvs/__pycache__/schemas.cpython-313.pyc` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `cv_api/src/cvs/schemas.py` (M)
+- `cv_api/test_main.py` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/users/changelog.yaml` (M)
+- `db_migrations/docker-entrypoint.sh` (M)
+- `docker-compose.yml` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `frontend/VERSION` (M)
+- `frontend/nginx/default.conf` (M)
+- `frontend/package-lock.json` (M)
+- `frontend/package.json` (M)
+- `frontend/src/App.vue` (M)
+- `frontend/src/main.ts` (M)
+- `frontend/src/router/index.ts` (M)
+- `frontend/src/services/auth.ts` (M)
+- `frontend/src/style.css` (M)
+- `frontend/src/views/Home.vue` (M)
+- `frontend/src/views/Profile.vue` (M)
+- `frontend/src/views/Specs.vue` (M)
+- `frontend/vite.config.ts` (M)
+- `items_api/VERSION` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/VERSION` (M)
+- `market_mcp/mcp_app.py` (M)
+- `market_mcp/requirements.txt` (M)
+- `platform-engineering/envs/dev.yaml` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/envs/uat.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/bigquery.tf` (M)
+- `platform-engineering/terraform/cloudrun.tf` (M)
+- `platform-engineering/terraform/db_init_job.tf` (M)
+- `platform-engineering/terraform/lb-internal.tf` (M)
+- `platform-engineering/terraform/lb.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `prompts_api/.coverage` (M)
+- `prompts_api/Dockerfile` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/src/prompts/__pycache__/analyzer.cpython-313.pyc` (M)
+- `prompts_api/src/prompts/__pycache__/router.cpython-313.pyc` (M)
+- `prompts_api/src/prompts/analyzer.py` (M)
+- `prompts_api/src/prompts/router.py` (M)
+- `prompts_api/tests/__pycache__/test_prompts.cpython-313-pytest-9.0.2.pyc` (M)
+- `prompts_api/tests/test_prompts.py` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/run_tests.sh` (M)
+- `seed_data.py` (M)
+- `todo.md` (M)
+- `users_api/VERSION` (M)
+- `users_api/main.py` (M)
+- `users_api/mcp_server.py` (M)
+- `users_api/spec.md` (M)
+- `users_api/src/__pycache__/auth.cpython-313.pyc` (M)
+- `users_api/src/auth.py` (M)
+- `users_api/src/users/models.py` (M)
+- `users_api/src/users/router.py` (M)
+- `users_api/src/users/schemas.py` (M)
+- `.agents/workflows/analyse-code-api.md` (??)
+- `.agents/workflows/analyse-security.md` (??)
+- `agent_api/.dockerignore` (??)
+- `db_migrations/changelogs/missions/` (??)
+- `docs/` (??)
+- `drive_api/.dockerignore` (??)
+- `frontend/src/components/agent/` (??)
+- `frontend/src/components/ui/` (??)
+- `frontend/src/services/agentApi.ts` (??)
+- `frontend/src/stores/` (??)
+- `frontend/src/types/` (??)
+- `frontend/src/utils/` (??)
+- `frontend/src/views/AdminAvailability.vue` (??)
+- `frontend/src/views/FinopsAdmin.vue` (??)
+- `frontend/src/views/MissionDetail.vue` (??)
+- `frontend/src/views/MissionsList.vue` (??)
+- `market_mcp/.dockerignore` (??)
+- `market_mcp/logger.py` (??)
+- `missions_api/` (??)
+- `platform-engineering/terraform/imports_users.tf` (??)
+- `platform-engineering/terraform/scheduler.tf` (??)
+- `roi.md` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-13 14:30:07
 
 ### Résumé des Changements

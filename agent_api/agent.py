@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 from google.genai import types
 from google.adk.agents import Agent
-from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp, get_drive_mcp, get_market_mcp
+from mcp_client import get_users_mcp, get_items_mcp, get_competencies_mcp, get_loki_mcp, get_cv_mcp, get_drive_mcp, get_market_mcp, get_missions_mcp
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +226,40 @@ DRIVE_TOOLS = [
     delete_drive_folder,
     get_drive_status,
     trigger_drive_sync
+]
+
+# --- Missions Tools ---
+
+async def create_mission(title: str, description: str) -> dict:
+    """
+    Crée une opportunité de mission à pourvoir. L'outil enregistre la mission, extrait les compétences nécessaires, 
+    et propose automatiquement une équipe (Directeur de projet, Tech Lead, Consultants).
+    """
+    mcp = await get_missions_mcp()
+    result = await mcp.call_tool("create_mission", {"title": title, "description": description})
+    return format_mcp_result(result, "mission")
+
+async def list_missions() -> dict:
+    """
+    Liste toutes les missions enregistrées.
+    """
+    mcp = await get_missions_mcp()
+    result = await mcp.call_tool("list_missions", {})
+    return format_mcp_result(result, "missions")
+
+async def reanalyze_mission(mission_id: int) -> dict:
+    """
+    Relance l'analyse complète (extraction de contexte et proposition de staffing IA) d'une mission existante.
+    Utiliser cet outil si l'utilisateur souhaite générer une nouvelle proposition d'équipe pour une mission existante.
+    """
+    mcp = await get_missions_mcp()
+    result = await mcp.call_tool("reanalyze_mission", {"mission_id": mission_id})
+    return format_mcp_result(result, "mission")
+
+MISSIONS_TOOLS = [
+    create_mission,
+    list_missions,
+    reanalyze_mission
 ]
 
 # --- Users Tools ---
@@ -838,7 +872,7 @@ async def create_agent(session_id: str | None = None):
         ),
         instruction=instruction_text,
         description="Assistant IA pour la gestion des utilisateurs, items et compétences. Analyse des logs et du marché GCP/FinOps.",
-        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *DRIVE_TOOLS, *MARKET_TOOLS, *log_tools]
+        tools=[*USERS_TOOLS, *ITEMS_TOOLS, *COMPETENCIES_TOOLS, *CV_TOOLS, *DRIVE_TOOLS, *MARKET_TOOLS, *MISSIONS_TOOLS, *log_tools]
     )
     
     return agent
@@ -847,10 +881,25 @@ async def create_agent(session_id: str | None = None):
 async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     from google.adk.runners import Runner
     import uuid
+    import hashlib
+    import json
     
     session_id = session_id or str(uuid.uuid4())
     
     session_service = get_session_service()
+    
+    # --- Semantic Cache Check ---
+    cache_key = f"semantic_cache:{hashlib.sha256(query.encode('utf-8')).hexdigest()}"
+    try:
+        if getattr(session_service, 'r', None):
+            cached = session_service.r.get(cache_key)
+            if cached:
+                cached_data = json.loads(cached)
+                logger.info(f"FinOps: Cache hit for query. Saved Gemini invocation.")
+                return cached_data
+    except Exception as e:
+        logger.error(f"Semantic Cache read error: {e}")
+
     agent = await create_agent(session_id)
     runner = Runner(app_name="zenika_assistant", agent=agent, session_service=session_service)
     
@@ -1065,7 +1114,7 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
         except Exception as e:
             logger.error(f"Failed to log FinOps consumption: {e}")
     
-    return {
+    final_result = {
         "response": response_text,
         "thoughts": thought_text,
         "data": last_tool_data,
@@ -1078,3 +1127,11 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
             "estimated_cost_usd": round(total_input_tokens * 0.000000075 + total_output_tokens * 0.0000003, 6)
         }
     }
+
+    try:
+        if getattr(session_service, 'r', None):
+            session_service.r.set(cache_key, json.dumps(final_result), ex=86400)
+    except Exception as e:
+        logger.error(f"Semantic Cache write error: {e}")
+        
+    return final_result

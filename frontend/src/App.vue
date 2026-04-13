@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { Search, LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen, FileDown, ChevronDown, Settings, BarChart } from 'lucide-vue-next'
 import { authService } from './services/auth'
 import { useRouter } from 'vue-router'
+import ToastNotification from '@/components/ui/ToastNotification.vue'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -20,6 +21,7 @@ const handleLogout = async () => {
 
 <template>
   <div id="main-app">
+    <ToastNotification />
     <div class="header">
       <div class="logo">ZENIKA</div>
       <div class="subtitle">Console Intelligent Agent</div>
@@ -36,6 +38,9 @@ const handleLogout = async () => {
           <RouterLink to="/" class="nav-pill" active-class="active">
             <Bot size="16" /> Agent
           </RouterLink>
+          <RouterLink to="/missions" class="nav-pill" active-class="active">
+            <Briefcase size="16" /> Hub Missions
+          </RouterLink>
 
           <!-- Administration Panel (Protected) -->
           <div class="dropdown" v-if="authService.state.user?.role === 'admin' || authService.state.user?.role === 'rh'">
@@ -49,8 +54,10 @@ const handleLogout = async () => {
                 <RouterLink to="/admin/reanalysis" active-class="dropdown-active">Réanalyse Globale</RouterLink>
               </template>
               <RouterLink to="/admin/deduplication" active-class="dropdown-active">Déduplication</RouterLink>
+              <RouterLink to="/admin/availability" active-class="dropdown-active">Planning des consultants</RouterLink>
               <template v-if="authService.state.user?.role === 'admin'">
                 <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
+                <RouterLink to="/admin/finops" active-class="dropdown-active">Sécurité & FinOps</RouterLink>
               </template>
               <div class="dropdown-divider"></div>
               <a href="/users_api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
@@ -73,6 +80,9 @@ const handleLogout = async () => {
               </a>
               <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">
                 <BookOpen size="14" /> Swagger Agent
+              </a>
+              <a href="/missions-api/docs" target="_blank" class="nav-pill swagger-link" title="Missions API Swagger">
+                <BookOpen size="14" /> Swagger Missions
               </a>
             </div>
           </div>
