@@ -112,8 +112,8 @@ services:
     hostname: items_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - USERS_API_URL=http://users-api:8000
-      - ITEMS_API_URL=http://items-api:8001
+      - USERS_API_URL=http://users_api:8000
+      - ITEMS_API_URL=http://items_api:8001
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=items_mcp
@@ -155,8 +155,8 @@ services:
     hostname: competencies_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - USERS_API_URL=http://users-api:8000
-      - COMPETENCIES_API_URL=http://competencies-api:8003
+      - USERS_API_URL=http://users_api:8000
+      - COMPETENCIES_API_URL=http://competencies_api:8003
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=competencies_mcp
@@ -201,12 +201,55 @@ services:
     hostname: cv_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - CV_API_URL=http://cv-api:8004
+      - CV_API_URL=http://cv_api:8004
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=cv_mcp
     depends_on:
       - cv_api
+    networks:
+      - monitoring_net
+
+  missions_api:
+    build: ./missions_api
+    container_name: missions_api
+    hostname: missions_api
+    ports:
+      - "8009:8009"
+    environment:
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=missions_api
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/missions
+      - REDIS_URL=redis://redis:6379/8
+      - USERS_API_URL=http://users_api:8000
+      - CV_API_URL=http://cv_api:8004
+      - SECRET_KEY=${SECRET_KEY}
+      - ROOT_PATH=/missions-api
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      monitoring_net:
+        aliases:
+          - missions_api
+
+  missions_mcp:
+    build: ./missions_api
+    container_name: missions_mcp
+    hostname: missions_mcp
+    command: ["python", "/app/mcp_app.py"]
+    environment:
+      - MISSIONS_API_URL=http://missions_api:8009
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=missions_mcp
+    depends_on:
+      - missions_api
     networks:
       - monitoring_net
 
@@ -244,7 +287,7 @@ services:
     hostname: drive_mcp
     command: ["python", "/app/mcp_app.py"]
     environment:
-      - DRIVE_API_URL=http://drive-api:8006
+      - DRIVE_API_URL=http://drive_api:8006
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=drive_mcp

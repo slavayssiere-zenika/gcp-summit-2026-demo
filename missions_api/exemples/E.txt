@@ -1,0 +1,102 @@
+Proposition de Mission : Conception et Développement du MVP "Moteur de Rapprochement Factures"
+Référence : PR-2026-ZEN-FIN-04
+
+Client : Secteur Retail / Grande Distribution (Direction Financière)
+
+Domaine : Automatisation des processus financiers & Architecture Microservices
+
+Date : 13 Avril 2026
+
+1. Contexte et Enjeux
+Dans le cadre de la modernisation de son système d'information financier, le Client souhaite automatiser la validation de ses factures fournisseurs. Actuellement, le rapprochement entre les bons de commande (émis dans l'ERP) et les factures (reçues via un outil de dématérialisation) est effectué manuellement par les comptables. Ce processus chronophage génère des retards de paiement, des erreurs de saisie et limite la capacité du département financier à absorber les pics d'activité.
+
+Afin de valider rapidement la faisabilité technique et le retour sur investissement (ROI) d'une automatisation, le Client a décidé de lancer le développement d'un Produit Minimum Viable (MVP). Ce MVP prendra la forme d'un microservice autonome chargé d'appliquer des règles de gestion strictes pour rapprocher automatiquement les documents et générer un statut de validation.
+
+2. Description du Besoin
+Le Client nécessite une équipe "commando" capable de concevoir, développer et livrer ce moteur de règles métier de manière rapide et sécurisée. La mission est volontairement circonscrite à un périmètre fonctionnel réduit (le MVP ne traitera dans un premier temps que les factures de marchandises standard) afin de garantir une mise en production rapide avant la clôture du prochain exercice.
+
+L'objectif est de s'affranchir de l'interface utilisateur (UI) dans cette première étape. Le socle applicatif sera purement "Back-end", communicant avec les systèmes existants via des APIs RESTful. Le code produit devra cependant respecter les standards de qualité de l'entreprise pour permettre une évolution future vers un produit complet.
+
+3. Objectifs de la Mission
+La mission se concentre sur l'efficacité de livraison et la qualité d'exécution technique :
+
+Conception du socle technique : Définir l'architecture du microservice, les modèles de données (JSON) pour les échanges avec l'ERP, et initialiser le dépôt de code.
+
+Développement du moteur de règles : Implémenter en Java la logique de rapprochement (tolérances de montants, vérification des quantités, correspondance des numéros de série).
+
+Exposition des APIs : Créer les endpoints sécurisés permettant la soumission d'une facture et l'interrogation de son statut de rapprochement.
+
+Validation et Intégration : Mettre en place un harnais de tests automatisés (unitaires et d'intégration) pour s'assurer qu'aucune régression fonctionnelle ne viendra perturber la comptabilité.
+
+4. Équipe Proposée et Gouvernance
+Pour répondre à l'exigence d'une livraison rapide sur un périmètre très ciblé, nous proposons un dispositif complet et autonome, combinant pilotage, expertise d'architecture et force de frappe en développement.
+
+1 Directeur de Projet (Pilotage & Stratégie) : * Garant des engagements de la mission et de l'alignement avec les directions métiers (Direction Financière).
+
+Gestion des risques, levée des obstacles organisationnels et animation des comités de pilotage.
+
+1 Tech Lead (Architecture & Qualité) :
+
+Responsable de la conception technique, des choix d'implémentation et de la robustesse du socle.
+
+Assure les revues de code complexes, encadre les développements et fait le pont avec l'équipe d'infrastructure du Client.
+
+2 Développeurs Java (Conception & Réalisation) :
+
+En charge du développement intensif des fonctionnalités métiers et de l'écriture stricte des tests associés.
+
+Travail en binôme et itération rapide pour transformer les spécifications du Product Owner en code exécutable.
+
+5. Découpage du Travail et Périmètre d'Intervention
+La mission est dimensionnée et structurée pour s'exécuter sous un format "Time-to-Market" très agressif. Le volume de travail est découpé en trois phases intensives, justifiant la mobilisation de l'équipe sur une période courte et très concentrée :
+
+Phase A : Cadrage technique et Initialisation du Socle (Sprint de démarrage)
+Cette phase nécessite une forte mobilisation du Tech Lead et du Directeur de Projet.
+
+Analyse détaillée des interfaces avec l'ERP existant et l'outil de dématérialisation.
+
+Création du squellette de l'application Spring Boot.
+
+Mise en place des chaînes de CI/CD basiques pour garantir que l'équipe peut déployer son code dès les premiers jours.
+
+Définition des contrats d'interface (Swagger/OpenAPI).
+
+Phase B : Développement intensif du Moteur de Rapprochement (Cœur de mission)
+C'est la phase de réalisation principale où les deux Développeurs Java et le Tech Lead abattent la majorité du travail applicatif.
+
+Itération 1 : Création des modèles de données internes et développement du flux d'ingestion des factures (API POST).
+
+Itération 2 : Développement des algorithmes de rapprochement exacts (correspondance 1:1 entre ligne de facture et ligne de commande).
+
+Itération 3 : Implémentation des règles de gestion complexes (tolérances de prix, gestion des frais de port, statuts d'erreur).
+
+Point de synchronisation quotidien avec l'équipe métier pour valider les cas aux limites (Edge Cases).
+
+Phase C : Recette, Stabilisation et Transfert (Finalisation)
+Tests d'intégration de bout en bout avec un jeu de données réel anonymisé fourni par le Client.
+
+Optimisation des performances si nécessaire.
+
+Préparation du package de déploiement pour la mise en production.
+
+Remise de la documentation technique et passation au support de niveau 2 (Run).
+
+6. Environnement Technique
+Langage & Framework principal : Java 21, Spring Boot 3 (Spring Web).
+
+Mapping & Validation : MapStruct, Hibernate Validator.
+
+Stockage des données (éphémère pour le MVP) : Base de données relationnelle légère (H2 en mémoire pour les tests, ou connexion à un schéma PostgreSQL dédié fourni par le client).
+
+Tests et Qualité : JUnit 5, Mockito, SonarQube (pour le contrôle continu de la qualité du code).
+
+Outillage et Gestion de versions : Git, Maven, GitLab CI.
+
+7. Livrables Attendus
+À l'issue de ce cycle de développement court, l'équipe fournira :
+
+Le code source complet du microservice "Moteur de Rapprochement", déposé sur le référentiel Git du Client, avec un taux de couverture de tests supérieur à 85%.
+
+Les spécifications techniques et les contrats d'APIs au format OpenAPI (Swagger) générés automatiquement.
+
+Un rapport de fin de mission détaillant les limitations du MVP et les recommandations architecturales pour l'évolution vers le produit complet (V1).

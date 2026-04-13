@@ -1,46 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
 import markdownit from 'markdown-it'
 import { 
   Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network, Trash2, 
-  Eye, Cpu, Terminal, PlayCircle, Database, FileCode, RefreshCw 
+  Eye, Cpu, RefreshCw 
 } from 'lucide-vue-next'
 import CompetencyNode from '@/components/CompetencyNode.vue'
 import { authService } from '@/services/auth'
+import { useChatStore } from '@/stores/chatStore'
+import AgentExpertTerminal from '@/components/agent/AgentExpertTerminal.vue'
+import FinopsBadge from '@/components/agent/FinopsBadge.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 
 const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_name);
 const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
 const techKeys = ['semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 'username', 'name', 'full_name'];
 const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
-
-const treeify = (items: any[]) => {
-  if (!items || !Array.isArray(items)) return [];
-  const map: any = {};
-  const roots: any[] = [];
-  
-  // Clone and initialize
-  items.forEach(item => {
-    if (item && typeof item === 'object') {
-      map[item.id] = { ...item, sub_competencies: [] };
-    }
-  });
-  
-  // Link parents and children
-  items.forEach(item => {
-    if (item && typeof item === 'object') {
-      const node = map[item.id];
-      if (item.parent_id && map[item.parent_id]) {
-        map[item.parent_id].sub_competencies.push(node);
-      } else {
-        roots.push(node);
-      }
-    }
-  });
-  return roots;
-}
-
 
 const route = useRoute()
 const router = useRouter()
@@ -50,46 +26,17 @@ const md = markdownit({
   typographer: true
 })
 
-interface Message {
-  role: 'user' | 'assistant' | 'error'
-  content: string
-  data?: any
-  parsedData?: any[]
-  displayType?: string
-  typing?: boolean
-  // New Expert/Pagination fields
-  steps?: any[]
-  thoughts?: string
-  rawResponse?: string
-  activeTab?: 'preview' | 'expert'
-  pagination?: {
-    currentPage: number
-    itemsPerPage: number
-  }
-  usage?: {
-    total_input_tokens: number
-    total_output_tokens: number
-    estimated_cost_usd: number
-  }
-}
-
-
-const messages = ref<Message[]>([
-  {
-    role: 'assistant',
-    content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements."
-  }
-])
-
+const chatStore = useChatStore()
 const userInput = ref('')
-const isTyping = ref(false)
-const savingTree = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
 
 const scrollToBottom = () => {
   setTimeout(() => {
     if (chatContainer.value) {
-      chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+      chatContainer.value.scrollTo({
+        top: chatContainer.value.scrollHeight,
+        behavior: 'smooth'
+      })
     }
   }, 50)
 }
@@ -97,131 +44,19 @@ const scrollToBottom = () => {
 const sendQuery = async (queryOverride?: string) => {
   const query = queryOverride || userInput.value.trim()
   if (!query) return
-
   userInput.value = ''
-  messages.value.push({ role: 'user', content: query })
-  isTyping.value = true
+  await chatStore.sendQuery(query)
   scrollToBottom()
-
-  try {
-    const response = await axios.post('/api/query', { query })
-    isTyping.value = false
-    
-    let replyText = response.data.response || ''
-    let displayType = 'text_only'
-    let parsedData = null
-    const toolData = response.data.data || null
-    const steps = response.data.steps || []
-
-    // Robust JSON extraction
-    try {
-      // Find JSON block even with surrounding text
-      const jsonMatch = replyText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const cleanStr = jsonMatch[0].trim()
-        const jsonObj = JSON.parse(cleanStr)
-        
-        if (jsonObj.reply && jsonObj.display_type) {
-           replyText = jsonObj.reply
-           displayType = jsonObj.display_type
-           if (displayType === 'profile') displayType = 'cards'
-
-           if (jsonObj.display_type === 'tree') {
-             parsedData = jsonObj.data
-           } else if (jsonObj.data) {
-             parsedData = Array.isArray(jsonObj.data) ? jsonObj.data : [jsonObj.data]
-           }
-        }
-      }
-    } catch (e) {
-      console.warn("Soft fail on JSON parsing", e)
-    }
-
-    // Fallback: If no parsedData from markdown, use toolData
-    if (!parsedData && toolData) {
-      if (typeof toolData === 'object' && toolData.items) {
-        parsedData = toolData.items
-      } else if (Array.isArray(toolData)) {
-        parsedData = toolData
-      } else {
-        parsedData = [toolData]
-      }
-      if (displayType === 'text_only') displayType = 'cards'
-    }
-
-    // SPECIAL: If dataType is competency, transform to tree
-    if (toolData && toolData.dataType === 'competency' && Array.isArray(parsedData)) {
-       parsedData = treeify(parsedData)
-       displayType = 'tree'
-    }
-
-
-    if (response.data.response) {
-      messages.value.push({
-        role: 'assistant',
-        content: replyText,
-        data: toolData,
-        parsedData: parsedData,
-        displayType: displayType,
-        steps: steps,
-        thoughts: response.data.thoughts || '',
-        rawResponse: response.data.response,
-        activeTab: 'preview',
-        pagination: {
-          currentPage: 1,
-          itemsPerPage: 10
-        },
-        usage: response.data.usage
-      })
-    } else {
-      messages.value.push({
-        role: 'assistant',
-        content: JSON.stringify(response.data, null, 2),
-        activeTab: 'expert'
-      })
-    }
-  } catch (error: any) {
-    isTyping.value = false
-    messages.value.push({
-      role: 'error',
-      content: `Erreur: ${error.response?.data?.detail || error.message}`
-    })
-  } finally {
-    scrollToBottom()
-  }
 }
 
-// Handle search query from URL or Events
 const applyTree = async (treeData: any) => {
-  if (!confirm('Voulez-vous vraiment appliquer cette nouvelle taxonomie ? Cela réinitialisera toutes les relations parent/enfant actuelles.')) return;
-  
-  savingTree.value = true
-  try {
-    const response = await axios.post('/api/query', { 
-      query: `Applique cette taxonomie de compétences : ${JSON.stringify(treeData)}` 
-    })
-    
-    let replyText = response.data.response || ''
-    messages.value.push({
-      role: 'assistant',
-      content: replyText,
-      displayType: 'text_only'
-    })
-  } catch (error: any) {
-    messages.value.push({
-      role: 'error',
-      content: `Erreur lors de l'application: ${error.response?.data?.detail || error.message}`
-    })
-  } finally {
-    savingTree.value = false
-    scrollToBottom()
-  }
+  await chatStore.applyTree(treeData)
+  scrollToBottom()
 }
 
 const handleSearch = (queryText: string) => {
   if (!queryText) return
   sendQuery(`cherche l'utilisateur nommé ${queryText}`)
-  // Clean URL to avoid re-triggering on refresh
   router.replace({ query: {} })
 }
 
@@ -229,43 +64,29 @@ const handleSearchEvent = (event: any) => {
   handleSearch(event.detail)
 }
 
-const fetchHistory = async () => {
-  try {
-    isTyping.value = true
-    const response = await axios.get('/api/history')
-    if (response.data && response.data.history && response.data.history.length > 0) {
-      messages.value = response.data.history.map((msg: Message) => {
-        // Apply treeify for historical competency messages
-        if (msg.data && msg.data.dataType === 'competency' && Array.isArray(msg.parsedData) && msg.displayType === 'tree') {
-          msg.parsedData = treeify(msg.parsedData);
-        }
-        return msg;
-      });
-      setTimeout(() => scrollToBottom(), 100)
-    }
-  } catch(e) {
-    console.warn("Could not load agent history", e)
-  } finally {
-    isTyping.value = false
-  }
+const resetHistory = async () => {
+  await chatStore.resetHistory()
 }
 
-const resetHistory = async () => {
-  if (!confirm('Voulez-vous vraiment effacer votre historique avec l\'agent ?')) return;
-  try {
-    const token = localStorage.getItem('access_token')
-    await axios.delete('/api/history', {
-       headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
-    messages.value = [
-      {
-        role: 'assistant',
-        content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements."
-      }
-    ]
-  } catch(e) {
-    console.error("Impossible de réinitialiser l'historique", e)
-  }
+const goToUser = (id: number) => {
+  router.push({ name: 'user-detail', params: { id: id.toString() } })
+}
+
+const getInitials = (name: string) => {
+  if (!name) return '?'
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
+const getPaginatedData = (msg: any) => {
+  if (!msg.parsedData || !msg.pagination) return []
+  const start = (msg.pagination.currentPage - 1) * msg.pagination.itemsPerPage
+  const end = start + msg.pagination.itemsPerPage
+  return msg.parsedData.slice(start, end)
+}
+
+const totalPages = (msg: any) => {
+  if (!msg.parsedData || !msg.pagination) return 0
+  return Math.ceil(msg.parsedData.length / msg.pagination.itemsPerPage)
 }
 
 const handleInternalLink = (e: MouseEvent) => {
@@ -288,17 +109,12 @@ onMounted(() => {
   if (chatContainer.value) {
     chatContainer.value.addEventListener('click', handleInternalLink)
   }
-  
-  // Check for search query in URL on mount
   if (route.query.q) {
     handleSearch(route.query.q as string)
   }
-  
-  // Load persistent ADK agent thread for the logged-in user
-  fetchHistory()
+  chatStore.fetchHistory().then(() => scrollToBottom())
 })
 
-// Also watch for query changes if already on Home page
 watch(() => route.query.q, (newQ) => {
   if (newQ) {
     handleSearch(newQ as string)
@@ -311,27 +127,6 @@ onUnmounted(() => {
     chatContainer.value.removeEventListener('click', handleInternalLink)
   }
 })
-
-const getInitials = (name: string) => {
-  if (!name) return '?'
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-}
-
-const goToUser = (id: number) => {
-  router.push({ name: 'user-detail', params: { id: id.toString() } })
-}
-
-const getPaginatedData = (msg: Message) => {
-  if (!msg.parsedData || !msg.pagination) return []
-  const start = (msg.pagination.currentPage - 1) * msg.pagination.itemsPerPage
-  const end = start + msg.pagination.itemsPerPage
-  return msg.parsedData.slice(start, end)
-}
-
-const totalPages = (msg: Message) => {
-  if (!msg.parsedData || !msg.pagination) return 0
-  return Math.ceil(msg.parsedData.length / msg.pagination.itemsPerPage)
-}
 </script>
 
 <template>
@@ -349,16 +144,11 @@ const totalPages = (msg: Message) => {
         </div>
       </div>
 
-      <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.role]">
+      <div v-for="(msg, index) in chatStore.messages" :key="index" :class="['message', msg.role]">
         <div v-if="msg.role === 'assistant'" class="assistant-content">
           <!-- FinOps Cost Display (Floating Badge) -->
-          <div v-if="msg.usage" class="usage-container">
-            <div class="cost-badge" title="Coût estimé de cet appel à l'IA">
-              <Database size="12" />
-              <span>{{ msg.usage.total_input_tokens + msg.usage.total_output_tokens }} tokens</span>
-              <span class="cost-divider">|</span>
-              <span class="cost-value">${{ msg.usage.estimated_cost_usd.toFixed(6) }}</span>
-            </div>
+          <div class="usage-container">
+            <FinopsBadge :usage="msg.usage" />
           </div>
 
           <!-- Multi-View Tabs -->
@@ -375,7 +165,6 @@ const totalPages = (msg: Message) => {
             >
               <Cpu size="14" /> Expert
             </button>
-
           </div>
 
           <div v-if="msg.activeTab === 'preview' || !msg.activeTab" class="tab-pane">
@@ -399,9 +188,9 @@ const totalPages = (msg: Message) => {
                 </table>
                 <!-- Pagination UI -->
                 <div v-if="totalPages(msg) > 1" class="pagination-controls">
-                  <button :disabled="msg.pagination.currentPage === 1" @click="msg.pagination.currentPage--">Précédent</button>
-                  <span class="page-info">Page {{ msg.pagination.currentPage }} sur {{ totalPages(msg) }}</span>
-                  <button :disabled="msg.pagination.currentPage === totalPages(msg)" @click="msg.pagination.currentPage++">Suivant</button>
+                  <BaseButton :disabled="msg.pagination!.currentPage === 1" @click="msg.pagination!.currentPage--">Précédent</BaseButton>
+                  <span class="page-info">Page {{ msg.pagination!.currentPage }} sur {{ totalPages(msg) }}</span>
+                  <BaseButton :disabled="msg.pagination!.currentPage === totalPages(msg)" @click="msg.pagination!.currentPage++">Suivant</BaseButton>
                 </div>
               </div>
 
@@ -433,7 +222,7 @@ const totalPages = (msg: Message) => {
                     <div class="status-dot-glow"></div>
                     <div class="item-icon-wrapper"><Package size="20" /></div>
                     <div class="item-info">
-                      <h4 class="name">{{ obj.name }}</h4>
+                       <h4 class="name">{{ obj.name }}</h4>
                       <p class="desc" v-if="obj.description">{{ obj.description }}</p>
                       <div class="owner" v-if="obj.user_id || obj.owner">Propriétaire: #{{ obj.user_id || obj.owner }}</div>
                       <div v-if="obj.categories" class="categories-tags">
@@ -487,59 +276,20 @@ const totalPages = (msg: Message) => {
                
                <!-- Validation Button for Admin -->
                <div v-if="authService.state.user?.role === 'admin'" class="tree-actions">
-                 <button 
-                  class="apply-tree-btn" 
+                 <BaseButton 
                   @click="applyTree(msg.parsedData)"
-                  :disabled="savingTree"
+                  :loading="chatStore.isTyping"
                  >
-                   <CheckCircle2 v-if="!savingTree" size="18" />
-                   <RefreshCw v-else size="18" class="spin" />
-                   {{ savingTree ? 'Application en cours...' : 'Valider et Appliquer la Taxonomie' }}
-                 </button>
+                   <CheckCircle2 v-if="!chatStore.isTyping" size="18" />
+                   Valider et Appliquer la Taxonomie
+                 </BaseButton>
                </div>
             </div>
           </div>
         </div>
 
-          <!-- Expert View Tab -->
-          <div v-else-if="msg.activeTab === 'expert'" class="tab-pane expert-mode">
-            <!-- Chain of Thought (Thoughts) -->
-            <div v-if="msg.thoughts" class="thought-section">
-              <div class="expert-header">
-                <RefreshCw size="18" class="spin" style="color: #6366f1;" /> <span>Raisonnement de l'IA (CoT)</span>
-              </div>
-              <div class="thought-bubble" v-html="md.render(msg.thoughts)">
-              </div>
-            </div>
-
-            <div class="expert-header" :style="{ marginTop: msg.thoughts ? '2rem' : '0' }">
-              <Terminal size="18" /> <span>Exécution des microservices (MCP)</span>
-            </div>
-            
-            <div class="steps-timeline">
-              <div v-for="(step, idx) in msg.steps" :key="idx" :class="['step-item', step.type]">
-                <div class="step-icon">
-                  <PlayCircle v-if="step.type === 'call'" size="14" />
-                  <Database v-else size="14" />
-                </div>
-                <div class="step-details">
-                  <div class="step-title">
-                    <strong v-if="step.type === 'call'">APPEL OUTIL: {{ step.tool }}</strong>
-                    <strong v-else>RÉSULTAT BRUT</strong>
-                  </div>
-                  <pre class="step-payload">{{ JSON.stringify(step.args || step.data, null, 2) }}</pre>
-                </div>
-              </div>
-              <div v-if="!msg.steps || msg.steps.length === 0" class="no-steps">
-                Aucun appel d'outil n'a été enregistré pour cette réponse.
-              </div>
-            </div>
-
-            <div v-if="msg.rawResponse" class="expert-header" style="margin-top: 2rem;">
-              <FileCode size="18" /> <span>Réponse brute de l'IA (JSON)</span>
-            </div>
-            <pre v-if="msg.rawResponse" class="json-viewer">{{ msg.rawResponse }}</pre>
-          </div>
+          <!-- Expert View Tab (Isolated Component) -->
+          <AgentExpertTerminal v-else-if="msg.activeTab === 'expert'" :message="msg" />
         </div>
         
         <div v-else class="user-content">
@@ -547,8 +297,13 @@ const totalPages = (msg: Message) => {
         </div>
       </div>
       
-      <div v-if="isTyping" class="message assistant typing">
-        <span></span><span></span><span></span>
+      <div v-if="chatStore.isTyping" class="message assistant typing">
+        <!-- Skeleton Loaders UX -->
+        <div class="skeleton-wrapper">
+          <div class="skeleton-row header-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row short"></div>
+        </div>
       </div>
     </div>
 
@@ -561,10 +316,10 @@ const totalPages = (msg: Message) => {
           placeholder="Posez votre question à l'assistant..."
           autocomplete="off"
         >
-        <button @click="resetHistory" class="reset-btn" title="Réinitialiser l'historique">
+        <BaseButton @click="resetHistory" variant="ghost" title="Réinitialiser l'historique">
           <Trash2 size="18" />
-        </button>
-        <button @click="sendQuery()" :disabled="isTyping">Envoyer</button>
+        </BaseButton>
+        <BaseButton @click="sendQuery()" :loading="chatStore.isTyping">Envoyer</BaseButton>
       </div>
     </div>
   </div>

@@ -27,13 +27,14 @@ resource "google_service_account" "cr_sa" {
 # Modèle pour les services avec Sidecar MCP
 # ==============================================================
 locals {
-  mcp_services = ["users", "items", "competencies", "cv"]
-  cr_sa_keys   = ["users", "items", "competencies", "cv", "prompts", "agent", "drive", "market"]
+  mcp_services = ["users", "items", "competencies", "cv", "missions"]
+  cr_sa_keys   = ["users", "items", "competencies", "cv", "missions", "prompts", "agent", "drive", "market"]
   mcp_images = {
     "users"        = var.image_users
     "items"        = var.image_items
     "competencies" = var.image_competencies
     "cv"           = var.image_cv
+    "missions"     = var.image_missions
   }
 }
 
@@ -64,7 +65,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       name    = "api"
       image   = local.mcp_images[each.key] # géré par Terraform
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
       ports {
         container_port = 8080 # Le trafic Cloud Run arrive ici, GCP injecte le $PORT=8080 automatiquement
       }
@@ -130,6 +131,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
           "items"        = var.items_api_version
           "competencies" = var.competencies_api_version
           "cv"           = var.cv_api_version
+          "missions"     = var.missions_api_version
         }, each.key, "unknown")
       }
       env {
@@ -224,7 +226,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
 
       # Alimentation exclusive pour l'API CV responsable des embeddings RAG
       dynamic "env" {
-        for_each = each.key == "cv" ? [1] : []
+        for_each = contains(["cv", "missions"], each.key) ? [1] : []
         content {
           name = "GOOGLE_API_KEY"
           value_source {
@@ -237,7 +239,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
 
       dynamic "env" {
-        for_each = each.key == "cv" ? [1] : []
+        for_each = contains(["cv", "missions"], each.key) ? [1] : []
         content {
           name  = "PROMPTS_API_URL"
           value = "http://api.internal.zenika/prompts-api/"
@@ -245,7 +247,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
 
       dynamic "env" {
-        for_each = contains(["cv", "competencies"], each.key) ? [1] : []
+        for_each = contains(["cv", "competencies", "missions"], each.key) ? [1] : []
         content {
           name  = "USERS_API_URL"
           value = "http://api.internal.zenika/users-api/"
@@ -253,7 +255,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
 
       dynamic "env" {
-        for_each = each.key == "cv" ? [1] : []
+        for_each = contains(["cv", "missions"], each.key) ? [1] : []
         content {
           name  = "COMPETENCIES_API_URL"
           value = "http://api.internal.zenika/comp-api/"
@@ -261,7 +263,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
 
       dynamic "env" {
-        for_each = each.key == "cv" ? [1] : []
+        for_each = contains(["cv", "missions"], each.key) ? [1] : []
         content {
           name  = "ITEMS_API_URL"
           value = "http://api.internal.zenika/items-api/"
@@ -269,7 +271,15 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
 
       dynamic "env" {
-        for_each = each.key == "cv" ? [1] : []
+        for_each = each.key == "missions" ? [1] : []
+        content {
+          name  = "CV_API_URL"
+          value = "http://api.internal.zenika/cv-api/"
+        }
+      }
+
+      dynamic "env" {
+        for_each = contains(["cv", "missions"], each.key) ? [1] : []
         content {
           name  = "DRIVE_API_URL"
           value = "http://api.internal.zenika/drive-api/"
@@ -277,7 +287,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       }
 
       dynamic "env" {
-        for_each = each.key == "cv" ? [1] : []
+        for_each = contains(["cv", "missions"], each.key) ? [1] : []
         content {
           name  = "MARKET_MCP_URL"
           value = "http://api.internal.zenika/market-mcp/"
@@ -290,7 +300,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
       name    = "mcp"
       image   = local.mcp_images[each.key] # géré par Terraform
       command = ["python"]
-      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081"]
+      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081", "--no-server-header"]
       dynamic "startup_probe" {
         for_each = terraform.workspace == "dev" ? [] : [1]
         content {
@@ -340,6 +350,7 @@ resource "google_cloud_run_v2_service" "mcp_services" {
           "items"        = var.items_api_version
           "competencies" = var.competencies_api_version
           "cv"           = var.cv_api_version
+          "missions"     = var.missions_api_version
         }, each.key, "unknown")
       }
       env {
@@ -387,7 +398,7 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       name    = "api"
       image   = var.image_prompts
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
       ports {
         container_port = 8080
       }
@@ -506,7 +517,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
       name    = "api"
       image   = var.image_drive
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
       ports {
         container_port = 8080
       }
@@ -593,7 +604,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
       name    = "mcp"
       image   = var.image_drive
       command = ["python"]
-      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081"]
+      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081", "--no-server-header"]
       dynamic "startup_probe" {
         for_each = terraform.workspace == "dev" ? [] : [1]
         content {
@@ -682,7 +693,7 @@ resource "google_cloud_run_v2_service" "agent_api" {
       name    = "api"
       image   = var.image_agent
       command = ["python"]
-      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
+      args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
       ports {
         container_port = 8080
       }
@@ -752,6 +763,10 @@ resource "google_cloud_run_v2_service" "agent_api" {
       env {
         name  = "CV_API_URL"
         value = "http://api.internal.zenika/cv-api/"
+      }
+      env {
+        name  = "MISSIONS_API_URL"
+        value = "http://api.internal.zenika/missions-api/"
       }
       env {
         name = "DRIVE_MCP_URL"
@@ -874,6 +889,14 @@ resource "google_cloud_run_v2_service" "market_mcp" {
       env {
         name  = "APP_VERSION"
         value = var.market_mcp_version
+      }
+      env {
+        name  = "FINOPS_ANOMALY_THRESHOLD"
+        value = tostring(var.finops_anomaly_threshold)
+      }
+      env {
+        name  = "USERS_API_URL"
+        value = "http://api.internal.zenika/users-api/" # Added for kill-switch HTTP call
       }
       env {
         name = "SECRET_KEY"
@@ -999,6 +1022,15 @@ resource "google_project_iam_member" "agent_logging_viewer" {
 }
 
 # ==============================================================
+# Droits IAM spécifiques pour Missions (DocumentAI Sandbox)
+# ==============================================================
+resource "google_project_iam_member" "missions_documentai_user" {
+  project = var.project_id
+  role    = "roles/documentai.apiUser"
+  member  = "serviceAccount:${google_service_account.cr_sa["missions"].email}"
+}
+
+# ==============================================================
 # Timer de propagation IAM (Evite les crashs Cloud Run / DB)
 # ==============================================================
 resource "time_sleep" "wait_for_iam_propagation" {
@@ -1012,7 +1044,8 @@ resource "time_sleep" "wait_for_iam_propagation" {
     google_project_iam_member.otel_metric_writer,
     google_project_iam_member.alloydb_client,
     google_project_iam_member.alloydb_databaseUser,
-    google_project_iam_member.agent_logging_viewer
+    google_project_iam_member.agent_logging_viewer,
+    google_project_iam_member.missions_documentai_user
   ]
   create_duration = "45s"
 }
@@ -1020,9 +1053,12 @@ resource "time_sleep" "wait_for_iam_propagation" {
 # ==============================================================
 # Autorisation d'invocation anonyme (via Load Balancer uniquement)
 # ==============================================================
-# NB: L'ingress 'INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER' garantit 
+# DOCUMENTATION ZERO-TRUST : L'ingress 'INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER' garantit 
 # qu'aucun trafic public direct (*.run.app) ne peut joindre le conteneur.
-# Mettre "allUsers" permet donc au Load Balancer de router la requête sans jeton IAM.
+# L'assignation de `roles/run.invoker` à "allUsers" permet au Load Balancer Interne (ou aux autres microservices 
+# via VPC) de router la requête HTTP standard sans avoir à générer des jetons d'identité GCP OIDC complexes pour chaque Call inter-service.
+# La VRAIE sécurité (Zero-Trust) est gérée au niveau applicatif : chaque microservice vérifie strictement 
+# le JWT Bearer via FastAPI (Dependencies) interdisant toute action non authentifiée, même en réseau interne.
 
 resource "google_cloud_run_v2_service_iam_member" "mcp_invoker" {
   for_each = toset(local.mcp_services)

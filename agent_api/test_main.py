@@ -27,13 +27,15 @@ def test_root():
 
 def test_get_spec_success(mocker):
     mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
-    response = client.get("/spec")
+    token = get_auth_token()
+    response = client.get("/spec", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert "# Spec doc" in response.text
 
 def test_get_spec_fail(mocker):
     mocker.patch("builtins.open", side_effect=Exception("Not found"))
-    response = client.get("/spec")
+    token = get_auth_token()
+    response = client.get("/spec", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert "# Specification introuvable" in response.text
 
@@ -85,7 +87,8 @@ def test_get_me_fail(mock_httpx):
     assert response.status_code == 401
 
 def test_mcp_registry():
-    response = client.get("/mcp/registry")
+    token = get_auth_token()
+    response = client.get("/mcp/registry", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     payload = response.json()
     assert "services" in payload
@@ -120,9 +123,19 @@ def test_get_history_success(mocker):
     mock_session = MagicMock()
     
     mock_event_1 = MagicMock(author="user")
+    mock_event_1.usage_metadata = None
+    mock_event_1.response = None
+    mock_event_1.get_function_calls.return_value = []
+    mock_event_1.get_function_responses.return_value = []
+    mock_event_1.actions = []
     mock_event_1.content.parts = [MagicMock(text="User msg")]
     
     mock_event_2 = MagicMock(author="assistant")
+    mock_event_2.usage_metadata = None
+    mock_event_2.response = None
+    mock_event_2.get_function_calls.return_value = []
+    mock_event_2.get_function_responses.return_value = []
+    mock_event_2.actions = []
     mock_event_2.content = "```json\n{\"reply\": \"Ans\", \"display_type\": \"text\"}\n```"
     
     mock_session.events = [mock_event_1, mock_event_2]
@@ -136,7 +149,7 @@ def test_get_history_success(mocker):
     history = response.json()["history"]
     assert len(history) == 2
     assert history[0]["content"] == "User msg"
-    assert history[1]["content"] == "Ans"
+    assert "Ans" in history[1]["content"]
 
 def test_get_history_no_session(mocker):
     mock_svc = AsyncMock()

@@ -1,12 +1,12 @@
 # Stage 1: Build Python dependencies
-FROM python:3.11-slim as py-builder
+FROM python:3.11-slim AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # Stage 2: Node setup and promptfoo installation
-FROM node:20-slim as node-builder
+FROM node:20-slim AS node-builder
 ENV NPM_CONFIG_PREFIX=/opt/promptfoo-env
 # Using npm install globally for promptfoo
 RUN npm install -g promptfoo
@@ -26,7 +26,7 @@ COPY --from=node-builder /opt/promptfoo-env /opt/promptfoo-env
 ENV PATH="/opt/promptfoo-env/bin:${PATH}"
 
 # Install Python wheels
-COPY --from=py-builder /app/wheels /wheels
+COPY --from=builder /app/wheels /wheels
 COPY requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels

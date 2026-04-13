@@ -10,7 +10,10 @@ import {
   AlertCircle,
   Clock,
   Fingerprint,
-  MessageSquare
+  MessageSquare,
+  Calendar,
+  XCircle,
+  Plus
 } from 'lucide-vue-next'
 import axios from 'axios'
 
@@ -82,9 +85,54 @@ const savePersonalPrompt = async () => {
   }
 }
 
+const unavailabilityPeriods = ref<any[]>([])
+const newPeriod = ref({ start_date: '', end_date: '', type: 'full', reason: 'client' })
+const isSavingAvailability = ref(false)
+
+const loadAvailability = () => {
+  if (user && user.unavailability_periods) {
+    unavailabilityPeriods.value = [...user.unavailability_periods]
+  }
+}
+
+const addAvailability = async () => {
+  if (!newPeriod.value.start_date || !newPeriod.value.end_date) return;
+  const updatedPeriods = [...unavailabilityPeriods.value, {...newPeriod.value}]
+  try {
+    isSavingAvailability.value = true
+    const token = localStorage.getItem('access_token')
+    await axios.put(`/users-api/${user?.id}`, { 
+        unavailability_periods: updatedPeriods 
+    }, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    unavailabilityPeriods.value = updatedPeriods
+    newPeriod.value = { start_date: '', end_date: '', type: 'full', reason: 'client' }
+  } catch(e) {
+      console.error('Failed saving availability', e)
+  } finally {
+      isSavingAvailability.value = false
+  }
+}
+
+const removeAvailability = async (index: number) => {
+    const updatedPeriods = [...unavailabilityPeriods.value]
+    updatedPeriods.splice(index, 1)
+    try {
+        const token = localStorage.getItem('access_token')
+        await axios.put(`/users-api/${user?.id}`, { 
+            unavailability_periods: updatedPeriods 
+        }, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        unavailabilityPeriods.value = updatedPeriods
+    } catch(e) { console.error(e) }
+}
+
 onMounted(() => {
   fetchCategories()
   fetchPersonalPrompt()
+  loadAvailability()
 })
 </script>
 
@@ -168,6 +216,53 @@ onMounted(() => {
           
           <div v-if="error" class="error-toast">
             {{ error }}
+          </div>
+        </div>
+      </section>
+
+      <!-- Availability Card -->
+      <section class="profile-card availability-card">
+        <div class="card-header">
+          <Calendar class="icon" />
+          <h2>Mes Indisponibilités</h2>
+        </div>
+        
+        <div class="availability-section">
+          <p class="section-desc">Déclarez vos périodes d'indisponibilités calendaires (vacances, staffé chez un client).</p>
+          
+          <div class="availability-list">
+            <div v-for="(period, idx) in unavailabilityPeriods" :key="idx" class="availability-item">
+              <div class="period-info">
+                <strong>{{ period.start_date }}</strong> au <strong>{{ period.end_date }}</strong>
+                <span class="badge type">{{ period.type === 'full' ? 'Journée complète' : period.type }}</span>
+                <span class="badge reason">{{ period.reason }}</span>
+              </div>
+              <button @click="removeAvailability(idx)" class="btn-remove" title="Supprimer">
+                <XCircle size="18" />
+              </button>
+            </div>
+          </div>
+
+          <div class="add-availability-form">
+            <div class="form-row">
+              <input type="date" v-model="newPeriod.start_date" class="form-input" />
+              <input type="date" v-model="newPeriod.end_date" class="form-input" />
+            </div>
+            <div class="form-row">
+              <select v-model="newPeriod.type" class="form-input">
+                <option value="full">Journée</option>
+                <option value="am">Matin</option>
+                <option value="pm">Après-midi</option>
+              </select>
+              <select v-model="newPeriod.reason" class="form-input">
+                <option value="client">Client</option>
+                <option value="vacances">Vacances</option>
+                <option value="formation">Formation</option>
+              </select>
+              <button @click="addAvailability" :disabled="isSavingAvailability" class="btn-add">
+                <Plus size="18" /> Ajouter
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -452,6 +547,28 @@ h1 {
   word-break: break-all;
   border: 1px dashed rgba(255, 255, 255, 0.2);
 }
+
+/* Availability Card Styles */
+.availability-card { grid-column: 1 / -1; }
+.availability-list {
+  display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;
+}
+.availability-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.75rem 1rem; background: #f8f9fa; border: 1px solid #eee; border-radius: 8px;
+}
+.period-info { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; }
+.badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+.badge.type { background: #e0f2fe; color: #0369a1; }
+.badge.reason { background: #fef08a; color: #854d0e; }
+.btn-remove { background: none; border: none; color: #ef4444; cursor: pointer; display: flex; align-items: center; padding: 0; }
+.btn-remove:hover { color: #dc2626; }
+.add-availability-form { display: flex; flex-direction: column; gap: 0.75rem; background: #fafafa; padding: 1rem; border-radius: 8px; border: 1px dashed #ccc; }
+.form-row { display: flex; gap: 0.75rem; }
+.form-input { padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px; flex: 1; font-family: inherit; }
+.btn-add { background: var(--zenika-red); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 600; transition: transform 0.1s; }
+.btn-add:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-add:disabled { opacity: 0.7; }
 
 /* Prompt Card Styles */
 .prompt-card {

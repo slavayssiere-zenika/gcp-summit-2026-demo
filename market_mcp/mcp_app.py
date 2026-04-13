@@ -5,6 +5,19 @@ import os
 import json
 import uvicorn
 import redis
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.semconv.resource import ResourceAttributes
+
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -12,9 +25,27 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from mcp_server import list_tools, call_tool, get_aiops_dashboard_data_internal
 from auth import verify_jwt
-from fastapi import Depends
+from logger import setup_logging, LoggingMiddleware
 
-app = FastAPI(title="Market & FinOps MCP Sidecar")
+provider = TracerProvider(
+    resource=Resource.create({
+        ResourceAttributes.SERVICE_NAME: "market-mcp",
+        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+    })
+)
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer(__name__)
+
+setup_logging()
+
+app = FastAPI(title="Market & FinOps MCP Sidecar", root_path=os.getenv("ROOT_PATH", ""))
+app.add_middleware(LoggingMiddleware)
+
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
@@ -178,10 +209,66 @@ async def execute_tool(request: ToolCallRequest, http_request: Request, user: di
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/admin/finops/detect", dependencies=[Depends(verify_jwt)])
+async def detect_finops_anomalies(http_request: Request):
+    """
+    Exécute la Requête BigQuery pour détecter les anomalies de consommation,
+    et déclenche le Kill-Switch si le seuil est dépassé.
+    """
+    from mcp_server import client as bq_client, FINOPS_TABLE_REF
+    import httpx
+    
+    threshold = int(os.getenv("FINOPS_ANOMALY_THRESHOLD", 500000))
+    users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000/")
+    
+    query = f"""
+        SELECT user_email, SUM(input_tokens + output_tokens) as total_tokens
+        FROM `{FINOPS_TABLE_REF}`
+        WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
+        GROUP BY user_email
+        HAVING total_tokens > @threshold
+    """
+    
+    from google.cloud import bigquery
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("threshold", "INT64", threshold)
+        ]
+    )
+    
+    query_job = bq_client.query(query, job_config=job_config)
+    results = query_job.result()
+    
+    auth_header = http_request.headers.get("Authorization")
+    headers = {"Authorization": auth_header} if auth_header else {}
+    
+    suspended_users = []
+    
+    async with httpx.AsyncClient() as http:
+        for row in results:
+            user_email = row.user_email
+            total_tokens = row.total_tokens
+            
+            # Déclenchement du Kill Switch
+            try:
+                res = await http.post(f"{users_api_url.rstrip('/')}/suspend/{user_email}", headers=headers)
+                if res.status_code == 200:
+                    suspended_users.append({"email": user_email, "tokens": total_tokens, "status": "suspended"})
+                else:
+                    import logging
+                    logging.error(f"Echec suspension {user_email}: {res.text}")
+                    suspended_users.append({"email": user_email, "tokens": total_tokens, "status": "failed"})
+            except Exception as e:
+                import logging
+                logging.exception(f"Exception suspension {user_email}")
+                suspended_users.append({"email": user_email, "tokens": total_tokens, "status": "error", "message": str(e)})
+
+    return {"threshold": threshold, "anomalies_detected": len(suspended_users), "details": suspended_users}
+
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "market-mcp"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, server_header=False)

@@ -1,0 +1,370 @@
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, File, UploadFile, Form
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import database
+from .models import Mission
+from .schemas import MissionCreateRequest, MissionAnalyzeResponse, TaskResponse
+from src.auth import verify_jwt
+from opentelemetry.propagate import inject
+import os
+import json
+import httpx
+from google import genai
+from google.genai import types
+import logging
+import uuid
+import traceback
+import re
+import urllib.parse
+
+from .cache import get_cached_prompt, force_invalidate_prompt
+from .task_state import task_manager
+
+router = APIRouter(prefix="", tags=["Missions"])
+public_router = APIRouter(prefix="", tags=["Public"])
+
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+if GEMINI_API_KEY:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    client = None
+
+CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+
+async def _process_mission_core(title: str, description: str, url: str, file_bytes: bytes, file_mime: str, headers: dict, user_email: str, auth_token: str, task_id: str, mission_id: int = None):
+    logger = logging.getLogger(__name__)
+    if not client:
+        await task_manager.update_status_failed(task_id, "Gemini non configuré.")
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as http_client:
+            # 1. Fetch from Cache
+            extract_prompt = await get_cached_prompt(http_client, "missions_api.extract_mission_info", headers)
+            base_staffing_prompt = await get_cached_prompt(http_client, "missions_api.staffing_heuristics", headers)
+            
+            # Preparation du contenu multimodal
+            gemini_contents = [extract_prompt]
+            final_description = description or ""
+
+            if url and not file_bytes:
+                # URL transform
+                if "docs.google.com/document/d/" in url:
+                    doc_id = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+                    if doc_id:
+                        fetch_url = f"https://docs.google.com/document/d/{doc_id.group(1)}/export?format=txt"
+                    else:
+                        fetch_url = url
+                else:
+                    fetch_url = url
+                    
+                req_heads = headers.copy()
+                doc_res = await http_client.get(fetch_url, headers=req_heads, follow_redirects=True)
+                if doc_res.status_code == 200:
+                    gemini_contents.append(f"Mission Text Document from URL: \n{doc_res.text}")
+                    if not final_description:
+                        final_description = f"Document chargé depuis: {url}"
+                else:
+                    logger.warning(f"Failed to fetch document at {fetch_url}, status: {doc_res.status_code}")
+
+            if file_bytes:
+                try:
+                    # Ingestion multimodale directe via Gemini (Native OCR)
+                    part = types.Part.from_bytes(data=file_bytes, mime_type=file_mime)
+                    gemini_contents.append(part)
+                except Exception as e:
+                    logger.error(f"Erreur d'ingestion binaire Gemini: {str(e)}")
+
+                if not final_description:
+                    final_description = "Mission chargée via document binaire et processée nativement par Gemini."
+
+            if final_description and not file_bytes and not url:
+                gemini_contents.append(f"Description fournie: {final_description}")
+
+            # 2. Extract & Summarize
+            model_extract = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+            
+            try:
+                COMPETENCIES_API_URL_LOCAL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
+                tree_res = await http_client.get(f"{COMPETENCIES_API_URL_LOCAL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
+                if tree_res.status_code == 200:
+                    items = tree_res.json().get('items', [])
+                    
+                    def extract_mid_parents(nodes):
+                        parents = []
+                        for n in nodes:
+                            subs = n.get("sub_competencies", [])
+                            if subs:
+                                has_leaf_child = any(not s.get("sub_competencies") for s in subs)
+                                if has_leaf_child and n.get("parent_id") is not None and n.get("name"):
+                                    parents.append(n.get("name"))
+                                parents.extend(extract_mid_parents(subs))
+                        return parents
+                        
+                    parent_categories = extract_mid_parents(items)
+                    gemini_contents.append(f"\n\nHere is the official list of parent capability domains for this company. Please try to map mission required skills to these parent categories directly:\n{json.dumps(parent_categories)}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch competencies tree for mission context: {e}")
+
+            res_extract = await client.aio.models.generate_content(
+                model=model_extract,
+                contents=gemini_contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema={
+                        "type": "object", 
+                        "properties": {
+                            "competencies": {
+                                "type": "array", 
+                                "items": {"type": "string"},
+                                "description": "Liste de domaines ou compétences parentes larges (ex: Frontend, DevOps, Cloud) au lieu de technologies de niche."
+                            },
+                            "summary": {"type": "string", "description": "Résume explicitement le contexte de la mission pour les archives, très utile s'il s'agit d'un PDF."}
+                        }, 
+                        "required": ["competencies", "summary"]
+                    }
+                )
+            )
+
+            async def fast_log_finops(action, model, usage):
+                try:
+                    await http_client.post(
+                        "http://agent_api:8002/mcp/proxy/market_mcp/mcp/call",
+                        json={
+                            "name": "log_ai_consumption",
+                            "arguments": {
+                                "user_email": user_email,
+                                "action": action,
+                                "model": model,
+                                "input_tokens": usage.prompt_token_count,
+                                "output_tokens": usage.candidates_token_count
+                            }
+                        },
+                        headers=headers
+                    )
+                except Exception:
+                    pass
+            await fast_log_finops("RAG_Mission_Extraction", model_extract, res_extract.usage_metadata)
+            
+            extracted_data = json.loads(res_extract.text)
+            extracted_competencies = extracted_data.get("competencies", [])
+            
+            # Subsituer la description par le résumé de Gemini si on part d'un doc brut
+            if not final_description or len(final_description) < 60:
+                final_description = extracted_data.get("summary", final_description)
+                if isinstance(final_description, list):
+                    final_description = " ".join(final_description)
+
+            # 3. CV_API Profile Match
+            candidates_data = []
+            # On utilise le fallback summary généré s'il y a un pdf pour trouver via pgvector
+            search_context = final_description or title
+            payload = {"query": search_context, "limit": 6}
+            if extracted_competencies:
+                payload["skills"] = extracted_competencies
+                
+            logger.info(f"Recherche CV_API avec requête POST intégrale")
+            cv_res = await http_client.post(f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers)
+            is_fallback = False
+            if cv_res.status_code == 200:
+                is_fallback = (cv_res.headers.get("X-Fallback-Full-Scan", "false").lower() == "true")
+                missing_embeddings = cv_res.headers.get("X-Missing-Embeddings-Count")
+                if missing_embeddings and int(missing_embeddings) > 0:
+                    logger.warning(f"⚠️ DATA ANOMALY: {missing_embeddings} profils exclus de la recherche CV en raison d'embeddings manquants. Utilisez la ré-analyse de masse.")
+                cv_res_json = cv_res.json()
+                logger.info(f"CV_API a répondu avec {len(cv_res_json)} résultats bruts. Fallback_full_scan={is_fallback}")
+                for p in cv_res_json:
+                    u_id = p.get("user_id")
+                    u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers)
+                    if u_res.status_code == 200:
+                        u_info = u_res.json()
+                        if u_info.get("is_active", True):
+                            candidates_data.append({
+                                "user_id": u_id,
+                                "full_name": u_info.get("full_name") or f"{u_info.get('first_name')} {u_info.get('last_name')}",
+                                "similarity_score": p.get("similarity_score"),
+                                "unavailabilities": u_info.get("unavailability_periods", [])
+                            })
+            else:
+                logger.error(f"Erreur CV_API: statut {cv_res.status_code}")
+
+            logger.info(f"Candidats préfiltrés (actifs) après recherche: {[c['user_id'] for c in candidates_data]}")
+
+            if not candidates_data:
+                skills_str = ", ".join(extracted_competencies) if extracted_competencies else "identifiées pour cette mission"
+                proposed_team = [{
+                    "user_id": 0,
+                    "full_name": "Aucun profil disponible",
+                    "role": "Non staffé",
+                    "justification": f"Aucun consultant qualifié n'a été trouvé dans la base de connaissance pour les compétences requises : {skills_str}.",
+                    "estimated_days": 0
+                }]
+            else:
+                # 4. LLM Staffing
+                model_staffing = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+                staffing_prompt = f"{base_staffing_prompt}\nMission: '{title}'. Description: '{final_description}'. Skills: {extracted_competencies}. Candidates: {json.dumps(candidates_data)}."
+                res_staffing = await client.aio.models.generate_content(
+                    model=model_staffing,
+                    contents=staffing_prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema={"type": "array", "items": {"type": "object", "properties": {"user_id": {"type": "integer"}, "full_name": {"type": "string"}, "role": {"type": "string"}, "justification": {"type": "string"}, "estimated_days": {"type": "integer"}}, "required": ["user_id", "full_name", "role", "justification", "estimated_days"]}}
+                    )
+                )
+                await fast_log_finops("RAG_Mission_Staffing", model_staffing, res_staffing.usage_metadata)
+                proposed_team = json.loads(res_staffing.text)
+
+            # Embed
+            try:
+                emb_res = await client.aio.models.embed_content(model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"), contents=search_context)
+                vector_data = emb_res.embeddings[0].values
+            except Exception:
+                vector_data = None
+
+            # 5. Save to DB decoupled
+            async for db in database.get_db():
+                if mission_id:
+                    result = await db.execute(select(Mission).where(Mission.id == mission_id))
+                    existing_mission = result.scalars().first()
+                    if existing_mission:
+                        existing_mission.title = title
+                        existing_mission.description = final_description
+                        existing_mission.extracted_competencies = extracted_competencies
+                        existing_mission.competencies_keywords = extracted_competencies
+                        existing_mission.prefiltered_candidates = candidates_data
+                        existing_mission.proposed_team = proposed_team
+                        existing_mission.fallback_full_scan = is_fallback
+                        existing_mission.semantic_embedding = vector_data
+                        await db.commit()
+                        await db.refresh(existing_mission)
+                        await task_manager.update_status_success(task_id, existing_mission.id)
+                        from metrics import MISSIONS_CREATED_TOTAL
+                        MISSIONS_CREATED_TOTAL.labels(status="reanalyze_success").inc()
+                        break
+                        
+                new_mission = Mission(title=title, description=final_description, extracted_competencies=extracted_competencies, competencies_keywords=extracted_competencies, prefiltered_candidates=candidates_data, proposed_team=proposed_team, semantic_embedding=vector_data, fallback_full_scan=is_fallback)
+                db.add(new_mission)
+                await db.commit()
+                await db.refresh(new_mission)
+                await task_manager.update_status_success(task_id, new_mission.id)
+                from metrics import MISSIONS_CREATED_TOTAL
+                MISSIONS_CREATED_TOTAL.labels(status="success").inc()
+                break
+
+    except Exception as e:
+        logger.error(f"Erreur task {task_id}: {traceback.format_exc()}")
+        await task_manager.update_status_failed(task_id, str(e))
+        from metrics import MISSIONS_CREATED_TOTAL
+        MISSIONS_CREATED_TOTAL.labels(status="staffing_failed").inc()
+
+
+@router.post("/missions", response_model=TaskResponse, status_code=202)
+async def create_and_analyze_mission(
+    req: Request, 
+    bg_tasks: BackgroundTasks, 
+    title: str = Form(...),
+    description: str = Form(None),
+    url: str = Form(None),
+    file: UploadFile = File(None),
+    db: AsyncSession = Depends(database.get_db), 
+    token_payload: dict = Depends(verify_jwt)
+):
+    # Tracing & Auth Capture
+    auth_header = req.headers.get("Authorization")
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+    
+    auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
+    user_email = token_payload.get("sub", "unknown@zenika.com")
+    
+    file_bytes = None
+    file_mime = None
+    if file:
+        file_bytes = await file.read()
+        file_mime = file.content_type or "application/pdf"
+    
+    # Generate ID and initialize tracking
+    task_id = str(uuid.uuid4())
+    await task_manager.initialize_task(task_id, title)
+    
+    # Launch background processing
+    bg_tasks.add_task(_process_mission_core, title, description, url, file_bytes, file_mime, headers, user_email, auth_token, task_id)
+    
+    return {"task_id": task_id, "status": "processing"}
+
+@router.post("/missions/{mission_id}/reanalyze", response_model=TaskResponse, status_code=202)
+async def reanalyze_mission(
+    mission_id: int,
+    req: Request, 
+    bg_tasks: BackgroundTasks, 
+    db: AsyncSession = Depends(database.get_db), 
+    token_payload: dict = Depends(verify_jwt)
+):
+    # Tracing & Auth Capture
+    auth_header = req.headers.get("Authorization")
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+    
+    auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
+    user_email = token_payload.get("sub", "unknown@zenika.com")
+    
+    result = await db.execute(select(Mission).where(Mission.id == mission_id))
+    m = result.scalars().first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    # Generate ID and initialize tracking
+    task_id = str(uuid.uuid4())
+    await task_manager.initialize_task(task_id, f"Re-analyse: {m.title}")
+    
+    # Launch background processing
+    bg_tasks.add_task(_process_mission_core, m.title, m.description, None, None, None, headers, user_email, auth_token, task_id, mission_id)
+    
+    return {"task_id": task_id, "status": "processing"}
+
+@router.get("/missions/task/{task_id}")
+async def get_mission_task_status(task_id: str):
+    stat = await task_manager.get_task(task_id)
+    if not stat:
+        raise HTTPException(status_code=404, detail="Task introuvable.")
+    return stat
+
+@router.post("/cache/invalidate")
+async def force_invalidate(prompt_key: str, token_payload: dict = Depends(verify_jwt)):
+    await force_invalidate_prompt(prompt_key)
+    return {"message": "Cache invalidé"}
+
+@router.get("/missions", response_model=list[MissionAnalyzeResponse])
+async def list_missions(db: AsyncSession = Depends(database.get_db)):
+    result = await db.execute(select(Mission).order_by(Mission.created_at.desc()))
+    missions = result.scalars().all()
+    
+    response = []
+    for m in missions:
+        response.append({
+            "id": m.id,
+            "title": m.title,
+            "description": m.description,
+            "extracted_competencies": m.extracted_competencies or [],
+            "prefiltered_candidates": m.prefiltered_candidates or [],
+            "proposed_team": m.proposed_team or [],
+            "fallback_full_scan": m.fallback_full_scan
+        })
+    return response
+
+@router.get("/missions/{mission_id}", response_model=MissionAnalyzeResponse)
+async def get_mission(mission_id: int, db: AsyncSession = Depends(database.get_db)):
+    result = await db.execute(select(Mission).where(Mission.id == mission_id))
+    m = result.scalars().first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+    return {
+        "id": m.id,
+        "title": m.title,
+        "description": m.description,
+        "extracted_competencies": m.extracted_competencies or [],
+        "prefiltered_candidates": m.prefiltered_candidates or [],
+        "proposed_team": m.proposed_team or [],
+        "fallback_full_scan": m.fallback_full_scan
+    }

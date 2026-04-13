@@ -22,6 +22,7 @@ class UserBase(BaseModel):
     allowed_category_ids: List[int] = []
     picture_url: Optional[str] = None
     is_anonymous: bool = False
+    unavailability_periods: List[dict] = []
 
 
 class UserCreate(UserBase):
@@ -54,6 +55,7 @@ class UserUpdate(BaseModel):
     is_anonymous: Optional[bool] = None
     role: Optional[str] = None
     allowed_category_ids: Optional[List[int]] = None
+    unavailability_periods: Optional[List[dict]] = None
 
 class UserResponse(UserBase):
     id: int

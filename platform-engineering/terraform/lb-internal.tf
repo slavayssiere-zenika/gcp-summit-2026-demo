@@ -136,6 +136,17 @@ resource "google_compute_region_url_map" "internal_url_map" {
     }
 
     route_rules {
+      priority = 75
+      match_rules { prefix_match = "/missions-api/" }
+      service = google_compute_region_backend_service.internal_mcp_backend["missions"].id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
       priority = 80
       match_rules { prefix_match = "/drive-api/" }
       service = google_compute_region_backend_service.internal_drive_backend.id

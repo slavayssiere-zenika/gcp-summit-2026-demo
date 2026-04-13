@@ -23,3 +23,7 @@ class User(Base):
     google_id = Column(String, nullable=True)
     merged_into_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     is_anonymous = Column(Boolean, default=False, nullable=False)
+
+    from sqlalchemy import JSON
+    from sqlalchemy.dialects.postgresql import JSONB
+    unavailability_periods = Column(JSON().with_variant(JSONB, "postgresql"), default=list)

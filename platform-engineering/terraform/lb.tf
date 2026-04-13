@@ -215,6 +215,11 @@ resource "google_compute_url_map" "default" {
       priority = 70
       match_rules { prefix_match = "/cv-api/" }
       service = google_compute_backend_service.mcp_backend["cv"].id
+    }
+    route_rules {
+      priority = 75
+      match_rules { prefix_match = "/missions-api/" }
+      service = google_compute_backend_service.mcp_backend["missions"].id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

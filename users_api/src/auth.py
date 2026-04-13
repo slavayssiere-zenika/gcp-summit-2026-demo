@@ -10,8 +10,10 @@ import os
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
+os.environ.pop("SECRET_KEY", None)
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 15  # 15 minutes
+REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -31,7 +33,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "type": "access"})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -44,6 +57,8 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
     if credentials:
         try:
             payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+            if payload.get("type") == "refresh":
+                raise JWTError("Refresh token cannot be used as access token")
             return payload
         except JWTError:
             # If header token is invalid, we don't fail yet, we'll try the cookie
@@ -67,6 +82,8 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
         
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") == "refresh":
+            raise JWTError("Refresh token cannot be used as access token")
         return payload
     except JWTError:
         raise HTTPException(

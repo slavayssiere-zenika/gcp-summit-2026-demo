@@ -47,6 +47,13 @@ tracer = trace.get_tracer(__name__)
 
 
 setup_logging()
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Starting ADK Web Agent with Gemini...")
+    yield
+
 app = FastAPI(
     title="ADK Web Agent",
     version="1.0.0",
@@ -61,9 +68,6 @@ RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
 
-@app.on_event("startup")
-async def startup_event():
-    print("Starting ADK Web Agent with Gemini...")
 
 
 @app.get("/")
@@ -85,6 +89,8 @@ security = HTTPBearer()
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
+# Purge the secret from environment to prevent Agent/LLM from reading it via os.environ dumps
+os.environ.pop("SECRET_KEY", None)
 ALGORITHM = "HS256"
 
 from fastapi import APIRouter
@@ -528,6 +534,39 @@ async def health():
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
+
+
+@protected_router.api_route("/mcp/proxy/{server_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+    target_url_env = f"{server_name.upper()}_URL"
+    base_url = os.getenv(target_url_env)
+    
+    if not base_url:
+        raise HTTPException(status_code=404, detail=f"MCP Server {server_name} introuvable")
+        
+    auth_header = f"{auth.scheme} {auth.credentials}"
+    headers = {"Authorization": auth_header}
+    inject(headers)
+    
+    body = await request.body()
+    target_path = f"{base_url.rstrip('/')}/{path}"
+    query_params = request.url.query
+    if query_params:
+        target_path += "?" + query_params
+        
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.request(
+                method=request.method,
+                url=target_path,
+                headers=headers,
+                content=body,
+                timeout=300.0
+            )
+            return Response(content=res.content, status_code=res.status_code, media_type=res.headers.get("content-type"))
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"Erreur de communication avec {server_name}: {str(exc)}")
+
 
 
 app.include_router(protected_router)

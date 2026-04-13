@@ -1,0 +1,67 @@
+databaseChangeLog:
+  - changeSet:
+      id: "1"
+      author: "system"
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: "CREATE EXTENSION IF NOT EXISTS vector;"
+        - createTable:
+            tableName: missions
+            columns:
+              - column:
+                  name: id
+                  type: SERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: extracted_competencies
+                  type: jsonb
+              - column:
+                  name: competencies_keywords
+                  type: varchar[]
+              - column:
+                  name: proposed_team
+                  type: jsonb
+              - column:
+                  name: semantic_embedding
+                  type: vector(3072)
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: "2"
+      author: "system"
+      changes:
+        - addColumn:
+            tableName: missions
+            columns:
+              - column:
+                  name: prefiltered_candidates
+                  type: jsonb
+
+  - changeSet:
+      id: "3"
+      author: "system"
+      changes:
+        - addColumn:
+            tableName: missions
+            columns:
+              - column:
+                  name: fallback_full_scan
+                  type: boolean
+                  defaultValueBoolean: false

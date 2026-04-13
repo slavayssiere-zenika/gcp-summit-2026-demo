@@ -41,3 +41,19 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# =========================
+# Frontend & Build
+# =========================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# =========================
+# Tests
+# =========================
+pytest.log
+*_test.db
+patch*.py
+test_*.py

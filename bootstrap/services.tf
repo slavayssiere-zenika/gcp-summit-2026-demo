@@ -17,7 +17,8 @@ locals {
     "redis.googleapis.com",                # Redis
     "cloudscheduler.googleapis.com",       # Cloud Scheduler
     "bigquery.googleapis.com",             # BigQuery
-    "drive.googleapis.com"                 # Drive
+    "drive.googleapis.com",                # Drive
+    "documentai.googleapis.com"            # Document AI (OCR / Sandbox RCE PDF)
   ]
 }
 

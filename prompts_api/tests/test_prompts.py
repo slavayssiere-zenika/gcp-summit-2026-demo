@@ -4,7 +4,7 @@ import os
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./prompts_test.db"
 os.environ["SECRET_KEY"] = "testsecret"
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     from main import app
@@ -174,28 +174,31 @@ def test_analyzer_get_genai_client_fail(monkeypatch):
     with pytest.raises(ValueError):
         analyzer.get_genai_client()
 
-def test_analyzer_generate_test_cases_success(monkeypatch):
+@pytest.mark.asyncio
+async def test_analyzer_generate_test_cases_success(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake")
     with patch("src.prompts.analyzer.genai.Client") as mock_client:
         mock_resp = MagicMock()
         mock_resp.text = '[{"user_query": "hi", "rubric": "ok"}]'
-        mock_client.return_value.models.generate_content.return_value = mock_resp
+        mock_client.return_value.aio.models.generate_content = AsyncMock(return_value=mock_resp)
         
-        res = analyzer.generate_test_cases("my prompt")
+        res = await analyzer.generate_test_cases("my prompt")
         assert len(res) == 1
         assert res[0]["user_query"] == "hi"
 
-def test_analyzer_generate_test_cases_fail(monkeypatch):
+@pytest.mark.asyncio
+async def test_analyzer_generate_test_cases_fail(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake")
     with patch("src.prompts.analyzer.genai.Client") as mock_client:
         mock_resp = MagicMock()
         mock_resp.text = '{"bad json'
-        mock_client.return_value.models.generate_content.return_value = mock_resp
+        mock_client.return_value.aio.models.generate_content = AsyncMock(return_value=mock_resp)
         
-        res = analyzer.generate_test_cases("my prompt")
+        res = await analyzer.generate_test_cases("my prompt")
         assert res == []
 
-def test_analyzer_run_promptfoo_analysis_success(mocker):
+@pytest.mark.asyncio
+async def test_analyzer_run_promptfoo_analysis_success(mocker):
     # Check that subprocess.run is called and output.json is parsed
     mock_run = mocker.patch("src.prompts.analyzer.subprocess.run")
     
@@ -203,11 +206,12 @@ def test_analyzer_run_promptfoo_analysis_success(mocker):
     mocker.patch("src.prompts.analyzer.os.path.exists", return_value=True)
     mocker.patch("builtins.open", mocker.mock_open(read_data='{"results": "ok"}'))
     
-    res = analyzer.run_promptfoo_analysis("prompt", [{"user_query": "u1", "rubric": "r1"}])
+    res = await analyzer.run_promptfoo_analysis("prompt", [{"user_query": "u1", "rubric": "r1"}])
     assert res == {"results": "ok"}
     mock_run.assert_called_once()
 
-def test_analyzer_run_promptfoo_analysis_no_json(mocker):
+@pytest.mark.asyncio
+async def test_analyzer_run_promptfoo_analysis_no_json(mocker):
     mock_run = mocker.patch("src.prompts.analyzer.subprocess.run")
     mock_run.return_value.stdout = "out"
     mock_run.return_value.stderr = "err"
@@ -216,23 +220,25 @@ def test_analyzer_run_promptfoo_analysis_no_json(mocker):
     # the second open is meant for config and prompts
     mocker.patch("builtins.open", mocker.mock_open())
     
-    res = analyzer.run_promptfoo_analysis("prompt", [])
+    res = await analyzer.run_promptfoo_analysis("prompt", [])
     assert "error" in res
     assert "stdout" in res
     assert res["stdout"] == "out"
 
-def test_analyzer_run_promptfoo_analysis_exception(mocker):
+@pytest.mark.asyncio
+async def test_analyzer_run_promptfoo_analysis_exception(mocker):
     mocker.patch("src.prompts.analyzer.subprocess.run", side_effect=ValueError("subprocess failed"))
     mocker.patch("builtins.open", mocker.mock_open())
-    res = analyzer.run_promptfoo_analysis("prompt", [])
+    res = await analyzer.run_promptfoo_analysis("prompt", [])
     assert res == {"error": "subprocess failed"}
 
-def test_analyzer_improve_prompt_with_gemini_success(monkeypatch):
+@pytest.mark.asyncio
+async def test_analyzer_improve_prompt_with_gemini_success(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake")
     with patch("src.prompts.analyzer.genai.Client") as mock_client:
         mock_resp = MagicMock()
         mock_resp.text = "better prompt"
-        mock_client.return_value.models.generate_content.return_value = mock_resp
+        mock_client.return_value.aio.models.generate_content = AsyncMock(return_value=mock_resp)
         
         eval_data = {
             "results": {
@@ -241,15 +247,16 @@ def test_analyzer_improve_prompt_with_gemini_success(monkeypatch):
                 ]
             }
         }
-        res = analyzer.improve_prompt_with_gemini("orig", eval_data)
+        res = await analyzer.improve_prompt_with_gemini("orig", eval_data)
         assert res == "better prompt"
 
-def test_analyzer_improve_prompt_with_gemini_markdown(monkeypatch):
+@pytest.mark.asyncio
+async def test_analyzer_improve_prompt_with_gemini_markdown(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake")
     with patch("src.prompts.analyzer.genai.Client") as mock_client:
         mock_resp = MagicMock()
         mock_resp.text = "```\nbetter prompt\nline2\n```"
-        mock_client.return_value.models.generate_content.return_value = mock_resp
+        mock_client.return_value.aio.models.generate_content = AsyncMock(return_value=mock_resp)
         
-        res = analyzer.improve_prompt_with_gemini("orig", {})
+        res = await analyzer.improve_prompt_with_gemini("orig", {})
         assert res == "better prompt\nline2"
