@@ -4,6 +4,7 @@ import tempfile
 import subprocess
 from google import genai
 from google.genai import types
+from src.gemini_retry import generate_content_with_retry
 
 def get_genai_client():
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -25,7 +26,8 @@ async def generate_test_cases(prompt_value: str) -> list:
     ]
     """
     
-    response = await client.aio.models.generate_content(
+    response = await generate_content_with_retry(
+        client,
         model='gemini-2.5-flash',
         contents=prompt_value,
         config=types.GenerateContentConfig(
@@ -132,7 +134,8 @@ async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> s
     
     prompt = f"Original Prompt:\n{original_prompt}\n\nFeedback from Evaluation:\n{feedback_text}\n\nPlease provide the improved prompt."
     
-    response = await client.aio.models.generate_content(
+    response = await generate_content_with_retry(
+        client,
         model='gemini-2.5-flash',
         contents=prompt,
         config=types.GenerateContentConfig(
