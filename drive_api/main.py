@@ -60,6 +60,12 @@ app.include_router(router)
 
 from src.auth import verify_jwt
 from fastapi import APIRouter, Depends
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY must be set in environment variables")
+os.environ.pop("SECRET_KEY", None)
+
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])

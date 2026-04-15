@@ -102,6 +102,19 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
     session_id = session_id or str(uuid.uuid4())
     session_service = get_session_service()
 
+    # --- Semantic Cache Check (FinOps: évite les appels Gemini redondants) ---
+    cache_key = f"semantic_cache:ops:{hashlib.sha256(query.encode('utf-8')).hexdigest()}"
+    try:
+        if getattr(session_service, 'r', None):
+            cached = session_service.r.get(cache_key)
+            if cached:
+                import json as _json
+                cached_data = _json.loads(cached)
+                logger.info("FinOps: OPS Cache hit for query. Saved Gemini invocation.")
+                return cached_data
+    except Exception as e:
+        logger.error(f"OPS Semantic Cache read error: {e}")
+
     agent = await create_agent(session_id)
     runner = Runner(app_name="zenika_ops_assistant", agent=agent, session_service=session_service)
     
@@ -203,7 +216,7 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
         except Exception:
             pass
 
-    return {
+    final_result = {
         "response": response_text,
         "data": last_tool_data,
         "steps": steps,
@@ -214,3 +227,12 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
             "estimated_cost_usd": round(total_input_tokens * 0.000000075 + total_output_tokens * 0.0000003, 6)
         }
     }
+
+    # --- Cache Write (24h TTL) ---
+    try:
+        if getattr(session_service, 'r', None):
+            session_service.r.set(cache_key, json.dumps(final_result), ex=86400)
+    except Exception:
+        pass
+
+    return final_result
