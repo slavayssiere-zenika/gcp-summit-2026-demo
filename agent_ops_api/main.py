@@ -154,7 +154,13 @@ async def a2a_query(request: QueryRequest, http_request: Request, auth: HTTPAuth
     with tracer.start_as_current_span("a2a.query", context=ctx, kind=SpanKind.SERVER) as span:
         try:
             result = await run_agent_query(request.query, computed_session_id)
-            return {"response": result.get("response", ""), "data": result.get("data")}
+            return {
+                "response": result.get("response", ""),
+                "data": result.get("data"),
+                "steps": result.get("steps", []),
+                "thoughts": result.get("thoughts", ""),
+                "usage": result.get("usage", {})
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
