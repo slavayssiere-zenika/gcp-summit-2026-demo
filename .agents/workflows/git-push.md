@@ -75,10 +75,6 @@ fi
 git commit -m "<MESSAGE>"
 ```
 
-9. **Push vers le dépôt distant (git push)**
-   Envoie les modifications commitées vers la branche distante.
-// turbo
-```bash
-git push
-```
+9. **Informer l'utilisateur**
+   Indiquer à l'utilisateur que le commit est prêt et qu'il peut faire `git push` manuellement depuis son terminal (l'agent n'a pas les droits SSH nécessaires).
 
