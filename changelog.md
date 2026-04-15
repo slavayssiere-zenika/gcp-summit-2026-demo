@@ -1,3 +1,31 @@
+## Mise à jour automatique - 2026-04-15 08:37:24
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1145  | 317  |  72% |
+| cv_api           | 1671  | 570  |  66% |
+| drive_api        | 856   | 371  |  57% |
+| items_api        | 1098  | 243  |  78% |
+| prompts_api      | 640   | 122  |  81% |
+| users_api        | 1327  | 412  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Add semantic cache read/write to HR and Ops agents
+- Improve agent prompts and A2A observability
+
+#### Fichiers (non commités)
+- `rive_api/test.db` (M)
+- `prompts_api/.coverage` (M)
+- `prompts_api/conftest.py` (M)
+- `market_mcp/conftest.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-15 08:31:17
 
 ### Couverture de Code

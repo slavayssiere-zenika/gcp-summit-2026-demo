@@ -47,8 +47,11 @@ failed = False
 for api in apis:
     if not os.path.isdir(api):
         continue
-    # Use the test_env python path which has the fastapi libs
-    p = subprocess.run(["../test_env/bin/python", "-c", extractor_code], cwd=api)
+    # Injecter SECRET_KEY pour éviter ValueError dans les src/auth.py au moment de l'import
+    env = os.environ.copy()
+    env.setdefault("SECRET_KEY", "spec-generation-dummy-key")
+    env.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./spec_gen.db")
+    p = subprocess.run(["../test_env/bin/python", "-c", extractor_code], cwd=api, env=env)
     if p.returncode != 0:
         failed = True
 
