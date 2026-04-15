@@ -59,7 +59,7 @@ const fetchUser = async () => {
 
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('/items-api/categories')
+    const response = await axios.get('/api/items/categories')
     categories.value = response.data.items || []
   } catch (err) {
     console.error('Failed to fetch categories:', err)
@@ -86,7 +86,7 @@ const errorCompetencies = ref<string | null>(null)
 
 const fetchCompetencies = async () => {
   try {
-    const response = await axios.get(`/comp-api/user/${userId}`)
+    const response = await axios.get(`/api/competencies/user/${userId}`)
     competencies.value = response.data || []
   } catch (err) {
     console.error('Failed to fetch user competencies:', err)
@@ -103,7 +103,7 @@ const isLoadingMissions = ref(false)
 
 const fetchCVProfile = async () => {
   try {
-    const response = await axios.get(`/cv-api/user/${userId}`)
+    const response = await axios.get(`/api/cv/user/${userId}`)
     cvProfiles.value = response.data
     
     // We display the importer based on the most recent CV if it exists
@@ -119,7 +119,7 @@ const fetchCVProfile = async () => {
 const fetchMissions = async () => {
   isLoadingMissions.value = true
   try {
-    const response = await axios.get(`/cv-api/user/${userId}/missions`)
+    const response = await axios.get(`/api/cv/user/${userId}/missions`)
     missions.value = response.data.missions || []
   } catch (err) {
     console.warn("Missions not found or error fetching them.")

@@ -168,7 +168,7 @@ let pollInterval: any = null
 
 const fetchFolders = async () => {
   try {
-    const res = await axios.get('/drive-api/folders')
+    const res = await axios.get('/api/drive/folders')
     folders.value = res.data
   } catch (error) {
     console.error("Failed to load folders", error)
@@ -177,7 +177,7 @@ const fetchFolders = async () => {
 
 const fetchStatus = async () => {
   try {
-    const res = await axios.get('/drive-api/status')
+    const res = await axios.get('/api/drive/status')
     syncStatus.value = res.data
   } catch (error) {
     console.error("Failed to load status", error)
@@ -186,7 +186,7 @@ const fetchStatus = async () => {
 
 const fetchFiles = async () => {
   try {
-    const res = await axios.get('/drive-api/files')
+    const res = await axios.get('/api/drive/files')
     files.value = res.data
   } catch (error) {
     console.error("Failed to load files", error)
@@ -213,7 +213,7 @@ const retryErrors = async () => {
   if (isRetrying.value) return
   isRetrying.value = true
   try {
-    await axios.post('/drive-api/retry-errors')
+    await axios.post('/api/drive/retry-errors')
     await fetchStatus()
     await fetchFiles()
     triggerSync() // trigger sync to process pending items immediately
@@ -228,7 +228,7 @@ const addFolder = async () => {
   if (!newFolder.value.google_folder_id || !newFolder.value.tag) return
   isAdding.value = true
   try {
-    await axios.post('/drive-api/folders', newFolder.value)
+    await axios.post('/api/drive/folders', newFolder.value)
     newFolder.value = { google_folder_id: '', tag: '' }
     await fetchFolders()
     // Manually trigger a background sync to wake up the worker
@@ -243,7 +243,7 @@ const addFolder = async () => {
 const deleteFolder = async (id: number) => {
   if (!confirm('Voulez-vous retirer cette source ? La file d\'attente existante ne sera pas détruite.')) return
   try {
-    await axios.delete(`/drive-api/folders/${id}`)
+    await axios.delete(`/api/drive/folders/${id}`)
     await fetchFolders()
   } catch (err) {
     console.error(err)
@@ -255,7 +255,7 @@ const syncStartedMsg = ref('')
 const triggerSync = async () => {
   isSyncing.value = true
   try {
-    await axios.post('/drive-api/sync')
+    await axios.post('/api/drive/sync')
     syncStartedMsg.value = 'Synchronisation démarrée en arrière-plan...'
     setTimeout(() => { syncStartedMsg.value = '' }, 3000)
     await fetchStatus()

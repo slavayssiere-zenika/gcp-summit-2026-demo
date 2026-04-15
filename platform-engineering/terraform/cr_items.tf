@@ -64,7 +64,7 @@ resource "google_cloud_run_v2_service" "items_api" {
       }
       env {
         name  = "ROOT_PATH"
-        value = "/items-api"
+        value = "/api/items"
       }
       env {
         name  = "USE_IAM_AUTH"
@@ -87,8 +87,12 @@ resource "google_cloud_run_v2_service" "items_api" {
         value = var.items_api_version
       }
       env {
+        name  = "MCP_SIDECAR_URL"
+        value = "http://localhost:8081"
+      }
+      env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
       env {
         name = "SECRET_KEY"

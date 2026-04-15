@@ -1,35 +1,41 @@
+import logging
+import os
 import re
 import json
-from fastapi import FastAPI, HTTPException, Request, Response
-import httpx
-from pydantic import BaseModel
+import inspect
 from typing import Optional
+from contextlib import asynccontextmanager
+
+import httpx
 import uvicorn
-import os
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+from jose import jwt, JWTError
+
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-import os
+from opentelemetry.propagate import inject, extract
+from opentelemetry.trace import SpanKind
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
+
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.propagate import inject, extract
-from opentelemetry.trace import SpanKind
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
+
 from prometheus_fastapi_instrumentator import Instrumentator
 from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
-
-
-from agent import run_agent_query, ROUTER_TOOLS
-import inspect
+from agent import run_agent_query, get_session_service
 from logger import setup_logging, LoggingMiddleware
+from mcp_client import auth_header_var
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -114,7 +120,11 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
     try:
         from jose import jwt, JWTError
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        computed_session_id = payload.get("sub")
+        # Priorité au session_id du body (permet aux tests d'utiliser des sessions isolées)
+        # Fallback sur le sub JWT pour les sessions utilisateurs normales
+        body_session_id = request.session_id if request.session_id else None
+        jwt_sub = payload.get("sub")
+        computed_session_id = body_session_id if body_session_id else jwt_sub
         if not computed_session_id:
             raise HTTPException(status_code=401, detail="Token invalide")
     except Exception:
@@ -216,13 +226,20 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
         if current_assistant_msg:
             # a) Scan Parts
             for part in parts:
-                # Thoughts
+                # Thoughts (Gemini 2.0 Thinking)
                 thought_val = getattr(part, 'thought', None)
                 if thought_val:
-                    if current_assistant_msg["thoughts"]:
-                        current_assistant_msg["thoughts"] += "\n" + str(thought_val)
+                    thought_text = ""
+                    if isinstance(thought_val, bool) and thought_val:
+                        thought_text = getattr(part, 'text', "")
                     else:
-                        current_assistant_msg["thoughts"] = str(thought_val)
+                        thought_text = str(thought_val)
+                    
+                    if thought_text:
+                        if current_assistant_msg["thoughts"]:
+                            current_assistant_msg["thoughts"] += "\n" + thought_text
+                        else:
+                            current_assistant_msg["thoughts"] = thought_text
                 
                 # Tool Calls
                 tcall = getattr(part, 'tool_call', None) or getattr(part, 'function_call', None)
@@ -255,6 +272,30 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                     if hasattr(res_to_process, 'model_dump'): res_to_process = res_to_process.model_dump()
                     elif hasattr(res_to_process, 'dict'): res_to_process = res_to_process.dict()
                     
+                    # Unwrap MCP 'result' JSON string (Crucial for sub-agent data access)
+                    if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
+                        try: res_to_process = json.loads(res_to_process["result"])
+                        except: pass
+
+                    # A2A Unwrapping (Router Specific)
+                    if isinstance(res_to_process, dict) and "response" in res_to_process:
+                        if res_to_process.get("thoughts"):
+                            if current_assistant_msg["thoughts"]:
+                                current_assistant_msg["thoughts"] += f"\n[Sub-Agent] {res_to_process['thoughts']}"
+                            else:
+                                current_assistant_msg["thoughts"] = f"[Sub-Agent] {res_to_process['thoughts']}"
+                        
+                        for s in res_to_process.get("steps", []):
+                            current_assistant_msg["steps"].append(s)
+                            
+                        # FinOps Aggregation
+                        sub_use = res_to_process.get("usage", {})
+                        if "usage" not in current_assistant_msg:
+                            current_assistant_msg["usage"] = {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0}
+                        current_assistant_msg["usage"]["total_input_tokens"] += sub_use.get("total_input_tokens", 0)
+                        current_assistant_msg["usage"]["total_output_tokens"] += sub_use.get("total_output_tokens", 0)
+                        current_assistant_msg["data"] = res_to_process.get("data") or res_to_process
+                    
                     # Unwrap MCP 'result' JSON string
                     if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
                         try: res_to_process = json.loads(res_to_process["result"])
@@ -262,46 +303,9 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                     
                     sig = f"result:{json.dumps(res_to_process, sort_keys=True)}"
                     if sig not in current_assistant_seen_steps:
-                        current_assistant_msg["data"] = res_to_process
+                        if not current_assistant_msg["data"]:
+                            current_assistant_msg["data"] = res_to_process
                         current_assistant_msg["steps"].append({"type": "result", "data": res_to_process})
-                        current_assistant_seen_steps.add(sig)
-            
-            # b) Scan Event Methods
-            if hasattr(event, 'actions') and event.actions:
-                for action in event.actions:
-                    tc = getattr(action, 'tool_call', None)
-                    if tc:
-                        name = getattr(tc, 'name', "unknown")
-                        args = getattr(tc, 'args', {})
-                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
-                        if sig not in current_assistant_seen_steps:
-                            current_assistant_msg["steps"].append({"type": "call", "tool": name, "args": args})
-                            current_assistant_seen_steps.add(sig)
-            
-            if hasattr(event, 'get_function_calls'):
-                for fc in (event.get_function_calls() or []):
-                    name = getattr(fc, 'name', "unknown")
-                    args = getattr(fc, 'args', {})
-                    sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
-                    if sig not in current_assistant_seen_steps:
-                        current_assistant_msg["steps"].append({"type": "call", "tool": name, "args": args})
-                        current_assistant_seen_steps.add(sig)
-
-            if hasattr(event, 'get_function_responses'):
-                for fr in (event.get_function_responses() or []):
-                    res_data = getattr(fr, 'response', fr)
-                    if hasattr(res_data, 'model_dump'): res_data = res_data.model_dump()
-                    elif hasattr(res_data, 'dict'): res_data = res_data.dict()
-                    
-                    # Unwrap MCP 'result' JSON string
-                    if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
-                        try: res_data = json.loads(res_data["result"])
-                        except: pass
-                    
-                    sig = f"result:{json.dumps(res_data, sort_keys=True)}"
-                    if sig not in current_assistant_seen_steps:
-                        current_assistant_msg["data"] = res_data
-                        current_assistant_msg["steps"].append({"type": "result", "data": res_data})
                         current_assistant_seen_steps.add(sig)
             
             
@@ -495,6 +499,7 @@ async def mcp_registry(auth: HTTPAuthorizationCredentials = Depends(security)):
     Chaque service MCP expose GET /mcp/tools. On les agrège en parallèle.
     """
     import asyncio
+    from agent import ROUTER_TOOLS
 
     auth_header = f"{auth.scheme} {auth.credentials}"
 

@@ -11,13 +11,13 @@ resource "google_cloud_scheduler_job" "finops_anomaly_detector" {
 
   http_target {
     http_method = "POST"
-    uri         = "https://api.internal.zenika/market-mcp/admin/finops/detect"
+    uri         = "${google_cloud_run_v2_service.market_mcp.uri}/admin/finops/detect"
 
     # Authentification via le Service Account Agent_API (ou IAM specifique si configuré)
     # Pour s'assurer que c'est une requête de confiance
     oidc_token {
       service_account_email = google_service_account.agent_router_sa.email
-      audience              = "https://api.internal.zenika/market-mcp"
+      audience              = google_cloud_run_v2_service.market_mcp.uri
     }
   }
 }

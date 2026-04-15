@@ -43,3 +43,20 @@ Ce micro-service se base sur :
   ]
 }
 ```
+
+## 📡 Schema OpenAPI Auto-Généré
+
+- **GET** `/metrics` : Metrics
+- **GET** `/health` : Health
+- **GET** `/version` : Get Version
+- **GET** `/missions` : List Missions
+- **POST** `/missions` : Create And Analyze Mission
+- **POST** `/missions/{mission_id}/reanalyze` : Reanalyze Mission
+- **GET** `/missions/task/{task_id}` : Get Mission Task Status
+- **POST** `/cache/invalidate` : Force Invalidate
+- **GET** `/missions/{mission_id}` : Get Mission
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **GET** `/spec` : Get Spec

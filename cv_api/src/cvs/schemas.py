@@ -58,6 +58,7 @@ class CVFullProfileResponse(BaseModel):
     user_id: int
     summary: Optional[str] = None
     current_role: Optional[str] = None
+    seniority: Optional[str] = None
     years_of_experience: Optional[int] = None
     competencies_keywords: List[str] = []
     missions: List[ExtractedMission] = []

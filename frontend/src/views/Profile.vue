@@ -29,7 +29,7 @@ const error = ref<string | null>(null)
 
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('/items-api/categories')
+    const response = await axios.get('/api/items/categories')
     categories.value = response.data.items || []
   } catch (err) {
     console.error('Failed to fetch categories:', err)
@@ -56,7 +56,7 @@ const fetchPersonalPrompt = async () => {
   try {
     // using cookies for auth, proxy passes it, or send Bearer explicitly
     const token = localStorage.getItem('access_token')
-    const response = await axios.get('/prompts-api/user/me', {
+    const response = await axios.get('/api/prompts/user/me', {
        headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
     personalPrompt.value = response.data.value || ''
@@ -71,7 +71,7 @@ const savePersonalPrompt = async () => {
   promptSaveError.value = false
   try {
     const token = localStorage.getItem('access_token')
-    await axios.put('/prompts-api/user/me', { value: personalPrompt.value }, {
+    await axios.put('/api/prompts/user/me', { value: personalPrompt.value }, {
        headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
     promptSaveSuccess.value = true
@@ -101,7 +101,7 @@ const addAvailability = async () => {
   try {
     isSavingAvailability.value = true
     const token = localStorage.getItem('access_token')
-    await axios.put(`/users-api/${user?.id}`, { 
+    await axios.put(`/api/users/${user?.id}`, { 
         unavailability_periods: updatedPeriods 
     }, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -120,7 +120,7 @@ const removeAvailability = async (index: number) => {
     updatedPeriods.splice(index, 1)
     try {
         const token = localStorage.getItem('access_token')
-        await axios.put(`/users-api/${user?.id}`, { 
+        await axios.put(`/api/users/${user?.id}`, { 
             unavailability_periods: updatedPeriods 
         }, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}

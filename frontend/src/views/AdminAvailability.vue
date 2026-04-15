@@ -9,7 +9,7 @@ const isLoading = ref(true)
 const fetchUsers = async () => {
     try {
         const token = localStorage.getItem('access_token')
-        const response = await axios.get('/users-api/?limit=100', {
+        const response = await axios.get('/api/users/?limit=100', {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
         users.value = response.data.items.filter((u: any) => u.unavailability_periods && u.unavailability_periods.length > 0)

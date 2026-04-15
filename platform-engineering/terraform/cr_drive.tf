@@ -61,7 +61,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
       }
       env {
         name  = "ROOT_PATH"
-        value = "/drive-api"
+        value = "/api/drive"
       }
       env {
         name  = "USE_IAM_AUTH"
@@ -77,11 +77,11 @@ resource "google_cloud_run_v2_service" "drive_api" {
       }
       env {
         name  = "CV_API_URL"
-        value = "http://api.internal.zenika/cv-api/"
+        value = "http://api.internal.zenika/api/cv/"
       }
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
       env {
         name  = "TRACE_EXPORTER"
@@ -90,6 +90,10 @@ resource "google_cloud_run_v2_service" "drive_api" {
       env {
         name  = "APP_VERSION"
         value = var.drive_api_version
+      }
+      env {
+        name  = "MCP_SIDECAR_URL"
+        value = "http://localhost:8081"
       }
       env {
         name = "SECRET_KEY"

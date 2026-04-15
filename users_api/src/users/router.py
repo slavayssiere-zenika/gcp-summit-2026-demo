@@ -24,6 +24,37 @@ auth_router = APIRouter(prefix="", tags=["auth"])
 CACHE_TTL = 60
 
 
+def _set_auth_cookies(request: Request, response: Response, access_token: str, refresh_token: str) -> None:
+    """Pose les cookies access_token et refresh_token en respectant le contexte HTTPS.
+
+    Sur GCP Cloud Run, le Load Balancer ajoute X-Forwarded-Proto=https.
+    Les navigateurs modernes (Chrome 80+) refusent les cookies SameSite=Lax
+    sans l'attribut Secure sur les connexions HTTPS — d'où la détection dynamique.
+
+    SameSite=Strict est intentionnellement évité : il bloque l'envoi du cookie
+    lors des requêtes POST cross-origin (ex: /auth/refresh depuis le frontend
+    servi par le LB GCP), ce qui casse silencieusement le refresh flow.
+    """
+    is_https = request.headers.get("x-forwarded-proto", "http").lower() == "https"
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=15 * 60,  # 15 minutes
+        samesite="lax",
+        secure=is_https,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=3600 * 24 * 7,  # 7 jours
+        samesite="lax",
+        secure=is_https,
+    )
+
+
 @router.get("/stats", response_model=UserStatsResponse)
 async def get_user_stats(db: AsyncSession = Depends(get_db)):
     cache_key = "users:stats"
@@ -162,7 +193,7 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db), payload: 
 
     user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
     if user is None:
-        raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+        raise HTTPException(status_code=401, detail="Utilisateur non répertorié ou compte inactif dans l'annuaire Zenika.")
         
     result = map_user_to_response(user)
     
@@ -176,16 +207,16 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db), payload: 
 
 
 @auth_router.post("/login", response_model=TokenResponse)
-async def login(login_data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(login_data: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).filter(User.email == login_data.email))).scalars().first()
     if not user or not verify_password(login_data.password, user.hashed_password):
         USER_LOGINS_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=401, detail="Identifiants invalides")
-    
+
     if not user.is_active:
         USER_LOGINS_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=400, detail="Compte inactif")
-    
+
     USER_LOGINS_TOTAL.labels(status="success").inc()
 
     # Include allowed categories as a list of integers in the JWT payload
@@ -198,25 +229,8 @@ async def login(login_data: LoginRequest, response: Response, db: AsyncSession =
     from src.auth import create_refresh_token
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data={"sub": user.username})
-    
-    # Set HTTP-Only cookie for the token
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        max_age=15 * 60, # 15 minutes
-        samesite="lax",
-        secure=False # Set to True in production with HTTPS
-    )
-    
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        max_age=3600 * 24 * 7, # 7 d
-        samesite="strict",
-        secure=False # Set to True in production with HTTPS
-    )
+
+    _set_auth_cookies(request, response, access_token, refresh_token)
 
     return TokenResponse(
         access_token=access_token,
@@ -230,7 +244,7 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
     refresh_token_cookie = request.cookies.get("refresh_token")
     if not refresh_token_cookie:
         raise HTTPException(status_code=401, detail="Refresh token manquant")
-        
+
     try:
         from src.auth import SECRET_KEY, ALGORITHM
         payload = jwt.decode(refresh_token_cookie, SECRET_KEY, algorithms=[ALGORITHM])
@@ -238,16 +252,16 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
             raise HTTPException(status_code=401, detail="Token de type invalide")
         username: str = payload.get("sub")
         if not username:
-             raise HTTPException(status_code=401, detail="Token invalide")
+            raise HTTPException(status_code=401, detail="Token invalide")
     except JWTError:
         raise HTTPException(status_code=401, detail="Refresh token expiré ou invalide")
-        
+
     user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
     if not user or not user.is_active:
-         raise HTTPException(status_code=401, detail="Compte inactif ou introuvable")
-         
+        raise HTTPException(status_code=401, detail="Compte inactif ou introuvable")
+
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
-    
+
     token_data = {
         "sub": user.username,
         "allowed_category_ids": allowed_ids,
@@ -256,23 +270,9 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
     from src.auth import create_refresh_token
     new_access = create_access_token(data=token_data)
     new_refresh = create_refresh_token(data={"sub": user.username})
-    
-    response.set_cookie(
-        key="access_token",
-        value=new_access,
-        httponly=True,
-        max_age=15 * 60,
-        samesite="lax",
-        secure=False
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=new_refresh,
-        httponly=True,
-        max_age=3600 * 24 * 7,
-        samesite="strict",
-        secure=False
-    )
+
+    _set_auth_cookies(request, response, new_access, new_refresh)
+
     return TokenResponse(
         access_token=new_access,
         token_type="bearer",
@@ -438,24 +438,9 @@ async def google_callback(request: Request, code: str, response: Response, db: A
     
     frontend_url = os.getenv("FRONTEND_URL", "/")
     redirect_response = RedirectResponse(frontend_url)
-    
-    redirect_response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        max_age=15 * 60, # 15 minutes
-        samesite="lax",
-        secure=False # Set to True in production with HTTPS
-    )
-    redirect_response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        max_age=3600 * 24 * 7, # 7 d
-        samesite="strict",
-        secure=False 
-    )
-    
+
+    _set_auth_cookies(request, redirect_response, access_token, refresh_token)
+
     return redirect_response
 
 
@@ -576,7 +561,7 @@ async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
 
     user = (await db.execute(select(User).filter(User.id == user_id))).scalars().first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=f"Collaborateur #{user_id} introuvable dans la base de données Zenika.")
 
     result = map_user_to_response(user)
     set_cache(cache_key, result, CACHE_TTL)

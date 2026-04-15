@@ -1,46 +1,68 @@
-# Agent API Specification (GEMINI)
+# Agent HR API — Spécification Métier
 
-## Présentation
-Le composant **Agent API** est le cerveau orchestrateur ("The Conductor") du réseau Zenika.
-Contrairement aux autres microservices, il ne possède aucune base de données (Stateless). Son rôle est d'héberger le modèle d'Intelligence Artificielle Google Gemini (via l'ADK Agent Development Kit) et d'orienter le raisonnement de ce dernier grâce au standard interopérable MCP (Model Context Protocol).
+> Version : voir `/version` | Service : `agent-hr-api` | Rôle : Expert RH, Talent & Compétences
 
----
+## 🎯 Rôle
 
-## 🏛️ Architecture et Modèle LLM
-### 1. Le Cerveau (`agent.py`)
-Ce moteur propulse un agent IA asynchrone défini par :
-- **System Prompt** : Un encadrement délimitant son persona (l'Assistant de consultation expert Zenika) et son comportement linguistique (Poli, concis, direct).
-- **Tooling Engine** : Une liste exhaustive de +20 fonctions (Wrappers) que l'IA peut appeler arbitrairement pour questionner l'architecture (Users, Items, Competencies) au travers de protocoles réseau SSE.
+L'Agent HR est le **spécialiste des ressources humaines** de la plateforme Zenika.
+Il gère exclusivement les profils consultants, leurs CVs et leurs compétences.
 
-## Description Fonctionnelle Détaillée
-L'Agent API est la porte d'entrée conversationnelle intelligente pour les collaborateurs Zenika. Son rôle fonctionnel est de traduire le langage naturel de l'humain en actions techniques concrètes réparties sur les différents microservices.
-Plutôt que d'exiger des utilisateurs qu'ils naviguent dans des interfaces complexes, l'Agent leur permet de poser des questions simples (ex: "Qui est le meilleur expert Kubernetes à Paris ?") ou de déclencher des processus complexes (ex: "Assigne ce nouvel ordinateur portable à Thomas").
-Pour accomplir ces tâches, le système analyse l'intention, déduit les outils MCP nécessaires, planifie des appels vers les sous-systèmes (Users, Competencies, Items, CV), collecte les résultats de manière sécurisée (Zero-Trust), et synthétise une réponse lisible et utile pour l'utilisateur.
-
-### 2. Connecteurs MCP (Server-Sent Events)
-L'Agent charge `mcp.get_mcp_client()` vers 3 adresses indépendantes du réseau Docker (ex: `http://users_mcp:5000/mcp/sse`). Il maintient sa mémoire active afin d'agréger les retours distants.
+> ❌ **HORS PÉRIMÈTRE** : Toute demande de missions ou de staffing → déléguer à `agent_missions_api`
 
 ---
 
-## 🛠️ Endpoints Principaux
-Cet API est l'unique canal d'interaction autorisé pour la Console Chat Front-End (Vue.js).
+## 🛠️ Outils MCP disponibles
 
-### Interaction avec le Modèle NLP
-- `POST /query` : Exécute une prompt libre.
-  - **Payload** : `{"query": "Liste moi les ordinateurs de tel salarié"}`
-  - **Process** : L'Agent décode, interroge dynamiquement ses Servers MCP reliés, aggrège les résultats (ex: ordi HP + ID employé), puis renvoie formellement un condensé de l'historique de recherche + le texte naturel validant.
-
-### Health & Supervision
-- `GET /health` : Vérifie que le service Web Gemini est sous tension et que la clé _GOOGLE_API_KEY_ est valide.
+| MCP | Outils principaux |
+|-----|------------------|
+| `users_mcp` | `list_users`, `get_user`, `search_users`, `get_users_by_tag` |
+| `competencies_mcp` | `get_competency_tree`, `get_user_competencies`, `list_user_competencies` |
+| `cv_mcp` | `search_best_candidates`, `get_candidate_rag_context`, `analyze_cv`, `get_user_missions` |
+| `items_mcp` | `list_items`, `get_item` (équipements, tags) |
+| `missions_mcp` | `get_user_missions` — lecture seule pour enrichissement de profil uniquement |
+| `drive_mcp` | `sync_drive_folder`, `list_drive_files` (import CVs) |
 
 ---
 
-## 🚨 Sécurité Cognitive (Stateless & Pass-through)
-Bien que super-intelligent, cet Agent **n'avertit pas les règles structurelles**.
-Si un Endpoint sous-jacent (Items) refuse une attribution ou lève un code HTTP 400 (Violation parentale de Compétence), c'est le Wrapper Python de l'Agent qui réceptionne l'exception. Gemini interprète alors vocalement cet "échec" vers l'utilisateur final.
+## 🗺️ Cas d'usage couverts
 
-## 🔒 Sécurité Zero-Trust & JWT
-L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorénavant un JWT d'authentification vérifié. Le token doit être passé dans l'entête HTTP (`Authorization: Bearer <token>`). Tous les composants internes et externes propagent l'identité du requérant.
+1. **Recherche sémantique** : "Qui maîtrise React + TypeScript ?" → `search_best_candidates`
+2. **Profil utilisateur** : "Donne-moi le profil de Jean Martin" → `search_users` + `get_user`
+3. **Compétences** : "Quelles sont les compétences de [nom] ?" → `get_user_competencies`
+4. **Import CV** : "Import les CVs du dossier Drive" → `sync_drive_folder` + `analyze_cv`
+5. **Historique consultant** : "Quelles missions a faites Sophie ?" → `get_user_missions` (lecture seule)
+
+---
+
+## 🚨 Règle anti-hallucination
+
+Chaque consultant cité **doit avoir un ID entier** issu d'un appel outil.  
+Il est strictement interdit de citer un profil sans ID vérifié.
+
+---
+
+## 📡 Endpoints
+
+| Méthode | Chemin | Description |
+|---------|--------|-------------|
+| `GET` | `/health` | Santé du service |
+| `GET` | `/version` | Version déployée |
+| `POST` | `/query` | Requête directe |
+| `POST` | `/a2a/query` | Point d'entrée A2A (appelé par le Router) |
+| `GET` | `/history` | Historique de session |
+| `DELETE` | `/history` | Effacer la session |
+| `GET` | `/mcp/registry` | Catalogue des outils MCP chargés |
+| `GET` | `/spec` | Cette spécification |
+
+---
+
+## ⚙️ Configuration
+
+- **Redis DB** : 10 (isolation sessions HR)
+- **Session** : éphémère par requête (UUID frais)
+- **Modèle** : `GEMINI_MODEL` (env var)
+- **OTel** : `OTEL_SERVICE_NAME=agent-hr-api`
+- **Anti-hallucination** : guardrail actif (0 tool call → warning dans les steps)
 
 ## 📡 Schema OpenAPI Auto-Généré
 
@@ -53,11 +75,12 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
 - **POST** `/query` : Query
+- **POST** `/a2a/query` : A2A Query
 - **GET** `/history` : Get History
 - **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

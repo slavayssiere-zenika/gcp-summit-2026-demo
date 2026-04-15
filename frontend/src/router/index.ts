@@ -49,6 +49,11 @@ const router = createRouter({
       component: () => import('../views/Specs.vue')
     },
     {
+      path: '/docs/agents',
+      name: 'agents-docs',
+      component: () => import('../views/AgentsDocs.vue')
+    },
+    {
       path: '/import-cv',
       name: 'import-cv',
       component: () => import('../views/ImportCV.vue')

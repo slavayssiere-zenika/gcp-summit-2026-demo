@@ -17,6 +17,8 @@ image_market: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-sum
 image_agent_router: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_router_api:latest"
 image_agent_hr: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_hr_api:latest"
 image_agent_ops: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_ops_api:latest"
+image_agent_missions: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_missions_api:latest"
 image_drive: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest"
 admin_user: "sebastien.lavayssiere@zenika.com"
 finops_anomaly_threshold: 500000
+gemini_model: "gemini-3.1-flash-lite-preview"

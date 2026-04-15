@@ -18,25 +18,25 @@ const error = ref('')
 onMounted(async () => {
   try {
     // Fetch User Identity Information
-    const userRes = await axios.get(`/users-api/users/${userId}`)
+    const userRes = await axios.get(`/api/users/${userId}`)
     userProfile.value = userRes.data
 
     // Fetch Assigned Technical/Functional Skills
     try {
-      const compRes = await axios.get(`/comp-api/competencies/user/${userId}`)
+      const compRes = await axios.get(`/api/competencies/user/${userId}`)
       competencies.value = compRes.data
     } catch(e) {}
 
     // Fetch the candidate's Google Docs CV Link (silently fail if 404 because not all users are candidates)
     try {
-      const cvRes = await axios.get(`/cv-api/cvs/user/${userId}`)
+      const cvRes = await axios.get(`/api/cv/user/${userId}`)
       cvData.value = cvRes.data
     } catch(e) {}
 
     // Fetch Missions
     loadingMissions.value = true
     try {
-      const missionRes = await axios.get(`/cv-api/user/${userId}/missions`)
+      const missionRes = await axios.get(`/api/cv/user/${userId}/missions`)
       missions.value = missionRes.data.missions || []
     } catch(e) {}
     loadingMissions.value = false

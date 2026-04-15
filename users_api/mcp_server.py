@@ -56,7 +56,11 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="list_users",
-            description="List all users with pagination",
+            description=(
+                "Liste tous les utilisateurs avec pagination. "
+                "Utiliser uniquement pour des listings génériques sans critère de recherche. "
+                "Si un nom ou email est connu, préférer search_users qui est plus précis."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -67,7 +71,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_user",
-            description="Get a user by ID",
+            description=(
+                "Récupère un utilisateur par son ID (entier). "
+                "ATTENTION : n'appeler qu'avec un ID réel issu d'un appel précédent à search_users. "
+                "Ne JAMAIS inventer ou deviner un ID."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -93,7 +101,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="create_user",
-            description="Create a new user",
+            description=(
+                "Crée un nouvel utilisateur. "
+                "Si le mot de passe n'est pas fourni explicitement, générer un mot de passe aléatoire sécurisé (ex: UUID). "
+                "Ne JAMAIS échouer avec une erreur 422 pour cause de mot de passe manquant."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -124,7 +136,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="delete_user",
-            description="Delete a user",
+            description=(
+                "ACTION DESTRUCTIVE ET IRRÉVERSIBLE. Supprime définitivement un utilisateur et toutes ses données associées. "
+                "Ne PAS appeler sans confirmation explicite de l'utilisateur dans sa requête. "
+                "Toujours proposer update_user (désactivation via is_active=false) comme alternative moins destructive."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -140,7 +156,14 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="search_users",
-            description="Search users by username, email or full name",
+            description=(
+                "PREMIÈRE ÉTAPE OBLIGATOIRE pour tout flux impliquant un utilisateur identifié par son nom. "
+                "Recherche par username, email ou nom complet. "
+                "Retourne une liste d'utilisateurs avec leurs IDs réels. "
+                "TOUJOURS appeler avant get_user, list_user_competencies, get_user_cv ou get_candidate_rag_context. "
+                "Ne JAMAIS inventer un user_id sans passer par cet outil d'abord. "
+                "Utiliser des mots-clés simples sans accents (ex: 'Lavayssiere' et non 'Lavayssière')."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -285,7 +308,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 limit = arguments.get("limit", 10)
                 response = await client.get(f"{API_BASE_URL}/search", params={"query": query, "limit": limit})
                 response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
+                data = response.json()
+                if not data:
+                    return [TextContent(type="text", text=f"Aucun utilisateur trouvé dans la base de données pour la recherche '{query}'.")]
+                return [TextContent(type="text", text=json.dumps(data))]
 
             elif name == "toggle_user_status":
                 user_id = arguments["user_id"]

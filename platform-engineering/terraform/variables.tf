@@ -97,6 +97,11 @@ variable "image_agent_ops" {
   type        = string
 }
 
+variable "image_agent_missions" {
+  description = "Image for Agent Missions API container"
+  type        = string
+}
+
 variable "image_market" {
   description = "Image for Market & FinOps MCP container"
   type        = string
@@ -117,7 +122,7 @@ variable "gemini_api_key" {
 variable "gemini_model" {
   description = "Modèle Gemini par défaut à utiliser"
   type        = string
-  default     = "gemini-3-flash-preview"
+  default     = "gemini-3.1-flash-lite-preview"
 }
 
 # Les objectifs SLO (disponibilité, latence) sont définis
@@ -128,6 +133,7 @@ variable "gemini_model" {
 variable "agent_router_api_version" { type = string }
 variable "agent_hr_api_version" { type = string }
 variable "agent_ops_api_version" { type = string }
+variable "agent_missions_api_version" { type = string }
 variable "users_api_version" { type = string }
 variable "items_api_version" { type = string }
 variable "competencies_api_version" { type = string }

@@ -13,7 +13,7 @@ const fetchDuplicates = async () => {
   isLoading.value = true
   error.value = ''
   try {
-    const res = await axios.get('/users-api/duplicates', {
+    const res = await axios.get('/api/users/duplicates', {
       headers: { Authorization: `Bearer ${authService.state.token}` }
     })
     
@@ -46,7 +46,7 @@ const performMerge = async (candidate: any) => {
   error.value = ''
   successResponse.value = ''
   try {
-    await axios.post('/users-api/merge', {
+    await axios.post('/api/users/merge', {
       source_id: candidate.source_id,
       target_id: candidate.target_id
     }, {

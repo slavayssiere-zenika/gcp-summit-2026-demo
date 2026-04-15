@@ -64,7 +64,7 @@ resource "google_cloud_run_v2_service" "users_api" {
       }
       env {
         name  = "ROOT_PATH"
-        value = "/users-api"
+        value = "/api/users"
       }
       env {
         name  = "USE_IAM_AUTH"
@@ -85,6 +85,10 @@ resource "google_cloud_run_v2_service" "users_api" {
       env {
         name  = "APP_VERSION"
         value = var.users_api_version
+      }
+      env {
+        name  = "MCP_SIDECAR_URL"
+        value = "http://localhost:8081"
       }
       env {
         name = "SECRET_KEY"
@@ -125,15 +129,15 @@ resource "google_cloud_run_v2_service" "users_api" {
       }
       env {
         name  = "CV_API_URL"
-        value = "http://api.internal.zenika/cv-api/"
+        value = "http://api.internal.zenika/api/cv/"
       }
       env {
         name  = "ITEMS_API_URL"
-        value = "http://api.internal.zenika/items-api/"
+        value = "http://api.internal.zenika/api/items/"
       }
       env {
         name  = "COMPETENCIES_API_URL"
-        value = "http://api.internal.zenika/comp-api/"
+        value = "http://api.internal.zenika/api/competencies/"
       }
       env {
         name  = "GCP_PROJECT_ID"
@@ -142,6 +146,10 @@ resource "google_cloud_run_v2_service" "users_api" {
       env {
         name  = "USER_EVENTS_TOPIC"
         value = google_pubsub_topic.user_events.name
+      }
+      env {
+        name  = "FRONTEND_URL"
+        value = "https://${terraform.workspace}.${var.base_domain}"
       }
     }
 

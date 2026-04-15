@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, File, UploadFile, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import asyncio
 import database
 from .models import Mission
 from .schemas import MissionCreateRequest, MissionAnalyzeResponse, TaskResponse
@@ -129,10 +130,13 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                 )
             )
 
+            market_mcp_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+
             async def fast_log_finops(action, model, usage):
                 try:
+                    inject(headers)
                     await http_client.post(
-                        "http://agent_api:8002/mcp/proxy/market_mcp/mcp/call",
+                        f"{market_mcp_url.rstrip('/')}/mcp/call",
                         json={
                             "name": "log_ai_consumption",
                             "arguments": {
@@ -165,7 +169,7 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             payload = {"query": search_context, "limit": 6}
             if extracted_competencies:
                 payload["skills"] = extracted_competencies
-                
+
             logger.info(f"Recherche CV_API avec requête POST intégrale")
             cv_res = await http_client.post(f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers)
             is_fallback = False
@@ -176,18 +180,64 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                     logger.warning(f"⚠️ DATA ANOMALY: {missing_embeddings} profils exclus de la recherche CV en raison d'embeddings manquants. Utilisez la ré-analyse de masse.")
                 cv_res_json = cv_res.json()
                 logger.info(f"CV_API a répondu avec {len(cv_res_json)} résultats bruts. Fallback_full_scan={is_fallback}")
-                for p in cv_res_json:
+
+                async def _enrich_candidate(p: dict) -> dict | None:
+                    """Enrichit un candidat avec ses données users_api ET cv_api (seniority, skills)."""
                     u_id = p.get("user_id")
-                    u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers)
-                    if u_res.status_code == 200:
-                        u_info = u_res.json()
-                        if u_info.get("is_active", True):
-                            candidates_data.append({
-                                "user_id": u_id,
-                                "full_name": u_info.get("full_name") or f"{u_info.get('first_name')} {u_info.get('last_name')}",
-                                "similarity_score": p.get("similarity_score"),
-                                "unavailabilities": u_info.get("unavailability_periods", [])
-                            })
+                    try:
+                        u_res, cv_details_res = await asyncio.gather(
+                            http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers),
+                            http_client.get(f"{CV_API_URL.rstrip('/')}/user/{u_id}/details", headers=headers),
+                        )
+                    except Exception as e:
+                        logger.warning(f"Enrichissement candidat {u_id} échoué: {e}")
+                        return None
+
+                    if u_res.status_code != 200:
+                        return None
+                    u_info = u_res.json()
+                    if not u_info.get("is_active", True):
+                        return None
+
+                    # --- Données CV : seniority + skills ---
+                    cv_details = {}
+                    if cv_details_res.status_code == 200:
+                        cv_details = cv_details_res.json()
+                    else:
+                        logger.debug(f"cv_api /user/{u_id}/details indisponible (HTTP {cv_details_res.status_code}), seniority sera inféré.")
+
+                    # Inférer la seniority depuis years_of_experience si non fournie par l'utilisateur
+                    seniority = u_info.get("seniority") or cv_details.get("seniority")
+                    if not seniority:
+                        years = cv_details.get("years_of_experience") or 0
+                        if years >= 8:
+                            seniority = "Senior"
+                        elif years >= 3:
+                            seniority = "Mid"
+                        elif years > 0:
+                            seniority = "Junior"
+                        else:
+                            seniority = "Unknown"
+
+                    # Compétences : combiner competencies_keywords du CV et mots-clés extraits
+                    skills = (
+                        cv_details.get("competencies_keywords")
+                        or cv_details.get("skills")
+                        or []
+                    )
+
+                    return {
+                        "user_id": u_id,
+                        "full_name": u_info.get("full_name") or f"{u_info.get('first_name')} {u_info.get('last_name')}",
+                        "seniority": seniority,
+                        "skills": skills,
+                        "similarity_score": p.get("similarity_score"),
+                        "unavailabilities": u_info.get("unavailability_periods", []),
+                    }
+
+                enriched = await asyncio.gather(*[_enrich_candidate(p) for p in cv_res_json])
+                candidates_data = [c for c in enriched if c is not None]
+                logger.info(f"Candidats enrichis (seniority+skills) : {[c['user_id'] for c in candidates_data]}")
             else:
                 logger.error(f"Erreur CV_API: statut {cv_res.status_code}")
 

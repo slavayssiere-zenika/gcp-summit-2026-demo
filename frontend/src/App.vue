@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Search, LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen, FileDown, ChevronDown, Settings, BarChart } from 'lucide-vue-next'
+import { Search, LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen, FileDown, ChevronDown, Settings, BarChart, Cpu } from 'lucide-vue-next'
 import { authService } from './services/auth'
 import { useRouter } from 'vue-router'
 import ToastNotification from '@/components/ui/ToastNotification.vue'
@@ -81,7 +81,7 @@ const handleLogout = async () => {
               <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">
                 <BookOpen size="14" /> Swagger Agent
               </a>
-              <a href="/missions-api/docs" target="_blank" class="nav-pill swagger-link" title="Missions API Swagger">
+              <a href="/api/missions/docs" target="_blank" class="nav-pill swagger-link" title="Missions API Swagger">
                 <BookOpen size="14" /> Swagger Missions
               </a>
             </div>
@@ -113,6 +113,9 @@ const handleLogout = async () => {
             <div class="dropdown-content">
               <RouterLink to="/help" class="nav-pill" active-class="active">
                 <BookOpen size="16" /> Centre d'Aide
+              </RouterLink>
+              <RouterLink to="/docs/agents" class="nav-pill" active-class="active">
+                <Cpu size="16" /> Documentation Agents
               </RouterLink>
               <RouterLink to="/specs" class="nav-pill" active-class="active">
                 <BookOpen size="16" /> Spécifications Interne

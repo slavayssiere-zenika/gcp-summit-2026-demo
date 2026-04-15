@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 COPY . .
 
 ENV PYTHONPATH=/app
-ENV PORT=8080
+ENV PORT=8006
+ENV MCP_SIDECAR_URL=http://drive_mcp:8000
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 ENV TRACE_EXPORTER=grpc

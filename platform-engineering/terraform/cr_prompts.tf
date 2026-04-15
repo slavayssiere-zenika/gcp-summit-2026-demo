@@ -61,7 +61,7 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       }
       env {
         name  = "ROOT_PATH"
-        value = "/prompts-api"
+        value = "/api/prompts"
       }
       env {
         name  = "USE_IAM_AUTH"

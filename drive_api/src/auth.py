@@ -1,6 +1,6 @@
 from jose import JWTError, jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 import os
 import logging
 from google.oauth2 import id_token
@@ -14,12 +14,49 @@ if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
 ALGORITHM = "HS256"
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
-def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    token = credentials.credentials
+from typing import Optional
+
+def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
+    """
+    Vérifie le token JWT. Priorité au header Authorization, puis au cookie access_token.
+    Supporte les tokens HS256 (applicatifs) et RS256 (Google OIDC pour Cloud Scheduler).
+    """
+    # 1. Tentative via le Header Authorization
+    if credentials:
+        try:
+            return _decode_and_validate(credentials.credentials)
+        except HTTPException:
+            raise # Re-raise 403 (Service Account unauthorized)
+        except Exception as e:
+            logger.debug(f"Échec validation via header, tentative via cookie: {e}")
+            pass
+
+    # 2. Fallback via le Cookie
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide ou manquant",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     try:
-        # Check token headers without verification to identify token type (HS256 vs RS256)
+        return _decode_and_validate(token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur de validation JWT (tout mode): {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide ou expiré",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+def _decode_and_validate(token: str) -> dict:
+    """Helper interne pour décoder et valider un token (HS256 ou RS256)"""
+    try:
         unverified_header = jwt.get_unverified_header(token)
         if unverified_header.get("alg") == "RS256":
             # Potentiel token OIDC Google (Cloud Scheduler)
@@ -39,16 +76,12 @@ def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)) ->
             except HTTPException:
                 raise
             except Exception as e:
-                # Si la validation Google échoue, on log et on passe au fallback local
                 logger.debug(f"Échec de la validation Google OIDC : {e}")
+                raise JWTError("Invalid OIDC Token")
 
         # Validation JWT applicative classique (HS256)
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except JWTError as e:
-        logger.error(f"Erreur de validation JWT applicatif: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token invalide ou manquant",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    except JWTError:
+        raise
+

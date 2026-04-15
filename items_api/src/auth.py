@@ -11,13 +11,32 @@ ALGORITHM = "HS256"
 # In items_api, we use HTTPBearer so Swagger UI just asks for the Bearer token directly
 security = HTTPBearer()
 
-def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
+from fastapi import Request
+from typing import Optional
+
+def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
+    # 1. Try Authorization header
+    if credentials:
+        try:
+            return jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        except JWTError:
+            pass
+            
+    # 2. Try cookie
+    token = request.cookies.get("access_token")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalide ou manquant",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide ou expiré",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+

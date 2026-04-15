@@ -88,13 +88,15 @@ async def get_spec():
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
+app.include_router(protected_router)  # /spec MUST be registered before /{competency_id} wildcard
 app.include_router(router)
 
-@protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@protected_router.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     import httpx
-    url = f"http://localhost:8081/mcp/{path}"
+    sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://competencies_mcp:8000")
+    url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
         url += f"?{request.url.query}"
     
@@ -119,8 +121,6 @@ async def proxy_mcp(path: str, request: Request):
             return Response(content=res.content, status_code=res.status_code, headers=res_headers)
         except Exception as e:
             return Response(content=str(e), status_code=502)
-
-app.include_router(protected_router)
 
 if __name__ == "__main__":
     import uvicorn

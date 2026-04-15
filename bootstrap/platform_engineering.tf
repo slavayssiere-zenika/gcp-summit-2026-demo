@@ -17,7 +17,8 @@ locals {
     "roles/iam.serviceAccountAdmin",
     "roles/iam.serviceAccountUser",
     "roles/secretmanager.admin",
-    "roles/alloydb.admin"
+    "roles/alloydb.admin",
+    "roles/pubsub.admin"
   ]
 }
 

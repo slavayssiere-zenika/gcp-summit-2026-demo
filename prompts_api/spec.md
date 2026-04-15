@@ -35,6 +35,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health Check
 - **GET** `/version` : Get Version
+- **GET** `/spec` : Get Spec
 - **GET** `/user/me` : Get My Prompt
 - **PUT** `/user/me` : Update My Prompt
 - **GET** `/` : List Prompts
@@ -42,4 +43,3 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/{key}` : Read Prompt
 - **PUT** `/{key}` : Update Prompt
 - **POST** `/{key}/analyze` : Analyze Prompt
-- **GET** `/spec` : Get Spec

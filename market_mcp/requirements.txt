@@ -20,3 +20,5 @@ opentelemetry-instrumentation-httpx
 opentelemetry-instrumentation-redis
 python-json-logger>=2.0.7
 opentelemetry-exporter-otlp
+google-cloud-logging>=3.8.0
+google-cloud-run>=0.10.0

@@ -63,7 +63,13 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="search_best_candidates",
-            description="Find the best ranked candidates for a specific project format, role, or technical context by semantically matching their CVs against an embedded vector spatial graph. Only Returns user IDs.",
+            description=(
+                "Outil de recherche sémantique vectorielle — trouve les meilleurs candidats pour un contexte technique donné. "
+                "RETOURNE UNIQUEMENT des user_ids. "
+                "Il faut ensuite appeler get_candidate_rag_context ou get_user (users_api) pour enrichir les profils. "
+                "Utiliser en priorité pour les questions 'qui maîtrise X ?' ou les missions de staffing. "
+                "Ne pas utiliser pour retrouver une personne par son nom (utiliser search_users à la place)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -132,7 +138,12 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="global_reanalyze_cvs",
-            description="(Admin Only) Relance l'analyse des CVs correspondant à un tag ou pour un utilisateur spécifique. Efface les compétences existantes avant ré-import.",
+            description=(
+                "(Admin Only) ACTION LONGUE ET DESTRUCTIVE. Relance l'analyse des CVs pour un tag ou un utilisateur spécifique. "
+                "ATTENTION : efface les compétences existantes avant ré-import. "
+                "Ne JAMAIS appeler sans confirmation explicite de l'administrateur. "
+                "Durée estimée : plusieurs minutes pour un volume important."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -215,7 +226,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 try:
                     response = await client.get(f"{API_BASE_URL}/search", params={"query": query, "limit": limit}, headers=headers, timeout=60.0)
                     response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                    data = response.json()
+                    if not data:
+                        return [TextContent(type="text", text=f"Aucun candidat ne correspond à la recherche sémantique '{query}' dans la base de CVs.")]
+                    return [TextContent(type="text", text=json.dumps(data, indent=2))]
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code == 409:
                         return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]

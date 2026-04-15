@@ -56,4 +56,4 @@ dist-ssr/
 pytest.log
 *_test.db
 patch*.py
-test_*.py
+test_*.py.antigravity_env

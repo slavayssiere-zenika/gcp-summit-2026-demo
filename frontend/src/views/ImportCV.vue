@@ -77,7 +77,7 @@ const executeImport = async (googleToken?: string) => {
     if (googleToken) {
       payload.google_access_token = googleToken
     }
-    const response = await axios.post('/cv-api/import', 
+    const response = await axios.post('/api/cv/import', 
       payload,
       { headers: { Authorization: `Bearer ${authService.state.token}` } }
     )
