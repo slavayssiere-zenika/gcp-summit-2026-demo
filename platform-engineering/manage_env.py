@@ -7,7 +7,18 @@ import json
 import re
 import yaml
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# --- Timer global ---
+START_TIME = time.monotonic()
+
+def elapsed() -> str:
+    """Retourne le temps écoulé depuis le démarrage du script, formaté en HH:MM:SS."""
+    secs = int(time.monotonic() - START_TIME)
+    h, rem = divmod(secs, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 def discover_versions():
     """Scans for VERSION files in component directories and returns a mapping."""
@@ -40,10 +51,22 @@ def discover_versions():
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [+%(elapsed)s] [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+class _ElapsedFilter(logging.Filter):
+    """Injecte le temps écoulé dans chaque LogRecord."""
+    def filter(self, record):
+        record.elapsed = elapsed()
+        return True
+
 logger = logging.getLogger(__name__)
+logger.addFilter(_ElapsedFilter())
+
+# Ajouter le filtre à tous les handlers existants
+for _h in logging.root.handlers:
+    _h.addFilter(_ElapsedFilter())
 
 class DeploymentError(Exception):
     """Exception levée lors d'un échec de déploiement."""
@@ -80,7 +103,7 @@ PERSISTENT_RESOURCES = [
 ]
 
 def run_cmd(cmd, check=True, capture_output=False, live=False):
-    logger.info(f"[*] Running: {' '.join(cmd)}")
+    logger.info(f"[*] Running: {' '.join(cmd)}  (elapsed: {elapsed()})")
     
     if live:
         # Mode live : on affiche en temps réel tout en capturant dans un buffer
@@ -710,7 +733,20 @@ if __name__ == "__main__":
             
     except DeploymentError as e:
         logger.error(f"DEPLOYMENT FAILED: {e}")
+        total = elapsed()
+        print(f"\n{'='*55}")
+        print(f"[!] Script terminé avec erreur en {total}.")
+        print(f"{'='*55}")
         sys.exit(1)
     except Exception as e:
         logger.error(f"UNEXPECTED ERROR: {e}")
+        total = elapsed()
+        print(f"\n{'='*55}")
+        print(f"[!] Script terminé avec erreur inattendue en {total}.")
+        print(f"{'='*55}")
         sys.exit(1)
+    else:
+        total = elapsed()
+        print(f"\n{'='*55}")
+        print(f"[+] Script terminé avec succès en {total}.")
+        print(f"{'='*55}")

@@ -62,8 +62,8 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **PATCH** `/files/{file_id}` : Update File
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
-- **GET** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec

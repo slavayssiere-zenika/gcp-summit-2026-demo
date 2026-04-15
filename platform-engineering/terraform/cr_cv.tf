@@ -205,7 +205,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
 # Identité et Permissions
 # ==========================================
 resource "google_service_account" "cv_sa" {
-  account_id = "sa-cv-${terraform.workspace}-${random_id.sa_suffix.hex}"
+  account_id                   = "sa-cv-${terraform.workspace}-${random_id.sa_suffix.hex}"
   create_ignore_already_exists = true
 }
 
@@ -217,27 +217,27 @@ resource "google_secret_manager_secret_iam_member" "cv_jwt_access" {
 }
 
 resource "google_project_iam_member" "cv_otel_trace" {
-  project  = var.project_id
-  role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${google_service_account.cv_sa.email}"
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
 }
 
 resource "google_project_iam_member" "cv_otel_metric" {
-  project  = var.project_id
-  role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${google_service_account.cv_sa.email}"
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
 }
 
 resource "google_project_iam_member" "cv_alloydb_client" {
-  project  = var.project_id
-  role     = "roles/alloydb.client"
-  member   = "serviceAccount:${google_service_account.cv_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
 }
 
 resource "google_project_iam_member" "cv_alloydb_databaseUser" {
-  project  = var.project_id
-  role     = "roles/alloydb.databaseUser"
-  member   = "serviceAccount:${google_service_account.cv_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
 }
 
 resource "google_alloydb_user" "cv_db_user" {
@@ -298,4 +298,66 @@ resource "google_secret_manager_secret_iam_member" "cv_gemini_access" {
   secret_id = data.google_secret_manager_secret.gemini_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cv_sa.email}"
+}
+
+# ==============================================================
+# Monitoring Custom Service & SLOs
+# Latence cible : 5000ms (traitement LLM multimodal de CVs)
+# Disponibilité : 99% sur 30 jours glissants (tolérance élevée
+# car dépend de Gemini API externe)
+# ==============================================================
+resource "google_monitoring_custom_service" "cv_api_svc" {
+  service_id   = "cv-api-service-${terraform.workspace}"
+  display_name = "CV API Service"
+
+  telemetry {
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.cv_api.name}"
+  }
+}
+
+resource "google_monitoring_slo" "cv_api_availability" {
+  service      = google_monitoring_custom_service.cv_api_svc.service_id
+  slo_id       = "cv-api-availability-${terraform.workspace}"
+  display_name = "Availability 99% - CV API"
+
+  goal                = 0.99
+  rolling_period_days = 30
+
+  request_based_sli {
+    good_total_ratio {
+      good_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.cv_api.name}\"",
+        "metric.label.\"response_code_class\"!=\"5xx\""
+      ])
+      total_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.cv_api.name}\""
+      ])
+    }
+  }
+}
+
+resource "google_monitoring_slo" "cv_api_latency" {
+  service      = google_monitoring_custom_service.cv_api_svc.service_id
+  slo_id       = "cv-api-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 5000ms - CV API"
+
+  goal                = 0.95
+  rolling_period_days = 30
+
+  request_based_sli {
+    distribution_cut {
+      distribution_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_latencies\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.cv_api.name}\""
+      ])
+      range {
+        max = 5.0 # 5000ms — analyse LLM multimodale
+      }
+    }
+  }
 }

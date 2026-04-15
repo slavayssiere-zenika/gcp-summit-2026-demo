@@ -1,3 +1,64 @@
+## Mise à jour automatique - 2026-04-15 09:14:35
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1145  | 317  |  72% |
+| cv_api           | 1706  | 578  |  66% |
+| drive_api        | 853   | 370  |  57% |
+| items_api        | 1095  | 242  |  78% |
+| prompts_api      | 675   | 143  |  79% |
+| users_api        | 1327  | 412  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- fix(terraform): suppression des accolades orphelines dans cr_agent_hr/ops/router/market
+
+#### Fichiers (non commités)
+- `GENTS.md` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_router_api/VERSION` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `frontend/VERSION` (M)
+- `items_api/VERSION` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/VERSION` (M)
+- `missions_api/VERSION` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/.terraform.lock.hcl` (M)
+- `platform-engineering/terraform/cr_agent_hr.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_agent_router.tf` (M)
+- `platform-engineering/terraform/cr_competencies.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/cr_drive.tf` (M)
+- `platform-engineering/terraform/cr_items.tf` (M)
+- `platform-engineering/terraform/cr_market.tf` (M)
+- `platform-engineering/terraform/cr_missions.tf` (M)
+- `platform-engineering/terraform/cr_prompts.tf` (M)
+- `platform-engineering/terraform/cr_users.tf` (M)
+- `platform-engineering/terraform/slo.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `prompts_api/.coverage` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/src/prompts/__pycache__/analyzer.cpython-313.pyc` (M)
+- `users_api/VERSION` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-15 08:37:24
 
 ### Couverture de Code

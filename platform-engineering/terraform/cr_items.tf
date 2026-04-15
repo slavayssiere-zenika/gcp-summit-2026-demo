@@ -176,7 +176,7 @@ resource "google_cloud_run_v2_service" "items_api" {
 # Identité et Permissions
 # ==========================================
 resource "google_service_account" "items_sa" {
-  account_id = "sa-items-${terraform.workspace}-${random_id.sa_suffix.hex}"
+  account_id                   = "sa-items-${terraform.workspace}-${random_id.sa_suffix.hex}"
   create_ignore_already_exists = true
 }
 
@@ -188,27 +188,27 @@ resource "google_secret_manager_secret_iam_member" "items_jwt_access" {
 }
 
 resource "google_project_iam_member" "items_otel_trace" {
-  project  = var.project_id
-  role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${google_service_account.items_sa.email}"
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.items_sa.email}"
 }
 
 resource "google_project_iam_member" "items_otel_metric" {
-  project  = var.project_id
-  role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${google_service_account.items_sa.email}"
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.items_sa.email}"
 }
 
 resource "google_project_iam_member" "items_alloydb_client" {
-  project  = var.project_id
-  role     = "roles/alloydb.client"
-  member   = "serviceAccount:${google_service_account.items_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:${google_service_account.items_sa.email}"
 }
 
 resource "google_project_iam_member" "items_alloydb_databaseUser" {
-  project  = var.project_id
-  role     = "roles/alloydb.databaseUser"
-  member   = "serviceAccount:${google_service_account.items_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.items_sa.email}"
 }
 
 resource "google_alloydb_user" "items_db_user" {
@@ -261,5 +261,66 @@ resource "google_compute_region_backend_service" "items_internal_backend" {
     group           = google_compute_region_network_endpoint_group.items_neg.id
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
+  }
+}
+
+# ==============================================================
+# Monitoring Custom Service & SLOs
+# Latence cible : 300ms (API REST catalogue/référentiel)
+# Disponibilité : 99.9% sur 30 jours glissants
+# ==============================================================
+resource "google_monitoring_custom_service" "items_api_svc" {
+  service_id   = "items-api-service-${terraform.workspace}"
+  display_name = "Items API Service"
+
+  telemetry {
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.items_api.name}"
+  }
+}
+
+resource "google_monitoring_slo" "items_api_availability" {
+  service      = google_monitoring_custom_service.items_api_svc.service_id
+  slo_id       = "items-api-availability-${terraform.workspace}"
+  display_name = "Availability 99.9% - Items API"
+
+  goal                = 0.999
+  rolling_period_days = 30
+
+  request_based_sli {
+    good_total_ratio {
+      good_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.items_api.name}\"",
+        "metric.label.\"response_code_class\"!=\"5xx\""
+      ])
+      total_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.items_api.name}\""
+      ])
+    }
+  }
+}
+
+resource "google_monitoring_slo" "items_api_latency" {
+  service      = google_monitoring_custom_service.items_api_svc.service_id
+  slo_id       = "items-api-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 300ms - Items API"
+
+  goal                = 0.95
+  rolling_period_days = 30
+
+  request_based_sli {
+    distribution_cut {
+      distribution_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_latencies\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.items_api.name}\""
+      ])
+      range {
+        max = 0.3 # 300ms
+      }
+    }
   }
 }

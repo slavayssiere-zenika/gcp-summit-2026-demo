@@ -120,7 +120,7 @@ resource "google_cloud_run_v2_service" "prompts_api" {
 # Identité et Permissions
 # ==========================================
 resource "google_service_account" "prompts_sa" {
-  account_id = "sa-prompts-${terraform.workspace}-${random_id.sa_suffix.hex}"
+  account_id                   = "sa-prompts-${terraform.workspace}-${random_id.sa_suffix.hex}"
   create_ignore_already_exists = true
 }
 
@@ -132,27 +132,27 @@ resource "google_secret_manager_secret_iam_member" "prompts_jwt_access" {
 }
 
 resource "google_project_iam_member" "prompts_otel_trace" {
-  project  = var.project_id
-  role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${google_service_account.prompts_sa.email}"
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.prompts_sa.email}"
 }
 
 resource "google_project_iam_member" "prompts_otel_metric" {
-  project  = var.project_id
-  role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${google_service_account.prompts_sa.email}"
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.prompts_sa.email}"
 }
 
 resource "google_project_iam_member" "prompts_alloydb_client" {
-  project  = var.project_id
-  role     = "roles/alloydb.client"
-  member   = "serviceAccount:${google_service_account.prompts_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:${google_service_account.prompts_sa.email}"
 }
 
 resource "google_project_iam_member" "prompts_alloydb_databaseUser" {
-  project  = var.project_id
-  role     = "roles/alloydb.databaseUser"
-  member   = "serviceAccount:${google_service_account.prompts_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.prompts_sa.email}"
 }
 
 resource "google_alloydb_user" "prompts_db_user" {
@@ -205,5 +205,66 @@ resource "google_compute_region_backend_service" "prompts_internal_backend" {
     group           = google_compute_region_network_endpoint_group.prompts_neg.id
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
+  }
+}
+
+# ==============================================================
+# Monitoring Custom Service & SLOs
+# Latence cible : 300ms (CRUD de prompts en base de données)
+# Disponibilité : 99.9% sur 30 jours glissants
+# ==============================================================
+resource "google_monitoring_custom_service" "prompts_api_svc" {
+  service_id   = "prompts-api-service-${terraform.workspace}"
+  display_name = "Prompts API Service"
+
+  telemetry {
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.prompts_api.name}"
+  }
+}
+
+resource "google_monitoring_slo" "prompts_api_availability" {
+  service      = google_monitoring_custom_service.prompts_api_svc.service_id
+  slo_id       = "prompts-api-availability-${terraform.workspace}"
+  display_name = "Availability 99.9% - Prompts API"
+
+  goal                = 0.999
+  rolling_period_days = 30
+
+  request_based_sli {
+    good_total_ratio {
+      good_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.prompts_api.name}\"",
+        "metric.label.\"response_code_class\"!=\"5xx\""
+      ])
+      total_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.prompts_api.name}\""
+      ])
+    }
+  }
+}
+
+resource "google_monitoring_slo" "prompts_api_latency" {
+  service      = google_monitoring_custom_service.prompts_api_svc.service_id
+  slo_id       = "prompts-api-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 300ms - Prompts API"
+
+  goal                = 0.95
+  rolling_period_days = 30
+
+  request_based_sli {
+    distribution_cut {
+      distribution_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_latencies\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.prompts_api.name}\""
+      ])
+      range {
+        max = 0.3 # 300ms — CRUD base de données
+      }
+    }
   }
 }
