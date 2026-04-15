@@ -19,6 +19,7 @@ import urllib.parse
 
 from .cache import get_cached_prompt, force_invalidate_prompt
 from .task_state import task_manager
+from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
 
 router = APIRouter(prefix="", tags=["Missions"])
 public_router = APIRouter(prefix="", tags=["Public"])
@@ -107,7 +108,8 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             except Exception as e:
                 logger.warning(f"Failed to fetch competencies tree for mission context: {e}")
 
-            res_extract = await client.aio.models.generate_content(
+            res_extract = await generate_content_with_retry(
+                client,
                 model=model_extract,
                 contents=gemini_contents,
                 config=types.GenerateContentConfig(
@@ -204,7 +206,8 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                 # 4. LLM Staffing
                 model_staffing = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
                 staffing_prompt = f"{base_staffing_prompt}\nMission: '{title}'. Description: '{final_description}'. Skills: {extracted_competencies}. Candidates: {json.dumps(candidates_data)}."
-                res_staffing = await client.aio.models.generate_content(
+                res_staffing = await generate_content_with_retry(
+                    client,
                     model=model_staffing,
                     contents=staffing_prompt,
                     config=types.GenerateContentConfig(
@@ -217,7 +220,7 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
 
             # Embed
             try:
-                emb_res = await client.aio.models.embed_content(model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"), contents=search_context)
+                emb_res = await embed_content_with_retry(client, model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"), contents=search_context)
                 vector_data = emb_res.embeddings[0].values
             except Exception:
                 vector_data = None

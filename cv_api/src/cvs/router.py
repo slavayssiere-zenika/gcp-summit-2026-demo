@@ -26,6 +26,7 @@ from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
 from .task_state import task_state_manager
 from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
+from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["CV_Public"])
@@ -202,7 +203,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             
         final_prompt = prompt + tree_context
 
-        response = await client.aio.models.generate_content(
+        response = await generate_content_with_retry(
+            client,
             model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
             contents=[final_prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
             config=types.GenerateContentConfig(
@@ -543,7 +545,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     )
     
     try:
-        emb_res = await client.aio.models.embed_content(
+        emb_res = await embed_content_with_retry(
+            client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             contents=distilled_content
         )
@@ -607,7 +610,8 @@ async def _execute_search(
     else:
         try:
             filter_prompt = f"Extract a JSON list of strictly required technical competencies from this search query. Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are strictly required.\nQuery: '{query}'"
-            filter_res = await client.aio.models.generate_content(
+            filter_res = await generate_content_with_retry(
+                client,
                 model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
                 contents=filter_prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
@@ -622,7 +626,8 @@ async def _execute_search(
     try:
         # 1. Convert Prompt Query into 3072-D Matrix
         safe_embed_query = query[:3000] if query and len(query) > 3000 else query
-        emb_res = await client.aio.models.embed_content(
+        emb_res = await embed_content_with_retry(
+            client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             contents=safe_embed_query
         )
@@ -1022,7 +1027,8 @@ async def recalculate_competencies_tree(
         print(f"WARNING: Failed to inject existing competencies: {e}")
 
     try:
-        response = await client.aio.models.generate_content(
+        response = await generate_content_with_retry(
+            client,
             model=os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"),
             contents=[instruction, combined_text],
             config=types.GenerateContentConfig(
