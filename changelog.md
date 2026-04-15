@@ -1,3 +1,41 @@
+## Mise à jour automatique - 2026-04-15 08:31:17
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1145  | 317  |  72% |
+| cv_api           | 1671  | 570  |  66% |
+| drive_api        | 818   | 374  |  54% |
+| items_api        | 1098  | 243  |  78% |
+| prompts_api      | 593   | 116  |  80% |
+| users_api        | 1327  | 412  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Improve agent prompts and A2A observability
+
+#### Fichiers (non commités)
+- `gent_hr_api/agent.py` (M)
+- `agent_ops_api/agent.py` (M)
+- `cv_api/.coverage` (M)
+- `drive_api/main.py` (M)
+- `drive_api/test.db` (M)
+- `items_api/main.py` (M)
+- `market_mcp/mcp_app.py` (M)
+- `missions_api/main.py` (M)
+- `platform-engineering/terraform/cr_market.tf` (M)
+- `platform-engineering/terraform/vpc.tf` (M)
+- `platform-engineering/terraform/waf.tf` (M)
+- `cv_api/conftest.py` (??)
+- `drive_api/conftest.py` (??)
+- `missions_api/conftest.py` (??)
+- `prompts_api/conftest.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-15 08:25:36
 
 ### Couverture de Code

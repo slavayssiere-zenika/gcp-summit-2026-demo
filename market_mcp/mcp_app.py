@@ -21,11 +21,18 @@ else:
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
+from opentelemetry.propagate import inject
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from mcp_server import list_tools, call_tool, get_aiops_dashboard_data_internal
 from auth import verify_jwt
 from logger import setup_logging, LoggingMiddleware
+
+# --- Purge des secrets sensibles dès le démarrage (anti prompt-injection) ---
+_SECRET_KEY = os.getenv("SECRET_KEY")
+if not _SECRET_KEY and os.getenv("ENVIRONMENT") == "prod":
+    raise ValueError("SECRET_KEY must be set in environment variables")
+os.environ.pop("SECRET_KEY", None)
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -241,6 +248,7 @@ async def detect_finops_anomalies(http_request: Request):
     
     auth_header = http_request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)  # Propagate OTel trace context
     
     suspended_users = []
     

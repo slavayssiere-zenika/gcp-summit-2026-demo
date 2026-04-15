@@ -20,7 +20,7 @@ resource "google_cloud_run_v2_service" "market_mcp" {
       name    = "api"
       image   = var.image_market
       command = ["python"]
-      args    = ["mcp_app.py"]
+      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]
       ports {
         container_port = 8080
       }

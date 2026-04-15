@@ -12,61 +12,56 @@ resource "google_compute_security_policy" "waf" {
   rule {
     action   = "deny(403)"
     priority = 1001
-    preview  = true
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
       }
     }
-    description = "OWASP SQLi protection (Soft Launch)"
+    description = "OWASP SQLi protection"
   }
 
   rule {
     action   = "deny(403)"
     priority = 1002
-    preview  = true
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('xss-v33-stable')"
       }
     }
-    description = "OWASP XSS protection (Soft Launch)"
+    description = "OWASP XSS protection"
   }
 
   rule {
     action   = "deny(403)"
     priority = 1003
-    preview  = true
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('lfi-v33-stable')"
       }
     }
-    description = "OWASP LFI protection (Soft Launch)"
+    description = "OWASP LFI protection"
   }
 
   rule {
     action   = "deny(403)"
     priority = 1004
-    preview  = true
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('rce-v33-stable')"
       }
     }
-    description = "OWASP RCE protection (Soft Launch)"
+    description = "OWASP RCE protection"
   }
 
   rule {
     action   = "deny(403)"
     priority = 1005
-    preview  = true
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('scannerdetection-v33-stable')"
       }
     }
-    description = "OWASP Scanner Detection (Soft Launch)"
+    description = "OWASP Scanner Detection"
   }
 
   # Règle par défaut : autoriser (ou on peut refuser et whitelist, selon les besoins)

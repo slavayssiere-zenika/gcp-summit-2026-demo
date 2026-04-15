@@ -127,8 +127,8 @@ resource "google_compute_firewall" "allow_redis_egress" {
 }
 
 # 5. Règle "Allow" Egress vers Google APIs (HTTPS Port 443).
-# Indispensable pour que les SDK (Cloud Trace, Logging, etc.) puissent fonctionner 
-# quand Direct VPC Egress est activé pour tout le trafic.
+# Utilise les plages Private Google Access (restricted + private) pour le Zero-Trust.
+# Indispensable pour Cloud Trace, Logging, Gemini API, BigQuery, etc.
 resource "google_compute_firewall" "allow_google_apis_egress" {
   name      = "fw-allow-google-apis-egress-${terraform.workspace}"
   network   = google_compute_network.main.id
@@ -140,6 +140,7 @@ resource "google_compute_firewall" "allow_google_apis_egress" {
     ports    = ["443"]
   }
 
-  destination_ranges = ["0.0.0.0/0"] # Ou utiliser les plages Google API via Private Google Access
+  # restricted.googleapis.com (199.36.153.4/30) + private.googleapis.com (199.36.153.8/30)
+  destination_ranges = ["199.36.153.4/30", "199.36.153.8/30"]
   target_tags        = ["cr-egress"]
 }
