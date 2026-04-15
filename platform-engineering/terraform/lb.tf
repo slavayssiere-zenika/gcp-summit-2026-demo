@@ -359,7 +359,5 @@ resource "google_dns_record_set" "api_a" {
   }
 }
 
-import {
-  to = google_compute_managed_ssl_certificate.default
-  id = "projects/${var.project_id}/global/sslCertificates/ssl-${terraform.workspace}"
-}
+# Note: L'import de cette ressource est géré impérativement par manage_env.py
+# via resource_exists_in_gcp("ssl_cert") + import_persistent_resource() pour être conditionnel.

@@ -1,0 +1,21 @@
+# Terraform state — ne jamais commiter ces fichiers
+*.tfstate
+*.tfstate.backup
+errored.tfstate
+
+# Répertoire de plugins Terraform
+.terraform/
+
+# Fichiers de lock du provider (peut être commité selon le projet, ici exclu)
+# .terraform.lock.hcl
+
+# Variables auto-générées par manage_env.py (contiennent des secrets)
+*.auto.tfvars.json
+
+# Fichiers override temporaires (générés par manage_env.py --force)
+# Ce fichier est créé et supprimé automatiquement — ne JAMAIS commiter
+destroy_override.tf
+destroy_override.tf.json
+
+# Scratch scripts (ne pas commiter les scripts de travail)
+scratch_*.py
