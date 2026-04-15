@@ -120,23 +120,9 @@ variable "gemini_model" {
   default     = "gemini-3-flash-preview"
 }
 
-variable "slo_availability_goal" {
-  description = "Objectif de disponibilité (SLO) pour les API Cloud Run"
-  type        = number
-  default     = 0.999
-}
-
-variable "slo_latency_goal" {
-  description = "Objectif du ratio de requêtes satisfaisant le critère de latence (SLO)"
-  type        = number
-  default     = 0.95
-}
-
-variable "slo_latency_threshold_ms" {
-  description = "Seuil de latence en millisecondes pour considérer une requête comme rapide"
-  type        = number
-  default     = 500
-}
+# Les objectifs SLO (disponibilité, latence) sont définis
+# directement dans chaque fichier cr_<service>.tf pour permettre
+# une configuration granulaire par service.
 
 # Versions par composant (automatiquement alimentés par manage_env.py)
 variable "agent_router_api_version" { type = string }

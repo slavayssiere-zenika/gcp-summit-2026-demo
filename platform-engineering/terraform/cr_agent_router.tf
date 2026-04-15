@@ -133,7 +133,7 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
 # Identité et Permissions
 # ==========================================
 resource "google_service_account" "agent_router_sa" {
-  account_id = "sa-agent-router-${terraform.workspace}-${random_id.sa_suffix.hex}"
+  account_id                   = "sa-agent-router-${terraform.workspace}-${random_id.sa_suffix.hex}"
   create_ignore_already_exists = true
 }
 
@@ -145,15 +145,15 @@ resource "google_secret_manager_secret_iam_member" "agent_router_jwt_access" {
 }
 
 resource "google_project_iam_member" "agent_router_otel_trace" {
-  project  = var.project_id
-  role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${google_service_account.agent_router_sa.email}"
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.agent_router_sa.email}"
 }
 
 resource "google_project_iam_member" "agent_router_otel_metric" {
-  project  = var.project_id
-  role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${google_service_account.agent_router_sa.email}"
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.agent_router_sa.email}"
 }
 
 # Autorisation invocation interne LB
@@ -210,4 +210,66 @@ resource "google_project_iam_member" "agent_router_logging_viewer" {
   project = var.project_id
   role    = "roles/logging.viewer"
   member  = "serviceAccount:${google_service_account.agent_router_sa.email}"
+}
+
+# ==============================================================
+# Monitoring Custom Service & SLOs
+# Latence cible : 30 000ms (orchestration LLM multi-étapes,
+# appels MCP chaînés vers agent-hr et agent-ops)
+# Disponibilité : 99.5% sur 30 jours glissants
+# ==============================================================
+resource "google_monitoring_custom_service" "agent_router_api_svc" {
+  service_id   = "agent-router-api-service-${terraform.workspace}"
+  display_name = "Agent Router API Service"
+
+  telemetry {
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.agent_router_api.name}"
+  }
+}
+
+resource "google_monitoring_slo" "agent_router_api_availability" {
+  service      = google_monitoring_custom_service.agent_router_api_svc.service_id
+  slo_id       = "agent-router-api-availability-${terraform.workspace}"
+  display_name = "Availability 99.5% - Agent Router API"
+
+  goal                = 0.995
+  rolling_period_days = 30
+
+  request_based_sli {
+    good_total_ratio {
+      good_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.agent_router_api.name}\"",
+        "metric.label.\"response_code_class\"!=\"5xx\""
+      ])
+      total_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.agent_router_api.name}\""
+      ])
+    }
+  }
+}
+
+resource "google_monitoring_slo" "agent_router_api_latency" {
+  service      = google_monitoring_custom_service.agent_router_api_svc.service_id
+  slo_id       = "agent-router-api-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 30s - Agent Router API"
+
+  goal                = 0.95
+  rolling_period_days = 30
+
+  request_based_sli {
+    distribution_cut {
+      distribution_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_latencies\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.agent_router_api.name}\""
+      ])
+      range {
+        max = 30.0 # 30 000ms — orchestration LLM + appels MCP chaînés
+      }
+    }
+  }
 }

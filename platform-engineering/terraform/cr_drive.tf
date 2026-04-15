@@ -177,7 +177,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
 # Identité et Permissions
 # ==========================================
 resource "google_service_account" "drive_sa" {
-  account_id = "sa-drive-${terraform.workspace}-v2"
+  account_id                   = "sa-drive-${terraform.workspace}-v2"
   create_ignore_already_exists = true
 }
 
@@ -189,27 +189,27 @@ resource "google_secret_manager_secret_iam_member" "drive_jwt_access" {
 }
 
 resource "google_project_iam_member" "drive_otel_trace" {
-  project  = var.project_id
-  role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${google_service_account.drive_sa.email}"
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_otel_metric" {
-  project  = var.project_id
-  role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${google_service_account.drive_sa.email}"
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_alloydb_client" {
-  project  = var.project_id
-  role     = "roles/alloydb.client"
-  member   = "serviceAccount:${google_service_account.drive_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:${google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_alloydb_databaseUser" {
-  project  = var.project_id
-  role     = "roles/alloydb.databaseUser"
-  member   = "serviceAccount:${google_service_account.drive_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.drive_sa.email}"
 }
 
 resource "google_alloydb_user" "drive_db_user" {
@@ -262,5 +262,66 @@ resource "google_compute_region_backend_service" "drive_internal_backend" {
     group           = google_compute_region_network_endpoint_group.drive_neg.id
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
+  }
+}
+
+# ==============================================================
+# Monitoring Custom Service & SLOs
+# Latence cible : 500ms (dépend de Google Drive API externe)
+# Disponibilité : 99.5% sur 30 jours glissants
+# ==============================================================
+resource "google_monitoring_custom_service" "drive_api_svc" {
+  service_id   = "drive-api-service-${terraform.workspace}"
+  display_name = "Drive API Service"
+
+  telemetry {
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.drive_api.name}"
+  }
+}
+
+resource "google_monitoring_slo" "drive_api_availability" {
+  service      = google_monitoring_custom_service.drive_api_svc.service_id
+  slo_id       = "drive-api-availability-${terraform.workspace}"
+  display_name = "Availability 99.5% - Drive API"
+
+  goal                = 0.995
+  rolling_period_days = 30
+
+  request_based_sli {
+    good_total_ratio {
+      good_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.drive_api.name}\"",
+        "metric.label.\"response_code_class\"!=\"5xx\""
+      ])
+      total_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.drive_api.name}\""
+      ])
+    }
+  }
+}
+
+resource "google_monitoring_slo" "drive_api_latency" {
+  service      = google_monitoring_custom_service.drive_api_svc.service_id
+  slo_id       = "drive-api-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 500ms - Drive API"
+
+  goal                = 0.95
+  rolling_period_days = 30
+
+  request_based_sli {
+    distribution_cut {
+      distribution_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_latencies\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.drive_api.name}\""
+      ])
+      range {
+        max = 0.5 # 500ms — latence Drive API externe incluse
+      }
+    }
   }
 }

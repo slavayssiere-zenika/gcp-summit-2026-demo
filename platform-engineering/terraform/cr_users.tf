@@ -219,7 +219,7 @@ resource "google_cloud_run_v2_service" "users_api" {
 # Identité et Permissions
 # ==========================================
 resource "google_service_account" "users_sa" {
-  account_id = "sa-users-${terraform.workspace}-${random_id.sa_suffix.hex}"
+  account_id                   = "sa-users-${terraform.workspace}-${random_id.sa_suffix.hex}"
   create_ignore_already_exists = true
 }
 
@@ -231,27 +231,27 @@ resource "google_secret_manager_secret_iam_member" "users_jwt_access" {
 }
 
 resource "google_project_iam_member" "users_otel_trace" {
-  project  = var.project_id
-  role     = "roles/cloudtrace.agent"
-  member   = "serviceAccount:${google_service_account.users_sa.email}"
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
 resource "google_project_iam_member" "users_otel_metric" {
-  project  = var.project_id
-  role     = "roles/monitoring.metricWriter"
-  member   = "serviceAccount:${google_service_account.users_sa.email}"
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
 resource "google_project_iam_member" "users_alloydb_client" {
-  project  = var.project_id
-  role     = "roles/alloydb.client"
-  member   = "serviceAccount:${google_service_account.users_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
 resource "google_project_iam_member" "users_alloydb_databaseUser" {
-  project  = var.project_id
-  role     = "roles/alloydb.databaseUser"
-  member   = "serviceAccount:${google_service_account.users_sa.email}"
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
 resource "google_alloydb_user" "users_db_user" {
@@ -324,4 +324,65 @@ resource "google_secret_manager_secret_iam_member" "users_google_secret_key_acce
   secret_id = data.google_secret_manager_secret.google_secret_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.users_sa.email}"
+}
+
+# ==============================================================
+# Monitoring Custom Service & SLOs
+# Latence cible : 300ms (API REST synchrone, base de données)
+# Disponibilité : 99.9% sur 30 jours glissants
+# ==============================================================
+resource "google_monitoring_custom_service" "users_api_svc" {
+  service_id   = "users-api-service-${terraform.workspace}"
+  display_name = "Users API Service"
+
+  telemetry {
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.users_api.name}"
+  }
+}
+
+resource "google_monitoring_slo" "users_api_availability" {
+  service      = google_monitoring_custom_service.users_api_svc.service_id
+  slo_id       = "users-api-availability-${terraform.workspace}"
+  display_name = "Availability 99.9% - Users API"
+
+  goal                = 0.999
+  rolling_period_days = 30
+
+  request_based_sli {
+    good_total_ratio {
+      good_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.users_api.name}\"",
+        "metric.label.\"response_code_class\"!=\"5xx\""
+      ])
+      total_service_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_count\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.users_api.name}\""
+      ])
+    }
+  }
+}
+
+resource "google_monitoring_slo" "users_api_latency" {
+  service      = google_monitoring_custom_service.users_api_svc.service_id
+  slo_id       = "users-api-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 300ms - Users API"
+
+  goal                = 0.95
+  rolling_period_days = 30
+
+  request_based_sli {
+    distribution_cut {
+      distribution_filter = join(" ", [
+        "metric.type=\"run.googleapis.com/request_latencies\"",
+        "resource.type=\"cloud_run_revision\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.users_api.name}\""
+      ])
+      range {
+        max = 0.3 # 300ms
+      }
+    }
+  }
 }
