@@ -51,7 +51,5 @@ resource "google_dns_record_set" "internal_api_a" {
   rrdatas = [google_compute_forwarding_rule.internal_rule.ip_address]
 }
 
-import {
-  to = google_dns_managed_zone.env_zone
-  id = "projects/${var.project_id}/managedZones/zone-${terraform.workspace}"
-}
+# Note: L'import de cette ressource est géré impérativement par manage_env.py
+# via resource_exists_in_gcp() + import_persistent_resource() pour être conditionnel.

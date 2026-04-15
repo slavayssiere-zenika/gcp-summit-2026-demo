@@ -16,8 +16,14 @@ data "google_secret_manager_secret" "google_secret_key" {
 }
 
 # Unique ID to bypass GCP Service Account soft-delete (30 days) for ephemeral environments
+# IMPORTANT: ignore_changes = all prevents regeneration if Terraform state is partially lost.
+# A new suffix would break all AlloyDB IAM grants and require full DB re-init.
 resource "random_id" "sa_suffix" {
   byte_length = 2
+
+  lifecycle {
+    ignore_changes = all
+  }
 }
 
 # ==============================================================

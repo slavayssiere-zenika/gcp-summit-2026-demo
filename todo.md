@@ -37,6 +37,7 @@
 - [ ] Automatisation des rapports hebdomadaires par email via Cloud Functions.
 - [ ] Code en python avec un docker pour le service mcp.
 - [ ] Déploiement dans le cloud GCP via le projet platform-engineering.
+- [ ] **[Platform Engineering] Automatisation du cycle éphémère Matin/Soir** : Créer un Cloud Run Job (`manage-env-job`) + deux Cloud Scheduler Jobs (`07:00 → deploy --env dev`, `19:00 → destroy --env dev`) pour automatiser la création/destruction journalière de la plateforme dev sans intervention manuelle. S'appuyer sur la containerisation de `manage_env` (voir conv. `dee36a0e`).
 
 ### 🚀 Nouvelles Features Proposées
 - [ ] **Intégration d'Agendas (Google Calendar/Outlook)** : Connecter la Console avec les calendriers des consultants pour affiner de manière déterministe les disponibilités dans les réponses de l'agent.
