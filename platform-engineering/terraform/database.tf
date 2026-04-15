@@ -35,17 +35,7 @@ resource "google_alloydb_instance" "primary" {
   }
 }
 
-resource "google_alloydb_user" "iam_users" {
-  for_each   = google_service_account.cr_sa
-  cluster    = google_alloydb_cluster.main.name
-  user_id    = replace(each.value.email, ".gserviceaccount.com", "")
-  user_type  = "ALLOYDB_IAM_USER"
-  depends_on = [google_alloydb_instance.primary]
 
-  lifecycle {
-    ignore_changes = [database_roles]
-  }
-}
 
 resource "google_alloydb_user" "admin_user" {
   cluster    = google_alloydb_cluster.main.name

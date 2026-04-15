@@ -14,18 +14,26 @@ def discover_versions():
     versions = {}
     base_dir = os.path.dirname(os.path.dirname(__file__))
     components = [
-        "agent_api", "users_api", "items_api", "competencies_api", 
+        "agent_router_api", "agent_hr_api", "agent_ops_api", "users_api", "items_api", "competencies_api", 
         "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp", 
         "db_migrations", "frontend"
     ]
     
     for comp in components:
-        v_file = os.path.join(base_dir, comp, "VERSION")
-        if os.path.exists(v_file):
-            with open(v_file, "r") as f:
-                versions[f"{comp}_version"] = f.read().strip()
+        # Check environment variable first (e.g. AGENT_API_VERSION)
+        env_var_name = f"{comp.upper()}_VERSION"
+        env_val = os.environ.get(env_var_name)
+        
+        if env_val:
+            versions[f"{comp}_version"] = env_val
         else:
-            versions[f"{comp}_version"] = "v0.0.1"
+            # Fallback to local file discovery
+            v_file = os.path.join(base_dir, comp, "VERSION")
+            if os.path.exists(v_file):
+                with open(v_file, "r") as f:
+                    versions[f"{comp}_version"] = f.read().strip()
+            else:
+                versions[f"{comp}_version"] = "v0.0.1"
             
     return versions
 
@@ -187,14 +195,19 @@ def deploy(env, base_domain, project_id, config, force=False):
         toggle_prevent_destroy(disable=True)
 
     try:
-        apply_cmd = ["terraform", "apply", "-auto-approve"] + get_tf_args()
+        apply_cmd = ["terraform", "apply", "-auto-approve", "-parallelism=5"] + get_tf_args()
         
         print(f"[*] Terraform Apply...")
         res = run_cmd(apply_cmd, check=False, live=True)
             
         if res.returncode != 0:
-            print(f"[!] Échec définitif de l'apply.")
-            sys.exit(res.returncode)
+            print("[*] Terraform apply caught an error (often GCP eventual consistency). Retrying once...")
+            import time
+            time.sleep(10)
+            res = run_cmd(apply_cmd, check=False, live=True)
+            if res.returncode != 0:
+                print(f"[!] Échec définitif de l'apply.")
+                sys.exit(res.returncode)
 
     # Post-deploy: Déploiement du Frontend
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
@@ -440,8 +453,9 @@ def deploy(env, base_domain, project_id, config, force=False):
                             if access_token:
                                 print(f"\n[*] Check 4.5: Seeding system prompts into Prompts API...")
                                 prompts_to_seed = {
-                                    "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
-                                    "agent_api.capabilities_instruction": "agent_api/agent_api.capabilities_instruction.txt",
+                                    "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
+                                    "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
+                                    "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
                                     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
                                     "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
                                     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
@@ -513,14 +527,16 @@ def deploy(env, base_domain, project_id, config, force=False):
                 logger.info(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
                 # On teste toutes les routes déclarées dans le Load Balancer (lb.tf)
                 api_routes = [
-                    "/api/health",         # agent_api
-                    "/users-api/health",   # users_api
-                    "/items-api/health",   # items_api
-                    "/prompts-api/health", # prompts_api
-                    "/comp-api/health",    # competencies_api
-                    "/cv-api/health",      # cv_api
-                    "/drive-api/health",   # drive_api
-                    "/missions-api/health" # missions_api
+                    "/api/health",           # agent_router_api
+                    "/agent-hr-api/health",  # agent_hr_api
+                    "/agent-ops-api/health", # agent_ops_api
+                    "/users-api/health",     # users_api
+                    "/items-api/health",     # items_api
+                    "/prompts-api/health",   # prompts_api
+                    "/comp-api/health",      # competencies_api
+                    "/cv-api/health",        # cv_api
+                    "/drive-api/health",     # drive_api
+                    "/missions-api/health"   # missions_api
                 ]
                 
                 def check_route(route):

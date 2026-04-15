@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
 
@@ -54,7 +54,7 @@ class PaginationResponse(BaseModel):
     limit: int
 
 class TreeImportRequest(BaseModel):
-    tree: Dict[str, Any]
+    tree: Union[Dict[str, Any], List[Any]]
 
 class StatsRequest(BaseModel):
     user_ids: Optional[List[int]] = None

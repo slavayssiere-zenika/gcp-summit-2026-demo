@@ -30,7 +30,9 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo -e "  items_api      Microservice Items"
   echo -e "  cv_api         Microservice CVs"
   echo -e "  missions_api   Microservice Missions"
-  echo -e "  agent_api      Orchestrateur Agent"
+  echo -e "  agent_router_api Orchestrateur A2A"
+  echo -e "  agent_hr_api   Agent HR (A2A Worker)"
+  echo -e "  agent_ops_api  Agent Ops (A2A Worker)"
   echo -e "  frontend       Frontend Vue.js"
   echo -e "  db_migrations  Migrations de base de données (non inclus dans 'all')"
   echo -e "  db_init       Initialise la base de données via Cloud Run Job"
@@ -226,18 +228,19 @@ build_and_push_standard() {
 }
 
 build_and_push_agent() {
-  local BUMP=${1:-"patch"}
-  local TAG=$(get_service_tag "agent_api" "$BUMP")
+  local SERVICE=$1
+  local BUMP=${2:-"patch"}
+  local TAG=$(get_service_tag "$SERVICE" "$BUMP")
   
-  # Cas particulier de l'Agent API (build context à la racine)
-  echo "--- Building agent_api ($TAG) ---"
-  local AGENT_IMAGE_NAME="${DOCKER_REPO}/agent_api"
-  docker build --platform linux/amd64 -t "${AGENT_IMAGE_NAME}:${TAG}" -t "${AGENT_IMAGE_NAME}:latest" -f "agent_api/Dockerfile" .
-  echo "--- Pushing agent_api ---"
+  # Build context doit être le dossier de l'agent
+  echo "--- Building $SERVICE ($TAG) ---"
+  local AGENT_IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
+  docker build --platform linux/amd64 -t "${AGENT_IMAGE_NAME}:${TAG}" -t "${AGENT_IMAGE_NAME}:latest" "./${SERVICE}"
+  echo "--- Pushing $SERVICE ---"
   docker push "${AGENT_IMAGE_NAME}:${TAG}"
   docker push "${AGENT_IMAGE_NAME}:latest"
   
-  update_cloudrun "agent_api" "$TAG"
+  update_cloudrun "$SERVICE" "$TAG"
 }
 
 build_and_upload_frontend() {
@@ -291,7 +294,7 @@ build_and_upload_frontend() {
 # Liste des services applicatifs (déployés par 'all')
 APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp")
 # Liste de tous les services possibles pour la validation
-VALID_SERVICES=("db_migrations" "db_init" "agent_api" "frontend" "${APP_MICROSERVICES[@]}")
+VALID_SERVICES=("db_migrations" "db_init" "agent_router_api" "agent_hr_api" "agent_ops_api" "frontend" "${APP_MICROSERVICES[@]}")
 
 BUMP_TYPE="patch"
 TARGET_SERVICES=()
@@ -318,7 +321,7 @@ for svc in "${TARGET_SERVICES[@]}"; do
 done
 
 if [ "${TARGET_SERVICES[0]}" = "all" ]; then
-  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_api" "frontend")
+  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "frontend")
 else
   ALL_TASKS=("${TARGET_SERVICES[@]}")
 fi
@@ -331,9 +334,13 @@ for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
       build_and_push_standard "$SERVICE" "$BUMP_TYPE"
     done
 
-    # 2. Build Agent
-    show_progress "agent_api"
-    build_and_push_agent "$BUMP_TYPE"
+    # 2. Build des Agents A2A
+    show_progress "agent_ops_api"
+    build_and_push_agent "agent_ops_api" "$BUMP_TYPE"
+    show_progress "agent_hr_api"
+    build_and_push_agent "agent_hr_api" "$BUMP_TYPE"
+    show_progress "agent_router_api"
+    build_and_push_agent "agent_router_api" "$BUMP_TYPE"
     
     # 3. Build and Upload du Frontend
     show_progress "frontend"
@@ -344,9 +351,9 @@ for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
     build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
   elif [ "$TARGET_SERVICE" = "db_init" ]; then
     run_db_init_job
-  elif [ "$TARGET_SERVICE" = "agent_api" ]; then
-    show_progress "agent_api"
-    build_and_push_agent "$BUMP_TYPE"
+  elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
+    show_progress "$TARGET_SERVICE"
+    build_and_push_agent "$TARGET_SERVICE" "$BUMP_TYPE"
   elif [ "$TARGET_SERVICE" = "frontend" ]; then
     show_progress "frontend"
     build_and_upload_frontend "$BUMP_TYPE"

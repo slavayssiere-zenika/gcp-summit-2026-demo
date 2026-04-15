@@ -14,17 +14,25 @@
     </div>
     
     <div class="steps-timeline">
-      <div v-for="(step, idx) in message.steps" :key="idx" :class="['step-item', step.type]">
+      <div v-for="(step, idx) in message.steps" :key="idx" :class="['step-item', step.type, step.data?.agent ? 'a2a-delegation' : '']">
         <div class="step-icon">
           <PlayCircle v-if="step.type === 'call'" size="14" />
+          <Bot v-else-if="step.data?.agent" size="14" />
           <Database v-else size="14" />
         </div>
         <div class="step-details">
           <div class="step-title">
-            <strong v-if="step.type === 'call'">APPEL OUTIL: {{ step.tool }}</strong>
+            <strong v-if="step.type === 'call'" class="agent-badge orchestrator">
+              <Bot size="12" style="margin-right:4px; margin-bottom:-2px;" /> ORCHESTRATEUR
+              <span style="color:#64748b; margin-left: 8px;">APPEL OUTIL: {{ step.tool }}</span>
+            </strong>
+            <strong v-else-if="step.data?.agent" class="agent-badge" :class="step.data.agent">
+               <Bot size="12" style="margin-right:4px; margin-bottom:-2px;" /> {{ step.data.agent.replace('_', ' ').toUpperCase() }}
+               <span style="color:#64748b; margin-left: 8px;">RÉPONSE A2A</span>
+            </strong>
             <strong v-else>RÉSULTAT BRUT</strong>
           </div>
-          <pre class="step-payload">{{ JSON.stringify(step.args || step.data, null, 2) }}</pre>
+          <pre class="step-payload" :class="{'a2a-payload': step.data?.agent}">{{ JSON.stringify(step.args || step.data, null, 2) }}</pre>
         </div>
       </div>
       <div v-if="!message.steps || message.steps.length === 0" class="no-steps">
@@ -40,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { RefreshCw, Terminal, PlayCircle, Database, FileCode } from 'lucide-vue-next'
+import { RefreshCw, Terminal, PlayCircle, Database, FileCode, Bot } from 'lucide-vue-next'
 import markdownit from 'markdown-it'
 import type { Message } from '@/types'
 
@@ -116,6 +124,45 @@ defineProps<{
   font-family: inherit;
   font-size: 0.85rem;
   border: 1px solid #f1f5f9;
+}
+
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.70rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.agent-badge.orchestrator {
+  background-color: #f8fafc;
+  color: var(--zenika-red);
+  border: 1px solid rgba(227, 25, 55, 0.2);
+}
+
+.agent-badge.hr_agent {
+  background-color: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.2);
+}
+
+.agent-badge.ops_agent {
+  background-color: #ede9fe;
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.step-item.a2a-delegation {
+  border-left: 4px solid #0ea5e9;
+  background: #f8fafc;
+}
+
+.step-payload.a2a-payload {
+  background: #ffffff;
+  border-color: #e0f2fe;
 }
 
 .thought-section {

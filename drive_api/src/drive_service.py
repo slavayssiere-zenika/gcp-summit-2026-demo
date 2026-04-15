@@ -218,6 +218,8 @@ class DriveService:
                 
                 try:
                     logger.info(f"CV trouvé (Nom: '{state.file_name}', Tag: {folder.tag}). Appel de l'API CV...")
+                    state.status = DriveSyncStatus.PROCESSING
+                    await self.db.commit()
                     res = await http_client.post(f"{CV_API_URL.rstrip('/')}/import", json=payload, headers=headers)
                     if res.status_code < 400:
                         data = res.json()

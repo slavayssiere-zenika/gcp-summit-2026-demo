@@ -232,7 +232,17 @@ async def bulk_import_tree(
     
     touched_ids = set()
         
-    async def upsert_level(nodes_dict: dict, parent_id: Optional[int] = None):
+    async def upsert_level(nodes_dict, parent_id: Optional[int] = None):
+        if isinstance(nodes_dict, list):
+            for item in nodes_dict:
+                if isinstance(item, dict):
+                    name = item.get("name")
+                    if name:
+                        await upsert_level({name: item}, parent_id)
+                    else:
+                        await upsert_level(item, parent_id)
+            return
+
         if not isinstance(nodes_dict, dict):
             return
             

@@ -1,3 +1,125 @@
+## Mise à jour automatique - 2026-04-15 08:11:48
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1145  | 317  |  72% |
+| cv_api           | 1648  | 564  |  66% |
+| drive_api        | 792   | 367  |  54% |
+| items_api        | 1094  | 242  |  78% |
+| prompts_api      | 593   | 116  |  80% |
+| users_api        | 1327  | 410  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `GENTS.md` (M)
+- `agent_api/.coverage` (D)
+- `agent_api/.dockerignore` (D)
+- `agent_api/Dockerfile` (D)
+- `agent_api/VERSION` (D)
+- `agent_api/__init__.py` (D)
+- `agent_api/agent.py` (D)
+- `agent_api/agent_api.assistant_system_instruction.txt` (D)
+- `agent_api/agent_api.capabilities_instruction.txt` (D)
+- `agent_api/conftest.py` (D)
+- `agent_api/logger.py` (D)
+- `agent_api/main.py` (D)
+- `agent_api/mcp_client.py` (D)
+- `agent_api/metrics.py` (D)
+- `agent_api/requirements.txt` (D)
+- `agent_api/session.py` (D)
+- `agent_api/spec.md` (D)
+- `agent_api/test_agent_logic.py` (D)
+- `agent_api/test_main.py` (D)
+- `agent_api/test_mcp.py` (D)
+- `agent_api/test_session.py` (D)
+- `competencies_api/.coverage` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/router.py` (M)
+- `competencies_api/src/competencies/schemas.py` (M)
+- `competencies_api/test_integration.py` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `docker-compose.yml` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/src/router.py` (M)
+- `drive_api/src/schemas.py` (M)
+- `drive_api/test.db` (M)
+- `frontend/VERSION` (M)
+- `frontend/nginx/default.conf` (M)
+- `frontend/src/components/DriveAdminPanel.vue` (M)
+- `frontend/src/components/agent/AgentExpertTerminal.vue` (M)
+- `frontend/src/services/auth.ts` (M)
+- `frontend/src/views/Registry.vue` (M)
+- `items_api/VERSION` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/VERSION` (M)
+- `market_mcp/mcp_app.py` (M)
+- `missions_api/VERSION` (M)
+- `platform-engineering/envs/dev.yaml` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/envs/uat.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/bigquery.tf` (M)
+- `platform-engineering/terraform/cloudrun.tf` (M)
+- `platform-engineering/terraform/database.tf` (M)
+- `platform-engineering/terraform/db_init_job.tf` (M)
+- `platform-engineering/terraform/db_migrations_job.tf` (M)
+- `platform-engineering/terraform/imports_users.tf` (D)
+- `platform-engineering/terraform/lb-internal.tf` (M)
+- `platform-engineering/terraform/lb.tf` (M)
+- `platform-engineering/terraform/pubsub.tf` (M)
+- `platform-engineering/terraform/scheduler.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `prompts_api/VERSION` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/run_tests.sh` (M)
+- `seed_data.py` (M)
+- `todo.md` (M)
+- `users_api/VERSION` (M)
+- `users_api/spec.md` (M)
+- `agent_hr_api/` (??)
+- `agent_ops_api/` (??)
+- `agent_router_api/` (??)
+- `bootstrap/platform_engineering.tf` (??)
+- `platform-engineering/.dockerignore` (??)
+- `platform-engineering/Dockerfile` (??)
+- `platform-engineering/terraform/cr_agent_hr.tf` (??)
+- `platform-engineering/terraform/cr_agent_ops.tf` (??)
+- `platform-engineering/terraform/cr_agent_router.tf` (??)
+- `platform-engineering/terraform/cr_competencies.tf` (??)
+- `platform-engineering/terraform/cr_cv.tf` (??)
+- `platform-engineering/terraform/cr_drive.tf` (??)
+- `platform-engineering/terraform/cr_items.tf` (??)
+- `platform-engineering/terraform/cr_market.tf` (??)
+- `platform-engineering/terraform/cr_missions.tf` (??)
+- `platform-engineering/terraform/cr_prompts.tf` (??)
+- `platform-engineering/terraform/cr_users.tf` (??)
+- `platform-engineering/terraform/scratch_check_env.py` (??)
+- `platform-engineering/terraform/scratch_check_tf_env.py` (??)
+- `platform-engineering/terraform/scratch_clean_db.py` (??)
+- `platform-engineering/terraform/scratch_clean_external_bg.py` (??)
+- `platform-engineering/terraform/scratch_cleanup.py` (??)
+- `platform-engineering/terraform/scratch_fix_agents.py` (??)
+- `platform-engineering/terraform/scratch_fix_names.py` (??)
+- `platform-engineering/terraform/scratch_fix_refs.py` (??)
+- `platform-engineering/terraform/scratch_gen.py` (??)
+- `platform-engineering/terraform/scratch_unroll.py` (??)
+- `scripts/async_manage_env.sh` (??)
+- `scripts/destroy_old_cr.sh` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-13 23:43:17
 
 ### Couverture de Code

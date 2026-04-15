@@ -82,8 +82,18 @@ variable "image_prompts" {
   type        = string
 }
 
-variable "image_agent" {
-  description = "Image for Agent API container"
+variable "image_agent_router" {
+  description = "Image for Agent Router API container"
+  type        = string
+}
+
+variable "image_agent_hr" {
+  description = "Image for Agent HR API container"
+  type        = string
+}
+
+variable "image_agent_ops" {
+  description = "Image for Agent Ops API container"
   type        = string
 }
 
@@ -129,7 +139,9 @@ variable "slo_latency_threshold_ms" {
 }
 
 # Versions par composant (automatiquement alimentés par manage_env.py)
-variable "agent_api_version" { type = string }
+variable "agent_router_api_version" { type = string }
+variable "agent_hr_api_version" { type = string }
+variable "agent_ops_api_version" { type = string }
 variable "users_api_version" { type = string }
 variable "items_api_version" { type = string }
 variable "competencies_api_version" { type = string }

@@ -2,63 +2,22 @@
 # INTERNAL REGIONAL HTTP L7 LOAD BALANCER
 # =========================================================
 
-resource "google_compute_region_backend_service" "internal_mcp_backend" {
-  for_each              = toset(local.mcp_services)
-  name                  = "backend-internal-${each.value}-${terraform.workspace}"
-  region                = var.region
-  protocol              = "HTTP"
-  load_balancing_scheme = "INTERNAL_MANAGED"
 
-  backend {
-    group           = google_compute_region_network_endpoint_group.mcp_neg[each.key].id
-    balancing_mode  = "UTILIZATION"
-    capacity_scaler = 1.0
-  }
-}
 
-resource "google_compute_region_backend_service" "internal_prompts_backend" {
-  name                  = "backend-internal-prompts-${terraform.workspace}"
-  region                = var.region
-  protocol              = "HTTP"
-  load_balancing_scheme = "INTERNAL_MANAGED"
 
-  backend {
-    group           = google_compute_region_network_endpoint_group.prompts_neg.id
-    balancing_mode  = "UTILIZATION"
-    capacity_scaler = 1.0
-  }
-}
 
-resource "google_compute_region_backend_service" "internal_drive_backend" {
-  name                  = "backend-internal-drive-${terraform.workspace}"
-  region                = var.region
-  protocol              = "HTTP"
-  load_balancing_scheme = "INTERNAL_MANAGED"
 
-  backend {
-    group           = google_compute_region_network_endpoint_group.drive_neg.id
-    balancing_mode  = "UTILIZATION"
-    capacity_scaler = 1.0
-  }
-}
 
-resource "google_compute_region_backend_service" "internal_market_backend" {
-  name                  = "backend-internal-market-${terraform.workspace}"
-  region                = var.region
-  protocol              = "HTTP"
-  load_balancing_scheme = "INTERNAL_MANAGED"
 
-  backend {
-    group           = google_compute_region_network_endpoint_group.market_neg.id
-    balancing_mode  = "UTILIZATION"
-    capacity_scaler = 1.0
-  }
-}
+
+
+
+
 
 resource "google_compute_region_url_map" "internal_url_map" {
   name            = "lb-internal-${terraform.workspace}"
   region          = var.region
-  default_service = google_compute_region_backend_service.internal_mcp_backend["users"].id
+  default_service = google_compute_region_backend_service.users_internal_backend.id
 
   host_rule {
     hosts        = ["api.internal.zenika"]
@@ -67,12 +26,23 @@ resource "google_compute_region_url_map" "internal_url_map" {
 
   path_matcher {
     name            = "internal-routes"
-    default_service = google_compute_region_backend_service.internal_mcp_backend["users"].id
+    default_service = google_compute_region_backend_service.users_internal_backend.id
+
+    route_rules {
+      priority = 10
+      match_rules { prefix_match = "/api/" }
+      service = google_compute_region_backend_service.agent_router_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
 
     route_rules {
       priority = 20
       match_rules { prefix_match = "/auth/" }
-      service = google_compute_region_backend_service.internal_mcp_backend["users"].id
+      service = google_compute_region_backend_service.users_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/users/"
@@ -83,7 +53,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 30
       match_rules { prefix_match = "/users-api/" }
-      service = google_compute_region_backend_service.internal_mcp_backend["users"].id
+      service = google_compute_region_backend_service.users_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -94,7 +64,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 40
       match_rules { prefix_match = "/items-api/" }
-      service = google_compute_region_backend_service.internal_mcp_backend["items"].id
+      service = google_compute_region_backend_service.items_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -105,7 +75,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 50
       match_rules { prefix_match = "/prompts-api/" }
-      service = google_compute_region_backend_service.internal_prompts_backend.id
+      service = google_compute_region_backend_service.prompts_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -116,7 +86,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 60
       match_rules { prefix_match = "/comp-api/" }
-      service = google_compute_region_backend_service.internal_mcp_backend["competencies"].id
+      service = google_compute_region_backend_service.competencies_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -127,7 +97,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 70
       match_rules { prefix_match = "/cv-api/" }
-      service = google_compute_region_backend_service.internal_mcp_backend["cv"].id
+      service = google_compute_region_backend_service.cv_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -138,7 +108,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 75
       match_rules { prefix_match = "/missions-api/" }
-      service = google_compute_region_backend_service.internal_mcp_backend["missions"].id
+      service = google_compute_region_backend_service.missions_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -149,7 +119,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 80
       match_rules { prefix_match = "/drive-api/" }
-      service = google_compute_region_backend_service.internal_drive_backend.id
+      service = google_compute_region_backend_service.drive_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -160,7 +130,29 @@ resource "google_compute_region_url_map" "internal_url_map" {
     route_rules {
       priority = 90
       match_rules { prefix_match = "/market-mcp/" }
-      service = google_compute_region_backend_service.internal_market_backend.id
+      service = google_compute_region_backend_service.market_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 100
+      match_rules { prefix_match = "/agent-hr-api/" }
+      service = google_compute_region_backend_service.agent_hr_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 110
+      match_rules { prefix_match = "/agent-ops-api/" }
+      service = google_compute_region_backend_service.agent_ops_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

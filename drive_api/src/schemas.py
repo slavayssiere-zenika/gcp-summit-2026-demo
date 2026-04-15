@@ -16,6 +16,7 @@ class FolderResponse(FolderCreate):
 class StatusResponse(BaseModel):
     total_files_scanned: int
     pending: int
+    processing: int = 0
     imported: int
     ignored: int
     errors: int

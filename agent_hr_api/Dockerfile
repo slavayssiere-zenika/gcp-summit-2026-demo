@@ -7,7 +7,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY agent_api/requirements.txt .
+COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # ---- Runtime Stage ----
@@ -24,21 +24,21 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/wheels /wheels
-COPY agent_api/requirements.txt .
+COPY requirements.txt .
 
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
-COPY agent_api/ ./
+COPY . ./
 
 ENV PYTHONPATH=/app
 ENV USERS_API_URL=http://users_api:8000
 ENV ITEMS_API_URL=http://items_api:8001
 
-ENV PORT=8002
-EXPOSE 8002
+ENV PORT=8080
+EXPOSE 8080
 
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

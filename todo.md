@@ -7,26 +7,8 @@
 ### 🛡️ Phase 1 : Gouvernance & Sécurité Admin (Lundi)
 *Focalisation sur l'identité et les accès privilégiés.*
 
-- [x] **Gestion Inactive** : Ajouter un flag `is_active` pour les utilisateurs et CVs afin de les exclure des recherches/staffing.
+- [ ] **Gestion Inactive** : Ajouter un flag `is_active` pour les utilisateurs et CVs afin de les exclure des recherches/staffing.
 - [ ] **Audit Trail** : Loguer les changements de statut utilisateur dans la base d'audit.
-
----
-
-### 📊 Phase 2 : Observabilité & SLOs (Mardi)
-*Passer d'une surveillance réactive à un engagement de niveau de service.*
-
-- [x] **Définition SLIs** : Identifier les métriques de latence (p95) et taux d'erreur par micro-service.
-- [x] **Provisionnement SLO** : Créer les dashboards et alertes Cloud Monitoring via Terraform.
-- [x] **Health Monitoring** : Intégrer les métriques OTel dans un tableau de bord SLO global.
-
----
-
-### 🏛️ Phase 3 : BigQuery Foundation & FinOps (Mercredi)
-*Mise en place de la brique analytique pour l'IA.*
-
-- [x] **Pipeline BQ** : Créer le dataset et les tables `token_usage` et `agent_latency`.
-- [x] **Streaming Logs** : Exporter les métriques de consommation de l'IA (Gemini) vers BigQuery à chaque appel.
-- [x] **Outil Agent** : Créer un outil MCP `get_finops_report` pour que l'agent analyse ses propres coûts.
 
 ---
 
@@ -49,6 +31,7 @@
 ---
 
 ### 📌 Backlog / Idées (Ancien Todo)
+- [ ] **Infrastructure as Code** : Refactoriser `cloudrun.tf` pour isoler chaque service Cloud Run dans son propre fichier (split monolith).
 - [ ] Intégration BigQuery ML pour la prédiction de disponibilité.
 - [ ] Dashboard de performance des outils MCP (latency vs success rate).
 - [ ] Automatisation des rapports hebdomadaires par email via Cloud Functions.

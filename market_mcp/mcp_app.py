@@ -269,6 +269,10 @@ async def detect_finops_anomalies(http_request: Request):
 async def health():
     return {"status": "healthy", "service": "market-mcp"}
 
+@app.get("/version")
+async def get_version():
+    return {"version": os.getenv("APP_VERSION", "unknown")}
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port, server_header=False)
