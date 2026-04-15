@@ -7,7 +7,7 @@ resource "google_secret_manager_secret_iam_member" "alloydb_password_access" {
   project   = google_secret_manager_secret.alloydb_password.project
   secret_id = google_secret_manager_secret.alloydb_password.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cr_sa["users"].email}"
+  member    = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
 # Définition du Job Cloud Run
@@ -17,7 +17,7 @@ resource "google_cloud_run_v2_job" "db_init" {
 
   template {
     template {
-      service_account = google_service_account.cr_sa["users"].email
+      service_account = google_service_account.users_sa.email
 
       vpc_access {
         network_interfaces {
@@ -52,6 +52,11 @@ resource "google_cloud_run_v2_job" "db_init" {
           name  = "ENV_VAL"
           value = terraform.workspace
         }
+
+        env {
+          name  = "SA_SUFFIX"
+          value = random_id.sa_suffix.hex
+        }
         env {
           name  = "SCRIPT_PAYLOAD"
           value = <<-EOT
@@ -66,11 +71,12 @@ root_pw_encoded = urllib.parse.quote(root_pw)
 db_ip = os.environ['DB_IP']
 project_id = os.environ["PROJECT_ID"]
 env_name = os.environ["ENV_VAL"]
+sa_suffix = os.environ["SA_SUFFIX"]
 admin_user = os.environ.get("ADMIN_USER")
 
 master_db_url = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/postgres?sslmode=require"
 services = ["users", "items", "competencies", "cv", "prompts", "drive", "missions"]
-all_iam_services = services + ["agent"]
+all_iam_services = services
 
 async def main():
     try:
@@ -95,8 +101,8 @@ async def main():
         
         print("\n[DB INIT] Stage 2: Granting Schema Permissions per Database...")
         for svc in all_iam_services:
-            target_db = "users" if svc == "agent" else svc
-            iam_user = f"sa-{svc}-{env_name}-v2@{project_id}.iam"
+            target_db = svc
+            iam_user = f"sa-drive-{env_name}-v2@{project_id}.iam" if svc == "drive" else f"sa-{svc}-{env_name}-{sa_suffix}@{project_id}.iam"
             svc_db_url = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/{target_db}?sslmode=require"
             
             try:
@@ -162,7 +168,7 @@ resource "null_resource" "run_db_init_job" {
 
   depends_on = [
     google_cloud_run_v2_job.db_init,
-    google_alloydb_user.iam_users,
+    google_alloydb_user.users_db_user,
     google_alloydb_user.admin_user
   ]
 }

@@ -5,6 +5,7 @@ from datetime import datetime
 
 class DriveSyncStatus(enum.Enum):
     PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
     IMPORTED_CV = "IMPORTED_CV"
     IGNORED_NOT_CV = "IGNORED_NOT_CV"
     ERROR = "ERROR"

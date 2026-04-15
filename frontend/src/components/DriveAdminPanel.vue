@@ -25,6 +25,13 @@
         </div>
       </div>
       <div class="stat-card">
+        <div class="stat-icon processing"><Loader2 class="icon spinning" /></div>
+        <div class="stat-content">
+          <span class="label">En cours</span>
+          <span class="value">{{ syncStatus.processing }}</span>
+        </div>
+      </div>
+      <div class="stat-card">
         <div class="stat-icon imported"><CheckCircle2 class="icon" /></div>
         <div class="stat-content">
           <span class="label">CV Importés</span>
@@ -194,6 +201,7 @@ const getFolderTag = (folderId: number) => {
 const formatStatus = (status: string) => {
   const map: Record<string, string> = {
     'PENDING': 'En Attente',
+    'PROCESSING': 'Import en cours',
     'IMPORTED_CV': 'Importé',
     'IGNORED_NOT_CV': 'Ignoré',
     'ERROR': 'Erreur'
@@ -348,6 +356,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 .stat-icon.pending { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+.stat-icon.processing { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
 .stat-icon.imported { background: rgba(16, 185, 129, 0.1); color: #10b981; }
 .stat-icon.ignored { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
 .stat-icon.error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
@@ -504,6 +513,7 @@ onUnmounted(() => {
 }
 
 .status-badge.pending { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+.status-badge.processing { background: rgba(59, 130, 246, 0.15); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.3); }
 .status-badge.imported_cv { background: rgba(16, 185, 129, 0.15); color: #059669; }
 .status-badge.ignored_not_cv { background: rgba(107, 114, 128, 0.15); color: #4b5563; }
 .status-badge.error { background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }

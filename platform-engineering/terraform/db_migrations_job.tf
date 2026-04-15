@@ -8,7 +8,7 @@ resource "google_cloud_run_v2_job" "db_migrations" {
 
   template {
     template {
-      service_account = google_service_account.cr_sa["users"].email
+      service_account = google_service_account.users_sa.email
 
       vpc_access {
         network_interfaces {

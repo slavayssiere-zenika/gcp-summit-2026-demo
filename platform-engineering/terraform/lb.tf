@@ -16,106 +16,21 @@ resource "google_compute_managed_ssl_certificate" "default" {
 # =========================================================
 # Serverless NEGs pour connecter le LB aux Cloud Runs
 # =========================================================
-resource "google_compute_region_network_endpoint_group" "mcp_neg" {
-  for_each              = toset(local.mcp_services)
-  name                  = "neg-${each.key}-${terraform.workspace}"
-  network_endpoint_type = "SERVERLESS"
-  region                = var.region
-  cloud_run {
-    service = google_cloud_run_v2_service.mcp_services[each.key].name
-  }
-}
 
-resource "google_compute_region_network_endpoint_group" "prompts_neg" {
-  name                  = "neg-prompts-${terraform.workspace}"
-  network_endpoint_type = "SERVERLESS"
-  region                = var.region
-  cloud_run {
-    service = google_cloud_run_v2_service.prompts_api.name
-  }
-}
 
-resource "google_compute_region_network_endpoint_group" "agent_neg" {
-  name                  = "neg-agent-${terraform.workspace}"
-  network_endpoint_type = "SERVERLESS"
-  region                = var.region
-  cloud_run {
-    service = google_cloud_run_v2_service.agent_api.name
-  }
-}
 
-resource "google_compute_region_network_endpoint_group" "drive_neg" {
-  name                  = "neg-drive-${terraform.workspace}"
-  network_endpoint_type = "SERVERLESS"
-  region                = var.region
-  cloud_run {
-    service = google_cloud_run_v2_service.drive_api.name
-  }
-}
 
-resource "google_compute_region_network_endpoint_group" "market_neg" {
-  name                  = "neg-market-${terraform.workspace}"
-  network_endpoint_type = "SERVERLESS"
-  region                = var.region
-  cloud_run {
-    service = google_cloud_run_v2_service.market_mcp.name
-  }
-}
 
-# =========================================================
-# Backend Services
-# =========================================================
-resource "google_compute_backend_service" "mcp_backend" {
-  for_each              = toset(local.mcp_services)
-  name                  = "backend-${each.key}-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
 
-  backend {
-    group = google_compute_region_network_endpoint_group.mcp_neg[each.key].id
-  }
-}
 
-resource "google_compute_backend_service" "prompts_backend" {
-  name                  = "backend-prompts-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
-  backend {
-    group = google_compute_region_network_endpoint_group.prompts_neg.id
-  }
-}
 
-resource "google_compute_backend_service" "agent_backend" {
-  name                  = "backend-agent-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
-  backend {
-    group = google_compute_region_network_endpoint_group.agent_neg.id
-  }
-}
 
-resource "google_compute_backend_service" "drive_backend" {
-  name                  = "backend-drive-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
-  backend {
-    group = google_compute_region_network_endpoint_group.drive_neg.id
-  }
-}
 
-resource "google_compute_backend_service" "market_backend" {
-  name                  = "backend-market-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
-  backend {
-    group = google_compute_region_network_endpoint_group.market_neg.id
-  }
-}
+
+
+
+
+
 
 resource "google_compute_backend_bucket" "frontend" {
   name        = "backend-frontend-${terraform.workspace}"
@@ -148,7 +63,7 @@ resource "google_compute_url_map" "default" {
     route_rules {
       priority = 10
       match_rules { prefix_match = "/api/" }
-      service = google_compute_backend_service.agent_backend.id
+      service = google_compute_backend_service.agent_router_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -156,10 +71,12 @@ resource "google_compute_url_map" "default" {
       }
     }
 
+
+
     route_rules {
       priority = 20
       match_rules { prefix_match = "/auth/" }
-      service = google_compute_backend_service.mcp_backend["users"].id
+      service = google_compute_backend_service.users_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -170,7 +87,7 @@ resource "google_compute_url_map" "default" {
     route_rules {
       priority = 30
       match_rules { prefix_match = "/users-api/" }
-      service = google_compute_backend_service.mcp_backend["users"].id
+      service = google_compute_backend_service.users_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -181,7 +98,7 @@ resource "google_compute_url_map" "default" {
     route_rules {
       priority = 40
       match_rules { prefix_match = "/items-api/" }
-      service = google_compute_backend_service.mcp_backend["items"].id
+      service = google_compute_backend_service.items_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -203,7 +120,7 @@ resource "google_compute_url_map" "default" {
     route_rules {
       priority = 60
       match_rules { prefix_match = "/comp-api/" }
-      service = google_compute_backend_service.mcp_backend["competencies"].id
+      service = google_compute_backend_service.competencies_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -214,12 +131,17 @@ resource "google_compute_url_map" "default" {
     route_rules {
       priority = 70
       match_rules { prefix_match = "/cv-api/" }
-      service = google_compute_backend_service.mcp_backend["cv"].id
+      service = google_compute_backend_service.cv_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
     }
     route_rules {
       priority = 75
       match_rules { prefix_match = "/missions-api/" }
-      service = google_compute_backend_service.mcp_backend["missions"].id
+      service = google_compute_backend_service.missions_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -238,21 +160,123 @@ resource "google_compute_url_map" "default" {
       }
     }
 
+
+
+    # SPA routing for all frontend views to avoid 404s on direct navigation or refresh
+    # We rewrite these known frontend paths to / so that GCS serves index.html
     route_rules {
-      priority = 85
-      match_rules { prefix_match = "/market-mcp/" }
-      service = google_compute_backend_service.market_backend.id
+      priority = 90
+      match_rules { prefix_match = "/admin" }
+      service = google_compute_backend_bucket.frontend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
         }
       }
     }
-
-    # SPA routing for /admin to avoid 404s on refresh
     route_rules {
-      priority = 90
-      match_rules { prefix_match = "/admin" }
+      priority = 91
+      match_rules { prefix_match = "/login" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 92
+      match_rules { prefix_match = "/registry" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 93
+      match_rules { prefix_match = "/profile" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 94
+      match_rules { prefix_match = "/user" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 95
+      match_rules { prefix_match = "/competencies" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 96
+      match_rules { prefix_match = "/specs" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 97
+      match_rules { prefix_match = "/import-cv" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 98
+      match_rules { prefix_match = "/help" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 99
+      match_rules { prefix_match = "/infrastructure" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 100
+      match_rules { prefix_match = "/aiops" }
+      service = google_compute_backend_bucket.frontend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+    route_rules {
+      priority = 101
+      match_rules { prefix_match = "/missions" }
       service = google_compute_backend_bucket.frontend.id
       route_action {
         url_rewrite {

@@ -5,7 +5,7 @@
 echo "Démarrage des tests en parallèle..."
 
 pids=()
-apis=("agent_api" "competencies_api" "cv_api" "drive_api" "items_api" "prompts_api" "users_api" "market_mcp")
+apis=("agent_hr_api" "agent_ops_api" "agent_router_api" "missions_api" "competencies_api" "cv_api" "drive_api" "items_api" "prompts_api" "users_api" "market_mcp")
 
 for api in "${apis[@]}"; do
     echo "Lancement des tests pour $api..."

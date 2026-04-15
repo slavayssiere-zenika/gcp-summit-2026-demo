@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { Terminal, Database, Cpu, ChevronRight, Activity, Code2, Box, Cloud } from 'lucide-vue-next'
+import { Terminal, Database, Cpu, ChevronRight, Activity, Code2, Box, Cloud, Briefcase } from 'lucide-vue-next'
 
 interface Parameter {
   name: string
@@ -89,6 +89,7 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
             <Box v-else-if="service.id === 'items'" />
             <Cloud v-else-if="service.id === 'drive'" />
             <Activity v-else-if="service.id === 'market'" />
+            <Briefcase v-else-if="service.id === 'missions'" />
             <Cpu v-else />
           </div>
           <div class="nav-info">

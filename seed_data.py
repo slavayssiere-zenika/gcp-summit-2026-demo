@@ -357,8 +357,9 @@ def main():
 
     print("\n📄 Loading External AI Prompts into Gateway...")
     prompt_files = {
-        "agent_api.assistant_system_instruction": "agent_api/agent_api.assistant_system_instruction.txt",
-        "agent_api.capabilities_instruction": "agent_api/agent_api.capabilities_instruction.txt",
+        "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
+        "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
+        "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
         "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",

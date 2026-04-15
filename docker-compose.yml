@@ -49,7 +49,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - GOOGLE_SECRET_ID=${GOOGLE_SECRET_ID}
       - GOOGLE_SECRET_KEY=${GOOGLE_SECRET_KEY}
-      - ROOT_PATH=/users_api
+      - ROOT_PATH=/users-api
       - CV_API_URL=http://cv_api:8004
       - ITEMS_API_URL=http://items_api:8001
       - COMPETENCIES_API_URL=http://competencies_api:8003
@@ -93,7 +93,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/items
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
-      - ROOT_PATH=/items_api
+      - ROOT_PATH=/items-api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -309,60 +309,108 @@ services:
     networks:
       - monitoring_net
 
-  # The Intelligent Agent (renamed from web)
-  agent_api:
+  # The Intelligent Agent Router (Orchestrator A2A)
+  agent_router_api:
     build:
       context: .
-      dockerfile: agent_api/Dockerfile
-    container_name: agent_api
-    hostname: agent_api
-    volumes:
-      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      dockerfile: agent_router_api/Dockerfile
+    container_name: agent_router_api
+    hostname: agent_router_api
+    ports:
+      - "8002:8002"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-2.5-flash
-      - USERS_API_URL=http://users_api:8000
-      - ITEMS_API_URL=http://items_api:8001
-      - PROMPTS_API_URL=http://prompts_api:8000
-      - USERS_MCP_URL=http://users_mcp:8000
-      - ITEMS_MCP_URL=http://items_mcp:8000
-      - COMPETENCIES_MCP_URL=http://competencies_mcp:8000
-      - CV_MCP_URL=http://cv_mcp:8000
-      - DRIVE_MCP_URL=http://drive_mcp:8000
+      - GEMINI_MODEL=gemini-2.0-flash
+      - PROMPTS_API_URL=http://prompts_api:8005
+      - AGENT_HR_API_URL=http://agent_hr_api:8080
+      - AGENT_OPS_API_URL=http://agent_ops_api:8080
       - MARKET_MCP_URL=http://market_mcp:8008
-      - LOKI_MCP_URL=http://loki_mcp:8080/sse
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/1
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=agent_api
+      - OTEL_SERVICE_NAME=agent-router-api
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/api
     depends_on:
       db_migrations:
         condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
-      users_api:
+      prompts_api:
         condition: service_started
-      items_api:
+      agent_hr_api:
         condition: service_started
-      users_mcp:
-        condition: service_started
-      items_mcp:
-        condition: service_started
-      competencies_mcp:
-        condition: service_started
-      cv_mcp:
-        condition: service_started
-      drive_mcp:
-        condition: service_started
-      loki_mcp:
+      agent_ops_api:
         condition: service_started
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - agent_router_api
+
+  # The Intelligent HR Agent (A2A Worker)
+  agent_hr_api:
+    build:
+      context: .
+      dockerfile: agent_hr_api/Dockerfile
+    container_name: agent_hr_api
+    hostname: agent_hr_api
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=gemini-2.0-flash
+      - USERS_API_URL=http://users_api:8000
+      - ITEMS_API_URL=http://items_api:8001
+      - COMPETENCIES_API_URL=http://competencies_api:8003
+      - CV_API_URL=http://cv_api:8004
+      - MISSIONS_API_URL=http://missions_api:8009
+      - PROMPTS_API_URL=http://prompts_api:8005
+      - MARKET_MCP_URL=http://market_mcp:8008
+      - REDIS_URL=redis://redis:6379/10
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=agent-hr-api
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      prompts_api:
+        condition: service_started
+    networks:
+      monitoring_net:
+        aliases:
+          - agent_hr_api
+
+  # The Intelligent Ops Agent (A2A Worker)
+  agent_ops_api:
+    build:
+      context: .
+      dockerfile: agent_ops_api/Dockerfile
+    container_name: agent_ops_api
+    hostname: agent_ops_api
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=gemini-2.0-flash
+      - PROMPTS_API_URL=http://prompts_api:8005
+      - DRIVE_MCP_URL=http://drive_mcp:8000
+      - MARKET_MCP_URL=http://market_mcp:8008
+      - LOKI_MCP_URL=http://loki_mcp:8080/sse
+      - REDIS_URL=redis://redis:6379/11
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=agent-ops-api
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      prompts_api:
+        condition: service_started
+    networks:
+      monitoring_net:
+        aliases:
+          - agent_ops_api
 
   # The New Vue.js SPA Frontend
   frontend:
@@ -374,7 +422,7 @@ services:
     ports:
       - "8002:8080"
     depends_on:
-      - agent_api
+      - agent_router_api
       - users_api
       - items_api
       - prompts_api
@@ -450,7 +498,9 @@ services:
     depends_on:
       - postgres_exporter
       - redis_exporter
-      - agent_api
+      - agent_router_api
+      - agent_hr_api
+      - agent_ops_api
       - users_api
       - items_api
       - prompts_api
@@ -491,7 +541,9 @@ services:
       - prometheus
       - tempo
       - loki
-      - agent_api
+      - agent_router_api
+      - agent_hr_api
+      - agent_ops_api
       - users_api
       - items_api
       - prompts_api

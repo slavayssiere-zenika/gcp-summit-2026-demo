@@ -1,4 +1,3 @@
-
 # ==============================================================
 # GCP Pub/Sub Infrastructure for User Events (Phase 3)
 # ==============================================================
@@ -70,20 +69,20 @@ resource "google_pubsub_topic_iam_member" "users_publisher" {
   project = var.project_id
   topic   = google_pubsub_topic.user_events.name
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.cr_sa["users"].email}"
+  member  = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
 # Allow Pub/Sub to invoke Cloud Run services (Push via OIDC)
 resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker_cv" {
   location = var.region
-  name     = google_cloud_run_v2_service.mcp_services["cv"].name
+  name     = google_cloud_run_v2_service.cv_api.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.pubsub_invoker.email}"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker_items" {
   location = var.region
-  name     = google_cloud_run_v2_service.mcp_services["items"].name
+  name     = google_cloud_run_v2_service.items_api.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.pubsub_invoker.email}"
 }

@@ -65,6 +65,9 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     
     pending_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.PENDING).subquery())
     pending = (await db.execute(pending_q)).scalar()
+
+    proc_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.PROCESSING).subquery())
+    proc = (await db.execute(proc_q)).scalar()
     
     imp_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.IMPORTED_CV).subquery())
     imp = (await db.execute(imp_q)).scalar()
@@ -80,6 +83,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     return StatusResponse(
         total_files_scanned=total,
         pending=pending,
+        processing=proc,
         imported=imp,
         ignored=ign,
         errors=err,

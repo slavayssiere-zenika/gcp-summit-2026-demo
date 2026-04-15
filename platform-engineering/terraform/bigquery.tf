@@ -75,11 +75,11 @@ EOF
 resource "google_bigquery_dataset_iam_member" "market_editor" {
   dataset_id = google_bigquery_dataset.finops.dataset_id
   role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:sa-market-${terraform.workspace}-v2@${var.project_id}.iam.gserviceaccount.com"
+  member     = "serviceAccount:${google_service_account.market_sa.email}"
 }
 
 resource "google_project_iam_member" "market_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
-  member  = "serviceAccount:sa-market-${terraform.workspace}-v2@${var.project_id}.iam.gserviceaccount.com"
+  member  = "serviceAccount:${google_service_account.market_sa.email}"
 }

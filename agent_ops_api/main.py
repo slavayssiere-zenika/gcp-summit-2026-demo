@@ -27,13 +27,13 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
 
 
-from agent import run_agent_query, USERS_TOOLS, ITEMS_TOOLS, COMPETENCIES_TOOLS, LOKI_TOOLS, CV_TOOLS, DRIVE_TOOLS, MARKET_TOOLS, get_infrastructure_topology
+from agent import run_agent_query, OPS_TOOLS
 import inspect
 from logger import setup_logging, LoggingMiddleware
 
 provider = TracerProvider(
     resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "agent-api",
+        ResourceAttributes.SERVICE_NAME: "agent-ops-api",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 )
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(
-    title="ADK Web Agent",
+    title="ADK Ops Agent (A2A)",
     version="1.0.0",
     docs_url="/docs",
     openapi_url="/openapi.json",
@@ -72,7 +72,7 @@ HTTPXClientInstrumentor().instrument()
 
 @app.get("/")
 async def root():
-    return {"message": "ADK Agent API - Use /query for interactions"}
+    return {"message": "Ops Agent API - Use /a2a/query for interactions"}
 
 
 class QueryRequest(BaseModel):
@@ -107,8 +107,6 @@ async def get_spec():
 @protected_router.post("/query")
 async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     auth_header = f"{auth.scheme} {auth.credentials}"
-    
-    # Store the authorization header securely in the contextvar so mcp_client.py can read it
     auth_header_var.set(auth_header)
     
     try:
@@ -138,6 +136,27 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             span.set_attribute("error", True)
             span.set_attribute("error.message", str(e))
             return {"response": f"Erreur: {str(e)}", "source": "error"}
+
+@protected_router.post("/a2a/query")
+async def a2a_query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+    # Standard A2A Entrypoint
+    auth_header = f"{auth.scheme} {auth.credentials}"
+    auth_header_var.set(auth_header)
+    
+    try:
+        from jose import jwt, JWTError
+        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        computed_session_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalide")
+        
+    ctx = extract(http_request.headers)
+    with tracer.start_as_current_span("a2a.query", context=ctx, kind=SpanKind.SERVER) as span:
+        try:
+            result = await run_agent_query(request.query, computed_session_id)
+            return {"response": result.get("response", ""), "data": result.get("data")}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 @protected_router.get("/history")
 async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
@@ -481,47 +500,9 @@ async def mcp_registry():
     return {
         "services": [
             {
-                "id": "users",
-                "name": "Users Service",
-                "tools": get_tool_metadata(USERS_TOOLS)
-            },
-            {
-                "id": "items",
-                "name": "Items Service",
-                "tools": get_tool_metadata(ITEMS_TOOLS)
-            },
-            {
-                "id": "competencies",
-                "name": "Competencies Service",
-                "tools": get_tool_metadata(COMPETENCIES_TOOLS)
-            },
-            {
-                "id": "loki",
-                "name": "Loki Log Explorer",
-                "status": "connected",
-                "version": "1.0",
-                "tools": get_tool_metadata(LOKI_TOOLS)
-            },
-            {
-                "id": "cv",
-                "name": "CV Parsing Agent",
-                "status": "connected",
-                "version": "1.0",
-                "tools": get_tool_metadata(CV_TOOLS)
-            },
-            {
-                "id": "drive",
-                "name": "Google Drive Sync Agent",
-                "status": "connected",
-                "version": "1.0",
-                "tools": get_tool_metadata(DRIVE_TOOLS)
-            },
-            {
-                "id": "market",
-                "name": "Market & FinOps Explorer",
-                "status": "connected",
-                "version": "1.0",
-                "tools": get_tool_metadata(MARKET_TOOLS)
+                "id": "ops",
+                "name": "Ops Agent (Platform & FinOps)",
+                "tools": get_tool_metadata(OPS_TOOLS)
             }
         ]
     }

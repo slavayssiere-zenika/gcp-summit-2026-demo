@@ -209,6 +209,38 @@ def test_bulk_import_tree_authorized(client):
     response = client.post("/bulk_tree", json=payload)
     assert response.status_code == 200
 
+def test_bulk_import_tree_list_format(client):
+    from main import app
+    from src.auth import verify_jwt
+    app.dependency_overrides[verify_jwt] = lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}
+
+    payload = {
+        "tree": [
+            {
+                "Language": {
+                    "sub": {
+                        "Go": {
+                            "sub": ["Gin"]
+                        }
+                    }
+                }
+            },
+            {
+                "Database": {
+                    "sub": ["PostgreSQL"]
+                }
+            }
+        ]
+    }
+    response = client.post("/bulk_tree", json=payload)
+    assert response.status_code == 200
+    
+    # Optional: verify that it was stored correctly
+    list_resp = client.get("/")
+    assert list_resp.status_code == 200
+    names = [i["name"] for i in list_resp.json()["items"]]
+    assert "Language" in names or "Database" in names
+
 
 def test_get_competency_stats(client):
     # 1. Create competencies
