@@ -32,10 +32,18 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 COPY . ./
 
 ENV PYTHONPATH=/app
-ENV USERS_API_URL=http://users_api:8000
-ENV ITEMS_API_URL=http://items_api:8001
-
+ENV GEMINI_MODEL=gemini-2.5-flash
 ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV TRACE_EXPORTER=grpc
+ENV ROOT_PATH=/api
+ENV APP_VERSION=dev
+ENV USERS_API_URL=http://users_api:8000
+ENV AGENT_HR_API_URL=http://agent_hr_api:8080
+ENV AGENT_OPS_API_URL=http://agent_ops_api:8080
+ENV PROMPTS_API_URL=http://prompts_api:8000
+ENV MARKET_MCP_URL=http://market_mcp:8080
 EXPOSE 8080
 
 RUN useradd -m appuser && chown -R appuser /app

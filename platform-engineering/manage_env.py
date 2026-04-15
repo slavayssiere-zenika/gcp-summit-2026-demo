@@ -8,6 +8,13 @@ import re
 import yaml
 import logging
 import time
+import socket
+import ssl
+import tempfile
+import tarfile
+import zipfile
+import urllib.request
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Timer global ---
@@ -195,8 +202,7 @@ def toggle_prevent_destroy(disable=True):
             override_blocks[rtype][rname] = {
                 "lifecycle": [{"prevent_destroy": False}]
             }
-        import json as _json
-        override_content = _json.dumps({"resource": override_blocks}, indent=2)
+        override_content = json.dumps({"resource": override_blocks}, indent=2)
         override_json_path = os.path.join(TERRAFORM_DIR, "destroy_override.tf.json")
         with open(override_json_path, "w") as f:
             f.write(override_content)
@@ -233,6 +239,241 @@ def import_persistent_resource(env, address, resource_id):
         except subprocess.TimeoutExpired:
             print(f"    -> [!] Import timed out for {address}. Proceeding without it.")
 
+def build_importable_resources_map(env, project_id, region):
+    """
+    Retourne la table de correspondance exhaustive entre adresses Terraform et IDs
+    GCP pour toutes les ressources susceptibles de générer une erreur 409 lors d'un
+    apply sur un environnement dont les ressources existent déjà dans GCP mais pas
+    dans le state Terraform (plateforme éphémère recréée).
+    """
+    cr_base  = f"projects/{project_id}/locations/{region}/services"
+    mon_base = f"projects/{project_id}/services"
+    dns_base = f"projects/{project_id}/managedZones"
+
+    return {
+        # ── Cloud Run Services ───────────────────────────────────────────────
+        "google_cloud_run_v2_service.agent_hr_api":     f"{cr_base}/agent-hr-api-{env}",
+        "google_cloud_run_v2_service.agent_ops_api":    f"{cr_base}/agent-ops-api-{env}",
+        "google_cloud_run_v2_service.agent_router_api": f"{cr_base}/agent-router-api-{env}",
+        "google_cloud_run_v2_service.market_mcp":       f"{cr_base}/market-mcp-{env}",
+        "google_cloud_run_v2_service.prompts_api":      f"{cr_base}/prompts-api-{env}",
+        "google_cloud_run_v2_service.users_api":        f"{cr_base}/users-api-{env}",
+        "google_cloud_run_v2_service.competencies_api": f"{cr_base}/competencies-api-{env}",
+        "google_cloud_run_v2_service.cv_api":           f"{cr_base}/cv-api-{env}",
+        "google_cloud_run_v2_service.drive_api":        f"{cr_base}/drive-api-{env}",
+        "google_cloud_run_v2_service.items_api":        f"{cr_base}/items-api-{env}",
+        "google_cloud_run_v2_service.missions_api":     f"{cr_base}/missions-api-{env}",
+        # ── Monitoring Custom Services ───────────────────────────────────────
+        "google_monitoring_custom_service.agent_hr_api_svc":     f"{mon_base}/agent-hr-api-service-{env}",
+        "google_monitoring_custom_service.agent_ops_api_svc":    f"{mon_base}/agent-ops-api-service-{env}",
+        "google_monitoring_custom_service.agent_router_api_svc": f"{mon_base}/agent-router-api-service-{env}",
+        "google_monitoring_custom_service.competencies_api_svc": f"{mon_base}/competencies-api-service-{env}",
+        "google_monitoring_custom_service.cv_api_svc":           f"{mon_base}/cv-api-service-{env}",
+        "google_monitoring_custom_service.drive_api_svc":        f"{mon_base}/drive-api-service-{env}",
+        "google_monitoring_custom_service.items_api_svc":        f"{mon_base}/items-api-service-{env}",
+        "google_monitoring_custom_service.market_mcp_svc":       f"{mon_base}/market-mcp-service-{env}",
+        "google_monitoring_custom_service.missions_api_svc":     f"{mon_base}/missions-api-service-{env}",
+        "google_monitoring_custom_service.prompts_api_svc":      f"{mon_base}/prompts-api-service-{env}",
+        "google_monitoring_custom_service.users_api_svc":        f"{mon_base}/users-api-service-{env}",
+        # ── DNS Managed Zones ────────────────────────────────────────────────
+        "google_dns_managed_zone.env_zone":      f"{dns_base}/zone-{env}",
+        "google_dns_managed_zone.internal_zone": f"{dns_base}/internal-zone-{env}",
+        # ── SSL Certificate ──────────────────────────────────────────────────
+        "google_compute_managed_ssl_certificate.default": f"projects/{project_id}/global/sslCertificates/ssl-{env}",
+    }
+
+
+def import_resources_on_409(output, env, project_id, region):
+    """
+    Analyse la sortie d'un `terraform apply` pour détecter les erreurs 409
+    (Conflict / Resource already exists) et importe automatiquement les
+    ressources conflictuelles dans le state Terraform.
+
+    Le parsing repose sur les blocs d'erreur Terraform :
+        │ Error: Error creating …: googleapi: Error 409: …
+        │   with google_cloud_run_v2_service.agent_hr_api,
+        │   on cr_agent_hr.tf line …
+
+    Retourne le nombre de ressources importées avec succès.
+    """
+    importable = build_importable_resources_map(env, project_id, region)
+
+    # Extrait les adresses Terraform depuis les blocs d'erreur 409
+    found_addresses = set()
+    with_pattern   = re.compile(r'with\s+([\w\.\[\]"]+),')
+    in_409_block   = False
+
+    for line in output.splitlines():
+        stripped = line.strip().lstrip('│').strip()
+        # Début d'un bloc 409
+        if ('409' in stripped or 'already exists' in stripped.lower()) and 'Error' in stripped:
+            in_409_block = True
+            continue
+        if in_409_block:
+            m = with_pattern.search(stripped)
+            if m:
+                found_addresses.add(m.group(1).strip())
+                in_409_block = False
+        # Fin de bloc d'erreur (ligne séparatrice Terraform)
+        if stripped in ('╵', '') and in_409_block:
+            in_409_block = False
+
+    if not found_addresses:
+        print("[*] Aucune adresse de ressource 409 détectée dans la sortie de l'apply.")
+        return 0
+
+    imported_count = 0
+    print(f"\n[*] Conflit 409 détecté sur {len(found_addresses)} ressource(s). Tentative d'auto-import...")
+
+    for addr in sorted(found_addresses):
+        if addr not in importable:
+            print(f"    [-] Pas de mapping d'import défini pour : {addr} — ignoré.")
+            continue
+
+        import_id = importable[addr]
+
+        # Vérifier si déjà présent dans le state (idempotence)
+        state_check = subprocess.run(
+            ["terraform", "state", "list", addr],
+            cwd=TERRAFORM_DIR, capture_output=True, text=True
+        )
+        if state_check.returncode == 0 and addr in state_check.stdout:
+            print(f"    [=] {addr} déjà dans le state — import ignoré.")
+            continue
+
+        print(f"    [→] Import de {addr}\n        depuis {import_id}")
+        try:
+            imp_res = subprocess.run(
+                ["terraform", "import"] + get_tf_args() + [addr, import_id],
+                cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=90
+            )
+            if imp_res.returncode == 0:
+                print(f"    [+] Import réussi : {addr}")
+                imported_count += 1
+            else:
+                err_detail = (imp_res.stderr or imp_res.stdout).strip()[:300]
+                print(f"    [!] Échec de l'import pour {addr} :\n        {err_detail}")
+        except subprocess.TimeoutExpired:
+            print(f"    [!] Timeout de l'import pour {addr}.")
+
+    print(f"[*] Auto-import terminé : {imported_count}/{len(found_addresses)} ressource(s) importée(s).")
+    return imported_count
+
+
+def get_gcp_quota_parallelism(project_id, region):
+    """
+    Interroge les quotas GCP Compute Engine (projet + region) via gcloud,
+    affiche un tableau colore des ressources critiques, puis retourne
+    un niveau de parallelisme adapte au taux d'utilisation le plus eleve.
+
+    Heuristique de parallelisme :
+      > 80%  utilise  -> parallelism = 1  (pression critique)
+      > 50%  utilise  -> parallelism = 2  (pression moderee)
+      <= 50% utilise  -> parallelism = 3  (quota confortable)
+    """
+    CRITICAL_PROJECT_QUOTAS = [
+        "BACKEND_SERVICES",
+        "URL_MAPS",
+        "SSL_CERTIFICATES",
+        "TARGET_HTTPS_PROXIES",
+        "TARGET_HTTP_PROXIES",
+        "GLOBAL_NETWORK_ENDPOINT_GROUPS",
+        "FORWARDING_RULES",
+    ]
+    CRITICAL_REGION_QUOTAS = [
+        "REGION_BACKEND_SERVICES",
+        "NETWORK_ENDPOINT_GROUPS",
+        "SUBNETWORKS",
+    ]
+
+    all_quotas = []
+    max_ratio  = 0.0
+
+    print("[*] Lecture des quotas GCP Compute Engine...")
+
+    # Quotas au niveau projet (global)
+    try:
+        res = subprocess.run(
+            ["gcloud", "compute", "project-info", "describe",
+             "--project", project_id, "--format=json"],
+            capture_output=True, text=True, timeout=20
+        )
+        if res.returncode == 0:
+            data = json.loads(res.stdout)
+            for q in data.get("quotas", []):
+                if q["metric"] in CRITICAL_PROJECT_QUOTAS:
+                    usage = q.get("usage", 0)
+                    limit = q.get("limit", 1)
+                    ratio = usage / limit if limit > 0 else 0
+                    all_quotas.append({
+                        "scope": "global",
+                        "metric": q["metric"],
+                        "usage": int(usage),
+                        "limit": int(limit),
+                        "ratio": ratio,
+                    })
+                    max_ratio = max(max_ratio, ratio)
+        else:
+            print(f"    [!] gcloud project-info a echoue : {res.stderr.strip()[:100]}")
+    except Exception as e:
+        print(f"    [!] Impossible de lire les quotas projet : {e}")
+
+    # Quotas au niveau region
+    try:
+        res = subprocess.run(
+            ["gcloud", "compute", "regions", "describe", region,
+             "--project", project_id, "--format=json"],
+            capture_output=True, text=True, timeout=20
+        )
+        if res.returncode == 0:
+            data = json.loads(res.stdout)
+            for q in data.get("quotas", []):
+                if q["metric"] in CRITICAL_REGION_QUOTAS:
+                    usage = q.get("usage", 0)
+                    limit = q.get("limit", 1)
+                    ratio = usage / limit if limit > 0 else 0
+                    all_quotas.append({
+                        "scope": region,
+                        "metric": q["metric"],
+                        "usage": int(usage),
+                        "limit": int(limit),
+                        "ratio": ratio,
+                    })
+                    max_ratio = max(max_ratio, ratio)
+        else:
+            print(f"    [!] gcloud regions describe a echoue : {res.stderr.strip()[:100]}")
+    except Exception as e:
+        print(f"    [!] Impossible de lire les quotas region : {e}")
+
+    # Affichage du tableau colore
+    print()
+    print("    +" + "-"*62 + "+")
+    print(f"    | {'QUOTA':<32} {'SCOPE':<14} {'USAGE':>5} {'LIMIT':>5} {'%':>4} |")
+    print("    +" + "-"*62 + "+")
+    for q in sorted(all_quotas, key=lambda x: x["ratio"], reverse=True):
+        icon = "[CRIT]" if q["ratio"] > 0.80 else "[WARN]" if q["ratio"] > 0.50 else "[ OK ]"
+        print(f"    | {icon} {q['metric']:<28} {q['scope']:<14} {q['usage']:>5} {q['limit']:>5} {q['ratio']*100:>3.0f}% |")
+    print("    +" + "-"*62 + "+")
+
+    # Decision du parallelisme
+    if not all_quotas:
+        parallelism = 1
+        verdict = "[CRIT] Quotas non disponibles - parallelisme prudent a 1"
+    elif max_ratio > 0.80:
+        parallelism = 1
+        verdict = f"[CRIT] Quota critique ({max_ratio*100:.0f}% max) -> parallelism = 1"
+    elif max_ratio > 0.50:
+        parallelism = 2
+        verdict = f"[WARN] Quota modere  ({max_ratio*100:.0f}% max) -> parallelism = 2"
+    else:
+        parallelism = 3
+        verdict = f"[ OK ] Quota OK      ({max_ratio*100:.0f}% max) -> parallelism = 3"
+
+    print(f"    {verdict}")
+    print()
+    return parallelism
+
+
 def deploy(env, base_domain, project_id, config, force=False):
     init_tf()
     set_workspace(env)
@@ -258,19 +499,47 @@ def deploy(env, base_domain, project_id, config, force=False):
         toggle_prevent_destroy(disable=True)
 
     try:
-        apply_cmd = ["terraform", "apply", "-auto-approve", "-parallelism=5"] + get_tf_args()
-        
+        # Extraction de la région depuis la config (fallback sur la valeur TF par défaut)
+        region = config.get("region", "europe-west1")
+
+        # Parallelisme adaptatif base sur les quotas GCP courants
+        parallelism = get_gcp_quota_parallelism(project_id, region)
+        apply_cmd = ["terraform", "apply", "-auto-approve",
+                     f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args()
+
         print(f"[*] Terraform Apply...")
         res = run_cmd(apply_cmd, check=False, live=True)
-            
+
         if res.returncode != 0:
-            print("[*] Terraform apply caught an error (often GCP eventual consistency). Retrying once...")
-            import time
-            time.sleep(10)
+            # ── Passe 1 : import auto des ressources en conflit 409 ──────────
+            print("[*] Apply échoué. Analyse des conflits 409 pour auto-import...")
+            imported = import_resources_on_409(res.stdout, env, project_id, region)
+
+            if imported > 0:
+                print(f"[+] {imported} ressource(s) importée(s). Nouveau tentative d'apply...")
+            else:
+                print("[*] Aucun import 409 effectué. Pause 15s (consistance éventuelle GCP)...")
+                time.sleep(15)
+
             res = run_cmd(apply_cmd, check=False, live=True)
-            if res.returncode != 0:
-                print(f"[!] Échec définitif de l'apply.")
-                sys.exit(res.returncode)
+
+        if res.returncode != 0:
+            # ── Passe 2 : un 2e lot de 409 peut apparaître après le 1er import ──
+            print("[*] 2ème apply échoué. Nouvelle analyse des conflits 409...")
+            imported2 = import_resources_on_409(res.stdout, env, project_id, region)
+
+            if imported2 > 0:
+                print(f"[+] {imported2} ressource(s) supplémentaire(s) importée(s). Dernier apply...")
+                time.sleep(5)
+                res = run_cmd(apply_cmd, check=False, live=True)
+            else:
+                print("[*] Aucun import supplémentaire. Pause 15s avant dernier essai...")
+                time.sleep(15)
+                res = run_cmd(apply_cmd, check=False, live=True)
+
+        if res.returncode != 0:
+            print(f"[!] Échec définitif de l'apply.")
+            sys.exit(res.returncode)
 
     # Post-deploy: Déploiement du Frontend
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
@@ -306,10 +575,6 @@ def deploy(env, base_domain, project_id, config, force=False):
         print(f"[*] Latest archive identified: {latest_archive_url}")
         
         # 3. Télécharger et extraire
-        import tempfile
-        import tarfile
-        import zipfile
-        
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = os.path.join(tmpdir, "archive")
             print(f"[*] Downloading {latest_archive_url}...")
@@ -394,13 +659,6 @@ def deploy(env, base_domain, project_id, config, force=False):
         print("\n=======================================================")
         print(f"[*] Post-Deploy: Running Sanity Checks on {env}...")
         print("=======================================================")
-        
-        import json
-        import socket
-        import time
-        import urllib.request
-        import urllib.error
-        import ssl
         
         # Extrait l'IP et Mdp depuis les outputs Terraform
         out_res = subprocess.run(["terraform", "output", "-json"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
@@ -658,7 +916,7 @@ def plan(env):
     cmd = ["terraform", "plan"] + get_tf_args()
     run_cmd(cmd)
 
-def destroy(env, force=False):
+def destroy(env, project_id, config, force=False):
     init_tf()
     set_workspace(env)
 
@@ -682,10 +940,23 @@ def destroy(env, force=False):
                 run_cmd(["terraform", "state", "rm", line], check=False)
 
     print(f"[*] Destroying all other components for environment '{env}'...")
-    cmd = ["terraform", "destroy", "-auto-approve"] + get_tf_args()
-    
+
+    # Parallelisme adaptatif : les DELETE GCP sont encore plus sensibles aux
+    # quotas API que les lectures du refresh. On applique la meme heuristique.
+    region = config.get("region", "europe-west1")
+    parallelism = get_gcp_quota_parallelism(project_id, region)
+    cmd = ["terraform", "destroy", "-auto-approve",
+           f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args()
+
     try:
-        run_cmd(cmd, live=True)
+        res = run_cmd(cmd, check=False, live=True)
+        if res.returncode != 0:
+            print("[*] Destroy echoue. Pause 15s et nouvelle tentative...")
+            time.sleep(15)
+            res = run_cmd(cmd, check=False, live=True)
+            if res.returncode != 0:
+                print(f"[!] Echec definitif du destroy.")
+                sys.exit(res.returncode)
     finally:
         if force:
             toggle_prevent_destroy(disable=False)
@@ -727,7 +998,7 @@ if __name__ == "__main__":
         if args.action == "deploy":
             deploy(args.env, base_domain, project_id, final_config, force=args.force)
         elif args.action == "destroy":
-            destroy(args.env, force=args.force)
+            destroy(args.env, project_id, final_config, force=args.force)
         elif args.action == "plan":
             plan(args.env)
             

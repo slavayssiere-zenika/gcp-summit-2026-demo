@@ -150,6 +150,17 @@ resource "google_compute_region_backend_service" "market_internal_backend" {
   }
 }
 
+# Backend global (EXTERNAL_MANAGED) pour accès via le LB externe (frontend AIOps, Admin)
+resource "google_compute_backend_service" "market_backend" {
+  name                  = "backend-market-${terraform.workspace}"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  security_policy       = google_compute_security_policy.waf.id
+  backend {
+    group = google_compute_region_network_endpoint_group.market_neg.id
+  }
+}
+
 resource "google_project_iam_member" "market_bq_admin" {
   project = var.project_id
   role    = "roles/bigquery.admin"

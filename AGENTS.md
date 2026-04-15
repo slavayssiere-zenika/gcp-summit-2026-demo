@@ -138,6 +138,15 @@ Tous les conteneurs du projet doivent impérativement respecter les règles dict
 2. **Multi-Stage Builds** : Chaque Dockerfile se doit d'utiliser des étapes de build (`AS builder`) pour séparer les outils de compilation (ex: `gcc`) du binaire final en prod. Cela renforce la sécurité et réduit l'empreinte de l'image.
 3. **Graceful Shutdown (CMD System)** : Interdiction d'utiliser des appels shell comme `CMD ["sh", "-c", "..."]`. Favorisez l'appel de module cible : `CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]` pour palier l'absence potentielle de shell liés aux packages `distroless` ou les wrappers pip.
 4. **Hygiène du Cache (.dockerignore)** : Les directives `COPY . .` doivent être sécurisées par des fichiers `.dockerignore` stricts (interdisant l'inclusion de `__pycache__`, environnements virtuels ou données de tests) pour maximiser la vitesse de Build.
+5. **Dockerfile comme Contrat de Configuration (ENV Contract)** : Le `Dockerfile` est la **source de vérité exhaustive** des variables d'environnement qu'un service consomme. Les règles sont :
+   - Toute variable lue via `os.getenv()` dans le code **DOIT** avoir un `ENV nom=valeur_locale` correspondant dans le Dockerfile (avec une valeur de dev local safe).
+   - Une variable présente dans le code mais **absente du Dockerfile est un bug** à corriger immédiatement.
+   - **3 niveaux d'env vars** selon leur origine :
+     - *Comportement applicatif* (`LOG_LEVEL`, `TRACE_EXPORTER`, `ROOT_PATH`, URLs locales) → défaut dans Dockerfile, optionnellement surchargé par Cloud Run.
+     - *Infrastructure* (`DATABASE_URL`, `REDIS_URL`, `ALLOYDB_INSTANCE_URI`) → **jamais de défaut dans Dockerfile**, toujours injecté par Cloud Run TF.
+     - *Secrets* (`GOOGLE_API_KEY`, `SECRET_KEY`) → **jamais dans Dockerfile**, toujours via `secret_key_ref` dans Cloud Run TF + binding IAM `secretAccessor`.
+   - Le fichier `cr_<service>.tf` Terraform doit surcharger toutes les valeurs infra/secrets. Les env vars présentes dans le Dockerfile **sans override TF** utilisent leur valeur de dev par défaut — ce comportement est intentionnel et accepté pour les variables comportementales.
+   - **Consulter le KI `env-vars-matrix`** pour la matrice de référence complète (service → variables → secrets requis).
 
 ---
 

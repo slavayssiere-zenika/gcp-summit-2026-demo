@@ -28,10 +28,22 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 COPY . .
 
 ENV PYTHONPATH=/app
-ENV GEMINI_MODEL=gemini-3-flash-preview
-ENV GEMINI_PRO_MODEL=gemini-3-pro-preview
+ENV GEMINI_MODEL=gemini-2.5-flash
+ENV GEMINI_PRO_MODEL=gemini-2.5-pro
 ENV GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 ENV PORT=8004
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV TRACE_EXPORTER=grpc
+ENV ROOT_PATH=/cv-api
+ENV APP_VERSION=dev
+ENV USE_IAM_AUTH=false
+ENV USERS_API_URL=http://users_api:8000
+ENV COMPETENCIES_API_URL=http://competencies_api:8003
+ENV ITEMS_API_URL=http://items_api:8001
+ENV DRIVE_API_URL=http://drive_api:8080
+ENV PROMPTS_API_URL=http://prompts_api:8000
+ENV MARKET_MCP_URL=http://market_mcp:8080
 EXPOSE 8004
 
 RUN useradd -m appuser && chown -R appuser /app

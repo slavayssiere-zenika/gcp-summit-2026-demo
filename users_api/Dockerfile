@@ -30,6 +30,14 @@ COPY . .
 
 ENV PYTHONPATH=/app
 ENV PORT=8000
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV TRACE_EXPORTER=grpc
+ENV ROOT_PATH=/users-api
+ENV APP_VERSION=dev
+ENV USE_IAM_AUTH=false
+ENV CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://localhost:8080
+ENV FRONTEND_URL=http://localhost:5173
 EXPOSE 8000
 
 # Création d'un utilisateur sans privilège

@@ -189,6 +189,7 @@ resource "google_compute_region_network_endpoint_group" "agent_hr_neg" {
   }
 }
 
+# Backend service interne (LB régional interne — utilisé inter-services)
 resource "google_compute_region_backend_service" "agent_hr_internal_backend" {
   name                  = "backend-internal-agent-hr-${terraform.workspace}"
   region                = var.region
@@ -198,6 +199,17 @@ resource "google_compute_region_backend_service" "agent_hr_internal_backend" {
     group           = google_compute_region_network_endpoint_group.agent_hr_neg.id
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
+  }
+}
+
+# Backend service externe (LB global HTTPS — exposé via /agent-hr-api/ dans lb.tf)
+resource "google_compute_backend_service" "agent_hr_backend" {
+  name                  = "backend-agent-hr-${terraform.workspace}"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  security_policy       = google_compute_security_policy.waf.id
+  backend {
+    group = google_compute_region_network_endpoint_group.agent_hr_neg.id
   }
 }
 
