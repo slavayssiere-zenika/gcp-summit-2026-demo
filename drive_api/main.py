@@ -18,7 +18,8 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from src.router import router
+from src.router import router, public_router
+from src.auth import verify_jwt
 from logger import setup_logging, LoggingMiddleware
 
 provider = TracerProvider(
@@ -48,21 +49,17 @@ app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
 
 import asyncio
-import os
 import logging
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
-
-app.include_router(router)
-
-from src.auth import verify_jwt
-from fastapi import APIRouter, Depends
-
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage (anti prompt-injection)
 
+from fastapi import APIRouter, Depends
+
+# Router protégé par JWT applicatif: endpoints admin + proxy MCP sidecar
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
@@ -72,13 +69,13 @@ async def proxy_mcp(path: str, request: Request):
     url = f"http://localhost:8081/mcp/{path}"
     if request.url.query:
         url += f"?{request.url.query}"
-    
+
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
-    
+
     body = await request.body()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             res = await client.request(
@@ -95,6 +92,14 @@ async def proxy_mcp(path: str, request: Request):
         except Exception as e:
             return Response(content=str(e), status_code=502)
 
+@protected_router.get("/spec")
+async def get_spec():
+    try:
+        with open("spec.md", "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/markdown")
+    except Exception:
+        return Response(content="# Specification introuvable", media_type="text/markdown")
+
 @app.get("/health")
 async def health(response: Response):
     if await database.check_db_connection():
@@ -106,14 +111,12 @@ async def health(response: Response):
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
 
-@protected_router.get("/spec")
-async def get_spec():
-    try:
-        with open("spec.md", "r", encoding="utf-8") as f:
-            return Response(content=f.read(), media_type="text/markdown")
-    except Exception:
-        return Response(content="# Specification introuvable", media_type="text/markdown")
-
+# Enregistrement des routeurs dans l'ordre:
+# 1. router: endpoints business protégés par JWT (folders, files, status…)
+# 2. public_router: /sync — protégé par IAM Cloud Run (OIDC Scheduler), pas par JWT
+# 3. protected_router: proxy MCP sidecar + /spec — protégés par JWT
+app.include_router(router)
+app.include_router(public_router)
 app.include_router(protected_router)
 
 if __name__ == "__main__":

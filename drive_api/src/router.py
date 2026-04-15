@@ -109,14 +109,20 @@ async def retry_errors(db: AsyncSession = Depends(get_db)):
 
 import asyncio
 
-
 from fastapi import BackgroundTasks
 
-@router.post("/sync")
+# NOTE SÉCURITÉ: Cette route est intentionnellement exclue du routeur protégé par verify_jwt.
+# La sécurité est assurée par IAM Cloud Run : seul le Service Account `drive_sa`
+# (roles/run.invoker) peut appeler cet endpoint via le Cloud Scheduler (oidc_token).
+# Un JWT applicatif ne peut pas être utilisé ici car le Scheduler émet un token OIDC Google.
+public_router = APIRouter(prefix="", tags=["Drive Sync - IAM Protected"])
+
+@public_router.post("/sync")
 async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """
     Called by GCP Cloud Scheduler every X minutes.
     Performs discovery and then processes a batch.
+    Protected by Cloud Run IAM (OIDC token from Scheduler SA), NOT by JWT.
     """
     logger.info("Début de la synchronisation avec Google Drive.")
     

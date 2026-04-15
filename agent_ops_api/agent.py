@@ -27,8 +27,9 @@ DRIVE_API_URL = os.getenv("DRIVE_MCP_URL", "http://drive_api:8000")
 MARKET_MCP_URL = os.getenv("MARKET_MCP_URL", "http://market_mcp:8000")
 
 # Note: Each of these clients uses auth_header_var from mcp_client.py seamlessly.
-drive_client = MCPHttpClient(f"{DRIVE_API_URL.rstrip('/')}/mcp/query")
-market_client = MCPHttpClient(f"{MARKET_MCP_URL.rstrip('/')}/mcp/query")
+# Base URL only — MCPHttpClient.list_tools() appends /mcp/tools and call_tool() appends /mcp/call
+drive_client = MCPHttpClient(DRIVE_API_URL)
+market_client = MCPHttpClient(MARKET_MCP_URL)
 
 # LOKI Uses SSE Client
 # Warning: The architecture rule strictly favors HTTP. But we keep it as SSE if it was designed so, or HTTP if we refactored it.
@@ -51,11 +52,24 @@ async def _get_cached_tools() -> list:
         logger.info("[Ops] Using cached MCP tool definitions (%d tools).", len(_tools_cache))
         return _tools_cache
     logger.info("[Ops] Fetching MCP tool definitions from all services...")
-    tools = (
-        await drive_client.list_tools()
-        + await market_client.list_tools()
-        + await loki_client.list_tools()
-    )
+    tools = []
+    for name, client in [
+        ("drive", drive_client),
+        ("market", market_client),
+    ]:
+        try:
+            service_tools = await client.list_tools()
+            tools.extend(service_tools)
+            logger.info("[Ops] Loaded %d tools from %s.", len(service_tools), name)
+        except Exception as e:
+            logger.warning("[Ops] Could not load tools from %s (degraded mode): %s", name, e)
+    # Loki uses SSE — keep separate try/except
+    try:
+        loki_tools = await loki_client.list_tools()
+        tools.extend(loki_tools)
+        logger.info("[Ops] Loaded %d tools from loki.", len(loki_tools))
+    except Exception as e:
+        logger.warning("[Ops] Could not load tools from loki (degraded mode): %s", e)
     _tools_cache = tools
     _tools_cache_ts = time.time()
     logger.info("[Ops] Cached %d MCP tools (TTL=%ds).", len(tools), _TOOLS_CACHE_TTL)

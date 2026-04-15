@@ -160,6 +160,41 @@ resource "google_compute_url_map" "default" {
       }
     }
 
+    # market-mcp exposé via le LB externe pour l'AIOps, l'Admin FinOps et le Scheduler
+    route_rules {
+      priority = 82
+      match_rules { prefix_match = "/market-mcp/" }
+      service = google_compute_backend_service.market_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    # Agents sub (HR et OPS) exposés via le LB externe pour les sanity checks et l'admin
+    route_rules {
+      priority = 83
+      match_rules { prefix_match = "/agent-hr-api/" }
+      service = google_compute_backend_service.agent_hr_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 84
+      match_rules { prefix_match = "/agent-ops-api/" }
+      service = google_compute_backend_service.agent_ops_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
 
 
     # SPA routing for all frontend views to avoid 404s on direct navigation or refresh

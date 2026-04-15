@@ -87,6 +87,30 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         value = "http://api.internal.zenika/market-mcp/"
       }
       env {
+        name  = "USERS_API_URL"
+        value = "http://api.internal.zenika/users-api/"
+      }
+      env {
+        name  = "ITEMS_API_URL"
+        value = "http://api.internal.zenika/items-api/"
+      }
+      env {
+        name  = "DRIVE_API_URL"
+        value = "http://api.internal.zenika/drive-api/"
+      }
+      env {
+        name  = "COMPETENCIES_API_URL"
+        value = "http://api.internal.zenika/comp-api/"
+      }
+      env {
+        name  = "CV_API_URL"
+        value = "http://api.internal.zenika/cv-api/"
+      }
+      env {
+        name  = "MISSIONS_API_URL"
+        value = "http://api.internal.zenika/missions-api/"
+      }
+      env {
         name  = "USE_GCP_LOGGING"
         value = "true"
       }

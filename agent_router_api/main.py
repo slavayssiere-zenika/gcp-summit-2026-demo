@@ -477,16 +477,76 @@ async def get_me(request: Request):
 
 
 @protected_router.get("/mcp/registry")
-async def mcp_registry():
-    return {
-        "services": [
-            {
-                "id": "router",
-                "name": "Router Agent (Orchestrator)",
-                "tools": get_tool_metadata(ROUTER_TOOLS)
-            }
-        ]
+async def mcp_registry(auth: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Renvoie la liste consolidée de tous les tools MCP de l'écosystème.
+    Chaque service MCP expose GET /mcp/tools. On les agrège en parallèle.
+    """
+    import asyncio
+
+    auth_header = f"{auth.scheme} {auth.credentials}"
+
+    # Liste de tous les services MCP connus, avec leur URL d'env et leur identifiant
+    MCP_SERVICES_CONFIG = [
+        {"id": "users",        "name": "Users API",           "env": "USERS_API_URL"},
+        {"id": "items",        "name": "Items API",           "env": "ITEMS_API_URL"},
+        {"id": "drive",        "name": "Drive API",           "env": "DRIVE_API_URL"},
+        {"id": "competencies", "name": "Competencies API",    "env": "COMPETENCIES_API_URL"},
+        {"id": "cv",           "name": "CV API",              "env": "CV_API_URL"},
+        {"id": "missions",     "name": "Missions API",        "env": "MISSIONS_API_URL"},
+        {"id": "market",       "name": "Market & FinOps MCP", "env": "MARKET_MCP_URL"},
+    ]
+
+    async def fetch_tools(svc_config: dict) -> dict:
+        base_url = os.getenv(svc_config["env"], "")
+        if not base_url:
+            return {"id": svc_config["id"], "name": svc_config["name"], "tools": [], "error": "URL non configurée"}
+
+        headers = {"Authorization": auth_header}
+        inject(headers)
+        url = f"{base_url.rstrip('/')}/mcp/tools"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get(url, headers=headers)
+                if res.status_code == 200:
+                    raw_tools = res.json()
+                    # Normalise la structure: les tools peuvent avoir inputSchema ou parameters
+                    tools = []
+                    for t in raw_tools:
+                        params = []
+                        schema = t.get("inputSchema", {})
+                        properties = schema.get("properties", {})
+                        required_fields = schema.get("required", [])
+                        for pname, pdef in properties.items():
+                            params.append({
+                                "name": pname,
+                                "type": pdef.get("type", "any"),
+                                "default": pdef.get("default", None),
+                                "required": pname in required_fields,
+                            })
+                        tools.append({
+                            "name": t.get("name", ""),
+                            "description": t.get("description", ""),
+                            "parameters": params,
+                        })
+                    return {"id": svc_config["id"], "name": svc_config["name"], "tools": tools}
+                else:
+                    return {"id": svc_config["id"], "name": svc_config["name"], "tools": [], "error": f"HTTP {res.status_code}"}
+        except Exception as e:
+            return {"id": svc_config["id"], "name": svc_config["name"], "tools": [], "error": str(e)}
+
+    # Agrégation parallèle + router lui-même
+    results = await asyncio.gather(*[fetch_tools(s) for s in MCP_SERVICES_CONFIG])
+
+    # Ajouter le Router agent en premier (ses tools sont locaux, pas besoin d'appel HTTP)
+    router_service = {
+        "id": "router",
+        "name": "Router Agent (Orchestrator)",
+        "tools": get_tool_metadata(ROUTER_TOOLS)
     }
+
+    all_services = [router_service] + list(results)
+    return {"services": all_services}
 
 
 @app.get("/health")

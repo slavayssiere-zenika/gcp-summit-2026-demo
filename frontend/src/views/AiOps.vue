@@ -58,7 +58,7 @@ const fetchMetrics = async (force: boolean = false) => {
   loading.value = true
   error.value = ''
   try {
-    const url = force ? '/market-mcp/metrics/aiops?force=true' : '/market-mcp/metrics/aiops'
+    const url = force ? '/api/mcp/proxy/market-mcp/metrics/aiops?force=true' : '/api/mcp/proxy/market-mcp/metrics/aiops'
     const res = await axios.get(url)
     data.value = res.data
   } catch (err: any) {

@@ -29,11 +29,12 @@ CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
 MISSIONS_API_URL = os.getenv("MISSIONS_API_URL", "http://missions_api:8000")
 
 # Note: Each of these clients uses auth_header_var from mcp_client.py seamlessly.
-users_client = MCPHttpClient(f"{USERS_API_URL}/mcp/query")
-items_client = MCPHttpClient(f"{ITEMS_API_URL}/mcp/query")
-comp_client = MCPHttpClient(f"{COMPETENCIES_API_URL}/mcp/query")
-cv_client = MCPHttpClient(f"{CV_API_URL}/mcp/query")
-missions_client = MCPHttpClient(f"{MISSIONS_API_URL}/mcp/query")
+# Base URL only — MCPHttpClient.list_tools() appends /mcp/tools and call_tool() appends /mcp/call
+users_client = MCPHttpClient(USERS_API_URL)
+items_client = MCPHttpClient(ITEMS_API_URL)
+comp_client = MCPHttpClient(COMPETENCIES_API_URL)
+cv_client = MCPHttpClient(CV_API_URL)
+missions_client = MCPHttpClient(MISSIONS_API_URL)
 
 HR_TOOLS = []
 # Tools will be fetched asynchronously in create_agent()
@@ -51,13 +52,20 @@ async def _get_cached_tools() -> list:
         logger.info("[HR] Using cached MCP tool definitions (%d tools).", len(_tools_cache))
         return _tools_cache
     logger.info("[HR] Fetching MCP tool definitions from all services...")
-    tools = (
-        await users_client.list_tools()
-        + await items_client.list_tools()
-        + await comp_client.list_tools()
-        + await cv_client.list_tools()
-        + await missions_client.list_tools()
-    )
+    tools = []
+    for name, client in [
+        ("users", users_client),
+        ("items", items_client),
+        ("competencies", comp_client),
+        ("cv", cv_client),
+        ("missions", missions_client),
+    ]:
+        try:
+            service_tools = await client.list_tools()
+            tools.extend(service_tools)
+            logger.info("[HR] Loaded %d tools from %s.", len(service_tools), name)
+        except Exception as e:
+            logger.warning("[HR] Could not load tools from %s (degraded mode): %s", name, e)
     _tools_cache = tools
     _tools_cache_ts = time.time()
     logger.info("[HR] Cached %d MCP tools (TTL=%ds).", len(tools), _TOOLS_CACHE_TTL)

@@ -87,6 +87,26 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = "http://api.internal.zenika/loki-mcp/" # Proxy directly if internal
       }
       env {
+        name  = "USERS_API_URL"
+        value = "http://api.internal.zenika/users-api/"
+      }
+      env {
+        name  = "ITEMS_API_URL"
+        value = "http://api.internal.zenika/items-api/"
+      }
+      env {
+        name  = "COMPETENCIES_API_URL"
+        value = "http://api.internal.zenika/comp-api/"
+      }
+      env {
+        name  = "CV_API_URL"
+        value = "http://api.internal.zenika/cv-api/"
+      }
+      env {
+        name  = "MISSIONS_API_URL"
+        value = "http://api.internal.zenika/missions-api/"
+      }
+      env {
         name  = "USE_GCP_LOGGING"
         value = "true"
       }
@@ -177,6 +197,7 @@ resource "google_compute_region_network_endpoint_group" "agent_ops_neg" {
   }
 }
 
+# Backend service interne (LB régional interne — utilisé inter-services)
 resource "google_compute_region_backend_service" "agent_ops_internal_backend" {
   name                  = "backend-internal-agent-ops-${terraform.workspace}"
   region                = var.region
@@ -186,6 +207,17 @@ resource "google_compute_region_backend_service" "agent_ops_internal_backend" {
     group           = google_compute_region_network_endpoint_group.agent_ops_neg.id
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
+  }
+}
+
+# Backend service externe (LB global HTTPS — exposé via /agent-ops-api/ dans lb.tf)
+resource "google_compute_backend_service" "agent_ops_backend" {
+  name                  = "backend-agent-ops-${terraform.workspace}"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  security_policy       = google_compute_security_policy.waf.id
+  backend {
+    group = google_compute_region_network_endpoint_group.agent_ops_neg.id
   }
 }
 

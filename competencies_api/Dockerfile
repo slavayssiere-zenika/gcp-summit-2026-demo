@@ -29,6 +29,13 @@ COPY . .
 
 ENV PYTHONPATH=/app
 ENV PORT=8003
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV TRACE_EXPORTER=grpc
+ENV ROOT_PATH=/comp-api
+ENV APP_VERSION=dev
+ENV USE_IAM_AUTH=false
+ENV USERS_API_URL=http://users_api:8000
 EXPOSE 8003
 
 RUN useradd -m appuser && chown -R appuser /app
