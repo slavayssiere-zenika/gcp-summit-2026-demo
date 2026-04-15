@@ -476,6 +476,18 @@ async def get_me(request: Request):
         return res.json()
 
 
+# Configuration centralisée des services MCP de l'écosystème
+# Sert à la fois pour le registre (/mcp/registry) et pour le proxy (/mcp/proxy)
+MCP_SERVICES_CONFIG = [
+    {"id": "users",        "name": "Users API",           "env": "USERS_API_URL"},
+    {"id": "items",        "name": "Items API",           "env": "ITEMS_API_URL"},
+    {"id": "drive",        "name": "Drive API",           "env": "DRIVE_API_URL"},
+    {"id": "competencies", "name": "Competencies API",    "env": "COMPETENCIES_API_URL"},
+    {"id": "cv",           "name": "CV API",              "env": "CV_API_URL"},
+    {"id": "missions",     "name": "Missions API",        "env": "MISSIONS_API_URL"},
+    {"id": "market",       "name": "Market & FinOps MCP", "env": "MARKET_MCP_URL"},
+]
+
 @protected_router.get("/mcp/registry")
 async def mcp_registry(auth: HTTPAuthorizationCredentials = Depends(security)):
     """
@@ -485,17 +497,6 @@ async def mcp_registry(auth: HTTPAuthorizationCredentials = Depends(security)):
     import asyncio
 
     auth_header = f"{auth.scheme} {auth.credentials}"
-
-    # Liste de tous les services MCP connus, avec leur URL d'env et leur identifiant
-    MCP_SERVICES_CONFIG = [
-        {"id": "users",        "name": "Users API",           "env": "USERS_API_URL"},
-        {"id": "items",        "name": "Items API",           "env": "ITEMS_API_URL"},
-        {"id": "drive",        "name": "Drive API",           "env": "DRIVE_API_URL"},
-        {"id": "competencies", "name": "Competencies API",    "env": "COMPETENCIES_API_URL"},
-        {"id": "cv",           "name": "CV API",              "env": "CV_API_URL"},
-        {"id": "missions",     "name": "Missions API",        "env": "MISSIONS_API_URL"},
-        {"id": "market",       "name": "Market & FinOps MCP", "env": "MARKET_MCP_URL"},
-    ]
 
     async def fetch_tools(svc_config: dict) -> dict:
         base_url = os.getenv(svc_config["env"], "")
@@ -560,11 +561,23 @@ async def get_version():
 
 @protected_router.api_route("/mcp/proxy/{server_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
-    target_url_env = f"{server_name.upper()}_URL"
-    base_url = os.getenv(target_url_env)
+    # Normalisation du nom (market-mcp -> market, items_api -> items)
+    normalized_name = server_name.lower().replace("-", "_").replace("_api", "").replace("_mcp", "")
+    
+    # Recherche du service dans la config globale
+    svc = next((s for s in MCP_SERVICES_CONFIG if s["id"] == normalized_name or s["id"] == server_name), None)
+    
+    base_url = None
+    if svc:
+        base_url = os.getenv(svc["env"])
+    
+    # Fallback si non trouvé dans la liste statique (tente un mapping direct prédictible)
+    if not base_url:
+        env_var_name = f"{normalized_name.upper()}_API_URL"
+        base_url = os.getenv(env_var_name)
     
     if not base_url:
-        raise HTTPException(status_code=404, detail=f"MCP Server {server_name} introuvable")
+        raise HTTPException(status_code=404, detail=f"MCP Server {server_name} (ID: {normalized_name}) introuvable ou variable d'env manquante")
         
     auth_header = f"{auth.scheme} {auth.credentials}"
     headers = {"Authorization": auth_header}
@@ -585,7 +598,9 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
                 content=body,
                 timeout=300.0
             )
-            return Response(content=res.content, status_code=res.status_code, media_type=res.headers.get("content-type"))
+            # Propagation de certains headers importants mais filtrage du content-length (httpx le regénère)
+            resp_headers = {k: v for k, v in res.headers.items() if k.lower() not in ["content-length", "content-encoding", "transfer-encoding"]}
+            return Response(content=res.content, status_code=res.status_code, headers=resp_headers)
         except httpx.RequestError as exc:
             raise HTTPException(status_code=502, detail=f"Erreur de communication avec {server_name}: {str(exc)}")
 

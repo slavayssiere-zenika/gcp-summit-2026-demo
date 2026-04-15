@@ -71,7 +71,16 @@ resource "google_compute_url_map" "default" {
       }
     }
 
-
+    route_rules {
+      priority = 11
+      match_rules { prefix_match = "/mcp/" }
+      service = google_compute_backend_service.agent_router_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
 
     route_rules {
       priority = 20
