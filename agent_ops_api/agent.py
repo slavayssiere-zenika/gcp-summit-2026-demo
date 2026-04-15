@@ -38,6 +38,29 @@ loki_client = MCPSseClient(LOKI_MCP_URL)
 OPS_TOOLS = []
 # Tools will be fetched asynchronously in create_agent()
 
+# --- MCP Tools Cache (avoids 3 HTTP calls per request) ---
+_tools_cache: list = []
+_tools_cache_ts: float = 0.0
+_TOOLS_CACHE_TTL = 300  # 5 minutes
+
+
+async def _get_cached_tools() -> list:
+    global _tools_cache, _tools_cache_ts
+    import time
+    if _tools_cache and (time.time() - _tools_cache_ts) < _TOOLS_CACHE_TTL:
+        logger.info("[Ops] Using cached MCP tool definitions (%d tools).", len(_tools_cache))
+        return _tools_cache
+    logger.info("[Ops] Fetching MCP tool definitions from all services...")
+    tools = (
+        await drive_client.list_tools()
+        + await market_client.list_tools()
+        + await loki_client.list_tools()
+    )
+    _tools_cache = tools
+    _tools_cache_ts = time.time()
+    logger.info("[Ops] Cached %d MCP tools (TTL=%ds).", len(tools), _TOOLS_CACHE_TTL)
+    return tools
+
 async def create_agent(session_id: str | None = None):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     instruction_text = "Tu es l'Agent Ops (Platform Engineering, FinOps & Sécurité) de la plateforme Zenika. Tu détiens l'expertise des logs et de l'infra."
@@ -53,11 +76,7 @@ async def create_agent(session_id: str | None = None):
             
     model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     
-    DRIVE_TOOLS = await drive_client.list_tools()
-    MARKET_TOOLS = await market_client.list_tools()
-    LOKI_TOOLS = await loki_client.list_tools()
-    
-    OPS_TOOLS = DRIVE_TOOLS + MARKET_TOOLS + LOKI_TOOLS
+    OPS_TOOLS = await _get_cached_tools()
     
     agent = Agent(
         name="assistant_zenika_ops",
@@ -113,6 +132,17 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
                 if getattr(part, 'thought', None):
                     thoughts.append(str(part.thought))
                 
+                # Track function calls (tool invocations) for observability
+                tcall = getattr(part, 'tool_call', None) or getattr(part, 'function_call', None)
+                if tcall:
+                    for call in (tcall if isinstance(tcall, list) else [tcall]):
+                        name = getattr(call, 'name', 'unknown')
+                        args = getattr(call, 'args', {})
+                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
+                        if sig not in seen_steps:
+                            steps.append({"type": "call", "tool": name, "args": args})
+                            seen_steps.add(sig)
+                
                 fres = getattr(part, 'function_response', None)
                 if fres:
                     res_data = getattr(fres, 'response', fres)
@@ -126,6 +156,7 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
                     sig = f"result:{json.dumps(res_data, sort_keys=True)}"
                     if sig not in seen_steps:
                         last_tool_data = res_data # Bubble up the last fetched data
+                        steps.append({"type": "result", "data": res_data})
                         seen_steps.add(sig)
         
         if has_content and is_assistant:
@@ -174,5 +205,12 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
 
     return {
         "response": response_text,
-        "data": last_tool_data
+        "data": last_tool_data,
+        "steps": steps,
+        "thoughts": "\n".join(thoughts),
+        "usage": {
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
+            "estimated_cost_usd": round(total_input_tokens * 0.000000075 + total_output_tokens * 0.0000003, 6)
+        }
     }

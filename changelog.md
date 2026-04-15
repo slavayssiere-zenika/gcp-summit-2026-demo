@@ -1,3 +1,35 @@
+## Mise à jour automatique - 2026-04-15 08:25:36
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1145  | 317  |  72% |
+| cv_api           | 1648  | 564  |  66% |
+| drive_api        | 792   | 367  |  54% |
+| items_api        | 1094  | 242  |  78% |
+| prompts_api      | 593   | 116  |  80% |
+| users_api        | 1327  | 412  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/agent.py` (M)
+- `agent_hr_api/agent_hr_api.system_instruction.txt` (M)
+- `agent_hr_api/main.py` (M)
+- `agent_ops_api/agent.py` (M)
+- `agent_ops_api/agent_ops_api.system_instruction.txt` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_router_api/agent.py` (M)
+- `agent_router_api/agent_router_api.system_instruction.txt` (M)
+- `drive_api/test.db` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-15 08:11:48
 
 ### Couverture de Code

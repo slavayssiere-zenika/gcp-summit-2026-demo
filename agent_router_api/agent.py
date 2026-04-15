@@ -49,7 +49,14 @@ async def ask_hr_agent(query: str) -> dict:
             res = await client.post(f"{hr_url.rstrip('/')}/a2a/query", json={"query": query})
             res.raise_for_status()
             data = res.json()
-            return {"result": json.dumps({"agent": "hr_agent", "response": data.get("response"), "data": data.get("data")})}
+            return {"result": json.dumps({
+                "agent": "hr_agent",
+                "response": data.get("response"),
+                "data": data.get("data"),
+                "steps": data.get("steps", []),
+                "thoughts": data.get("thoughts", ""),
+                "usage": data.get("usage", {})
+            })}
     except Exception as e:
         logger.error(f"[A2A] HR Agent error: {e}")
         return {"result": f"Échec de communication avec l'Agent RH: {str(e)}"}
@@ -83,7 +90,14 @@ async def ask_ops_agent(query: str) -> dict:
             res = await client.post(f"{ops_url.rstrip('/')}/a2a/query", json={"query": query})
             res.raise_for_status()
             data = res.json()
-            return {"result": json.dumps({"agent": "ops_agent", "response": data.get("response"), "data": data.get("data")})}
+            return {"result": json.dumps({
+                "agent": "ops_agent",
+                "response": data.get("response"),
+                "data": data.get("data"),
+                "steps": data.get("steps", []),
+                "thoughts": data.get("thoughts", ""),
+                "usage": data.get("usage", {})
+            })}
     except Exception as e:
         logger.error(f"[A2A] Ops Agent error: {e}")
         return {"result": f"Échec de communication avec l'Agent Ops: {str(e)}"}
@@ -213,6 +227,16 @@ async def run_agent_query(query: str, session_id: str | None = None) -> dict:
                     # Unpack the A2A response wrapped inside the A2A tool
                     if isinstance(res_data, dict) and "agent" in res_data and "data" in res_data:
                         last_tool_data = res_data.get("data") # Propagate inner tool data
+                        # Merge sub-agent steps for full observability in the Router's history
+                        if res_data.get("steps"):
+                            steps.extend(res_data["steps"])
+                        # Aggregate sub-agent token usage into the Router's total for accurate FinOps
+                        sub_usage = res_data.get("usage") or {}
+                        total_input_tokens += sub_usage.get("total_input_tokens", 0)
+                        total_output_tokens += sub_usage.get("total_output_tokens", 0)
+                        # Prepend sub-agent thoughts for Chain-of-Thought transparency
+                        if res_data.get("thoughts"):
+                            thoughts.insert(0, f"[{res_data.get('agent', 'sub-agent')}] {res_data['thoughts']}")
                         res_data = {"type": "a2a_delegation", "agent": res_data.get("agent"), "agent_response": res_data.get("response")}
                     
                     sig = f"result:{json.dumps(res_data, sort_keys=True)}"
