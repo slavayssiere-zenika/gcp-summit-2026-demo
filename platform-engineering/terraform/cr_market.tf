@@ -117,8 +117,6 @@ resource "google_project_iam_member" "market_otel_metric" {
   member   = "serviceAccount:${google_service_account.market_sa.email}"
 }
 
-}
-
 # Autorisation invocation interne LB
 resource "google_cloud_run_v2_service_iam_member" "market_invoker" {
   project  = google_cloud_run_v2_service.market_mcp.project

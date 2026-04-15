@@ -168,8 +168,6 @@ resource "google_project_iam_member" "agent_hr_otel_metric" {
   member   = "serviceAccount:${google_service_account.agent_hr_sa.email}"
 }
 
-}
-
 # Autorisation invocation interne LB
 resource "google_cloud_run_v2_service_iam_member" "agent_hr_invoker" {
   project  = google_cloud_run_v2_service.agent_hr_api.project
