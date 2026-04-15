@@ -69,6 +69,28 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["mission_id"]
             }
+        ),
+        Tool(
+            name="get_mission",
+            description="Récupère le détail complet d'une mission par son ID : titre, description, statut, compétences requises et consultants staffés. Appeler après list_missions pour obtenir un mission_id.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "mission_id": { "type": "integer", "description": "L'ID de la mission" }
+                },
+                "required": ["mission_id"]
+            }
+        ),
+        Tool(
+            name="get_mission_candidates",
+            description="Retourne la liste des consultants actuellement staffés sur une mission donnée, avec leurs IDs utilisateurs. Utiliser pour répondre à 'Qui est staffé sur la mission X ?'",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "mission_id": { "type": "integer", "description": "L'ID de la mission" }
+                },
+                "required": ["mission_id"]
+            }
         )
     ]
 
@@ -104,6 +126,22 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 mission_id = arguments.get("mission_id")
                 try:
                     response = await client.post(f"{API_BASE_URL}/missions/{mission_id}/reanalyze", headers=headers, timeout=60.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_mission":
+                mission_id = arguments.get("mission_id")
+                try:
+                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}", headers=headers, timeout=20.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_mission_candidates":
+                mission_id = arguments.get("mission_id")
+                try:
+                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/candidates", headers=headers, timeout=20.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:

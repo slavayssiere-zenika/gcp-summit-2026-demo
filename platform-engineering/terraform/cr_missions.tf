@@ -64,7 +64,7 @@ resource "google_cloud_run_v2_service" "missions_api" {
       }
       env {
         name  = "ROOT_PATH"
-        value = "/missions-api"
+        value = "/api/missions"
       }
       env {
         name  = "USE_IAM_AUTH"
@@ -87,6 +87,10 @@ resource "google_cloud_run_v2_service" "missions_api" {
         value = var.missions_api_version
       }
       env {
+        name  = "MCP_SIDECAR_URL"
+        value = "http://localhost:8081"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -98,7 +102,7 @@ resource "google_cloud_run_v2_service" "missions_api" {
 
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
       env {
         name = "GOOGLE_API_KEY"
@@ -111,27 +115,27 @@ resource "google_cloud_run_v2_service" "missions_api" {
       }
       env {
         name  = "PROMPTS_API_URL"
-        value = "http://api.internal.zenika/prompts-api/"
+        value = "http://api.internal.zenika/api/prompts/"
       }
       env {
         name  = "COMPETENCIES_API_URL"
-        value = "http://api.internal.zenika/comp-api/"
+        value = "http://api.internal.zenika/api/competencies/"
       }
       env {
         name  = "ITEMS_API_URL"
-        value = "http://api.internal.zenika/items-api/"
+        value = "http://api.internal.zenika/api/items/"
       }
       env {
         name  = "DRIVE_API_URL"
-        value = "http://api.internal.zenika/drive-api/"
+        value = "http://api.internal.zenika/api/drive/"
       }
       env {
         name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/market-mcp/"
+        value = "http://api.internal.zenika/api/market/"
       }
       env {
         name  = "CV_API_URL"
-        value = "http://api.internal.zenika/cv-api/"
+        value = "http://api.internal.zenika/api/cv/"
       }
     }
 

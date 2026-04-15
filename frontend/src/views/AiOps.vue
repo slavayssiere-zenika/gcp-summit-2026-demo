@@ -11,7 +11,9 @@ import {
   AlertCircle,
   Database,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Zap,
+  Cpu
 } from 'lucide-vue-next'
 import {
   Chart as ChartJS,
@@ -47,6 +49,8 @@ interface MetricData {
   daily: Array<{ day: string, cost: number, requests: number }>
   top_users_count: Array<{ user_email: string, count: number }>
   top_users_cost: Array<{ user_email: string, cost: number }>
+  top_actions: Array<{ action: string, count: number }>
+  top_models: Array<{ model: string, count: number }>
   generated_at: string
 }
 
@@ -58,7 +62,7 @@ const fetchMetrics = async (force: boolean = false) => {
   loading.value = true
   error.value = ''
   try {
-    const url = force ? '/mcp/proxy/market/metrics/aiops?force=true' : '/mcp/proxy/market/metrics/aiops'
+    const url = force ? '/api/market/metrics/aiops?force=true' : '/api/market/metrics/aiops'
     const res = await axios.get(url)
     data.value = res.data
   } catch (err: any) {
@@ -163,6 +167,55 @@ const topCostChartData = computed(() => {
   }
 })
 
+const topActionsChartData = computed(() => {
+  if (!data.value) return { labels: [], datasets: [] }
+  return {
+    labels: data.value.top_actions.map(a => a.action),
+    datasets: [{
+      data: data.value.top_actions.map(a => a.count),
+      backgroundColor: [
+        '#E31937', '#FF4D6D', '#FF758F', '#FF8FA3', '#FFB3C1',
+        '#1A1A1A', '#333333', '#4D4D4D', '#666666', '#808080',
+        '#A0AEC0', '#CBD5E0', '#E2E8F0', '#4A9EFF', '#1A73E8'
+      ],
+      borderWidth: 2,
+      borderColor: 'rgba(255,255,255,0.8)'
+    }]
+  }
+})
+
+const topModelsChartData = computed(() => {
+  if (!data.value) return { labels: [], datasets: [] }
+  return {
+    labels: data.value.top_models.map(m => m.model),
+    datasets: [{
+      data: data.value.top_models.map(m => m.count),
+      backgroundColor: [
+        '#7C3AED', '#9D5CE8', '#B983F4', '#D0A8F9', '#E8CFF9',
+        '#2563EB', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE'
+      ],
+      borderWidth: 2,
+      borderColor: 'rgba(255,255,255,0.8)'
+    }]
+  }
+})
+
+const doughnutOptionsCompact = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'right' as const,
+      labels: { boxWidth: 10, font: { size: 9 }, padding: 6 }
+    },
+    tooltip: {
+      callbacks: {
+        label: (ctx: any) => ` ${ctx.label}: ${ctx.parsed} appels`
+      }
+    }
+  }
+}
+
 const doughnutOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -264,6 +317,35 @@ const doughnutOptions = {
           </div>
           <div class="chart-body doughnut">
             <Doughnut :data="topCostChartData" :options="doughnutOptions" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions & Models Distribution -->
+      <div class="section-divider">
+        <span class="section-label">Répartition par Usage</span>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card glass-panel flex-1">
+          <div class="chart-header">
+            <h3>Actions LLM (Top 15)</h3>
+            <Zap size="18" class="text-accent" />
+          </div>
+          <p class="chart-subtitle">Distribution des outils et actions appelés par les agents</p>
+          <div class="chart-body doughnut-lg">
+            <Doughnut :data="topActionsChartData" :options="doughnutOptionsCompact" />
+          </div>
+        </div>
+
+        <div class="chart-card glass-panel flex-1">
+          <div class="chart-header">
+            <h3>Modèles IA (Top 10)</h3>
+            <Cpu size="18" class="text-purple" />
+          </div>
+          <p class="chart-subtitle">Répartition des requêtes par modèle Gemini utilisé</p>
+          <div class="chart-body doughnut-lg">
+            <Doughnut :data="topModelsChartData" :options="doughnutOptionsCompact" />
           </div>
         </div>
       </div>
@@ -442,6 +524,16 @@ h2 {
   height: 250px;
 }
 
+.chart-body.doughnut-lg {
+  height: 300px;
+}
+
+.chart-subtitle {
+  font-size: 12px;
+  color: #A0AEC0;
+  margin: -12px 0 0;
+}
+
 .charts-row {
   display: flex;
   gap: 20px;
@@ -449,6 +541,36 @@ h2 {
 }
 
 .flex-1 { flex: 1; min-width: 400px; }
+
+/* Section divider */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #E2E8F0, transparent);
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #A0AEC0;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+/* Icon color variants */
+.text-accent { color: #E31937; }
+.text-purple { color: #7C3AED; }
 
 .footer-info {
   display: flex;

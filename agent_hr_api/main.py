@@ -1,35 +1,42 @@
+import logging
+import os
 import re
 import json
-from fastapi import FastAPI, HTTPException, Request, Response
-import httpx
-from pydantic import BaseModel
+import inspect
 from typing import Optional
+from contextlib import asynccontextmanager
+
+import httpx
 import uvicorn
-import os
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+from jose import jwt, JWTError
+
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
-import os
+from opentelemetry.propagate import inject, extract
+from opentelemetry.trace import SpanKind
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor
+
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.propagate import inject, extract
-from opentelemetry.trace import SpanKind
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
+
 from prometheus_fastapi_instrumentator import Instrumentator
 from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
-
-
-from agent import run_agent_query, HR_TOOLS
-import inspect
+from agent import run_agent_query, HR_TOOLS, get_session_service
+from metadata import extract_metadata_from_session
 from logger import setup_logging, LoggingMiddleware
+from mcp_client import auth_header_var
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -42,8 +49,8 @@ if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
 else:
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
-
 tracer = trace.get_tracer(__name__)
+app_logger = logging.getLogger(__name__)
 
 
 setup_logging()
@@ -78,6 +85,7 @@ async def root():
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
+    user_id: Optional[str] = None  # Prb 7: propagated from Router JWT to isolate sessions
 
 
 from mcp_client import auth_header_var
@@ -110,7 +118,6 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
     auth_header_var.set(auth_header)
     
     try:
-        from jose import jwt, JWTError
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         computed_session_id = payload.get("sub")
         if not computed_session_id:
@@ -133,8 +140,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             return result
             
         except Exception as e:
-            span.set_attribute("error", True)
-            span.set_attribute("error.message", str(e))
+            app_logger.exception("CRITICAL: Exception in /query")
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
 @protected_router.post("/a2a/query")
@@ -149,11 +155,14 @@ async def a2a_query(request: QueryRequest, http_request: Request, auth: HTTPAuth
         computed_session_id = payload.get("sub")
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
+    
+    # Prb 7: Use the user_id propagated from Router if available, else fall back to JWT sub
+    effective_user_id = request.user_id or computed_session_id or "user_1"
         
     ctx = extract(http_request.headers)
     with tracer.start_as_current_span("a2a.query", context=ctx, kind=SpanKind.SERVER) as span:
         try:
-            result = await run_agent_query(request.query, computed_session_id)
+            result = await run_agent_query(request.query, computed_session_id, user_id=effective_user_id)
             return {
                 "response": result.get("response", ""),
                 "data": result.get("data"),
@@ -162,6 +171,7 @@ async def a2a_query(request: QueryRequest, http_request: Request, auth: HTTPAuth
                 "usage": result.get("usage", {})
             }
         except Exception as e:
+            app_logger.exception("CRITICAL: Exception in /a2a/query")
             raise HTTPException(status_code=500, detail=str(e))
 
 @protected_router.get("/history")
@@ -175,10 +185,9 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
         
-    from agent import get_session_service
     session_service = get_session_service()
     session = await session_service.get_session(
-        app_name="zenika_assistant", 
+        app_name="zenika_hr_assistant", 
         user_id="user_1", 
         session_id=session_id
     )
@@ -221,138 +230,27 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                 current_assistant_msg = None 
             
         elif is_assistant and current_assistant_msg is None:
+            # Reconstruct metadata using the shared foolproof utility
+            from metadata import extract_metadata_from_session
+            meta = extract_metadata_from_session(session) # Since we are in sub-agent, the whole session IS the turn
+            
             current_assistant_msg = {
                 "role": "assistant",
-                "content": "",
+                "content": content_text,
                 "displayType": "text_only",
-                "data": None,
+                "data": meta.get("data"),
                 "parsedData": [],
-                "steps": [],
-                "thoughts": "",
-                "rawResponse": "",
+                "steps": meta.get("steps", []),
+                "thoughts": meta.get("thoughts", ""),
+                "rawResponse": content_text,
                 "activeTab": "preview",
                 "pagination": {"currentPage": 1, "itemsPerPage": 10}
             }
-            current_assistant_seen_steps = set()
             history.append(current_assistant_msg)
 
 
-        # 2. Process EVERY event exhaustively for metadata (Chain of Thought, Tool Calls, Results)
-        if current_assistant_msg:
-            # a) Scan Parts
-            for part in parts:
-                # Thoughts
-                thought_val = getattr(part, 'thought', None)
-                if thought_val:
-                    if current_assistant_msg["thoughts"]:
-                        current_assistant_msg["thoughts"] += "\n" + str(thought_val)
-                    else:
-                        current_assistant_msg["thoughts"] = str(thought_val)
-                
-                # Tool Calls
-                tcall = getattr(part, 'tool_call', None) or getattr(part, 'function_call', None)
-                if tcall:
-                    calls = tcall if isinstance(tcall, list) else [tcall]
-                    for call in calls:
-                        name = getattr(call, 'name', 'unknown')
-                        args = getattr(call, 'args', {})
-                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
-                        if sig not in current_assistant_seen_steps:
-                            current_assistant_msg["steps"].append({
-                                "type": "call",
-                                "tool": name,
-                                "args": args
-                            })
-                            current_assistant_seen_steps.add(sig)
-                
-                # Tool Results
-                fres = getattr(part, 'function_response', None)
-                raw_text = getattr(part, 'text', None)
-                
-                res_to_process = None
-                if fres:
-                    res_to_process = getattr(fres, 'response', fres)
-                elif raw_text and role_val in ["tool", "user"]:
-                    try: res_to_process = json.loads(raw_text)
-                    except: pass
-                
-                if res_to_process is not None:
-                    if hasattr(res_to_process, 'model_dump'): res_to_process = res_to_process.model_dump()
-                    elif hasattr(res_to_process, 'dict'): res_to_process = res_to_process.dict()
-                    
-                    # Unwrap MCP 'result' JSON string
-                    if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
-                        try: res_to_process = json.loads(res_to_process["result"])
-                        except: pass
-                    
-                    sig = f"result:{json.dumps(res_to_process, sort_keys=True)}"
-                    if sig not in current_assistant_seen_steps:
-                        current_assistant_msg["data"] = res_to_process
-                        current_assistant_msg["steps"].append({"type": "result", "data": res_to_process})
-                        current_assistant_seen_steps.add(sig)
-            
-            # b) Scan Event Methods
-            if hasattr(event, 'actions') and event.actions:
-                for action in event.actions:
-                    tc = getattr(action, 'tool_call', None)
-                    if tc:
-                        name = getattr(tc, 'name', "unknown")
-                        args = getattr(tc, 'args', {})
-                        sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
-                        if sig not in current_assistant_seen_steps:
-                            current_assistant_msg["steps"].append({"type": "call", "tool": name, "args": args})
-                            current_assistant_seen_steps.add(sig)
-            
-            if hasattr(event, 'get_function_calls'):
-                for fc in (event.get_function_calls() or []):
-                    name = getattr(fc, 'name', "unknown")
-                    args = getattr(fc, 'args', {})
-                    sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
-                    if sig not in current_assistant_seen_steps:
-                        current_assistant_msg["steps"].append({"type": "call", "tool": name, "args": args})
-                        current_assistant_seen_steps.add(sig)
-
-            if hasattr(event, 'get_function_responses'):
-                for fr in (event.get_function_responses() or []):
-                    res_data = getattr(fr, 'response', fr)
-                    if hasattr(res_data, 'model_dump'): res_data = res_data.model_dump()
-                    elif hasattr(res_data, 'dict'): res_data = res_data.dict()
-                    
-                    # Unwrap MCP 'result' JSON string
-                    if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
-                        try: res_data = json.loads(res_data["result"])
-                        except: pass
-                    
-                    sig = f"result:{json.dumps(res_data, sort_keys=True)}"
-                    if sig not in current_assistant_seen_steps:
-                        current_assistant_msg["data"] = res_data
-                        current_assistant_msg["steps"].append({"type": "result", "data": res_data})
-                        current_assistant_seen_steps.add(sig)
-            
-            
-            # c) Extract Usage/Tokens (FinOps)
-            u = None
-            if hasattr(event, 'response') and event.response and hasattr(event.response, 'usage_metadata'):
-                u = event.response.usage_metadata
-            elif hasattr(event, 'usage_metadata'):
-                u = event.usage_metadata
-                
-            if u:
-                if "usage" not in current_assistant_msg:
-                    current_assistant_msg["usage"] = {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0}
-                
-                # ADK usage_metadata can be cumulative or turn-based
-                it = getattr(u, 'prompt_token_count', 0) or (u.get('prompt_token_count', 0) if isinstance(u, dict) else 0)
-                ot = getattr(u, 'candidates_token_count', 0) or (u.get('candidates_token_count', 0) if isinstance(u, dict) else 0)
-                
-                # We track the max seen for the turn as it's typically cumulative in GenerateContentResponse
-                current_assistant_msg["usage"]["total_input_tokens"] = max(current_assistant_msg["usage"]["total_input_tokens"], it)
-                current_assistant_msg["usage"]["total_output_tokens"] = max(current_assistant_msg["usage"]["total_output_tokens"], ot)
-                
-                # Recalculate estimated cost
-                ti = current_assistant_msg["usage"]["total_input_tokens"]
-                to = current_assistant_msg["usage"]["total_output_tokens"]
-                current_assistant_msg["usage"]["estimated_cost_usd"] = round(ti * 0.000000075 + to * 0.0000003, 6)
+            # Metadata extraction is now handled once above via extract_metadata_from_session
+            pass
 
         # 3. Process Content Text
         if is_assistant and content_text:
@@ -427,15 +325,14 @@ async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security))
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
         
-    from agent import get_session_service
     session_service = get_session_service()
     session = await session_service.get_session(
-        app_name="zenika_assistant", 
+        app_name="zenika_hr_assistant", 
         user_id="user_1", 
         session_id=session_id
     )
     if session:
-        session_service._delete_session_impl(app_name="zenika_assistant", user_id="user_1", session_id=session_id)
+        session_service._delete_session_impl(app_name="zenika_hr_assistant", user_id="user_1", session_id=session_id)
         return {"message": "Historique effacé"}
     else:
         return {"message": "Pas d'historique"}
@@ -559,4 +456,5 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
 app.include_router(protected_router)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    port = int(os.getenv("PORT", "8080"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

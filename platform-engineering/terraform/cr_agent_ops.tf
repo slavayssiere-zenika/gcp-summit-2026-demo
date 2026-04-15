@@ -72,15 +72,15 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
       }
       env {
         name  = "PROMPTS_API_URL"
-        value = "http://api.internal.zenika/prompts-api/"
+        value = "http://api.internal.zenika/api/prompts/"
       }
       env {
         name  = "DRIVE_MCP_URL"
-        value = "http://api.internal.zenika/drive-api/"
+        value = "http://api.internal.zenika/api/drive/"
       }
       env {
         name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/market-mcp/"
+        value = "http://api.internal.zenika/api/market/"
       }
       env {
         name  = "LOKI_MCP_URL"
@@ -88,23 +88,23 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
       }
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
       env {
         name  = "ITEMS_API_URL"
-        value = "http://api.internal.zenika/items-api/"
+        value = "http://api.internal.zenika/api/items/"
       }
       env {
         name  = "COMPETENCIES_API_URL"
-        value = "http://api.internal.zenika/comp-api/"
+        value = "http://api.internal.zenika/api/competencies/"
       }
       env {
         name  = "CV_API_URL"
-        value = "http://api.internal.zenika/cv-api/"
+        value = "http://api.internal.zenika/api/cv/"
       }
       env {
         name  = "MISSIONS_API_URL"
-        value = "http://api.internal.zenika/missions-api/"
+        value = "http://api.internal.zenika/api/missions/"
       }
       env {
         name  = "USE_GCP_LOGGING"

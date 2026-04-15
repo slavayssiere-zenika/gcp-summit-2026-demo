@@ -89,5 +89,5 @@ async def get_spec():
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
+app.include_router(protected_router)  # /spec MUST be registered before /{key} wildcard
 app.include_router(router.router, prefix="", tags=["prompts"])
-app.include_router(protected_router)

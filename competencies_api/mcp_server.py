@@ -66,11 +66,17 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="search_competencies",
-            description="Search for a competency by name",
+            description=(
+                "Search for competencies by name or alias in the competency tree. "
+                "IMPORTANT: Use specific terms of at least 3 characters (e.g. 'AWS', 'React', 'Python', 'Data Engineering'). "
+                "DO NOT use single letters like 'C', 'R', 'J' as they match every competency containing that letter and return useless results. "
+                "For the 'C language' or 'C programming', search for 'langage C' or 'C language' or 'systems programming'. "
+                "For semantic/staffing searches, prefer search_best_candidates (cv_api) instead."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "The search term"},
+                    "query": {"type": "string", "description": "The search term (minimum 3 meaningful characters). Examples: 'AWS', 'Kubernetes', 'React', 'Data Engineering'"},
                     "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10}
                 },
                 "required": ["query"]

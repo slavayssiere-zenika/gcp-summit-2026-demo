@@ -119,3 +119,21 @@ databaseChangeLog:
                   name: "unavailability_periods"
                   type: "json"
                   defaultValue: "[]"
+
+  - changeSet:
+      id: "7"
+      author: "antigravity"
+      comment: "Ajout du champ seniority pour le staffing IA (Junior/Mid/Senior). Editable manuellement par l'admin ou inféré depuis le CV."
+      changes:
+        - addColumn:
+            tableName: "users"
+            columns:
+              - column:
+                  name: "seniority"
+                  type: "varchar(20)"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "users"
+            columnName: "seniority"

@@ -24,10 +24,13 @@ JOB_NAME="platform-engineering"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_NAME}/${JOB_NAME}"
 FULL_IMAGE="${IMAGE}:${VERSION}"
 
-# 1. Build and push Platform Engineering Container
-echo "[*] Building Platform Engineering container version ${VERSION} via GCP Cloud Build..."
-# Note: This is fully native and independent of local architecture (arm vs amd64)
-gcloud builds submit platform-engineering --tag $FULL_IMAGE --project $PROJECT_ID
+# 1. Build and push Platform Engineering Container locally
+echo "[*] Building Platform Engineering container version ${VERSION} locally via Docker..."
+# IMPORTANT: On force l'architecture linux/amd64 requise par Cloud Run (surtout si exécuté depuis un Mac Apple Silicon)
+docker build --platform linux/amd64 -t $FULL_IMAGE platform-engineering
+
+echo "[*] Pushing image to Google Artifact Registry..."
+docker push $FULL_IMAGE
 
 # 2. Collect local versions to pass as environment variables
 echo "[*] Collecting local component versions..."
@@ -55,16 +58,23 @@ gcloud run jobs update $JOB_NAME \
     --region=$REGION \
     --project=$PROJECT_ID
 
-# 3. Run the job asynchronously
-echo "[*] Execution Async of $JOB_NAME for action '$ACTION' over env '$ENV'..."
-gcloud run jobs execute $JOB_NAME \
+# 3. Run the job asynchronously and capture its exact Execution ID
+echo "[*] Lancement de l'exécution $JOB_NAME pour l'action '$ACTION' sur l'environnement '$ENV'..."
+EXEC_ID=$(gcloud run jobs execute $JOB_NAME \
     --args="$ACTION,--env,$ENV" \
     --update-env-vars="$ENV_VARS_ARGS" \
     --region=$REGION \
-    --project=$PROJECT_ID
+    --project=$PROJECT_ID \
+    --format="value(metadata.name)")
 
-echo "[+] Job execution triggered asynchronously!"
+echo "[+] Job démarré sous l'ID : $EXEC_ID"
 echo "========================================================="
-echo "You can check progression live using:"
-echo "gcloud run jobs logs tail $JOB_NAME --region=$REGION --project=$PROJECT_ID"
+echo "[*] Attachement au flux de logs de l'exécution en temps réel..."
 echo "========================================================="
+
+# Streame exclusivement les logs de cette exécution spécifique
+# Remarque : La fonctionnalité de tail s'appuie sur le composant beta
+gcloud beta run executions logs tail $EXEC_ID \
+    --region=$REGION \
+    --project=$PROJECT_ID \
+    --log-http

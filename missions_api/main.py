@@ -88,11 +88,12 @@ async def get_spec():
 app.include_router(public_router)
 app.include_router(router)
 
-@protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@protected_router.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     import httpx
-    url = f"http://localhost:8081/mcp/{path}"
+    sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://missions_mcp:8000")
+    url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
         url += f"?{request.url.query}"
     

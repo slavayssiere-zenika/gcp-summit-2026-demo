@@ -11,26 +11,33 @@ Colonnes disponibles : `timestamp` (TIMESTAMP), `user_email` (STRING), `action` 
 - Table partitionnée par jour. Utilise TOUJOURS `DATE(timestamp) = 'YYYY-MM-DD'` ou `DATE(timestamp) BETWEEN` pour les filtres temporels.
 - Pour le coût global : `SUM(estimated_cost_usd)`, groupé par `user_email` ou `action` ou `model`.
 
-### Loki — Syntaxe LogQL
-Labels disponibles : `{service_name="<service>"}` où `<service>` est l'un des suivants :
-`users_api`, `items_api`, `competencies_api`, `cv_api`, `missions_api`,
-`agent_router_api`, `agent_hr_api`, `agent_ops_api`.
-- Filtrage textuel : `|= "ERROR"`, `|= "timeout"`, `|~ "error|exception|failed"`.
-- TOUJOURS inclure un label `service_name` dans chaque query Loki. Ne jamais faire de requête sans label.
-- Plage temporelle : utiliser des intervalles relatifs (`[5m]`, `[1h]`, `[24h]`).
+### Google Cloud Logging — Outils MCP
+Pour investiguer les logs, utilise l'outil `get_service_logs`.
+- `service_name` : Le nom exact du service Cloud Run (ex: 'agent-router-api-dev'). Si tu as un doute ou si un service est absent de la topologie trace, utilise `list_gcp_services` pour obtenir la liste exhaustive et filtrée des services de la plateforme.
+- `hours_lookback` : Par défaut 1h. Tu peux remonter plus loin si l'incident est ancien.
+- `severity` : Utilise 'ERROR' pour cibler rapidement les pannes.
+
+### Santé des Composants — Outils MCP
+- Utilise `check_component_health` pour vérifier un composant spécifique suspecté d'être en panne.
+- Utilise `check_all_components_health` pour répondre à une question sur l'état GLOBAL du système ou pour identifier quels services sont actuellement déployés et fonctionnels.
 
 ### Services GCP
-- Topologie interne : les services communiquent via DNS Docker (`container_name`) en HTTP.
-- Les agents utilisent le protocole MCP-HTTP (REST) sauf Loki qui utilise SSE.
+- Topologie interne : les services communiquent via DNS Docker (`container_name`) en HTTP ou via les URLs Cloud Run.
+- Les agents utilisent le protocole MCP-HTTP (REST).
 - Le monitoring est exposé via `/metrics` (Prometheus) et `/health` sur chaque service.
 
 ## Stratégies de Résolution
 
-1. **Coûts FinOps** : Interroger BigQuery via `query_ai_usage`. Filtrer par date, grouper par modèle ou action. Présenter le résultat avec des métriques chiffrées (tokens, coût $).
+1. **Coûts FinOps** : Interroger BigQuery via `get_finops_report`. Présenter le résultat avec des métriques chiffrées (tokens, coût $).
 
-2. **Investigation d'incident / logs** : Interroger Loki via l'outil dédié avec `service_name` et `|= "ERROR"`. Analyser les traces, identifier le service source et la cause racine.
+2. **Investigation d'incident / logs** : 
+   - Étape A : Identifier le service cible. Si inconnu, appeler `list_gcp_services`.
+   - Étape B : Appeler `get_service_logs` avec le `service_name` identifié. 
+   - Étape C : Analyser les payloads (text ou JSON), identifier les exceptions Python ou les codes erreurs HTTP.
 
-3. **Santé du système** : Combiner Loki (erreurs récentes sur les services clés) + BigQuery (volume d'appels anormal) pour établir un diagnostic complet.
+3. **Santé du système** : 
+   - Pour un état des lieux complet, utilise toujours `check_all_components_health`.
+   - Utilise `get_infrastructure_topology` pour visualiser les dépendances critiques identifiées via les traces.
 
 4. **Configuration Drive** : Utiliser les outils Drive MCP pour lister/modifier les dossiers synchronisés.
 

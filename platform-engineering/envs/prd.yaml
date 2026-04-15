@@ -15,15 +15,18 @@ image_prompts: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-su
 image_agent_router: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_router_api:latest"
 image_agent_hr: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_hr_api:latest"
 image_agent_ops: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_ops_api:latest"
+image_agent_missions: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_missions_api:latest"
 image_db_migrations: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/db_migrations:latest"
 image_market: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/market_mcp:latest"
 image_drive: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest"
 admin_user: "sebastien.lavayssiere@zenika.com"
+gemini_model: "gemini-3.1-flash-lite-preview"
 
 # Versions (automatiquement mis à jour par manage_env.py si synchronisé)
 agent_router_api_version: "v0.0.1"
 agent_hr_api_version: "v0.0.1"
 agent_ops_api_version: "v0.0.1"
+agent_missions_api_version: "v0.0.1"
 users_api_version: "v0.0.1"
 items_api_version: "v0.0.1"
 competencies_api_version: "v0.0.1"

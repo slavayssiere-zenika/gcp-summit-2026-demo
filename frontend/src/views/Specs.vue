@@ -19,13 +19,13 @@ interface SpecTab {
 
 const tabs: SpecTab[] = [
   { id: 'agent', name: 'Agent API', url: '/api/spec', versionUrl: '/api/version', icon: Cpu },
-  { id: 'prompts', name: 'Prompts API', url: '/prompts-api/spec', versionUrl: '/prompts-api/version', icon: MessageSquare },
-  { id: 'missions', name: 'Missions API', url: '/missions-api/spec', versionUrl: '/missions-api/version', icon: BookOpen },
-  { id: 'users', name: 'Users API', url: '/users-api/spec', versionUrl: '/users-api/version', icon: KeyRound },
-  { id: 'items', name: 'Items API', url: '/items-api/spec', versionUrl: '/items-api/version', icon: Database },
-  { id: 'competencies', name: 'Competencies API', url: '/comp-api/spec', versionUrl: '/comp-api/version', icon: Network },
-  { id: 'cv', name: 'CV API', url: '/cv-api/spec', versionUrl: '/cv-api/version', icon: FileText },
-  { id: 'drive', name: 'Drive API', url: '/drive-api/spec', versionUrl: '/drive-api/version', icon: Database },
+  { id: 'prompts', name: 'Prompts API', url: '/api/prompts/spec', versionUrl: '/api/prompts/version', icon: MessageSquare },
+  { id: 'missions', name: 'Missions API', url: '/api/missions/spec', versionUrl: '/api/missions/version', icon: BookOpen },
+  { id: 'users', name: 'Users API', url: '/api/users/spec', versionUrl: '/api/users/version', icon: KeyRound },
+  { id: 'items', name: 'Items API', url: '/api/items/spec', versionUrl: '/api/items/version', icon: Database },
+  { id: 'competencies', name: 'Competencies API', url: '/api/competencies/spec', versionUrl: '/api/competencies/version', icon: Network },
+  { id: 'cv', name: 'CV API', url: '/api/cv/spec', versionUrl: '/api/cv/version', icon: FileText },
+  { id: 'drive', name: 'Drive API', url: '/api/drive/spec', versionUrl: '/api/drive/version', icon: Database },
   { id: 'market', name: 'Market (MCP)', url: '/market-mcp/mcp/tools', versionUrl: '/market-mcp/version', icon: Network }
 ]
 

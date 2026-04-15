@@ -13,6 +13,19 @@ auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
 logger = logging.getLogger(__name__)
 
+# Tools that are known to exceed the standard 30s timeout.
+# These involve LLM calls, vector search, or large data processing.
+LONG_RUNNING_TOOLS = {
+    "analyze_cv",
+    "search_best_candidates",
+    "reanalyze_mission",
+    "global_reanalyze_cvs",
+    "recalculate_competencies_tree",
+    "get_infrastructure_topology",
+    "get_candidate_rag_context",
+    "get_aiops_dashboard_data",
+}
+
 class MCPHttpClient:
     def __init__(self, url: str):
         self.url = url
@@ -47,10 +60,11 @@ class MCPHttpClient:
         
         async with httpx.AsyncClient(headers=headers) as client:
             try:
+                timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
                 res = await client.post(
                     f"{self.url.rstrip('/')}/mcp/call", 
                     json={"name": tool_name, "arguments": arguments},
-                    timeout=30.0 # Define a reasonable HTTP timeout
+                    timeout=timeout
                 )
                 res.raise_for_status()
                 # The sidecar will return {"result": [{"text": "...", "type": "text"}]}
@@ -123,8 +137,6 @@ class MCPSseClient:
                         sub_errs.append(str(sub_e))
                 err_msg = f"{err_msg} -> " + " | ".join(sub_errs)
                 
-            logger.error(f"[MCP-SSE] Tool '{tool_name}' FAILED after {duration:.2f}s: {err_msg}")
-            raise RuntimeError(f"Loki MCP error: {err_msg}")
 # Global clients
 users_mcp_client: Optional[MCPHttpClient] = None
 items_mcp_client: Optional[MCPHttpClient] = None
@@ -133,7 +145,6 @@ cv_mcp_client: Optional[MCPHttpClient] = None
 drive_mcp_client: Optional[MCPHttpClient] = None
 missions_mcp_client: Optional[MCPHttpClient] = None
 market_mcp_client: Optional[MCPHttpClient] = None
-loki_mcp_client: Optional[MCPSseClient] = None
 _mcp_lock = threading.Lock()
 
 def init_mcp_clients():
@@ -147,7 +158,6 @@ def init_mcp_clients():
     drive_url = os.getenv("DRIVE_MCP_URL", "http://drive_mcp:8000")
     missions_url = os.getenv("MISSIONS_MCP_URL", os.getenv("MISSIONS_API_URL", "http://missions_mcp:8009"))
     market_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
-    loki_url = os.getenv("LOKI_MCP_URL", "http://loki_mcp:8080/sse")
 
     with _mcp_lock:
         if users_mcp_client is None:
@@ -164,8 +174,6 @@ def init_mcp_clients():
             missions_mcp_client = MCPHttpClient(missions_url)
         if market_mcp_client is None:
             market_mcp_client = MCPHttpClient(market_url)
-        if loki_mcp_client is None:
-            loki_mcp_client = MCPSseClient(loki_url)
 
 async def get_users_mcp() -> MCPHttpClient:
     init_mcp_clients()
@@ -179,9 +187,6 @@ async def get_competencies_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return competencies_mcp_client
 
-async def get_loki_mcp() -> MCPSseClient:
-    init_mcp_clients()
-    return loki_mcp_client
 
 async def get_cv_mcp() -> MCPHttpClient:
     init_mcp_clients()

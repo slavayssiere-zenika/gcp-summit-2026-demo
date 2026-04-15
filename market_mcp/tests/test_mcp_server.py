@@ -6,7 +6,7 @@ import json
 @pytest.mark.asyncio
 async def test_list_tools():
     tools = await list_tools()
-    assert len(tools) == 6
+    assert len(tools) == 10
     assert tools[0].name == "get_top_market_skills"
     assert tools[1].name == "get_market_demand_volume"
     assert tools[2].name == "log_ai_consumption"

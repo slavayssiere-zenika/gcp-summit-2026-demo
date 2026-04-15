@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, APIRouter
 from pydantic import BaseModel
 import asyncio
 import os
@@ -58,16 +58,30 @@ RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 Instrumentator().instrument(app).expose(app)
 
+from fastapi.middleware.cors import CORSMiddleware
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80,http://localhost:8080,https://dev.zenika.slavayssiere.fr,https://uat.zenika.slavayssiere.fr,https://zenika.slavayssiere.fr").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins, 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routers
+mcp_router = APIRouter(dependencies=[Depends(verify_jwt)])
+api_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
 class ToolCallRequest(BaseModel):
     name: str
     arguments: dict = {}
 
-@app.get("/mcp/tools", dependencies=[Depends(verify_jwt)])
+@mcp_router.get("/tools")
 async def get_tools():
     tools = await list_tools()
     return [{"name": t.name, "description": t.description, "inputSchema": t.inputSchema} for t in tools]
 
-@app.get("/topology", dependencies=[Depends(verify_jwt)])
+@api_router.get("/topology")
 async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 1, force: bool = False):
     """Native REST endpoint to fetch infrastructure topology from GCP Cloud Trace with Caching."""
     from mcp_server import get_infrastructure_topology
@@ -126,7 +140,7 @@ async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 
         logging.exception("Failed to fetch topology in Market MCP REST endpoint")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/metrics/aiops", dependencies=[Depends(verify_jwt)])
+@api_router.get("/metrics/aiops")
 async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = False):
     """
     Récupère les indicateurs AIOps et FinOps (Optimisé).
@@ -201,8 +215,8 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
         logging.exception("Failed to fetch AIOps metrics in Market MCP REST endpoint")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/mcp/call")
-async def execute_tool(request: ToolCallRequest, http_request: Request, user: dict = Depends(verify_jwt)):
+@mcp_router.post("/call")
+async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
         from mcp_server import mcp_auth_header_var
@@ -216,7 +230,7 @@ async def execute_tool(request: ToolCallRequest, http_request: Request, user: di
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/admin/finops/detect", dependencies=[Depends(verify_jwt)])
+@api_router.post("/admin/finops/detect")
 async def detect_finops_anomalies(http_request: Request):
     """
     Exécute la Requête BigQuery pour détecter les anomalies de consommation,
@@ -272,6 +286,9 @@ async def detect_finops_anomalies(http_request: Request):
                 suspended_users.append({"email": user_email, "tokens": total_tokens, "status": "error", "message": str(e)})
 
     return {"threshold": threshold, "anomalies_detected": len(suspended_users), "details": suspended_users}
+
+app.include_router(mcp_router, prefix="/mcp")
+app.include_router(api_router, prefix="/api")
 
 @app.get("/health")
 async def health():

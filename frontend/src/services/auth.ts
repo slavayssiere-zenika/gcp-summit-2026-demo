@@ -5,7 +5,12 @@ import axios from 'axios'
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    // Axios 1.x compatibility check
+    if (config.headers && typeof config.headers.set === 'function') {
+      config.headers.set('Authorization', `Bearer ${token}`)
+    } else {
+      config.headers.Authorization = `Bearer ${token}`
+    }
   }
   // Enforce sending cookies cross-origin if strictly needed, though usually same origin
   config.withCredentials = true
@@ -31,55 +36,72 @@ axios.interceptors.response.use((response) => {
   return response;
 }, async (error) => {
   const originalRequest = error.config;
-  
-  if (error.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/auth/login' && originalRequest.url !== '/auth/refresh') {
+
+  // Prevent refreshing logic if 401 comes from any auth route (login, refresh, me)
+  if (error.response?.status === 401 && !originalRequest._retry && !(originalRequest.url && originalRequest.url.includes('/auth/'))) {
+    originalRequest._retry = true;
+
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
       }).then(token => {
-        originalRequest.headers.Authorization = 'Bearer ' + token;
+        if (originalRequest.headers && typeof originalRequest.headers.set === 'function') {
+          originalRequest.headers.set('Authorization', 'Bearer ' + token);
+        } else if (originalRequest.headers) {
+          originalRequest.headers.Authorization = 'Bearer ' + token;
+        }
         return axios(originalRequest);
       }).catch(err => {
         return Promise.reject(err);
       });
     }
 
-    originalRequest._retry = true;
     isRefreshing = true;
 
     try {
       const { data } = await axios.post('/auth/refresh', {}, { withCredentials: true });
       const newAccessToken = data.access_token;
-      
+
       localStorage.setItem('access_token', newAccessToken);
-      if (state) state.token = newAccessToken; // safe check 
-      
-      axios.defaults.headers.common['Authorization'] = 'Bearer ' + newAccessToken;
-      originalRequest.headers.Authorization = 'Bearer ' + newAccessToken;
-      
+      if (state) state.token = newAccessToken;
+
+      if (axios.defaults.headers.common && typeof (axios.defaults.headers.common as any).set === 'function') {
+        (axios.defaults.headers.common as any).set('Authorization', 'Bearer ' + newAccessToken);
+      } else {
+        axios.defaults.headers.common['Authorization'] = 'Bearer ' + newAccessToken;
+      }
+      if (originalRequest.headers && typeof originalRequest.headers.set === 'function') {
+        originalRequest.headers.set('Authorization', 'Bearer ' + newAccessToken);
+      } else if (originalRequest.headers) {
+        originalRequest.headers.Authorization = 'Bearer ' + newAccessToken;
+      }
+
+      // Libérer le verrou AVANT de traiter la queue pour éviter un double-refresh
+      isRefreshing = false;
       processQueue(null, newAccessToken);
       return axios(originalRequest);
     } catch (refreshError) {
+      // Libérer le verrou AVANT de rejeter la queue
+      isRefreshing = false;
       processQueue(refreshError, null);
       // Logout completely if refresh fails
       localStorage.removeItem('access_token');
       if (state) {
-          state.token = null;
-          state.user = null;
-          state.isAuthenticated = false;
+        state.token = null;
+        state.user = null;
+        state.isAuthenticated = false;
       }
       // Prevent infinite redirect loop if already on login page
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
       return Promise.reject(refreshError);
-    } finally {
-      isRefreshing = false;
     }
   }
 
   return Promise.reject(error);
 });
+
 
 interface User {
   id: number

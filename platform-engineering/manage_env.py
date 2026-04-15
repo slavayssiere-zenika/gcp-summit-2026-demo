@@ -32,8 +32,9 @@ def discover_versions():
     versions = {}
     base_dir = os.path.dirname(os.path.dirname(__file__))
     components = [
-        "agent_router_api", "agent_hr_api", "agent_ops_api", "users_api", "items_api", "competencies_api", 
-        "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp", 
+        "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
+        "users_api", "items_api", "competencies_api",
+        "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp",
         "db_migrations", "frontend"
     ]
     
@@ -252,10 +253,11 @@ def build_importable_resources_map(env, project_id, region):
 
     return {
         # ── Cloud Run Services ───────────────────────────────────────────────
-        "google_cloud_run_v2_service.agent_hr_api":     f"{cr_base}/agent-hr-api-{env}",
-        "google_cloud_run_v2_service.agent_ops_api":    f"{cr_base}/agent-ops-api-{env}",
-        "google_cloud_run_v2_service.agent_router_api": f"{cr_base}/agent-router-api-{env}",
-        "google_cloud_run_v2_service.market_mcp":       f"{cr_base}/market-mcp-{env}",
+        "google_cloud_run_v2_service.agent_hr_api":       f"{cr_base}/agent-hr-api-{env}",
+        "google_cloud_run_v2_service.agent_ops_api":      f"{cr_base}/agent-ops-api-{env}",
+        "google_cloud_run_v2_service.agent_router_api":   f"{cr_base}/agent-router-api-{env}",
+        "google_cloud_run_v2_service.agent_missions_api": f"{cr_base}/agent-missions-api-{env}",
+        "google_cloud_run_v2_service.market_mcp":         f"{cr_base}/market-mcp-{env}",
         "google_cloud_run_v2_service.prompts_api":      f"{cr_base}/prompts-api-{env}",
         "google_cloud_run_v2_service.users_api":        f"{cr_base}/users-api-{env}",
         "google_cloud_run_v2_service.competencies_api": f"{cr_base}/competencies-api-{env}",
@@ -264,9 +266,10 @@ def build_importable_resources_map(env, project_id, region):
         "google_cloud_run_v2_service.items_api":        f"{cr_base}/items-api-{env}",
         "google_cloud_run_v2_service.missions_api":     f"{cr_base}/missions-api-{env}",
         # ── Monitoring Custom Services ───────────────────────────────────────
-        "google_monitoring_custom_service.agent_hr_api_svc":     f"{mon_base}/agent-hr-api-service-{env}",
-        "google_monitoring_custom_service.agent_ops_api_svc":    f"{mon_base}/agent-ops-api-service-{env}",
-        "google_monitoring_custom_service.agent_router_api_svc": f"{mon_base}/agent-router-api-service-{env}",
+        "google_monitoring_custom_service.agent_hr_api_svc":       f"{mon_base}/agent-hr-api-service-{env}",
+        "google_monitoring_custom_service.agent_ops_api_svc":      f"{mon_base}/agent-ops-api-service-{env}",
+        "google_monitoring_custom_service.agent_router_api_svc":   f"{mon_base}/agent-router-api-service-{env}",
+        "google_monitoring_custom_service.agent_missions_api_svc": f"{mon_base}/agent-missions-api-service-{env}",
         "google_monitoring_custom_service.competencies_api_svc": f"{mon_base}/competencies-api-service-{env}",
         "google_monitoring_custom_service.cv_api_svc":           f"{mon_base}/cv-api-service-{env}",
         "google_monitoring_custom_service.drive_api_svc":        f"{mon_base}/drive-api-service-{env}",
@@ -777,6 +780,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
                                     "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
                                     "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
+                                    "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
                                     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
                                     "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
                                     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
@@ -788,7 +792,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "Content-Type": "application/json",
                                     "Authorization": f"Bearer {access_token}"
                                 }
-                                prompts_url = f"https://{api_dns_name}/prompts-api/"
+                                prompts_url = f"https://{api_dns_name}/api/prompts/"
                                 
                                 for p_key, rel_path in prompts_to_seed.items():
                                     file_path = os.path.join(base_dir, rel_path)
@@ -869,16 +873,17 @@ def deploy(env, base_domain, project_id, config, force=False):
                 logger.info(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
                 # On teste toutes les routes déclarées dans le Load Balancer (lb.tf)
                 api_routes = [
-                    "/api/health",           # agent_router_api
-                    "/agent-hr-api/health",  # agent_hr_api
-                    "/agent-ops-api/health", # agent_ops_api
-                    "/users-api/health",     # users_api
-                    "/items-api/health",     # items_api
-                    "/prompts-api/health",   # prompts_api
-                    "/comp-api/health",      # competencies_api
-                    "/cv-api/health",        # cv_api
-                    "/drive-api/health",     # drive_api
-                    "/missions-api/health"   # missions_api
+                    "/api/health",                 # agent_router_api
+                    "/api/agent-hr/health",        # agent_hr_api
+                    "/api/agent-ops/health",       # agent_ops_api
+                    "/api/agent-missions/health",  # agent_missions_api ← NEW
+                    "/api/users/health",           # users_api
+                    "/api/items/health",           # items_api
+                    "/api/prompts/health",         # prompts_api
+                    "/api/competencies/health",    # competencies_api
+                    "/api/cv/health",              # cv_api
+                    "/api/drive/health",           # drive_api
+                    "/api/missions/health"         # missions_api
                 ]
                 
                 def check_route(route):

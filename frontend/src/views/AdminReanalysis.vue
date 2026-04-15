@@ -35,7 +35,7 @@ const searchUsers = async () => {
   
   isSearchingUsers.value = true
   try {
-    const resp = await axios.get('/users-api/search', { params: { query: userSearchQuery.value, limit: 10 } })
+    const resp = await axios.get('/api/users/search', { params: { query: userSearchQuery.value, limit: 10 } })
     userResults.value = resp.data.items || []
   } catch (e) {
     console.error('User search failed', e)
@@ -77,7 +77,7 @@ const triggerReanalysis = async () => {
       addLog("Filtre appliqué : TOUS LES CVS")
     }
 
-    const response = await fetch(`/cv-api/reanalyze?${params.toString()}`, {
+    const response = await fetch(`/api/cv/reanalyze?${params.toString()}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authService.state.token}`
@@ -143,7 +143,7 @@ const triggerRemapping = async () => {
     addLog("Calcul de la nouvelle taxonomie via Gemini...")
     
     try {
-      const resp = await axios.post('/cv-api/recalculate_tree')
+      const resp = await axios.post('/api/cv/recalculate_tree')
       treeResult.value = resp.data.tree || resp.data
       treeCost.value = resp.data.usage?.estimated_cost_usd || null
       addLog("Nouvelle taxonomie générée avec succès.")
@@ -162,7 +162,7 @@ const applyTree = async () => {
   
   try {
     addLog("Sauvegarde de la taxonomie en base de données...")
-    await axios.post('/comp-api/bulk_tree', { tree: treeResult.value })
+    await axios.post('/api/competencies/bulk_tree', { tree: treeResult.value })
     addLog("Taxonomie appliquée et caches vidés.")
     treeResult.value = null
     successMessage.value = "Taxonomie officiellement mise à jour sur toute la plateforme."
@@ -178,7 +178,7 @@ const pollingInterval = ref<any>(null)
 
 const checkTaskStatus = async () => {
   try {
-    const resp = await axios.get('/cv-api/reanalyze/status')
+    const resp = await axios.get('/api/cv/reanalyze/status')
     const data = resp.data
     
     if (data.status === 'running') {

@@ -13,6 +13,19 @@ auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
 logger = logging.getLogger(__name__)
 
+# Tools that are known to exceed the standard 30s timeout.
+# These involve LLM calls, vector search, or large data processing.
+LONG_RUNNING_TOOLS = {
+    "analyze_cv",
+    "search_best_candidates",
+    "reanalyze_mission",
+    "global_reanalyze_cvs",
+    "recalculate_competencies_tree",
+    "get_infrastructure_topology",
+    "get_candidate_rag_context",
+    "get_aiops_dashboard_data",
+}
+
 class MCPHttpClient:
     def __init__(self, url: str):
         self.url = url
@@ -47,10 +60,11 @@ class MCPHttpClient:
         
         async with httpx.AsyncClient(headers=headers) as client:
             try:
+                timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
                 res = await client.post(
                     f"{self.url.rstrip('/')}/mcp/call", 
                     json={"name": tool_name, "arguments": arguments},
-                    timeout=30.0 # Define a reasonable HTTP timeout
+                    timeout=timeout
                 )
                 res.raise_for_status()
                 # The sidecar will return {"result": [{"text": "...", "type": "text"}]}

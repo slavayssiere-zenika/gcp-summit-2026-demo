@@ -320,10 +320,11 @@ services:
       - "8002:8002"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-2.0-flash
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
       - PROMPTS_API_URL=http://prompts_api:8005
       - AGENT_HR_API_URL=http://agent_hr_api:8080
       - AGENT_OPS_API_URL=http://agent_ops_api:8080
+      - AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
       - MARKET_MCP_URL=http://market_mcp:8008
       - REDIS_URL=redis://redis:6379/1
       - TRACE_EXPORTER=http
@@ -342,6 +343,8 @@ services:
         condition: service_started
       agent_ops_api:
         condition: service_started
+      agent_missions_api:
+        condition: service_started
     networks:
       monitoring_net:
         aliases:
@@ -356,12 +359,19 @@ services:
     hostname: agent_hr_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-2.0-flash
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
+      # Main APIs (for business calls that require auth context)
       - USERS_API_URL=http://users_api:8000
       - ITEMS_API_URL=http://items_api:8001
       - COMPETENCIES_API_URL=http://competencies_api:8003
       - CV_API_URL=http://cv_api:8004
       - MISSIONS_API_URL=http://missions_api:8009
+      # MCP Sidecars (for list_tools/call_tool — no JWT required on these)
+      - USERS_MCP_URL=http://users_mcp:8000
+      - ITEMS_MCP_URL=http://items_mcp:8000
+      - COMPETENCIES_MCP_URL=http://competencies_mcp:8000
+      - CV_MCP_URL=http://cv_mcp:8000
+      - MISSIONS_MCP_URL=http://missions_mcp:8000
       - PROMPTS_API_URL=http://prompts_api:8005
       - MARKET_MCP_URL=http://market_mcp:8008
       - REDIS_URL=redis://redis:6379/10
@@ -375,6 +385,16 @@ services:
       redis:
         condition: service_healthy
       prompts_api:
+        condition: service_started
+      users_mcp:
+        condition: service_started
+      items_mcp:
+        condition: service_started
+      competencies_mcp:
+        condition: service_started
+      cv_mcp:
+        condition: service_started
+      missions_mcp:
         condition: service_started
     networks:
       monitoring_net:
@@ -390,7 +410,7 @@ services:
     hostname: agent_ops_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-2.0-flash
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
       - PROMPTS_API_URL=http://prompts_api:8005
       - DRIVE_MCP_URL=http://drive_mcp:8000
       - MARKET_MCP_URL=http://market_mcp:8008
@@ -411,6 +431,41 @@ services:
       monitoring_net:
         aliases:
           - agent_ops_api
+
+  # The Intelligent Missions Agent / Staffing Director (A2A Worker)
+  agent_missions_api:
+    build:
+      context: .
+      dockerfile: agent_missions_api/Dockerfile
+    container_name: agent_missions_api
+    hostname: agent_missions_api
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
+      - PROMPTS_API_URL=http://prompts_api:8005
+      - MISSIONS_MCP_URL=http://missions_api:8009
+      - CV_MCP_URL=http://cv_api:8004
+      - USERS_MCP_URL=http://users_api:8001
+      - COMPETENCIES_MCP_URL=http://competencies_api:8003
+      - MARKET_MCP_URL=http://market_mcp:8008
+      - REDIS_URL=redis://redis:6379/12
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=agent-missions-api
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      db_migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      prompts_api:
+        condition: service_started
+      missions_api:
+        condition: service_started
+    networks:
+      monitoring_net:
+        aliases:
+          - agent_missions_api
 
   # The New Vue.js SPA Frontend
   frontend:

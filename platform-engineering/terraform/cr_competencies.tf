@@ -64,7 +64,7 @@ resource "google_cloud_run_v2_service" "competencies_api" {
       }
       env {
         name  = "ROOT_PATH"
-        value = "/comp-api"
+        value = "/api/competencies"
       }
       env {
         name  = "USE_IAM_AUTH"
@@ -87,6 +87,10 @@ resource "google_cloud_run_v2_service" "competencies_api" {
         value = var.competencies_api_version
       }
       env {
+        name  = "MCP_SIDECAR_URL"
+        value = "http://localhost:8081"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -98,7 +102,7 @@ resource "google_cloud_run_v2_service" "competencies_api" {
 
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
     }
 

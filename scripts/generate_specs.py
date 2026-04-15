@@ -2,7 +2,12 @@ import subprocess
 import os
 import sys
 
-apis = ["agent_api", "competencies_api", "cv_api", "drive_api", "items_api", "prompts_api", "users_api"]
+# APIs REST — génération du bloc OpenAPI auto dans spec.md
+apis = ["competencies_api", "cv_api", "drive_api", "items_api", "missions_api", "prompts_api", "users_api"]
+
+# Agents IA — leur spec.md est un document métier statique.
+# Le script se contente d'y ajouter le bloc OpenAPI (endpoints) auto-extrait.
+agents = ["agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api"]
 
 extractor_code = """
 import os
@@ -44,13 +49,17 @@ except Exception as e:
 """
 
 failed = False
-for api in apis:
+for api in apis + agents:
     if not os.path.isdir(api):
+        print(f"⚠️  Répertoire '{api}' introuvable — ignoré.")
         continue
-    # Injecter SECRET_KEY pour éviter ValueError dans les src/auth.py au moment de l'import
+    # Injecter les variables d'environnement minimales pour éviter les erreurs d'import
     env = os.environ.copy()
     env.setdefault("SECRET_KEY", "spec-generation-dummy-key")
     env.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./spec_gen.db")
+    env.setdefault("REDIS_URL", "redis://localhost:6379/0")
+    env.setdefault("GOOGLE_API_KEY", "spec-dummy-api-key")
+    env.setdefault("GEMINI_MODEL", "gemini-2.5-flash")
     p = subprocess.run(["../test_env/bin/python", "-c", extractor_code], cwd=api, env=env)
     if p.returncode != 0:
         failed = True

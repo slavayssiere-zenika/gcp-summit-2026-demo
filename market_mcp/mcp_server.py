@@ -9,6 +9,8 @@ from mcp.types import Tool, TextContent
 from google.cloud import bigquery
 from google.protobuf.timestamp_pb2 import Timestamp
 import time
+from google.cloud import logging_v2 as logging_cloud
+from google.cloud import run_v2
 
 # Standard context var for MCP auth
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
@@ -119,6 +121,47 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_aiops_dashboard_data",
             description="Récupère l'ensemble des indicateurs AIOps et FinOps pour le dashboard : consommation mensuelle, évolution journalière, et tops utilisateurs.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="get_service_logs",
+            description="Extrait les logs récents d'un service Cloud Run spécifique. Permet d'investiguer les erreurs 500 ou les timeouts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "service_name": {"type": "string", "description": "Le nom du service Cloud Run (ex: 'agent-router-api-dev')."},
+                    "limit": {"type": "integer", "description": "Nombre de lignes à remonter (défaut 10).", "default": 10},
+                    "hours_lookback": {"type": "integer", "description": "Nombre d'heures d'historique (défaut 1).", "default": 1},
+                    "severity": {"type": "string", "description": "Niveau minimum de sévérité (ex: 'ERROR', 'INFO').", "default": "DEFAULT"}
+                },
+                "required": ["service_name"]
+            }
+        ),
+        Tool(
+            name="list_gcp_services",
+            description="Liste tous les services Cloud Run de la plateforme Zenika déployés dans le projet GCP.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="check_component_health",
+            description="Vérifie l'état de santé d'un composant de la plateforme (Service Cloud Run, Redis, BigQuery, AlloyDB).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "component_name": {"type": "string", "description": "Nom du service ou composant (ex: 'users-api', 'redis-cache', 'alloydb')."}
+                },
+                "required": ["component_name"]
+            }
+        ),
+        Tool(
+            name="check_all_components_health",
+            description="Réalise un check de santé global de TOUS les services et composants de la plateforme Zenika.",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -255,6 +298,27 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             data = await get_aiops_dashboard_data_internal()
             return [TextContent(type="text", text=json.dumps(data))]
 
+        elif name == "get_service_logs":
+            service_name = arguments.get("service_name")
+            limit = arguments.get("limit", 10)
+            hours = arguments.get("hours_lookback", 1)
+            severity = arguments.get("severity", "DEFAULT")
+            data = await get_service_logs_internal(service_name, limit, hours, severity)
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "list_gcp_services":
+            data = await list_gcp_services_internal()
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "check_component_health":
+            component_name = arguments.get("component_name")
+            data = await check_component_health_internal(component_name)
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "check_all_components_health":
+            data = await check_all_components_health_internal()
+            return [TextContent(type="text", text=json.dumps(data))]
+
         else:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 
@@ -302,6 +366,20 @@ async def get_aiops_dashboard_data_internal():
         FROM `{FINOPS_TABLE_REF}`
         GROUP BY 1 ORDER BY 2 DESC LIMIT 10
     """
+
+    # 5. Répartition par Action (outil/usage LLM)
+    query_top_actions = f"""
+        SELECT action, COUNT(*) as count
+        FROM `{FINOPS_TABLE_REF}`
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 15
+    """
+
+    # 6. Répartition par Modèle IA
+    query_top_models = f"""
+        SELECT model, COUNT(*) as count
+        FROM `{FINOPS_TABLE_REF}`
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    """
     
     # Helper pour la requête
     def fetch_data(q):
@@ -310,24 +388,28 @@ async def get_aiops_dashboard_data_internal():
     import asyncio
     
     # Exécution parallèle
-    monthly_res, daily_res, top_count_res, top_cost_res = await asyncio.gather(
+    monthly_res, daily_res, top_count_res, top_cost_res, top_actions_res, top_models_res = await asyncio.gather(
         asyncio.to_thread(fetch_data, query_monthly),
         asyncio.to_thread(fetch_data, query_daily),
         asyncio.to_thread(fetch_data, query_top_count),
-        asyncio.to_thread(fetch_data, query_top_cost)
+        asyncio.to_thread(fetch_data, query_top_cost),
+        asyncio.to_thread(fetch_data, query_top_actions),
+        asyncio.to_thread(fetch_data, query_top_models)
     )
-    
+
     # Formatting
-    for r in monthly_res: 
+    for r in monthly_res:
         if 'month' in r and r['month']: r['month'] = r['month'].isoformat()
-    for r in daily_res: 
+    for r in daily_res:
         if 'day' in r and r['day']: r['day'] = r['day'].isoformat()
-    
+
     return {
         "monthly": monthly_res,
         "daily": daily_res,
         "top_users_count": top_count_res,
         "top_users_cost": top_cost_res,
+        "top_actions": top_actions_res,
+        "top_models": top_models_res,
         "generated_at": datetime.utcnow().isoformat()
     }
 
@@ -467,7 +549,7 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
                             seen_links.add(link_key)
         
         # 3. Filter nodes: Keep Zenika services OR nodes involved in links
-        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "users", "items", "cv", "competencies"]
+        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive"]
         final_nodes = []
         linked_service_names = set()
         for l in links:
@@ -487,6 +569,214 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
     except Exception as e:
         logger.exception(f"Failed to fetch topology from GCP: {e}")
         raise e
+
+async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lookback: int = 1, severity: str = "DEFAULT") -> list:
+    """Fetch logs from Cloud Logging for a specific Cloud Run service."""
+    try:
+        client_logging = logging_cloud.Client(project=PROJECT_ID)
+        
+        # Calculate time filter
+        from datetime import datetime, timedelta, timezone
+        start_time = (datetime.now(timezone.utc) - timedelta(hours=hours_lookback)).isoformat()
+        
+        filter_str = (
+            f'resource.type="cloud_run_revision" '
+            f'AND resource.labels.service_name="{service_name}" '
+            f'AND timestamp >= "{start_time}"'
+        )
+        if severity != "DEFAULT":
+            filter_str += f' AND severity >= {severity}'
+            
+        entries = client_logging.list_entries(filter_=filter_str, order_by=logging_cloud.DESCENDING, page_size=limit)
+        
+        logs = []
+        for entry in entries:
+            logs.append({
+                "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+                "severity": entry.severity,
+                "text_payload": entry.text_payload,
+                "json_payload": entry.json_payload if hasattr(entry, 'json_payload') else None,
+                "resource_name": entry.resource.labels.get("revision_name", "unknown")
+            })
+            if len(logs) >= limit:
+                break
+                
+        return logs
+    except Exception as e:
+        logger.exception(f"Error fetching logs for {service_name}: {e}")
+        return {"error": str(e), "service": service_name}
+
+async def list_gcp_services_internal() -> list:
+    """List Cloud Run services filtered for Zenika platform."""
+    try:
+        client_run = run_v2.ServicesAsyncClient(project=PROJECT_ID)
+        parent = f"projects/{PROJECT_ID}/locations/-" # Search in all locations
+        
+        services_pager = await client_run.list_services(parent=parent)
+        
+        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive"]
+        
+        results = []
+        async for service in services_pager:
+            name = service.name.split("/")[-1]
+            if any(k in name.lower() for k in zenika_keywords):
+                results.append({
+                    "name": name,
+                    "uri": service.uri,
+                    "location": service.name.split("/")[3],
+                    "labels": dict(service.labels) if service.labels else {}
+                })
+        return results
+    except Exception as e:
+        logger.exception(f"Error listing Cloud Run services: {e}")
+        return {"error": str(e)}
+
+async def check_component_health_internal(component_name: str) -> dict:
+    """Basic health check for platform components using Internal LB where possible."""
+    try:
+        # 1. Redis Check
+        if "redis" in component_name.lower():
+            import redis
+            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+            try:
+                r = redis.from_url(redis_url, socket_timeout=2.0)
+                if r.ping():
+                    return {"status": "healthy", "component": component_name, "message": "Redis PING successful"}
+            except Exception as re:
+                return {"status": "unhealthy", "component": component_name, "error": str(re)}
+
+        # 2. BigQuery / AlloyDB Check
+        if any(k in component_name.lower() for k in ["bigquery", "alloydb"]):
+            try:
+                from google.cloud import bigquery
+                bq_client = bigquery.Client(project=PROJECT_ID)
+                bq_client.list_datasets(max_results=1)
+                return {"status": "healthy", "component": component_name, "message": "GCP Data APIs are responsive"}
+            except Exception as be:
+                return {"status": "degraded", "component": component_name, "error": str(be)}
+
+        # 3. Cloud Run Service Check via Internal Load Balancer (api.internal.zenika)
+        # Mapping component to ILB path prefix
+        mapping = {
+            "users": "/api/users/",
+            "items": "/api/items/",
+            "prompts-api": "/api/prompts/", # Specific match
+            "prompts": "/api/prompts/",
+            "prompt": "/api/prompts/",
+            "market": "/api/market/",
+            "cv": "/api/cv/",
+            "missions": "/api/missions/",
+            "competencies": "/api/competencies/",
+            "drive": "/api/drive/",
+            "agent-hr": "/api/agent-hr/",
+            "hr": "/api/agent-hr/",
+            "agent-ops": "/api/agent-ops/",
+            "ops": "/api/agent-ops/",
+            "router": "/api/",
+            "agent-router": "/api/",
+            "auth": "/auth/"
+        }
+        
+        target_path = None
+        for key, path in mapping.items():
+            if key in component_name.lower():
+                target_path = path
+                break
+        
+        if target_path:
+            import httpx
+            # Use ILB URL (api.internal.zenika on port 80 as per forwarding rule)
+            url = f"http://api.internal.zenika{target_path}health"
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Propagate trace if available
+                    res = await client.get(url)
+                    if res.status_code == 200:
+                        return {"status": "healthy", "component": component_name, "url": url, "code": 200}
+                    else:
+                        return {"status": "unhealthy", "component": component_name, "url": url, "code": res.status_code, "detail": res.text[:200]}
+            except Exception as he:
+                return {"status": "unreachable", "component": component_name, "url": url, "error": str(he)}
+
+        # Fallback: check if it exists in GCP via list_services
+        services = await list_gcp_services_internal()
+        if any(s["name"] == component_name for s in services if isinstance(s, dict)):
+            return {"status": "unknown", "component": component_name, "message": "Service exists in GCP but component name mapping for ILB is missing."}
+            
+        return {"status": "not_found", "component": component_name}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+async def check_all_components_health_internal() -> list:
+    """Run a comprehensive health check on all detected cloud run services and infra.
+
+    Strategy:
+    - Always checks infra components (Redis, AlloyDB, BigQuery).
+    - Tries to discover Cloud Run services dynamically via GCP SDK.
+    - Falls back to a static list of known Zenika internal services when GCP
+      discovery returns nothing (e.g. local dev environment without GCP access).
+    """
+    # Static fallback: canonical list of all Zenika platform services.
+    # These match the ILB path mapping in check_component_health_internal().
+    ZENIKA_STATIC_SERVICES = [
+        "users-api",
+        "items-api",
+        "competencies-api",
+        "cv-api",
+        "missions-api",
+        "prompts-api",
+        "drive-api",
+        "agent-hr-api",
+        "agent-ops-api",
+        "agent-missions-api",
+        "market-mcp",
+        "agent-router-api",
+    ]
+
+    try:
+        # 1. Start by listing all Cloud Run services
+        gcp_services = await list_gcp_services_internal()
+        is_valid_list = isinstance(gcp_services, list) and len(gcp_services) > 0 and not any("error" in s for s in gcp_services if isinstance(s, dict))
+
+        # Use GCP-discovered names if available; otherwise fall back to static list
+        if is_valid_list:
+            service_names = [s["name"] for s in gcp_services if isinstance(s, dict) and "name" in s]
+            logger.info(f"[health] Discovered {len(service_names)} Cloud Run services via GCP SDK")
+        else:
+            service_names = ZENIKA_STATIC_SERVICES
+            logger.info(f"[health] GCP SDK returned no services. Using static fallback list ({len(service_names)} services)")
+
+        # 2. Prepare task list
+        tasks = []
+        infra_components = ["redis-cache", "alloydb", "bigquery"]
+
+        # Add infra components
+        for comp in infra_components:
+            tasks.append(check_component_health_internal(comp))
+
+        # Add service components, avoiding duplicates with infra
+        seen = set(infra_components)
+        for name in service_names:
+            key = name.lower()
+            if not any(k in key for k in infra_components) and key not in seen:
+                seen.add(key)
+                tasks.append(check_component_health_internal(name))
+
+        # 3. Execute all in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 4. Filter out exceptions and format
+        final_results = []
+        for res in results:
+            if isinstance(res, Exception):
+                final_results.append({"status": "error", "error": str(res)})
+            else:
+                final_results.append(res)
+
+        return final_results
+    except Exception as e:
+        logger.exception(f"Global health check failed: {e}")
+        return {"error": str(e)}
 
 async def main():
     """Main entry point for the MCP server when run directly over stdio."""

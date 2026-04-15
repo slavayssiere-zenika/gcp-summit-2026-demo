@@ -17,6 +17,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False)
+    seniority = Column(String, nullable=True)  # "Junior", "Mid", "Senior" — éditable manuellement
     allowed_category_ids = Column(String, default="")  # Comma-separated IDs for simplicity
     created_at = Column(DateTime, default=datetime.utcnow)
     picture_url = Column(String, nullable=True)

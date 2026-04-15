@@ -48,12 +48,16 @@ app = FastAPI(lifespan=lifespan, title="Drive Synchronization API", root_path=os
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
 
-import asyncio
-import logging
+from fastapi.middleware.cors import CORSMiddleware
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
-RedisInstrumentor().instrument()
-HTTPXClientInstrumentor().instrument()
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80,http://localhost:8080").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage (anti prompt-injection)
 
@@ -62,11 +66,12 @@ from fastapi import APIRouter, Depends
 # Router protégé par JWT applicatif: endpoints admin + proxy MCP sidecar
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
-@protected_router.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@protected_router.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     import httpx
-    url = f"http://localhost:8081/mcp/{path}"
+    sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://drive_mcp:8000")
+    url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
         url += f"?{request.url.query}"
 

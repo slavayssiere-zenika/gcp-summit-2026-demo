@@ -72,31 +72,54 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
       }
       env {
         name  = "PROMPTS_API_URL"
-        value = "http://api.internal.zenika/prompts-api/"
+        value = "http://api.internal.zenika/api/prompts/"
       }
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
       env {
         name  = "ITEMS_API_URL"
-        value = "http://api.internal.zenika/items-api/"
+        value = "http://api.internal.zenika/api/items/"
       }
       env {
         name  = "COMPETENCIES_API_URL"
-        value = "http://api.internal.zenika/comp-api/"
+        value = "http://api.internal.zenika/api/competencies/"
       }
       env {
         name  = "CV_API_URL"
-        value = "http://api.internal.zenika/cv-api/"
+        value = "http://api.internal.zenika/api/cv/"
       }
       env {
         name  = "MISSIONS_API_URL"
-        value = "http://api.internal.zenika/missions-api/"
+        value = "http://api.internal.zenika/api/missions/"
       }
       env {
         name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/market-mcp/"
+        value = "http://api.internal.zenika/api/market/"
+      }
+      # MCP Sidecars: /mcp/tools and /mcp/call are now public endpoints (no JWT)
+      # on each API service. They proxy to the co-located MCP sidecar (port 8081).
+      # These URLs must NOT go through the EXTERNAL LB — they use the INTERNAL LB.
+      env {
+        name  = "USERS_MCP_URL"
+        value = "http://api.internal.zenika/api/users/"
+      }
+      env {
+        name  = "ITEMS_MCP_URL"
+        value = "http://api.internal.zenika/api/items/"
+      }
+      env {
+        name  = "COMPETENCIES_MCP_URL"
+        value = "http://api.internal.zenika/api/competencies/"
+      }
+      env {
+        name  = "CV_MCP_URL"
+        value = "http://api.internal.zenika/api/cv/"
+      }
+      env {
+        name  = "MISSIONS_MCP_URL"
+        value = "http://api.internal.zenika/api/missions/"
       }
       env {
         name  = "USE_GCP_LOGGING"

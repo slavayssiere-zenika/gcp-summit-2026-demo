@@ -30,9 +30,10 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo -e "  items_api      Microservice Items"
   echo -e "  cv_api         Microservice CVs"
   echo -e "  missions_api   Microservice Missions"
-  echo -e "  agent_router_api Orchestrateur A2A"
-  echo -e "  agent_hr_api   Agent HR (A2A Worker)"
-  echo -e "  agent_ops_api  Agent Ops (A2A Worker)"
+  echo -e "  agent_router_api   Orchestrateur A2A"
+  echo -e "  agent_hr_api       Agent HR (A2A Worker)"
+  echo -e "  agent_ops_api      Agent Ops (A2A Worker)"
+  echo -e "  agent_missions_api Agent Missions/Staffing (A2A Worker)"
   echo -e "  frontend       Frontend Vue.js"
   echo -e "  db_migrations  Migrations de base de données (non inclus dans 'all')"
   echo -e "  db_init       Initialise la base de données via Cloud Run Job"
@@ -288,13 +289,37 @@ build_and_upload_frontend() {
   fi
 }
 
+sync_system_prompts() {
+  echo -e "\n${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
+  
+  # 1. Récupération des infos via Terraform
+  echo "[*] Récupération du mot de passe admin et de la configuration..."
+  local TF_DIR="platform-engineering/terraform"
+  local ADMIN_PWD=$(cd "$TF_DIR" && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw admin_password 2>/dev/null || echo "")
+  
+  if [ -z "$ADMIN_PWD" ]; then
+    echo -e "${YELLOW}[!] Impossible de récupérer le mot de passe admin via Terraform. Skip sync.{RESET}"
+    return
+  fi
+  
+  # 2. Détermination de l'URL (via dev.yaml ou convention)
+  local BASE_DOMAIN="zenika.slavayssiere.fr" # Valeur par défaut ou extraite du yaml
+  if [ -f "platform-engineering/envs/dev.yaml" ]; then
+    BASE_DOMAIN=$(grep "base_domain:" platform-engineering/envs/dev.yaml | cut -d'"' -f2)
+  fi
+  local API_URL="https://api.dev.${BASE_DOMAIN}/api/prompts"
+  
+  # 3. Exécution du script Python
+  python3 scripts/sync_prompts.py --url "$API_URL" --password "$ADMIN_PWD"
+}
+
 # ==============================================================================
 # Main logic
 # ==============================================================================
 # Liste des services applicatifs (déployés par 'all')
 APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp")
 # Liste de tous les services possibles pour la validation
-VALID_SERVICES=("db_migrations" "db_init" "agent_router_api" "agent_hr_api" "agent_ops_api" "frontend" "${APP_MICROSERVICES[@]}")
+VALID_SERVICES=("db_migrations" "db_init" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "${APP_MICROSERVICES[@]}")
 
 BUMP_TYPE="patch"
 TARGET_SERVICES=()
@@ -321,7 +346,7 @@ for svc in "${TARGET_SERVICES[@]}"; do
 done
 
 if [ "${TARGET_SERVICES[0]}" = "all" ]; then
-  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "frontend")
+  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend")
 else
   ALL_TASKS=("${TARGET_SERVICES[@]}")
 fi
@@ -339,6 +364,8 @@ for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
     build_and_push_agent "agent_ops_api" "$BUMP_TYPE"
     show_progress "agent_hr_api"
     build_and_push_agent "agent_hr_api" "$BUMP_TYPE"
+    show_progress "agent_missions_api"
+    build_and_push_agent "agent_missions_api" "$BUMP_TYPE"
     show_progress "agent_router_api"
     build_and_push_agent "agent_router_api" "$BUMP_TYPE"
     
@@ -363,5 +390,6 @@ for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
     exit 1
   fi
 done
+sync_system_prompts
 
 echo -e "\n${GREEN}=== Déploiement terminé avec succès ! ===${RESET}"

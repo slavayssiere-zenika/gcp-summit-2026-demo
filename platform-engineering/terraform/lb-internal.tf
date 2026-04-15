@@ -29,7 +29,139 @@ resource "google_compute_region_url_map" "internal_url_map" {
     default_service = google_compute_region_backend_service.users_internal_backend.id
 
     route_rules {
+      priority = 5
+      match_rules { prefix_match = "/api/market/" }
+      service = google_compute_region_backend_service.market_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 6
+      match_rules { prefix_match = "/mcp/market/" }
+      service = google_compute_region_backend_service.market_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
       priority = 10
+      match_rules { prefix_match = "/api/users/" }
+      service = google_compute_region_backend_service.users_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 11
+      match_rules { prefix_match = "/api/items/" }
+      service = google_compute_region_backend_service.items_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 12
+      match_rules { prefix_match = "/api/prompts/" }
+      service = google_compute_region_backend_service.prompts_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 13
+      match_rules { prefix_match = "/api/competencies/" }
+      service = google_compute_region_backend_service.competencies_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 14
+      match_rules { prefix_match = "/api/cv/" }
+      service = google_compute_region_backend_service.cv_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 15
+      match_rules { prefix_match = "/api/missions/" }
+      service = google_compute_region_backend_service.missions_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 16
+      match_rules { prefix_match = "/api/drive/" }
+      service = google_compute_region_backend_service.drive_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 17
+      match_rules { prefix_match = "/api/agent-hr/" }
+      service = google_compute_region_backend_service.agent_hr_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 18
+      match_rules { prefix_match = "/api/agent-ops/" }
+      service = google_compute_region_backend_service.agent_ops_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 19
+      match_rules { prefix_match = "/api/agent-missions/" }
+      service = google_compute_region_backend_service.agent_missions_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 20
       match_rules { prefix_match = "/api/" }
       service = google_compute_region_backend_service.agent_router_internal_backend.id
       route_action {
@@ -40,7 +172,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
     }
 
     route_rules {
-      priority = 20
+      priority = 30
       match_rules { prefix_match = "/auth/" }
       service = google_compute_region_backend_service.users_internal_backend.id
       route_action {
@@ -50,109 +182,11 @@ resource "google_compute_region_url_map" "internal_url_map" {
       }
     }
 
+    # Compatibilité Legacy interne
     route_rules {
-      priority = 30
-      match_rules { prefix_match = "/users-api/" }
-      service = google_compute_region_backend_service.users_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 40
-      match_rules { prefix_match = "/items-api/" }
-      service = google_compute_region_backend_service.items_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 50
-      match_rules { prefix_match = "/prompts-api/" }
-      service = google_compute_region_backend_service.prompts_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 60
-      match_rules { prefix_match = "/comp-api/" }
-      service = google_compute_region_backend_service.competencies_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 70
-      match_rules { prefix_match = "/cv-api/" }
-      service = google_compute_region_backend_service.cv_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 75
-      match_rules { prefix_match = "/missions-api/" }
-      service = google_compute_region_backend_service.missions_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 80
-      match_rules { prefix_match = "/drive-api/" }
-      service = google_compute_region_backend_service.drive_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 90
+      priority = 200
       match_rules { prefix_match = "/market-mcp/" }
       service = google_compute_region_backend_service.market_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 100
-      match_rules { prefix_match = "/agent-hr-api/" }
-      service = google_compute_region_backend_service.agent_hr_internal_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 110
-      match_rules { prefix_match = "/agent-ops-api/" }
-      service = google_compute_region_backend_service.agent_ops_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

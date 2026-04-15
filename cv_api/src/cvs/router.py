@@ -755,6 +755,12 @@ async def _execute_search(
         # Run all users_api fetches concurrently
         import asyncio
         await asyncio.gather(*(fetch_user(res) for res in mapped_results))
+    
+    if not mapped_results:
+        raise HTTPException(
+            status_code=404, 
+            detail="Aucun collaborateur correspondant à ces critères (compétences/expérience) n'a été trouvé dans la base de CVs Zenika."
+        )
 
     return mapped_results
 
@@ -895,10 +901,22 @@ async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession =
         except Exception as e:
             logger.warning(f"Failed to fetch user anonymity status for {user_id}: {e}")
 
+    # Inférer seniority depuis years_of_experience si non stocké directement
+    years = profile.years_of_experience or 0
+    if years >= 8:
+        inferred_seniority = "Senior"
+    elif years >= 3:
+        inferred_seniority = "Mid"
+    elif years > 0:
+        inferred_seniority = "Junior"
+    else:
+        inferred_seniority = None
+
     return CVFullProfileResponse(
         user_id=profile.user_id,
         summary=profile.summary,
         current_role=profile.current_role,
+        seniority=inferred_seniority,
         years_of_experience=profile.years_of_experience,
         competencies_keywords=profile.competencies_keywords or [],
         missions=profile.missions or [],

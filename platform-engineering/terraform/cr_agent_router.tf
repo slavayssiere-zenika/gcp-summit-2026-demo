@@ -72,43 +72,47 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
       }
       env {
         name  = "PROMPTS_API_URL"
-        value = "http://api.internal.zenika/prompts-api/"
+        value = "http://api.internal.zenika/api/prompts/"
       }
       env {
         name  = "AGENT_HR_API_URL"
-        value = "http://api.internal.zenika/agent-hr-api/"
+        value = "http://api.internal.zenika/api/agent-hr/"
       }
       env {
         name  = "AGENT_OPS_API_URL"
-        value = "http://api.internal.zenika/agent-ops-api/"
+        value = "http://api.internal.zenika/api/agent-ops/"
+      }
+      env {
+        name  = "AGENT_MISSIONS_API_URL"
+        value = "http://api.internal.zenika/api/agent-missions/"
       }
       env {
         name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/market-mcp/"
+        value = "http://api.internal.zenika/api/market/"
       }
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/"
+        value = "http://api.internal.zenika/api/users/"
       }
       env {
         name  = "ITEMS_API_URL"
-        value = "http://api.internal.zenika/items-api/"
+        value = "http://api.internal.zenika/api/items/"
       }
       env {
         name  = "DRIVE_API_URL"
-        value = "http://api.internal.zenika/drive-api/"
+        value = "http://api.internal.zenika/api/drive/"
       }
       env {
         name  = "COMPETENCIES_API_URL"
-        value = "http://api.internal.zenika/comp-api/"
+        value = "http://api.internal.zenika/api/competencies/"
       }
       env {
         name  = "CV_API_URL"
-        value = "http://api.internal.zenika/cv-api/"
+        value = "http://api.internal.zenika/api/cv/"
       }
       env {
         name  = "MISSIONS_API_URL"
-        value = "http://api.internal.zenika/missions-api/"
+        value = "http://api.internal.zenika/api/missions/"
       }
       env {
         name  = "USE_GCP_LOGGING"

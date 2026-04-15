@@ -19,6 +19,7 @@ class UserBase(BaseModel):
     last_name: Optional[str] = None
     full_name: Optional[str] = None
     role: str = "user"
+    seniority: Optional[str] = None  # "Junior", "Mid", "Senior"
     allowed_category_ids: List[int] = []
     picture_url: Optional[str] = None
     is_anonymous: bool = False
@@ -54,6 +55,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_anonymous: Optional[bool] = None
     role: Optional[str] = None
+    seniority: Optional[str] = None  # "Junior", "Mid", "Senior"
     allowed_category_ids: Optional[List[int]] = None
     unavailability_periods: Optional[List[dict]] = None
 

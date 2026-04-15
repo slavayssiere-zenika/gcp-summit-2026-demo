@@ -12,11 +12,34 @@ import { useChatStore } from '@/stores/chatStore'
 import AgentExpertTerminal from '@/components/agent/AgentExpertTerminal.vue'
 import FinopsBadge from '@/components/agent/FinopsBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import MissionCard from '@/components/agent/MissionCard.vue'
+import ConsultantCard from '@/components/agent/ConsultantCard.vue'
+import ItemCard from '@/components/agent/ItemCard.vue'
+import ToolExecutionList from '@/components/agent/ToolExecutionList.vue'
+import CandidateProfileCard from '@/components/agent/CandidateProfileCard.vue'
+import SystemHealthCard from '@/components/agent/SystemHealthCard.vue'
+
+const isHealthComponent = (obj: any) => obj && typeof obj.status === 'string' && typeof obj.component === 'string'
+const isHealthData = (arr: any[]) => arr && arr.length > 0 && arr.every((o: any) => isHealthComponent(o))
 
 const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_name);
 const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
-const techKeys = ['semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 'username', 'name', 'full_name'];
+const isMissionObj = (obj: any) => obj && obj.title && (obj.proposed_team || obj.extracted_competencies || obj.description);
+const techKeys = [
+  'semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 
+  'username', 'name', 'full_name', 'agent', 'response', 'source', 'session_id', 
+  'usage', 'thoughts', 'steps', 'dataType', 'displayType', 'parsedData', 'activeTab',
+  'result', 'nodes', 'links'
+];
 const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
+const isProfileObj = (obj: any) => obj && !obj.email && (obj.user_id || obj.summary) && (obj.missions || obj.competencies_keywords || obj.current_role)
+const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj);
+const hasBusinessData = (obj: any) => filteredKeys(obj).length > 0 || isBusinessObj(obj);
+const hasAnyBusinessData = (msg: any) => {
+  if (msg.displayType === 'text_only') return false;
+  if (!msg.parsedData || msg.parsedData.length === 0) return false;
+  return msg.parsedData.some((obj: any) => hasBusinessData(obj));
+};
 
 const route = useRoute()
 const router = useRouter()
@@ -152,7 +175,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Multi-View Tabs -->
-          <div v-if="(msg.displayType && msg.displayType !== 'text_only') || (msg.steps && msg.steps.length > 0) || (msg.thoughts && msg.thoughts.length > 0)" class="message-tabs">
+          <div v-if="msg.usage || (msg.displayType && msg.displayType !== 'text_only') || (msg.steps && msg.steps.length > 0) || (msg.thoughts && msg.thoughts.length > 0)" class="message-tabs">
             <button 
               :class="['tab-btn', { active: msg.activeTab === 'preview' }]" 
               @click="msg.activeTab = 'preview'"
@@ -171,9 +194,12 @@ onUnmounted(() => {
             <div class="text-content" v-html="md.render(msg.content)"></div>
             
             <!-- Modern JSON Parsed Dashboard -->
-            <div v-if="msg.parsedData && (msg.displayType === 'tree' || msg.parsedData.length > 0)" class="dashboard-content">
+            <div v-if="msg.parsedData && (msg.displayType === 'tree' || hasAnyBusinessData(msg) || isHealthData(msg.parsedData))" class="dashboard-content">
+              <!-- System Health Dashboard -->
+              <SystemHealthCard v-if="isHealthData(msg.parsedData)" :components="msg.parsedData" />
+
               <!-- Table UI -->
-              <div v-if="msg.displayType === 'table'" class="data-table-container">
+              <div v-else-if="msg.displayType === 'table'" class="data-table-container">
                 <table class="zen-table">
                   <thead>
                     <tr>
@@ -194,47 +220,17 @@ onUnmounted(() => {
                 </div>
               </div>
 
-            <!-- Dynamic Cards UI (Inferred Types) -->
-            <div v-else-if="msg.displayType === 'cards'" class="generic-grid">
-               <template v-for="(obj, idx) in msg.parsedData" :key="idx">
-                 <!-- User Card Render -->
-                 <div v-if="isUserObj(obj)" class="user-dash-card clickable" @click="goToUser(obj.id || obj.user_id)">
-                    <div class="card-header">
-                      <div class="avatar">{{ getInitials(obj.full_name || obj.username) }}</div>
-                      <div class="id-tag"><Hash size="12" />{{ obj.id || obj.user_id }}</div>
-                    </div>
-                    <div class="card-body">
-                      <h3 class="name">{{ obj.full_name || obj.username }}</h3>
-                      <div class="username" v-if="obj.username">@{{ obj.username }}</div>
-                      <div class="email"><Mail size="14" /> {{ obj.email }}</div>
-                    </div>
-                    <div class="card-footer" v-if="obj.is_active !== undefined">
-                      <div :class="['status-pill', obj.is_active ? 'active' : 'inactive']">
-                        <CheckCircle2 v-if="obj.is_active" size="14" />
-                        <XCircle v-else size="14" />
-                        {{ obj.is_active ? 'Actif' : 'Inactif' }}
-                      </div>
-                    </div>
-                 </div>
-                 
-                 <!-- Item Card Render -->
-                 <div v-else-if="isItemObj(obj)" class="item-dash-card">
-                    <div class="status-dot-glow"></div>
-                    <div class="item-icon-wrapper"><Package size="20" /></div>
-                    <div class="item-info">
-                       <h4 class="name">{{ obj.name }}</h4>
-                      <p class="desc" v-if="obj.description">{{ obj.description }}</p>
-                      <div class="owner" v-if="obj.user_id || obj.owner">Propriétaire: #{{ obj.user_id || obj.owner }}</div>
-                      <div v-if="obj.categories" class="categories-tags">
-                        <span v-for="cat in (Array.isArray(obj.categories) ? obj.categories : [obj.categories])" :key="cat.id || cat" class="tag">
-                          <Tag size="10" /> {{ (cat && typeof cat === 'object') ? (cat.name || cat.id) : cat }}
-                        </span>
-                      </div>
-                    </div>
-                 </div>
-
-                 <!-- Generic Fallback Card Render -->
-                 <div v-else class="generic-dash-card" @click="obj.id || obj.user_id ? goToUser(obj.id || obj.user_id) : null">
+              <!-- Dynamic Cards UI (Dedicated Components) -->
+              <div v-else-if="msg.displayType === 'cards' && msg.parsedData && msg.parsedData.length > 0"
+                   :class="msg.parsedData.every((o: any) => isUserObj(o)) ? 'consultant-list' : 'generic-grid'">
+                <template v-for="(obj, idx) in msg.parsedData" :key="idx">
+                  <MissionCard v-if="isMissionObj(obj)" :mission="obj" />
+                  <ConsultantCard v-else-if="isUserObj(obj)" :consultant="obj" />
+                  <CandidateProfileCard v-else-if="isProfileObj(obj)" :profile="obj" />
+                  <ItemCard v-else-if="isItemObj(obj)" :item="obj" />
+                  
+                  <!-- Generic Fallback Card Render -->
+                  <div v-else-if="hasBusinessData(obj)" class="generic-dash-card" @click="obj.id || obj.user_id ? goToUser(obj.id || obj.user_id) : null">
                     <div class="card-header" v-if="obj.username || obj.name || obj.full_name">
                       <h3 class="name">{{ obj.full_name || obj.username || obj.name }}</h3>
                       <div v-if="obj.id || obj.user_id" class="id-tag"><Hash size="12" />{{ obj.id || obj.user_id }}</div>
@@ -250,43 +246,49 @@ onUnmounted(() => {
                         </div>
                       </div>
                     </div>
-                 </div>
-               </template>
+                  </div>
+                </template>
+              </div>
+
+
+              <!-- Tree View UI -->
+              <div v-else-if="msg.displayType === 'tree'" class="tree-grid">
+                <div class="tree-header">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <Network size="20" class="tree-icon" /> 
+                    <h3>Taxonomie des Compétences</h3>
+                  </div>
+                  <div v-if="msg.usage?.estimated_cost_usd" class="tree-cost-badge">
+                    Coût du recalcule : ${{ Number(msg.usage.estimated_cost_usd).toFixed(4) }}
+                  </div>
+                </div>
+                <div class="tree-content">
+                  <div v-for="(node, idx) in (Array.isArray(msg.parsedData) ? msg.parsedData : Object.entries(msg.parsedData).map(([k, v]) => ({ name: k, ...v })))" 
+                       :key="idx" 
+                       style="margin-bottom: 8px;"
+                  >
+                    <CompetencyNode :node="node" :depth="0" />
+                  </div>
+                </div>
+                
+                <!-- Validation Button for Admin -->
+                <div v-if="authService.state.user?.role === 'admin'" class="tree-actions">
+                  <BaseButton 
+                    @click="applyTree(msg.parsedData)"
+                    :loading="chatStore.isTyping"
+                  >
+                    <CheckCircle2 v-if="!chatStore.isTyping" size="18" />
+                    Valider et Appliquer la Taxonomie
+                  </BaseButton>
+                </div>
+              </div>
             </div>
 
-            <!-- Tree View UI -->
-            <div v-else-if="msg.displayType === 'tree'" class="tree-grid">
-               <div class="tree-header">
-                 <div style="display: flex; align-items: center; gap: 8px;">
-                   <Network size="20" class="tree-icon" /> 
-                   <h3>Taxonomie des Compétences</h3>
-                 </div>
-                 <div v-if="msg.usage?.estimated_cost_usd" class="tree-cost-badge">
-                   Coût du recalcule : ${{ Number(msg.usage.estimated_cost_usd).toFixed(4) }}
-                 </div>
-               </div>
-               <div class="tree-content">
-                 <div v-for="(node, idx) in (Array.isArray(msg.parsedData) ? msg.parsedData : Object.entries(msg.parsedData).map(([k, v]) => ({ name: k, ...v })))" 
-                      :key="idx" 
-                      style="margin-bottom: 8px;"
-                 >
-                   <CompetencyNode :node="node" :depth="0" />
-                 </div>
-               </div>
-               
-               <!-- Validation Button for Admin -->
-               <div v-if="authService.state.user?.role === 'admin'" class="tree-actions">
-                 <BaseButton 
-                  @click="applyTree(msg.parsedData)"
-                  :loading="chatStore.isTyping"
-                 >
-                   <CheckCircle2 v-if="!chatStore.isTyping" size="18" />
-                   Valider et Appliquer la Taxonomie
-                 </BaseButton>
-               </div>
+            <!-- Tool Execution Fallback (When no business visual is shown) -->
+            <div v-if="!hasAnyBusinessData(msg) && msg.steps && msg.steps.length > 0">
+              <ToolExecutionList :steps="msg.steps" />
             </div>
           </div>
-        </div>
 
           <!-- Expert View Tab (Isolated Component) -->
           <AgentExpertTerminal v-else-if="msg.activeTab === 'expert'" :message="msg" />
@@ -601,159 +603,6 @@ onUnmounted(() => {
   margin-top: 1.5rem;
 }
 
-/* Dashboard Grids */
-.user-grid, .item-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
-}
-
-/* User Card */
-.user-dash-card {
-  background: white;
-  border-radius: 20px;
-  padding: 1.5rem;
-  border: 1px solid #edf2f7;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.user-dash-card.clickable {
-  cursor: pointer;
-}
-
-.user-dash-card.clickable:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
-  border-color: var(--zenika-red);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-}
-
-.avatar {
-  width: 48px;
-  height: 48px;
-  background: var(--zenika-red);
-  color: white;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.1rem;
-  box-shadow: 0 4px 10px rgba(227, 25, 55, 0.2);
-}
-
-.id-tag {
-  background: #f8f9fa;
-  padding: 0.3rem 0.6rem;
-  border-radius: 8px;
-  font-size: 0.75rem;
-  color: #888;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.card-body .name {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin: 0;
-  color: #1a1a1a;
-}
-
-.card-body .username {
-  font-size: 0.850rem;
-  color: #666;
-  margin-bottom: 0.75rem;
-}
-
-.card-body .email {
-  font-size: 0.875rem;
-  color: #555;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.card-footer {
-  margin-top: 1.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid #f8f9fa;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.status-pill.active {
-  background: rgba(227, 25, 55, 0.08);
-  color: var(--zenika-red);
-}
-
-.status-pill.inactive {
-  background: #f1f1f1;
-  color: #888;
-}
-
-/* Item Grid */
-.item-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.25rem;
-}
-
-.item-dash-card {
-  background: #fafafa;
-  border-radius: 16px;
-  padding: 1rem;
-  display: flex;
-  gap: 1rem;
-  border: 1px solid #eee;
-}
-
-.item-icon-wrapper {
-  width: 42px;
-  height: 42px;
-  background: white;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #eee;
-  color: var(--zenika-red);
-}
-
-.item-info .name {
-  font-size: 0.95rem;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
-}
-
-.item-info .desc {
-  font-size: 0.825rem;
-  color: #666;
-  margin-bottom: 0.5rem;
-}
-
-.item-info .owner {
-  font-size: 0.75rem;
-  color: #999;
-}
-
 .categories-tags {
   display: flex;
   flex-wrap: wrap;
@@ -805,22 +654,6 @@ input {
   color: var(--text-primary);
 }
 
-button {
-  background: var(--zenika-red);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.75rem;
-  border-radius: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-button:hover:not(:disabled) {
-  background: #c2152f;
-  transform: translateY(-1px);
-}
-
 .usage-container {
   display: flex;
   justify-content: flex-end;
@@ -838,48 +671,6 @@ button:hover:not(:disabled) {
   color: #4a5568;
   border: 1px solid rgba(0, 0, 0, 0.03);
 }
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.reset-btn {
-  background: white;
-  color: #ef4444;
-  border: 1px solid #fee2e2;
-  padding: 0.75rem 1rem;
-  border-radius: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.reset-btn:hover {
-  background: #fef2f2;
-  color: #dc2626;
-  transform: translateY(-1px);
-}
-
-.typing span {
-  height: 8px;
-  width: 8px;
-  background: #cbd5e0;
-  display: inline-block;
-  border-radius: 50%;
-  margin: 0 2px;
-  animation: bounce 1.3s infinite;
-}
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-8px); }
-}
-
-.typing span:nth-child(2) { animation-delay: 0.2s; }
-.typing span:nth-child(3) { animation-delay: 0.4s; }
 
 /* Dynamic JSON Dashboard Elements */
 .data-table-container {
@@ -931,6 +722,14 @@ button:disabled {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.25rem;
   margin-top: 1.5rem;
+}
+
+/* Compact list layout for consultant-only results */
+.consultant-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px;
+  margin-top: 0.75rem;
 }
 
 .generic-dash-card {
@@ -995,17 +794,6 @@ button:disabled {
   margin-left: auto; /* Placer à droite */
 }
 
-.json-viewer {
-  background: rgba(10, 10, 15, 0.05);
-  border-radius: 12px;
-  padding: 1.5rem;
-  font-family: 'MesloLGS NF', 'Fira Code', monospace;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-  overflow-x: auto;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);
-}
 .tree-actions {
   margin-top: 20px;
   display: flex;
@@ -1014,27 +802,44 @@ button:disabled {
   border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.apply-tree-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--zenika-red);
-  color: white;
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-weight: 700;
-  transition: all 0.3s;
-  box-shadow: 0 4px 15px rgba(227, 25, 55, 0.2);
+.skeleton-wrapper {
+  padding: 1rem;
 }
 
-.apply-tree-btn:hover:not(:disabled) {
-  background: #c2152f;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(227, 25, 55, 0.3);
+.skeleton-row {
+  height: 12px;
+  background: #edf2f7;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
-.apply-tree-btn:disabled {
-  opacity: 0.7;
-  cursor: wait;
+.skeleton-row.header-row {
+  height: 20px;
+  width: 60%;
+  margin-bottom: 20px;
 }
+
+.skeleton-row.short {
+  width: 40%;
+}
+
+.skeleton-row::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 </style>

@@ -40,9 +40,19 @@ Assemble the best possible team by matching candidates to the requested roles.
 7.  **Justification:** Provide a brief, concise `justification` for each candidate selection, explaining why they are the best fit for their assigned role, considering their skills, seniority, and unavailabilities. The `justification` should be in French if the `mission_context` is in French.
 8.  **"Best Possible" Principle:** You MUST propose the best possible team or consultant(s) from the provided candidates, even if they do not perfectly match 100% of the requirements. Only make a No-Go decision under the specific condition below.
 
+**Graceful Degradation (Incomplete Profiles):**
+
+*   If a candidate's `seniority` field is `"Unknown"`, **DO NOT make a No-Go decision**. Instead, infer seniority from available signals:
+    *   `similarity_score` >= 0.80 → treat as **Senior** for staffing purposes.
+    *   `similarity_score` 0.60–0.79 → treat as **Mid**.
+    *   `similarity_score` < 0.60 → treat as **Junior**.
+    *   Also consider `current_role` if provided (e.g. "Lead", "Senior", "Principal").
+*   If a candidate's `skills` array is empty, use their `similarity_score` and `full_name` as the primary matching signal, and note in the `justification` that detailed skills data was unavailable.
+*   **Never trigger a No-Go solely because profile fields are structurally incomplete.** A No-Go is only valid if candidates are genuinely unfit, not if their metadata is missing.
+
 **No-Go Condition & Output:**
 
-*   You MUST make a "No-Go" decision (i.e., select no candidates) ONLY if, after thorough evaluation, you determine that *no candidate* possesses *sufficient core skills* or appropriate seniority to fulfill *any* of the requested roles.
+*   You MUST make a "No-Go" decision (i.e., select no candidates) ONLY if, after thorough evaluation, you determine that *no candidate* possesses *sufficient core skills* or appropriate seniority to fulfill *any* of the requested roles. This must be based on the content of their profile, NOT on the absence of metadata fields.
 *   If you make a "No-Go" decision, return a JSON array containing a single object with `user_id: 0`, and provide a `justification` that is very detailed and technical, explaining precisely why no suitable candidates could be found.
 
 **Output Format:**

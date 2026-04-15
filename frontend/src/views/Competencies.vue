@@ -24,7 +24,7 @@ const onSelectLeaf = async (node: any) => {
   
   try {
     // 1. Get user IDs from competencies API
-    const userIdsRes = await axios.get(`/comp-api/${node.id}/users`)
+    const userIdsRes = await axios.get(`/api/competencies/${node.id}/users`)
     const allUserIds = userIdsRes.data || []
     totalUserCount.value = allUserIds.length
     
@@ -33,7 +33,7 @@ const onSelectLeaf = async (node: any) => {
       const topIds = allUserIds.slice(0, 10)
       
       // 3. Resolve user details from users API bulk endpoint
-      const usersRes = await axios.post(`/users-api/bulk`, topIds)
+      const usersRes = await axios.post(`/api/users/bulk`, topIds)
       associatedUsers.value = usersRes.data || []
     }
   } catch (err) {
@@ -53,14 +53,14 @@ const fetchCompetencies = async () => {
   
   try {
     const limit = 50
-    const firstRes = await axios.get(`/comp-api/?skip=0&limit=${limit}`)
+    const firstRes = await axios.get(`/api/competencies/?skip=0&limit=${limit}`)
     let allItems = firstRes.data.items || []
     const total = firstRes.data.total || 0
     
     if (total > limit) {
       const promises = []
       for (let skip = limit; skip < total; skip += limit) {
-        promises.push(axios.get(`/comp-api/?skip=${skip}&limit=${limit}`))
+        promises.push(axios.get(`/api/competencies/?skip=${skip}&limit=${limit}`))
       }
       const responses = await Promise.all(promises)
       responses.forEach(res => {

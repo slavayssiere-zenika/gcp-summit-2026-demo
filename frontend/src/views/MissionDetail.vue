@@ -4,6 +4,7 @@ import axios from 'axios'
 import { Briefcase, ChevronLeft, ArrowRight, Loader2, User as UserIcon, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Target } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
 import { useRouter } from 'vue-router'
+import ConsultantProfile from '@/components/ConsultantProfile.vue'
 
 const props = defineProps<{
   id: string
@@ -19,6 +20,7 @@ const draftTitle = ref('')
 const draftDescription = ref('')
 const draftUrl = ref('')
 const draftFile = ref<File | null>(null)
+const selectedUserId = ref<number | null>(null)
 
 const handleFileUpload = (event: any) => {
   const file = event.target.files[0]
@@ -33,7 +35,7 @@ const fetchMission = async () => {
   if (isNew.value) return
   loading.value = true
   try {
-    const response = await axios.get(`/missions-api/missions/${props.id}`)
+    const response = await axios.get(`/api/missions/missions/${props.id}`)
     mission.value = response.data
   } catch (error) {
     console.error('Erreur chargement mission:', error)
@@ -59,9 +61,9 @@ const pollMissionStatus = async (taskId: string) => {
   }
   
   try {
-    const res = await axios.get(`/missions-api/missions/task/${taskId}`)
+    const res = await axios.get(`/api/missions/missions/task/${taskId}`)
     if (res.data.status === 'completed' && res.data.mission_id) {
-      const realRes = await axios.get(`/missions-api/missions/${res.data.mission_id}`)
+      const realRes = await axios.get(`/api/missions/missions/${res.data.mission_id}`)
       mission.value = realRes.data
       router.replace(`/missions/${mission.value.id}`)
       loading.value = false
@@ -98,7 +100,7 @@ const analyzeMission = async () => {
   if (draftFile.value) formData.append('file', draftFile.value)
   
   try {
-    const response = await axios.post('/missions-api/missions', formData, {
+    const response = await axios.post('/api/missions/missions', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
@@ -129,7 +131,7 @@ const reanalyzeMission = async () => {
   pollCounter.value = 0
   
   try {
-    const response = await axios.post(`/missions-api/missions/${mission.value.id}/reanalyze`)
+    const response = await axios.post(`/api/missions/missions/${mission.value.id}/reanalyze`)
     
     if (response.data.task_id) {
       pollMissionStatus(response.data.task_id)
@@ -207,6 +209,13 @@ const statusText = computed(() => {
 
     <!-- Mode Détail (Existant ou Analysé) -->
     <div v-else-if="mission" class="detail-mode">
+      <!-- Consultant Profile Highlight -->
+      <ConsultantProfile 
+        v-if="selectedUserId" 
+        :userId="selectedUserId" 
+        @close="selectedUserId = null" 
+      />
+
       <div class="grid-layout">
         <!-- Colonne Gauche: Détails -->
         <div class="left-col">
@@ -252,7 +261,12 @@ const statusText = computed(() => {
               </div>
 
               <div v-else class="team-list">
-                <div v-for="cand in mission.prefiltered_candidates" :key="cand.user_id" class="team-member prefiltered-item">
+                <div 
+                  v-for="cand in mission.prefiltered_candidates" 
+                  :key="cand.user_id" 
+                  class="team-member prefiltered-item clickable"
+                  @click="selectedUserId = cand.user_id"
+                >
                   <div class="member-header" style="margin-bottom: 0;">
                     <div class="member-identity">
                       <div class="avatar" style="width: 32px; height: 32px;"><UserIcon size="14" /></div>
@@ -291,7 +305,12 @@ const statusText = computed(() => {
                 </div>
               </div>
               <div v-else class="team-list">
-                <div v-for="member in mission.proposed_team.filter((m: any) => m.user_id !== 0)" :key="member.user_id" class="team-member">
+                <div 
+                  v-for="member in mission.proposed_team.filter((m: any) => m.user_id !== 0)" 
+                  :key="member.user_id" 
+                  class="team-member clickable"
+                  @click="selectedUserId = member.user_id"
+                >
                   <div class="member-header">
                     <div class="member-identity">
                       <div class="avatar"><UserIcon size="18" /></div>
@@ -537,6 +556,16 @@ h1 { font-size: 1.8rem; font-weight: 800; color: #1a1a1a; margin-bottom: 4px; }
   border: 1px solid #eee;
   border-radius: 12px;
   background: #fbfbfc;
+  transition: all 0.2s;
+}
+.team-member.clickable {
+  cursor: pointer;
+}
+.team-member.clickable:hover {
+  transform: translateY(-2px);
+  border-color: var(--zenika-red);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  background: white;
 }
 .member-header {
   display: flex;

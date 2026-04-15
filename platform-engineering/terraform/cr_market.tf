@@ -60,6 +60,10 @@ resource "google_cloud_run_v2_service" "market_mcp" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
       }
       env {
+        name  = "ROOT_PATH"
+        value = ""
+      }
+      env {
         name  = "APP_VERSION"
         value = var.market_mcp_version
       }
@@ -69,7 +73,7 @@ resource "google_cloud_run_v2_service" "market_mcp" {
       }
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/users-api/" # Added for kill-switch HTTP call
+        value = "http://api.internal.zenika/api/users/" # Added for kill-switch HTTP call
       }
       env {
         name = "SECRET_KEY"
@@ -174,6 +178,18 @@ resource "google_project_iam_member" "market_bq_job_user" {
 resource "google_project_iam_member" "market_trace_user" {
   project = var.project_id
   role    = "roles/cloudtrace.user"
+  member  = "serviceAccount:${google_service_account.market_sa.email}"
+}
+
+resource "google_project_iam_member" "market_logging_viewer" {
+  project = var.project_id
+  role    = "roles/logging.viewer"
+  member  = "serviceAccount:${google_service_account.market_sa.email}"
+}
+
+resource "google_project_iam_member" "market_run_viewer" {
+  project = var.project_id
+  role    = "roles/run.viewer"
   member  = "serviceAccount:${google_service_account.market_sa.email}"
 }
 

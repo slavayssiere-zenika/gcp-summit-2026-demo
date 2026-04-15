@@ -13,7 +13,7 @@ useHead({ title: 'Fiches Missions - Zenika Console' })
 
 const fetchMissions = async () => {
   try {
-    const response = await axios.get('/missions-api/missions')
+    const response = await axios.get('/api/missions/missions')
     missions.value = response.data
   } catch (error) {
     console.error('Erreur chargement missions:', error)
