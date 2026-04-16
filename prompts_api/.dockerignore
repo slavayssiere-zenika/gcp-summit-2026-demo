@@ -12,3 +12,11 @@ coverage.json
 tests/
 Dockerfile
 .dockerignore
+# Secrets — ne jamais inclure dans l'image (AGENTS.md §9)
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+*.p12
+secrets.sh

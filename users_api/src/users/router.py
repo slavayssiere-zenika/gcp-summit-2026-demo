@@ -454,9 +454,22 @@ async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_pay
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur inexistant.")
-    
+
     user.is_active = False
     await db.commit()
+
+    # Blacklist JWT : invalider immédiatement tous les tokens actifs du compte (F-05)
+    # On stocke le username dans un set Redis avec un TTL = durée max d'un access token (15 min)
+    # verify_jwt vérifie ce flag avant d'autoriser la requête (voir auth.py)
+    from cache import client as redis_client
+    BLACKLIST_KEY = f"jwt:blacklist:user:{user.username}"
+    redis_client.setex(BLACKLIST_KEY, 15 * 60, "suspended")  # TTL = ACCESS_TOKEN_EXPIRE_MINUTES
+
+    # Purge du cache utilisateur
+    delete_cache(f"users:{user.id}")
+    delete_cache_pattern("users:me:*")
+    delete_cache_pattern("users:list:*")
+
     return {"status": "suspended", "email": email}
 
 from src.users.schemas import MergeRequest, DuplicateCandidate

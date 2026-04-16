@@ -215,7 +215,13 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_user_availability",
-            description="Get the scheduled unavailability periods for a user",
+            description=(
+                "Retourne la disponibilité consolidée d'un consultant en deux dimensions :\n"
+                "1. unavailability_periods : indisponibilités déclarées (congés, formation, inter-contrat).\n"
+                "2. active_missions : missions sur lesquelles le consultant est actuellement STAFFÉ (proposed_team). "
+                "Un consultant avec des active_missions est déjà engagé — il n'est PAS pleinement disponible. "
+                "TOUJOURS vérifier active_missions avant d'affirmer qu'un consultant est disponible pour une nouvelle mission."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -344,11 +350,51 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_user_availability":
-                response = await client.get(f"{API_BASE_URL}/{arguments['user_id']}")
+                user_id = arguments['user_id']
+                response = await client.get(f"{API_BASE_URL}/{user_id}")
                 response.raise_for_status()
                 user_data = response.json()
-                availability = user_data.get("unavailability_periods", [])
-                return [TextContent(type="text", text=json.dumps(availability))]
+                unavailability_periods = user_data.get("unavailability_periods", [])
+
+                # STAFF-003 : Croiser avec les missions actives (proposed_team) pour détecter
+                # les conflits de staffing. Un consultant déjà proposé sur une mission active
+                # n'est PAS pleinement disponible même si ses unavailability_periods sont vides.
+                active_missions = []
+                missions_api_url = os.getenv("MISSIONS_API_URL", "http://missions_api:8009")
+                try:
+                    missions_response = await client.get(
+                        f"{missions_api_url}/missions/user/{user_id}/active",
+                        timeout=5.0
+                    )
+                    if missions_response.status_code == 200:
+                        missions_data = missions_response.json()
+                        active_missions = missions_data.get("active_missions", [])
+                except Exception as missions_err:
+                    # Dégradation gracieuse : si missions_api est indisponible, on retourne
+                    # quand même les indisponibilités déclarées sans bloquer la réponse.
+                    logging.warning(
+                        f"[get_user_availability] missions_api indisponible pour user {user_id}: {missions_err}. "
+                        "Dégradation gracieuse : seules les unavailability_periods sont retournées."
+                    )
+
+                result = {
+                    "user_id": user_id,
+                    "unavailability_periods": unavailability_periods,
+                    "active_missions": active_missions,
+                    "is_available": len(active_missions) == 0 and len(unavailability_periods) == 0,
+                    "conflict_detected": len(active_missions) > 0,
+                    "summary": (
+                        f"CONFLIT DÉTECTÉ : Le consultant est déjà staffé sur {len(active_missions)} mission(s) active(s). "
+                        f"Missions : {', '.join(m['mission_title'] for m in active_missions)}"
+                        if active_missions
+                        else (
+                            f"INDISPONIBILITÉS DÉCLARÉES : {len(unavailability_periods)} période(s) d'indisponibilité."
+                            if unavailability_periods
+                            else "DISPONIBLE : Aucun conflit de staffing ni indisponibilité déclarée."
+                        )
+                    )
+                }
+                return [TextContent(type="text", text=json.dumps(result))]
 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

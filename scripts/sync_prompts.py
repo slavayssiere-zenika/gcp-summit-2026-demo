@@ -20,10 +20,16 @@ PROMPTS_MAP = {
     "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
     "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
     "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
+    "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
     "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
     "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
+}
+
+# Services qui exposent un endpoint /cache/invalidate pour purge après sync
+CACHE_INVALIDATION_MAP = {
+    "missions_api.": "/api/missions",
 }
 
 async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
@@ -68,24 +74,23 @@ async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
                 res.raise_for_status()
                 logger.info(f"{GREEN}    -> Successfully {'updated' if method == 'PUT' else 'created'} {key}.{RESET}")
 
-                # Invalidation du cache Redis de missions_api si le prompt lui appartient
-                # La missions_api maintient un cache local (Redis) des prompts avec TTL.
-                # Sans invalidation, le nouveau prompt ne sera actif qu'après expiration du TTL.
-                if key.startswith("missions_api."):
-                    missions_base = base_url.replace("/api/prompts", "/api/missions").replace("/prompts", "/missions")
-                    try:
-                        inv_res = await client.post(
-                            f"{missions_base}/cache/invalidate",
-                            params={"prompt_key": key},
-                            headers=headers,
-                            timeout=5.0
-                        )
-                        if inv_res.status_code < 400:
-                            logger.info(f"{GREEN}    -> Cache Redis invalidé pour '{key}' sur missions_api.{RESET}")
-                        else:
-                            logger.warning(f"{YELLOW}    [!] Cache invalidation returned HTTP {inv_res.status_code} for '{key}'.{RESET}")
-                    except Exception as cache_err:
-                        logger.warning(f"{YELLOW}    [!] Cache invalidation failed for '{key}': {cache_err}{RESET}")
+                # Invalidation du cache Redis pour les services qui en ont besoin
+                for prefix, service_path in CACHE_INVALIDATION_MAP.items():
+                    if key.startswith(prefix):
+                        service_base = base_url.replace("/api/prompts", service_path).replace("/prompts", service_path)
+                        try:
+                            inv_res = await client.post(
+                                f"{service_base}/cache/invalidate",
+                                params={"prompt_key": key},
+                                headers=headers,
+                                timeout=5.0
+                            )
+                            if inv_res.status_code < 400:
+                                logger.info(f"{GREEN}    -> Cache Redis invalidé pour '{key}' sur {service_path}.{RESET}")
+                            else:
+                                logger.warning(f"{YELLOW}    [!] Cache invalidation returned HTTP {inv_res.status_code} for '{key}'.{RESET}")
+                        except Exception as cache_err:
+                            logger.warning(f"{YELLOW}    [!] Cache invalidation failed for '{key}': {cache_err}{RESET}")
 
             except Exception as e:
                 logger.error(f"{RED}    [!] Error syncing {key}: {e}{RESET}")

@@ -154,6 +154,12 @@ onUnmounted(() => {
 
 <template>
   <div class="chat-wrapper">
+    <!-- History loading banner -->
+    <div v-if="chatStore.isLoadingHistory" class="history-loading-banner" aria-live="polite">
+      <RefreshCw size="13" class="history-loading-spin" />
+      Chargement de l'historique...
+    </div>
+
     <div class="chat-container" ref="chatContainer">
       <!-- Project Introduction -->
       <div class="welcome-section">
@@ -337,6 +343,30 @@ onUnmounted(() => {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.history-loading-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.5rem 1.5rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.history-loading-spin {
+  animation: spin 1s linear infinite;
+  color: var(--zenika-red);
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 .message-tabs {

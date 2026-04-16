@@ -6,12 +6,34 @@ Voici les étapes strictes à suivre pour l'exécution d'un workflow de prépara
 
 1. **Relancer les tests unitaires via script parallèle**
    Exécute le script bash dédié pour effectuer la couverture en simultané sur chaque environnement. L'arrêt est requis si le script est en erreur.
+   > ⚠️ **Note** : Ce script exécute uniquement les tests présents dans chaque répertoire de service.
+   > Il n'effectue PAS de vérification de couverture minimale (voir étape 1b ci-dessous).
 // turbo
 ```bash
 bash scripts/run_tests.sh
 ```
 
-2. **Génération automatique ou mise à jour des spécifications techniques (`spec.md`)**
+2. **Synchronisation des System Prompts vers `prompts_api`**
+   Met à jour tous les system prompts des agents en base (AlloyDB via `prompts_api`) pour que GCP dev reçoive les dernières instructions. Invalide les caches Redis associés.
+   Pré-requis : la variable `$DEV_BASE_URL` doit être définie. Le mot de passe admin est récupéré via Terraform output.
+// turbo
+```bash
+if [ -n "$DEV_BASE_URL" ]; then
+  ADMIN_PWD=$(cd platform-engineering/terraform && terraform output -raw admin_password 2>/dev/null || echo "")
+  if [ -n "$ADMIN_PWD" ]; then
+    test_env/bin/python scripts/sync_prompts.py \
+      --url "$DEV_BASE_URL/api/prompts" \
+      --email "admin@zenika.com" \
+      --password "$ADMIN_PWD"
+  else
+    echo "[!] ADMIN_PWD introuvable via terraform output — sync_prompts ignoré."
+  fi
+else
+  echo "[!] DEV_BASE_URL non défini — sync_prompts ignoré (mode local)."
+fi
+```
+
+3. **Génération automatique ou mise à jour des spécifications techniques (`spec.md`)**
    Régénère le document API via OpenAPI.
 // turbo
 ```bash
@@ -35,11 +57,13 @@ terraform -chdir=platform-engineering/terraform fmt -recursive
 
 5. **Nettoyer les fichiers temporaires**
    Supprime les archives, logs et gros exécutables obsolètes avant le commit pour éviter les rejets de push.
+   > ⚠️ **ATTENTION** : Ne jamais supprimer les fichiers `test_*.py` —
+   > ce sont les tests unitaires, leur suppression serait catastrophique pour la CI.
 // turbo
 ```bash
 rm -rf frontend/dist frontend/node_modules
 rm -f */pytest.log */coverage.json *_test.db
-rm -f *.tar.gz otelcol-contrib output.log *.patch patch_*.py test_*.py
+rm -f *.tar.gz otelcol-contrib output.log *.patch patch_*.py
 ```
 
 6. **Ajouter les fichiers via git add**

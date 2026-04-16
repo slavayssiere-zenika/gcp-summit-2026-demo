@@ -45,7 +45,16 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="analyze_cv",
-            description="Download, parse, extract, and convert a CV into the Zenika platform recursively importing the candidate's skills and their matrix. Only call this when providing a public Google Docs Link.",
+            description=(
+                "Download, parse, extract, and convert a CV into the Zenika platform by recursively importing "
+                "the candidate's skills and their matrix. Only call this when providing a public Google Docs Link. "
+                "Returns a structured result with: 'message' (summary), 'user_id' (created/matched user), "
+                "'competencies_assigned' (count), 'steps' (list of pipeline steps with status/duration — "
+                "useful to explain what happened), and 'warnings' (non-blocking issues such as truncated document, "
+                "zero competencies extracted, missing email, or identity conflicts). "
+                "If 'warnings' is non-empty, report them to the user. "
+                "If a step has status='error', the import failed at that stage."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -61,6 +70,7 @@ async def list_tools() -> list[Tool]:
                 "required": ["url"]
             }
         ),
+
         Tool(
             name="search_best_candidates",
             description=(

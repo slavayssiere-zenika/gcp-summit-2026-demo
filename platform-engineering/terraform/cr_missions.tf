@@ -198,6 +198,9 @@ resource "google_cloud_run_v2_service" "missions_api" {
 
   lifecycle {
     ignore_changes = [
+      client,
+      client_version,
+      
       template[0].containers[0].resources[0].limits["cpu"],
       template[0].containers[1].resources[0].limits["cpu"]
     ]
@@ -254,7 +257,8 @@ resource "google_alloydb_user" "missions_db_user" {
   user_type  = "ALLOYDB_IAM_USER"
   depends_on = [google_alloydb_instance.primary]
   lifecycle {
-    ignore_changes = [database_roles]
+    ignore_changes = [
+      database_roles]
   }
 }
 

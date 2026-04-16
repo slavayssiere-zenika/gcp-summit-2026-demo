@@ -46,7 +46,7 @@ resource "google_cloud_scheduler_job" "drive_sync_job" {
     uri         = "${google_cloud_run_v2_service.drive_api.uri}/sync"
 
     oidc_token {
-      service_account_email = google_service_account.drive_sa.email
+      service_account_email = data.google_service_account.drive_sa.email
     }
   }
 }

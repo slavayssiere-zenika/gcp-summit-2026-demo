@@ -51,6 +51,17 @@ if gcloud artifacts docker images describe $FULL_IMAGE >/dev/null 2>&1; then
     echo "[+] Image $FULL_IMAGE already exists. Skipping build."
 else
     echo "[*] Image not found. Building Platform Engineering container version ${VERSION} locally via Docker..."
+    
+    echo "[*] Packaging system prompts for container deployment..."
+    rm -rf platform-engineering/bundled_prompts
+    mkdir -p platform-engineering/bundled_prompts
+    for dir in agent_router_api agent_hr_api agent_ops_api agent_missions_api cv_api missions_api; do
+        if [ -d "$dir" ]; then
+            mkdir -p platform-engineering/bundled_prompts/$dir
+            cp $dir/*.txt platform-engineering/bundled_prompts/$dir/ 2>/dev/null || true
+        fi
+    done
+
     # IMPORTANT: On force l'architecture linux/amd64 requise par Cloud Run (surtout si exécuté depuis un Mac Apple Silicon)
     docker build --platform linux/amd64 -t $FULL_IMAGE platform-engineering
 

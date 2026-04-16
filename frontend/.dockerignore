@@ -3,3 +3,8 @@ dist/
 .DS_Store
 Dockerfile
 .dockerignore
+# Secrets — ne jamais inclure dans l'image (AGENTS.md §9)
+.env
+.env.*
+*.pem
+*.key

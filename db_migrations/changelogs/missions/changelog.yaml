@@ -65,3 +65,72 @@ databaseChangeLog:
                   name: fallback_full_scan
                   type: boolean
                   defaultValueBoolean: false
+
+  - changeSet:
+      id: "4"
+      author: "system"
+      comment: "Add mission lifecycle status column"
+      changes:
+        - addColumn:
+            tableName: missions
+            columns:
+              - column:
+                  name: status
+                  type: varchar(30)
+                  defaultValue: "STAFFED"
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropColumn:
+            tableName: missions
+            columnName: status
+
+  - changeSet:
+      id: "5"
+      author: "system"
+      comment: "Create mission status audit history table"
+      changes:
+        - createTable:
+            tableName: mission_status_history
+            columns:
+              - column:
+                  name: id
+                  type: SERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: mission_id
+                  type: integer
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_status_history_mission
+                    references: missions(id)
+              - column:
+                  name: old_status
+                  type: varchar(30)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: new_status
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reason
+                  type: text
+                  constraints:
+                    nullable: true
+              - column:
+                  name: changed_by
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: changed_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: mission_status_history

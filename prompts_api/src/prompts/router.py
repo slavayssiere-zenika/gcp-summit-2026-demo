@@ -15,6 +15,7 @@ security = HTTPBearer()
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
+os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
 ALGORITHM = "HS256"
 
 def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):

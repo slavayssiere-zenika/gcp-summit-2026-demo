@@ -4,7 +4,8 @@ from sqlalchemy import select
 import asyncio
 import database
 from .models import Mission
-from .schemas import MissionCreateRequest, MissionAnalyzeResponse, TaskResponse
+from .schemas import MissionCreateRequest, MissionAnalyzeResponse, TaskResponse, MissionStatusUpdate, StatusHistoryEntry
+from .models import MissionStatus, MissionStatusHistory, ALLOWED_TRANSITIONS, STATUS_UPDATE_ROLES
 from src.auth import verify_jwt
 from opentelemetry.propagate import inject
 import os
@@ -281,6 +282,7 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                     result = await db.execute(select(Mission).where(Mission.id == mission_id))
                     existing_mission = result.scalars().first()
                     if existing_mission:
+                        old_status = existing_mission.status
                         existing_mission.title = title
                         existing_mission.description = final_description
                         existing_mission.extracted_competencies = extracted_competencies
@@ -289,15 +291,43 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                         existing_mission.proposed_team = proposed_team
                         existing_mission.fallback_full_scan = is_fallback
                         existing_mission.semantic_embedding = vector_data
+                        existing_mission.status = MissionStatus.STAFFED
+                        history_entry = MissionStatusHistory(
+                            mission_id=existing_mission.id,
+                            old_status=old_status,
+                            new_status=MissionStatus.STAFFED,
+                            reason="Ré-analyse IA complétée",
+                            changed_by=user_email,
+                        )
+                        db.add(history_entry)
                         await db.commit()
                         await db.refresh(existing_mission)
                         await task_manager.update_status_success(task_id, existing_mission.id)
                         from metrics import MISSIONS_CREATED_TOTAL
                         MISSIONS_CREATED_TOTAL.labels(status="reanalyze_success").inc()
                         break
-                        
-                new_mission = Mission(title=title, description=final_description, extracted_competencies=extracted_competencies, competencies_keywords=extracted_competencies, prefiltered_candidates=candidates_data, proposed_team=proposed_team, semantic_embedding=vector_data, fallback_full_scan=is_fallback)
+
+                new_mission = Mission(
+                    title=title,
+                    description=final_description,
+                    extracted_competencies=extracted_competencies,
+                    competencies_keywords=extracted_competencies,
+                    prefiltered_candidates=candidates_data,
+                    proposed_team=proposed_team,
+                    semantic_embedding=vector_data,
+                    fallback_full_scan=is_fallback,
+                    status=MissionStatus.STAFFED,
+                )
                 db.add(new_mission)
+                await db.flush()  # get new_mission.id before adding history
+                history_entry = MissionStatusHistory(
+                    mission_id=new_mission.id,
+                    old_status=MissionStatus.ANALYSIS_IN_PROGRESS,
+                    new_status=MissionStatus.STAFFED,
+                    reason="Analyse IA complétée",
+                    changed_by=user_email,
+                )
+                db.add(history_entry)
                 await db.commit()
                 await db.refresh(new_mission)
                 await task_manager.update_status_success(task_id, new_mission.id)
@@ -334,16 +364,59 @@ async def create_and_analyze_mission(
     file_bytes = None
     file_mime = None
     if file:
+        # Validation du MIME type (anti-spoofing) — AGENTS.md §2 / F-07
+        ALLOWED_MIME_TYPES = {
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword",
+            "text/plain",
+        }
+        if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Type de fichier non supporté : {file.content_type}. Types acceptés : PDF, DOCX, TXT."
+            )
         file_bytes = await file.read()
+        # Limite de taille : 10 MB max (anti-OOM sur Cloud Run)
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Fichier trop volumineux (maximum 10 MB autorisé)."
+            )
         file_mime = file.content_type or "application/pdf"
     
+    # Create mission in DB immediately with ANALYSIS_IN_PROGRESS status
+    new_mission_pre = Mission(
+        title=title,
+        description=description or "",
+        extracted_competencies=[],
+        status=MissionStatus.ANALYSIS_IN_PROGRESS,
+    )
+    db.add(new_mission_pre)
+    await db.flush()  # get id before adding history
+    history_entry = MissionStatusHistory(
+        mission_id=new_mission_pre.id,
+        old_status=None,
+        new_status=MissionStatus.ANALYSIS_IN_PROGRESS,
+        reason="Mission créée — analyse IA lancée",
+        changed_by=user_email,
+    )
+    db.add(history_entry)
+    await db.commit()
+    provisional_mission_id = new_mission_pre.id
+
     # Generate ID and initialize tracking
     task_id = str(uuid.uuid4())
     await task_manager.initialize_task(task_id, title)
-    
+
     # Launch background processing
-    bg_tasks.add_task(_process_mission_core, title, description, url, file_bytes, file_mime, headers, user_email, auth_token, task_id)
-    
+    bg_tasks.add_task(
+        _process_mission_core,
+        title, description, url, file_bytes, file_mime, headers,
+        user_email, auth_token, task_id, provisional_mission_id
+    )
+
     return {"task_id": task_id, "status": "processing"}
 
 @router.post("/missions/{mission_id}/reanalyze", response_model=TaskResponse, status_code=202)
@@ -389,22 +462,146 @@ async def force_invalidate(prompt_key: str, token_payload: dict = Depends(verify
     return {"message": "Cache invalidé"}
 
 @router.get("/missions", response_model=list[MissionAnalyzeResponse])
-async def list_missions(db: AsyncSession = Depends(database.get_db)):
-    result = await db.execute(select(Mission).order_by(Mission.created_at.desc()))
+async def list_missions(
+    db: AsyncSession = Depends(database.get_db),
+    status: str = None,
+):
+    query = select(Mission).order_by(Mission.created_at.desc())
+    if status:
+        query = query.where(Mission.status == status)
+    result = await db.execute(query)
     missions = result.scalars().all()
-    
+
     response = []
     for m in missions:
         response.append({
             "id": m.id,
             "title": m.title,
             "description": m.description,
+            "status": m.status or MissionStatus.STAFFED,
             "extracted_competencies": m.extracted_competencies or [],
             "prefiltered_candidates": m.prefiltered_candidates or [],
             "proposed_team": m.proposed_team or [],
-            "fallback_full_scan": m.fallback_full_scan
+            "fallback_full_scan": m.fallback_full_scan,
         })
     return response
+
+
+@router.patch("/missions/{mission_id}/status")
+async def update_mission_status(
+    mission_id: int,
+    payload: MissionStatusUpdate,
+    req: Request,
+    db: AsyncSession = Depends(database.get_db),
+    token_payload: dict = Depends(verify_jwt),
+):
+    """Modifie le statut d'une mission (réservé aux rôles commercial et admin).
+    Vérifie la validité de la transition avant application et enregistre l'audit.
+    """
+    user_role = token_payload.get("role", "user")
+    user_email = token_payload.get("sub", "unknown@zenika.com")
+
+    if user_role not in STATUS_UPDATE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Accès refusé : seuls les rôles {STATUS_UPDATE_ROLES} peuvent modifier le statut d'une mission.",
+        )
+
+    result = await db.execute(select(Mission).where(Mission.id == mission_id))
+    mission = result.scalars().first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    current_status = mission.status or MissionStatus.STAFFED
+    new_status = payload.status
+
+    # Validate transition
+    allowed = ALLOWED_TRANSITIONS.get(current_status, [])
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Transition invalide : '{current_status}' → '{new_status}'. Transitions autorisées : {allowed}",
+        )
+
+    # Apply status change
+    old_status = current_status
+    mission.status = new_status
+
+    # Persist audit entry
+    history_entry = MissionStatusHistory(
+        mission_id=mission_id,
+        old_status=old_status,
+        new_status=new_status,
+        reason=payload.reason,
+        changed_by=user_email,
+    )
+    db.add(history_entry)
+    await db.commit()
+    await db.refresh(mission)
+
+    return {
+        "id": mission.id,
+        "status": mission.status,
+        "old_status": old_status,
+        "changed_by": user_email,
+        "reason": payload.reason,
+    }
+
+
+@router.get("/missions/{mission_id}/status/history", response_model=list[StatusHistoryEntry])
+async def get_mission_status_history(
+    mission_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    token_payload: dict = Depends(verify_jwt),
+):
+    """Retourne l'historique complet des changements de statut d'une mission (audit trail)."""
+    result = await db.execute(select(Mission).where(Mission.id == mission_id))
+    mission = result.scalars().first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    history_result = await db.execute(
+        select(MissionStatusHistory)
+        .where(MissionStatusHistory.mission_id == mission_id)
+        .order_by(MissionStatusHistory.changed_at.asc())
+    )
+    return history_result.scalars().all()
+
+@router.get("/missions/user/{user_id}/active")
+async def get_active_missions_for_user(user_id: int, db: AsyncSession = Depends(database.get_db)):
+    """Retourne toutes les missions où l'utilisateur (user_id) figure dans proposed_team.
+
+    Utilisé par le tool MCP get_user_availability (users_api) pour détecter les conflits
+    de staffing. Un consultant déjà proposé sur une mission active ne peut pas être
+    considéré comme pleinement disponible (STAFF-003).
+
+    Returns:
+        Liste de missions actives avec : id, title, role du user, estimated_days.
+    """
+    result = await db.execute(select(Mission).order_by(Mission.created_at.desc()))
+    missions = result.scalars().all()
+
+    active_missions = []
+    for m in missions:
+        proposed_team = m.proposed_team or []
+        for member in proposed_team:
+            try:
+                member_user_id = int(member.get("user_id", -1))
+            except (ValueError, TypeError):
+                continue
+            # user_id 0 est la valeur sentinelle "aucun profil"
+            if member_user_id == user_id and member_user_id > 0:
+                active_missions.append({
+                    "mission_id": m.id,
+                    "mission_title": m.title,
+                    "role": member.get("role", "Consultant"),
+                    "estimated_days": member.get("estimated_days", 0),
+                    "justification": member.get("justification", "")
+                })
+                break  # Un user ne peut figurer qu'une fois par mission
+
+    return {"user_id": user_id, "active_missions": active_missions, "total": len(active_missions)}
+
 
 @router.get("/missions/{mission_id}", response_model=MissionAnalyzeResponse)
 async def get_mission(mission_id: int, db: AsyncSession = Depends(database.get_db)):
@@ -416,8 +613,9 @@ async def get_mission(mission_id: int, db: AsyncSession = Depends(database.get_d
         "id": m.id,
         "title": m.title,
         "description": m.description,
+        "status": m.status or MissionStatus.STAFFED,
         "extracted_competencies": m.extracted_competencies or [],
         "prefiltered_candidates": m.prefiltered_candidates or [],
         "proposed_team": m.proposed_team or [],
-        "fallback_full_scan": m.fallback_full_scan
+        "fallback_full_scan": m.fallback_full_scan,
     }

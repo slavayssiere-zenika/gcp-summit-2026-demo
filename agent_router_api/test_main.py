@@ -164,3 +164,124 @@ def test_get_history_no_session(mocker):
 def test_get_history_invalid_auth():
     response = client.get("/history", headers={"Authorization": "Bearer invalid"})
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests OPS-002 — Interception des erreurs ADK "No function call event found"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_agent_query_adk_session_corruption_returns_structured_response(mocker):
+    """OPS-002 : L'erreur ADK liée à la corruption de session retourne une réponse
+    structurée schema-complète (usage, steps, session_id) et ne lève pas d'exception."""
+    from agent import run_agent_query
+
+    # Simule un Runner ADK qui lève ValueError "No function call event found"
+    mock_runner = MagicMock()
+
+    async def corrupt_run_async(*args, **kwargs):
+        raise ValueError("No function call event found for function responses ids: {'abc123'}")
+        yield  # Make it an async generator
+
+    mock_runner.run_async = corrupt_run_async
+
+    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
+
+    mock_session_svc = AsyncMock()
+    mock_session_svc.get_session.return_value = MagicMock()
+    mocker.patch("agent.get_session_service", return_value=mock_session_svc)
+
+    result = await run_agent_query("Y a-t-il des erreurs 500 ?", session_id="corrupted-session-42")
+
+    # La réponse doit être structurée (schema-complète), pas juste {"response": "Erreur: ...", "source": "error"}
+    assert "response" in result
+    assert "⚠️" in result["response"]  # Message utilisateur friendly
+    assert "session" in result["response"].lower() or "corrompu" in result["response"].lower()
+
+    # steps doit contenir le warning de corruption
+    assert "steps" in result
+    assert len(result["steps"]) > 0
+    corruption_warnings = [s for s in result["steps"] if "SESSION_CORRUPTION" in s.get("tool", "")]
+    assert len(corruption_warnings) == 1
+    assert "technical_detail" in corruption_warnings[0]["args"]
+    assert "No function call event found" in corruption_warnings[0]["args"]["technical_detail"]
+
+    # usage doit être présent (schema-complet)
+    assert "usage" in result
+    assert "total_input_tokens" in result["usage"]
+    assert "total_output_tokens" in result["usage"]
+    assert "estimated_cost_usd" in result["usage"]
+
+    # session_id doit être retourné
+    assert "session_id" in result
+    assert result["session_id"] == "corrupted-session-42"
+
+    # source ne doit pas être "error" (qui casse l'UI)
+    assert result.get("source") != "error"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_query_other_value_error_is_logged(mocker):
+    """OPS-002 : Une ValueError ADK non-reconnue (pas 'No function call event found')
+    est loggée mais ne crash pas — retourne une réponse avec le message d'erreur."""
+    from agent import run_agent_query
+
+    mock_runner = MagicMock()
+
+    async def other_error_run_async(*args, **kwargs):
+        raise ValueError("Some other unexpected ADK error")
+        yield
+
+    mock_runner.run_async = other_error_run_async
+    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
+
+    mock_session_svc = AsyncMock()
+    mock_session_svc.get_session.return_value = MagicMock()
+    mocker.patch("agent.get_session_service", return_value=mock_session_svc)
+
+    result = await run_agent_query("Test query", session_id="test-session-other")
+
+    # La réponse doit contenir quelque chose (pas un crash)
+    assert "response" in result
+    assert "usage" in result
+    assert "steps" in result
+    # Pas de warning SESSION_CORRUPTION pour cette erreur
+    corruption_warnings = [s for s in result["steps"] if "SESSION_CORRUPTION" in s.get("tool", "")]
+    assert len(corruption_warnings) == 0
+
+
+@pytest.mark.asyncio
+async def test_run_agent_query_normal_execution_unaffected(mocker):
+    """OPS-002 : Le refactoring try/except ne doit pas altérer le comportement normal
+    d'une exécution sans erreur."""
+    from agent import run_agent_query
+
+    mock_runner = MagicMock()
+    mock_event = MagicMock()
+    mock_event.content = MagicMock()
+    mock_event.content.role = "model"
+    mock_event.content.parts = [MagicMock(text="Réponse normale", thought=None, tool_call=None, function_call=None, function_response=None)]
+    mock_event.response = None
+
+    async def normal_run_async(*args, **kwargs):
+        yield mock_event
+
+    mock_runner.run_async = normal_run_async
+    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
+
+    mock_session_svc = AsyncMock()
+    mock_session_svc.get_session.return_value = MagicMock()
+    mocker.patch("agent.get_session_service", return_value=mock_session_svc)
+
+    result = await run_agent_query("Bonjour", session_id="normal-session")
+
+    assert "response" in result
+    assert "Réponse normale" in result["response"]
+    assert "usage" in result
+    assert "steps" in result
+    # Aucun warning de corruption
+    corruption_warnings = [s for s in result["steps"] if "SESSION_CORRUPTION" in s.get("tool", "")]
+    assert len(corruption_warnings) == 0

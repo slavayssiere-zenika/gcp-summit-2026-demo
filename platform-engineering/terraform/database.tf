@@ -44,7 +44,8 @@ resource "google_alloydb_user" "admin_user" {
   depends_on = [google_alloydb_instance.primary]
 
   lifecycle {
-    ignore_changes = [database_roles]
+    ignore_changes = [
+      database_roles]
   }
 }
 

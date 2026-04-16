@@ -7,12 +7,26 @@ const props = defineProps<{
     id: number
     title: string
     description: string
+    status?: string
     extracted_competencies?: string[]
     proposed_team?: any[]
   }
 }>()
 
 const router = useRouter()
+
+const STATUS_LABELS: Record<string, { label: string; css: string }> = {
+  DRAFT:                { label: 'Brouillon',        css: 'mc-status-draft' },
+  ANALYSIS_IN_PROGRESS: { label: 'Analyse en cours', css: 'mc-status-analysis' },
+  STAFFED:              { label: 'Équipe proposée',  css: 'mc-status-staffed' },
+  NO_GO:                { label: 'No-Go',             css: 'mc-status-nogo' },
+  SUBMITTED_TO_CLIENT:  { label: 'Soumis client',     css: 'mc-status-submitted' },
+  WON:                  { label: 'Gagné 🏆',          css: 'mc-status-won' },
+  LOST:                 { label: 'Perdu',             css: 'mc-status-lost' },
+  CANCELLED:            { label: 'Annulé',            css: 'mc-status-cancelled' },
+}
+
+const statusInfo = (status?: string) => STATUS_LABELS[status || 'STAFFED'] || STATUS_LABELS['STAFFED']
 
 const goToDetail = () => {
   router.push({ name: 'mission-detail', params: { id: props.mission.id.toString() } })
@@ -26,8 +40,13 @@ const goToDetail = () => {
         <Briefcase size="24" />
       </div>
       <div class="title-area">
-        <h3 class="title">{{ mission.title }}</h3>
-        <span class="id-badge">#{{ mission.id }}</span>
+        <div class="title-row">
+          <h3 class="title">{{ mission.title }}</h3>
+          <span class="id-badge">#{{ mission.id }}</span>
+        </div>
+        <span class="mc-status-badge" :class="statusInfo(mission.status).css" aria-label="Statut">
+          {{ statusInfo(mission.status).label }}
+        </span>
       </div>
     </div>
 
@@ -227,4 +246,24 @@ const goToDetail = () => {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* Status badges on card */
+.title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mc-status-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.03em;
+  margin-top: 4px;
+}
+.mc-status-draft      { background: #f1f5f9; color: #475569; }
+.mc-status-analysis   { background: #eff6ff; color: #2563eb; }
+.mc-status-staffed    { background: #f0fdf4; color: #16a34a; }
+.mc-status-nogo       { background: #fef2f2; color: #dc2626; }
+.mc-status-submitted  { background: #f5f3ff; color: #7c3aed; }
+.mc-status-won        { background: #ecfdf5; color: #059669; }
+.mc-status-lost       { background: #fff7ed; color: #ea580c; }
+.mc-status-cancelled  { background: #f8fafc; color: #64748b; }
 </style>

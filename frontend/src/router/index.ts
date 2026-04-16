@@ -146,6 +146,9 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
       next()
     } else if (role === 'rh' && (to.path === '/admin' || to.path === '/admin/deduplication' || to.path === '/admin/availability')) {
       next()
+    } else if (role === 'commercial' && (to.path === '/missions' || to.path.startsWith('/missions/'))) {
+      // Les commerciaux accèdent aux missions mais pas au panneau admin complet
+      next()
     } else {
       next({ name: 'home' })
     }

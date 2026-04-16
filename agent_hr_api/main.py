@@ -135,7 +135,9 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
         
         try:
             AGENT_QUERIES_TOTAL.inc()
-            result = await run_agent_query(request.query, computed_session_id)
+            # Propager le sub JWT comme user_id pour le tracking FinOps
+            jwt_user_id = payload.get("sub") or "unknown@zenika.com"
+            result = await run_agent_query(request.query, computed_session_id, user_id=jwt_user_id)
             span.set_attribute("agent.source", result.get("source", "unknown"))
             return result
             
@@ -188,7 +190,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_hr_assistant", 
-        user_id="user_1", 
+        user_id=session_id,  # sub JWT = user_id
         session_id=session_id
     )
     if not session:
@@ -328,11 +330,11 @@ async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security))
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_hr_assistant", 
-        user_id="user_1", 
+        user_id=session_id,  # sub JWT = user_id
         session_id=session_id
     )
     if session:
-        session_service._delete_session_impl(app_name="zenika_hr_assistant", user_id="user_1", session_id=session_id)
+        session_service._delete_session_impl(app_name="zenika_hr_assistant", user_id=session_id, session_id=session_id)
         return {"message": "Historique effacé"}
     else:
         return {"message": "Pas d'historique"}

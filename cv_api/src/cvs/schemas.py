@@ -28,11 +28,21 @@ class ExtractedProfile(BaseModel):
     competencies: List[ExtractedCompetency]
     missions: List[ExtractedMission]
 
+class CVImportStep(BaseModel):
+    """Représente une étape du pipeline d'ingestion CV avec son statut et sa durée."""
+    step: str           # Identifiant technique (ex: 'download', 'llm_parse')
+    label: str          # Libellé lisible (ex: 'Téléchargement du document')
+    status: str         # 'success' | 'warning' | 'error' | 'skipped'
+    duration_ms: Optional[int] = None
+    detail: Optional[str] = None  # Info complémentaire (nb items, taille, etc.)
+
 class CVResponse(BaseModel):
     message: str
     user_id: int
     competencies_assigned: int
     extracted_info: Optional[dict] = None
+    steps: List[CVImportStep] = []
+    warnings: List[str] = []
 
 class SearchCandidateRequest(BaseModel):
     query: str

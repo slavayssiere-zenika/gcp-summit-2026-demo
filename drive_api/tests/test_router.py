@@ -7,11 +7,13 @@ import pytest
 from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 from main import app
-from database import get_db
+from database import get_db, Base
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from database import Base
+import src.models
+
+from src.auth import verify_jwt
 
 # Sync engine for table creation
 sync_engine = create_engine("sqlite:///./test.db", connect_args={"check_same_thread": False})

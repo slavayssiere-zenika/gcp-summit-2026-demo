@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status
 import os
 
 # Configuration for JWT
@@ -48,9 +48,17 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-from fastapi import Request
-
 security = HTTPBearer(auto_error=False)
+
+def _is_user_blacklisted(username: str) -> bool:
+    """Vérifie si un utilisateur est blacklisté (suspendu) en Redis (F-05)."""
+    try:
+        import redis as _redis
+        import os as _os
+        _r = _redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
+        return _r.exists(f"jwt:blacklist:user:{username}") > 0
+    except Exception:
+        return False  # Fail-open si Redis indisponible (évite le blocage total)
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     # 1. Try token from Authorization header if present
@@ -59,6 +67,14 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
             payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
             if payload.get("type") == "refresh":
                 raise JWTError("Refresh token cannot be used as access token")
+            # Vérification blacklist Redis (compte suspendu)
+            username = payload.get("sub")
+            if username and _is_user_blacklisted(username):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Compte suspendu — accès révoqué",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
             return payload
         except JWTError:
             # If header token is invalid, we don't fail yet, we'll try the cookie
@@ -84,6 +100,14 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") == "refresh":
             raise JWTError("Refresh token cannot be used as access token")
+        # Vérification blacklist Redis (compte suspendu)
+        username = payload.get("sub")
+        if username and _is_user_blacklisted(username):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Compte suspendu — accès révoqué",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return payload
     except JWTError:
         raise HTTPException(

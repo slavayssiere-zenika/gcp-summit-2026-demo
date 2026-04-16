@@ -139,7 +139,7 @@ Instrumentator().instrument(app).expose(app)
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
-    user_id: Optional[str] = "user_1"
+    user_id: Optional[str] = None  # None par défaut : le sub JWT est utilisé comme fallback
 
 
 class QueryResponse(BaseModel):
@@ -161,17 +161,14 @@ async def version():
     return {"version": APP_VERSION}
 
 
-# ── Protected router — JWT validé UNE SEULE FOIS via Depends sur chaque fn ────
-# Note : on n'utilise PAS dependencies=[Depends(verify_jwt)] sur l'APIRouter
-# pour éviter la double validation (router + param) — le Depends sur chaque
-# endpoint individuel suffit ET retourne le payload.
-protected_router = APIRouter()
+# ── Protected router — JWT validé via Depends sur le routeur ────
+protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 
 async def _execute_query(request: QueryRequest, payload: dict) -> QueryResponse:
     """Logique partagée entre /query et /a2a/query."""
     start_time = time.time()
-    user_id = request.user_id or payload.get("sub", "user_1")
+    user_id = request.user_id or payload.get("sub") or "unknown@zenika.com"
 
     QUERY_COUNT.labels(agent="missions", status="started").inc()
     logger.info("[MISSIONS] Query received user_id=%s session=%s", user_id, request.session_id)
@@ -227,11 +224,12 @@ async def get_history(payload: dict = Depends(verify_jwt)):
     session_id = payload.get("sub")
     if not session_id:
         raise HTTPException(status_code=401, detail="Token invalide — sub manquant")
+    user_id = session_id  # sub JWT = user_id pour la session ADK
 
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_missions_assistant",
-        user_id="user_1",
+        user_id=user_id,
         session_id=session_id,
     )
     if not session:
@@ -328,17 +326,18 @@ async def delete_history(payload: dict = Depends(verify_jwt)):
     session_id = payload.get("sub")
     if not session_id:
         raise HTTPException(status_code=401, detail="Token invalide — sub manquant")
+    user_id = session_id  # sub JWT = user_id pour la session ADK
 
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_missions_assistant",
-        user_id="user_1",
+        user_id=user_id,
         session_id=session_id,
     )
     if session:
         session_service._delete_session_impl(
             app_name="zenika_missions_assistant",
-            user_id="user_1",
+            user_id=user_id,
             session_id=session_id,
         )
         return {"message": "Historique effacé"}
