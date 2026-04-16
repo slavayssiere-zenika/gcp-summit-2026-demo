@@ -18,7 +18,9 @@ locals {
     "roles/iam.serviceAccountUser",
     "roles/secretmanager.admin",
     "roles/alloydb.admin",
-    "roles/pubsub.admin"
+    "roles/pubsub.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin"
   ]
 }
 

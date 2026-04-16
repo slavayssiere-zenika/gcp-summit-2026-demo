@@ -57,6 +57,6 @@ Ce micro-service se base sur :
 - **GET** `/missions/{mission_id}` : Get Mission
 - **PUT** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec
