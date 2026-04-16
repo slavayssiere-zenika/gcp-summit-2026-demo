@@ -1,3 +1,40 @@
+## Mise à jour automatique - 2026-04-16 08:36:46
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1155  | 325  |  72% |
+| cv_api           | 1730  | 592  |  66% |
+| drive_api        | 872   | 391  |  55% |
+| items_api        | 1105  | 250  |  77% |
+| prompts_api      | 675   | 143  |  79% |
+| users_api        | 1335  | 411  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- fix(agent): stabiliser tests unitaires et serialisation
+- fix(agent-router): robustify mcp proxy and harmonize routing via /mcp/
+- fix: resolve platform dev bugs (CV sync, MCP registry, AiOps 401) and prepare for redeployment
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `bootstrap/platform_engineering.tf` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `scripts/async_manage_env.sh` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-15 23:38:06
 
 ### Couverture de Code
