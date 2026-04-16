@@ -9,6 +9,7 @@ from main import app
 from database import get_db
 from src.auth import verify_jwt
 from src.cvs.models import CVProfile
+from src.cvs.schemas import CVImportStep, CVResponse
 
 # 1. Provide dependency overrides for testing
 async def override_get_db():
@@ -121,12 +122,13 @@ def test_import_and_analyze_cv(mocker):
     # Mocking Gemini Client
     mock_genai = mocker.patch("src.cvs.router.client")
     mock_genai.aio.models.generate_content = AsyncMock()
-    mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "competencies": [{"name": "Python", "parent": "Lang"}]}'
+    mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "summary": "Expert Python", "current_role": "Dev", "years_of_experience": 5, "competencies": [{"name": "Python", "parent": "Lang"}], "missions": [], "is_anonymous": false}'
     mock_genai.aio.models.embed_content = AsyncMock()
     mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
     
     # Mock HTTP responses
     mock_resp_prompts = MagicMock()
+    mock_resp_prompts.raise_for_status = MagicMock()
     mock_resp_prompts.json.return_value = {"value": "Prompt"}
     
     mock_resp_users = MagicMock()
@@ -164,9 +166,152 @@ def test_import_and_analyze_cv(mocker):
     response = client.post("/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
     
     assert response.status_code == 200
-    assert "Success" in response.json()["message"]
-    assert response.json()["user_id"] == 1
+    data = response.json()
+    assert "Success" in data["message"]
+    assert data["user_id"] == 1
 
+    # ── Vérification des nouvelles propriétés steps / warnings ──
+    assert "steps" in data, "CVResponse doit contenir 'steps'"
+    assert "warnings" in data, "CVResponse doit contenir 'warnings'"
+    assert isinstance(data["steps"], list), "steps doit être une liste"
+    assert isinstance(data["warnings"], list), "warnings doit être une liste"
+
+    # Vérifier que les étapes clés sont présentes et au statut 'success'
+    step_keys = {s["step"] for s in data["steps"]}
+    assert "download" in step_keys, "L'étape 'download' doit être présente"
+    assert "llm_parse" in step_keys, "L'étape 'llm_parse' doit être présente"
+    assert "user_resolve" in step_keys, "L'étape 'user_resolve' doit être présente"
+    assert "db_save" in step_keys, "L'étape 'db_save' doit être présente"
+
+    for step in data["steps"]:
+        assert step["status"] in {"success", "warning", "error"}, f"Statut inattendu: {step['status']}"
+        assert "label" in step, "Chaque step doit avoir un 'label'"
+        assert "step" in step, "Chaque step doit avoir un 'step' (identifiant)"
+
+
+def test_import_cv_steps_on_truncated_document(mocker):
+    """Un CV de plus de 8000 chars doit déclencher un warning 'download' + statut warning."""
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    long_text = "A" * 9000
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value=long_text)
+
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.aio.models.generate_content = AsyncMock()
+    mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "Jane", "last_name": "Smith", "email": "jane@test.com", "summary": "Expert", "current_role": "Lead", "years_of_experience": 3, "competencies": [{"name": "Java"}], "missions": [], "is_anonymous": false}'
+    mock_genai.aio.models.embed_content = AsyncMock()
+    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 99}
+    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "prompts_api" in url: return prompt_mock
+        if "/users/" in url: return users_mock
+        if "/competencies/" in url: return comps_mock
+        return MagicMock(status_code=200)
+    def post_se(*a, **kw): return create_mock
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = post_se
+
+    response = client.post("/import", json={"url": "http://docs.google.com/d/long"}, headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+    data = response.json()
+
+    download_step = next((s for s in data["steps"] if s["step"] == "download"), None)
+    assert download_step is not None
+    assert download_step["status"] == "warning", "Un doc >8000 chars doit produire step 'download' en warning"
+    assert any("tronqué" in w.lower() or "8000" in w for w in data["warnings"]), \
+        "Le warning de troncature doit être dans CVResponse.warnings"
+
+
+def test_import_cv_steps_on_zero_competencies(mocker):
+    """Quand le LLM extrait 0 compétences, llm_parse doit être en warning."""
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Short legal document")
+
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.aio.models.generate_content = AsyncMock()
+    # LLM retourne is_cv=true mais 0 compétences
+    mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "Alice", "last_name": "Boo", "email": "a@b.com", "summary": "Expert", "current_role": "Dev", "years_of_experience": 1, "competencies": [], "missions": [], "is_anonymous": false}'
+    mock_genai.aio.models.embed_content = AsyncMock()
+    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 42}
+    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "prompts_api" in url: return prompt_mock
+        if "/users/" in url: return users_mock
+        if "/competencies/" in url: return comps_mock
+        return MagicMock(status_code=200)
+    def post_se(*a, **kw): return create_mock
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = post_se
+
+    response = client.post("/import", json={"url": "http://docs.google.com/d/zero"}, headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+    data = response.json()
+    
+    llm_step = next((s for s in data["steps"] if s["step"] == "llm_parse"), None)
+    assert llm_step is not None
+    assert llm_step["status"] == "warning", "0 compétences doit passer llm_parse en 'warning'"
+    assert any("compétence" in w.lower() for w in data["warnings"]), \
+        "Le warning '0 compétences' doit être dans CVResponse.warnings"
+
+
+def test_import_cv_steps_structure(mocker):
+    """Vérifie que CVImportStep respecte le schéma Pydantic attendu."""
+    step = CVImportStep(
+        step="download",
+        label="Téléchargement du document",
+        status="success",
+        duration_ms=423,
+        detail="5000 caractères"
+    )
+    assert step.step == "download"
+    assert step.label == "Téléchargement du document"
+    assert step.status == "success"
+    assert step.duration_ms == 423
+    assert step.detail == "5000 caractères"
+
+
+def test_cv_response_has_steps_and_warnings():
+    """Vérifie que CVResponse peut porter des steps et warnings sans erreur Pydantic."""
+    r = CVResponse(
+        message="OK",
+        user_id=1,
+        competencies_assigned=3,
+        steps=[
+            CVImportStep(step="download", label="Téléchargement", status="success", duration_ms=100),
+            CVImportStep(step="llm_parse", label="Analyse IA", status="warning", duration_ms=5000, detail="0 compétences"),
+        ],
+        warnings=["Doc tronqué", "Email absent"]
+    )
+    assert len(r.steps) == 2
+    assert r.steps[0].step == "download"
+    assert r.steps[1].status == "warning"
+    assert len(r.warnings) == 2
+    assert "Doc tronqué" in r.warnings
 def test_recalculate_tree(mocker):
     mock_db = AsyncMock()
     app.dependency_overrides[get_db] = lambda: mock_db

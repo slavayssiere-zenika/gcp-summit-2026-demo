@@ -4,7 +4,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
   template {
-    service_account = google_service_account.drive_sa.email
+    service_account = data.google_service_account.drive_sa.email
     scaling {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances
@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
       }
       env {
         name  = "DATABASE_URL"
-        value = "postgresql://${replace(google_service_account.drive_sa.email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/drive"
+        value = "postgresql://${replace(data.google_service_account.drive_sa.email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/drive"
       }
       env {
         name  = "ROOT_PATH"
@@ -167,6 +167,9 @@ resource "google_cloud_run_v2_service" "drive_api" {
 
   lifecycle {
     ignore_changes = [
+      client,
+      client_version,
+      
       template[0].containers[0].resources[0].limits["cpu"],
       template[0].containers[1].resources[0].limits["cpu"]
     ]
@@ -180,49 +183,49 @@ resource "google_cloud_run_v2_service" "drive_api" {
 # ==========================================
 # Identité et Permissions
 # ==========================================
-resource "google_service_account" "drive_sa" {
-  account_id                   = "sa-drive-${terraform.workspace}-v2"
-  create_ignore_already_exists = true
+data "google_service_account" "drive_sa" {
+  account_id = "sa-drive-${terraform.workspace}-v2"
 }
 
 resource "google_secret_manager_secret_iam_member" "drive_jwt_access" {
   project   = data.google_secret_manager_secret.jwt_secret.project
   secret_id = data.google_secret_manager_secret.jwt_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.drive_sa.email}"
+  member    = "serviceAccount:${data.google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_otel_trace" {
   project = var.project_id
   role    = "roles/cloudtrace.agent"
-  member  = "serviceAccount:${google_service_account.drive_sa.email}"
+  member  = "serviceAccount:${data.google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_otel_metric" {
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${google_service_account.drive_sa.email}"
+  member  = "serviceAccount:${data.google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_alloydb_client" {
   project = var.project_id
   role    = "roles/alloydb.client"
-  member  = "serviceAccount:${google_service_account.drive_sa.email}"
+  member  = "serviceAccount:${data.google_service_account.drive_sa.email}"
 }
 
 resource "google_project_iam_member" "drive_alloydb_databaseUser" {
   project = var.project_id
   role    = "roles/alloydb.databaseUser"
-  member  = "serviceAccount:${google_service_account.drive_sa.email}"
+  member  = "serviceAccount:${data.google_service_account.drive_sa.email}"
 }
 
 resource "google_alloydb_user" "drive_db_user" {
   cluster    = google_alloydb_cluster.main.name
-  user_id    = replace(google_service_account.drive_sa.email, ".gserviceaccount.com", "")
+  user_id    = replace(data.google_service_account.drive_sa.email, ".gserviceaccount.com", "")
   user_type  = "ALLOYDB_IAM_USER"
   depends_on = [google_alloydb_instance.primary]
   lifecycle {
-    ignore_changes = [database_roles]
+    ignore_changes = [
+      database_roles]
   }
 }
 

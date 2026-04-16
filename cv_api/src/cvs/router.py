@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 import json
+import time
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -10,7 +11,7 @@ import httpx
 import os
 import re
 import unicodedata
-from typing import Optional, List
+from typing import Any, Optional, List
 from google import genai
 from google.genai import types
 from opentelemetry.propagate import inject
@@ -23,7 +24,7 @@ import logging
 from database import get_db
 from src.auth import verify_jwt, security
 from src.cvs.models import CVProfile
-from src.cvs.schemas import CVImportRequest, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
+from src.cvs.schemas import CVImportRequest, CVImportStep, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
 from .task_state import task_state_manager
 from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
 from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
@@ -141,14 +142,61 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
     )
 
 async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None) -> CVResponse:
-    # 2. Fetch Text from CV Link
+    """
+    Pipeline principal d'ingestion d'un CV en 8 étapes séquentielles.
+    Retourne un CVResponse enrichi avec les étapes (steps) et les warnings non-bloquants.
+    """
+    pipeline_steps: List[CVImportStep] = []
+    pipeline_warnings: List[str] = []
+
+    def _step_ok(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
+        s = CVImportStep(step=step, label=label, status="success", duration_ms=duration_ms, detail=detail)
+        pipeline_steps.append(s)
+        logger.info(
+            f"[CV_STEP] {label} — OK",
+            extra={"step": step, "duration_ms": duration_ms, "cv_url": url, "detail": detail}
+        )
+        return s
+
+    def _step_warn(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
+        s = CVImportStep(step=step, label=label, status="warning", duration_ms=duration_ms, detail=detail)
+        pipeline_steps.append(s)
+        pipeline_warnings.append(detail or label)
+        logger.warning(
+            f"[CV_STEP] {label} — WARN: {detail}",
+            extra={"step": step, "duration_ms": duration_ms, "cv_url": url}
+        )
+        return s
+
+    def _step_error(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
+        s = CVImportStep(step=step, label=label, status="error", duration_ms=duration_ms, detail=detail)
+        pipeline_steps.append(s)
+        logger.error(
+            f"[CV_STEP] {label} — ERROR: {detail}",
+            extra={"step": step, "duration_ms": duration_ms, "cv_url": url}
+        )
+        return s
+
+    # ── Étape 1 : Téléchargement du document ─────────────────────────────────
+    t0 = time.monotonic()
     try:
-        logger.info(f"Downloading CV content from {url}")
+        logger.info(f"[CV_STEP] download — start", extra={"step": "download", "cv_url": url})
         raw_text = await _fetch_cv_content(url, google_access_token)
+        dur = int((time.monotonic() - t0) * 1000)
+        raw_len = len(raw_text)
+        if raw_len > 8000:
+            warn_msg = f"Document tronqué : {raw_len} caractères → limité à 8000 pour l'analyse IA"
+            _step_warn("download", "Téléchargement du document", dur, warn_msg)
+        else:
+            _step_ok("download", "Téléchargement du document", dur, f"{raw_len} caractères")
     except HTTPException as he:
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_error("download", "Téléchargement du document", dur, he.detail)
         logger.error(f"HTTPException while downloading CV: {he.detail}")
         raise
     except Exception as e:
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_error("download", "Téléchargement du document", dur, str(e))
         logger.error(f"Failed downloading CV content: {e}", exc_info=True)
         CV_PROCESSING_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
@@ -157,9 +205,10 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         logger.error("GenAI Client not configured.")
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")
 
-    # 3. LLM Parsing Pass (Structured Output)
+    # ── Étape 2 : Analyse IA — Extraction du profil ──────────────────────────
+    t0 = time.monotonic()
     try:
-        logger.info("Fetching generic prompt for CV analysis")
+        logger.info("[CV_STEP] llm_parse — fetching prompt", extra={"step": "llm_parse", "cv_url": url})
         async with httpx.AsyncClient() as http_client:
             res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
             res_prompt.raise_for_status()
@@ -172,41 +221,41 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         else:
             logger.error("No fallback file cv_api.extract_cv_info.txt found.")
             raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
-    
+
     try:
-        logger.info("Calling Gemini to parse CV")
-        
         tree_context = ""
         try:
             async with httpx.AsyncClient() as http_client:
-                # On utilise limit=1000 pour être sûr d'avoir toutes les racines, mais on ne garde que le haut niveau
                 tree_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
                 if tree_res.status_code == 200:
                     items = tree_res.json().get('items', [])
-                    
+
                     def extract_mid_parents(nodes):
                         parents = []
                         for n in nodes:
                             subs = n.get("sub_competencies", [])
                             if subs:
-                                # A node is a mid-parent if it has a parent_id (not a root) AND has at least one child that is a leaf
                                 has_leaf_child = any(not s.get("sub_competencies") for s in subs)
                                 if has_leaf_child and n.get("parent_id") is not None and n.get("name"):
                                     parents.append(n.get("name"))
                                 parents.extend(extract_mid_parents(subs))
                         return parents
-                        
+
                     parent_categories = extract_mid_parents(items)
                     tree_context = f"\n\nHere is the official list of parent capability domains for this company. Please try to map CV skills to these broad categories directly:\n{json.dumps(parent_categories)}"
+                    logger.info(
+                        f"[CV_STEP] llm_parse — taxonomy context injected",
+                        extra={"step": "llm_parse", "categories_count": len(parent_categories), "cv_url": url}
+                    )
         except Exception as e:
             logger.warning(f"Failed to fetch competencies tree for context: {e}")
-            
+
         final_prompt = prompt + tree_context
 
         response = await generate_content_with_retry(
             client,
             model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
-            contents=[final_prompt, f"RESUME:\n{raw_text[:8000]}"], # Cap length to avoid massive overload
+            contents=[final_prompt, f"RESUME:\n{raw_text[:8000]}"],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema={
@@ -259,29 +308,58 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             )
         )
         parsed_data = response.text
-        # LLM returns a JSON string matching schema
         structured_cv = json.loads(parsed_data)
-        
-        # FinOps Logging (Safe extraction to avoid Pydantic validation mismatches)
+
+        # FinOps
         user_caller = token_payload.get("sub", "unknown")
         safe_meta = None
         try:
             safe_meta = response.usage_metadata
         except Exception as e:
             logger.warning(f"Metadata access failed for analyze_cv: {e}")
-            
         await _log_finops(user_caller, "analyze_cv", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), safe_meta, {"cv_url": url}, auth_token=auth_token)
-        
+
         if not structured_cv.get("is_cv", False):
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_error("llm_parse", "Analyse IA — Extraction du profil", dur, "Document non reconnu comme un CV")
             logger.warning("Document is not recognized as a CV")
             raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
+
+        # Vérifications qualité IA
+        nb_competencies = len(structured_cv.get("competencies", []))
+        nb_missions = len(structured_cv.get("missions", []))
+        summary_val = structured_cv.get("summary", "")
+        dur = int((time.monotonic() - t0) * 1000)
+
+        llm_detail = f"{nb_competencies} compétences, {nb_missions} missions détectées"
+        input_tokens = getattr(safe_meta, 'prompt_token_count', None) if safe_meta else None
+        if input_tokens:
+            llm_detail += f", {input_tokens} tokens en entrée"
+
+        if nb_competencies == 0:
+            warn_cv = "Aucune compétence extraite par l'IA — vérifiez la qualité du document"
+            _step_warn("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
+            pipeline_warnings.append(warn_cv)
+            logger.warning(f"[CV_STEP] llm_parse — zero competencies extracted", extra={"cv_url": url})
+        elif not summary_val or summary_val.strip() == "":
+            warn_cv = "Résumé de profil vide — l'IA n'a pas pu générer de synthèse"
+            _step_warn("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
+            pipeline_warnings.append(warn_cv)
+        else:
+            _step_ok("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
+
     except HTTPException:
         raise
     except Exception as e:
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_error("llm_parse", "Analyse IA — Extraction du profil", dur, str(e))
         logger.error(f"LLM Parsing failed: {e}", exc_info=True)
         CV_PROCESSING_TOTAL.labels(status="failure").inc()
-        raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")    # 4. Synchronous Provisioning targeting Users API
-    # 4. Identity Sanitization & Fallback Resolution
+        raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")
+
+    # ── Étape 3 : Résolution d'identité ──────────────────────────────────────
+    t0 = time.monotonic()
+
     def sanitize_field(val: Any) -> Optional[str]:
         if val is None: return None
         s = str(val).strip()
@@ -293,8 +371,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     last_name = sanitize_field(structured_cv.get("last_name"))
     is_anonymous = structured_cv.get("is_anonymous", False)
     trigram = sanitize_field(structured_cv.get("trigram"))
-    
-    # Regex Validation
+
     EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
     def is_valid_email(e: Optional[str]) -> bool:
         return bool(e and re.match(EMAIL_REGEX, e))
@@ -303,22 +380,21 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         if not s: return ""
         return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
 
-    # Apply User Falling Rules
     if not is_valid_email(raw_email):
         if first_name and last_name:
-            # Rule 1: Construct {first}.{last}@zenika.com
             clean_f = normalize_str(first_name).replace(" ", "")
             clean_l = normalize_str(last_name).replace(" ", "")
             email = f"{clean_f}.{clean_l}@zenika.com"
             logger.info(f"Invalid/Missing email in CV. Generated: {email}")
+            pipeline_warnings.append(f"Email absent ou invalide dans le CV — email généré : {email}")
         else:
-            # Rule 2: Random identity + Anonymization
             is_anonymous = True
             trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
             first_name = "Anon"
             last_name = trigram
             email = f"anon.{trigram.lower()}@anonymous.zenika.com"
             logger.warning(f"Total identity absence. Generated random: {email}")
+            pipeline_warnings.append("Identité introuvable dans le CV — profil anonymisé automatiquement")
     else:
         email = raw_email
 
@@ -328,24 +404,20 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         user_id = None
         importer_id = None
 
-        # 1. Resolve target user by email (Strict fallback used as key)
         if email:
             search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
             if search_res.status_code == 200:
                 for u in search_res.json().get("items", []):
                     if u.get("email", "").lower() == email.lower():
-                        # Name check: ensure the found user name matches the CV extracted name
                         u_full_norm = normalize_str(u.get("full_name") or f"{u.get('first_name')} {u.get('last_name')}")
-                        if ext_full_norm and ext_full_norm.strip(): # Don't match on empty
+                        if ext_full_norm and ext_full_norm.strip():
                             if ext_full_norm not in u_full_norm and u_full_norm not in ext_full_norm:
                                 logger.warning(f"Email {email} found but name mismatch: Extracted '{ext_full_norm}' vs System '{u_full_norm}'. Detaching.")
                                 continue
-                        
                         user_id = u["id"]
                         logger.info(f"User matched by identity: {email} -> ID: {user_id}")
                         break
-        
-        # 2. Semantic Fallback: if identity email wasn't found or name mismatched
+
         if not user_id and first_name and last_name:
             logger.info(f"Identity {email} not matched in system. Attempting semantic fallback on name: {first_name} {last_name}.")
             search_q = f"{first_name} {last_name}"
@@ -357,7 +429,6 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         logger.info(f"User matched semantically by name -> ID: {user_id}")
                         break
 
-        # 3. Resolve internal importer properly
         importer_username = token_payload.get("sub")
         if importer_username:
             importer_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": importer_username, "limit": 10}, headers=headers)
@@ -367,7 +438,6 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         importer_id = u["id"]
                         break
 
-        # 4. Final Metadata & Heuristic Anonymization
         filename = os.path.basename(url).lower()
         if not is_anonymous:
             if "annonym" in filename or "anon" in filename or "abc" in filename:
@@ -379,7 +449,6 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                     last_name = trigram
                     email = f"anon.{trigram.lower()}@anonymous.zenika.com"
 
-        # Response metadata for the caller
         extracted_info = {
             "first_name": first_name,
             "last_name": last_name,
@@ -388,8 +457,6 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         }
 
         if user_id and is_anonymous:
-            # On vérifie si l'utilisateur actuel est déjà anonyme
-            # S'il ne l'est pas, on "détache" en forçant la création d'un nouveau user anonyme
             user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
             if user_info_res.status_code == 200:
                 user_data = user_info_res.json()
@@ -397,13 +464,12 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                     warn_msg = f"🛡️ CV anonyme détecté sur un compte réel (User {user_id}). DÉTACHEMENT du profil."
                     logger.info(warn_msg)
                     await task_state_manager.update_progress(new_log=warn_msg)
-                    user_id = None # Forces creation of a new anonymous user below
+                    user_id = None
                 else:
                     logger.info(f"CV is anonymous and User {user_id} is already anonymous. Keeping link.")
 
         if not user_id:
             logger.info(f"User not found, creating {'anonymous ' if is_anonymous else ''}user...")
-            # Create User
             new_u = {
                 "username": f"{first_name[0].lower()}{last_name.lower()}{random.randint(100, 999)}",
                 "email": email,
@@ -414,30 +480,35 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                 "is_anonymous": is_anonymous
             }
             create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
-            
-            # Handle Email Conflict (Uniqueness Constraint)
+
             if create_res.status_code == 409 or (create_res.status_code >= 400 and "already exists" in create_res.text.lower()):
-                # If email is taken but it's not the same person (detachment case), we create a conflict entry
                 host = email.split('@')[1] if '@' in email else "zenika.com"
                 prefix = email.split('@')[0] if '@' in email else "conflict"
                 conflict_email = f"{prefix}.conflict.{random.randint(1000, 9999)}@{host}"
                 logger.warning(f"Email conflict for {email}. Detaching identity via {conflict_email}")
+                pipeline_warnings.append(f"Conflit d'email ({email}) — identité détachée vers {conflict_email}")
                 new_u["email"] = conflict_email
                 create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
 
             if create_res.status_code >= 400:
+                dur = int((time.monotonic() - t0) * 1000)
+                err_detail = f"Création utilisateur échouée (HTTP {create_res.status_code})"
+                _step_error("user_resolve", "Résolution & création d'identité", dur, err_detail)
                 logger.error(f"User creation failed: status={create_res.status_code}, detail={create_res.text}")
                 raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
-            
+
             user_id = create_res.json()["id"]
             logger.info(f"User created with ID {user_id}")
 
-        # 5. Provisioning Competencies API dependencies
-        # Fetch current existing flat tree to avoid redundant insertions
+        dur = int((time.monotonic() - t0) * 1000)
+        mode = "anonyme" if is_anonymous else f"email={email}"
+        _step_ok("user_resolve", "Résolution & création d'identité", dur, f"User ID {user_id} ({mode})")
+
+        # ── Étape 4 : Mapping des compétences ─────────────────────────────────
+        t0 = time.monotonic()
         comp_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers)
         comp_data = comp_res.json()
         all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
-        
 
         def normalize_comp(text):
             if not text: return ""
@@ -453,50 +524,58 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             return None
 
         assigned_count = 0
-        logger.info(f"Processing {len(structured_cv.get('competencies', []))} competencies")
+        comp_errors = 0
+        logger.info(f"[CV_STEP] competencies — start", extra={"step": "competencies", "count": nb_competencies, "cv_url": url})
         for comp in structured_cv.get("competencies", []):
             name = comp["name"]
             parent = comp.get("parent")
-            
-            c_id = find_comp_id(all_comps, name)
-            if not c_id:
-                p_id = None
-                # Create parent if needed
-                if parent:
-                    p_id = find_comp_id(all_comps, parent)
-                    if not p_id:
-                        p_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=headers)
-                        if p_res.status_code < 400:
-                            p_id = p_res.json()["id"]
-                            all_comps.append(p_res.json()) # quick cache patch
-                
-                # Create leaf
-                aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
-                leaf_data = {
-                    "name": name, 
-                    "description": "Candidate CV Skill",
-                    "aliases": aliases_str
-                }
-                if p_id: leaf_data["parent_id"] = p_id
-                
-                c_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=headers)
-                if c_res.status_code < 400:
-                    c_id = c_res.json()["id"]
-                    all_comps.append(c_res.json())
-            
-            # 6. Assign Node to User
-            if c_id:
-                assign_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/{c_id}", headers=headers)
-                if assign_res.status_code < 400:
-                    assigned_count += 1
 
-        # 6.5. Offload Missions to Items API (Phase 2 & 4)
-        logger.info(f"Offloading {len(structured_cv.get('missions', []))} missions to Items API")
-        
-        # Ensure categories exist
+            try:
+                c_id = find_comp_id(all_comps, name)
+                if not c_id:
+                    p_id = None
+                    if parent:
+                        p_id = find_comp_id(all_comps, parent)
+                        if not p_id:
+                            p_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=headers)
+                            if p_res.status_code < 400:
+                                p_id = p_res.json()["id"]
+                                all_comps.append(p_res.json())
+
+                    aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
+                    leaf_data = {"name": name, "description": "Candidate CV Skill", "aliases": aliases_str}
+                    if p_id: leaf_data["parent_id"] = p_id
+
+                    c_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=headers)
+                    if c_res.status_code < 400:
+                        c_id = c_res.json()["id"]
+                        all_comps.append(c_res.json())
+
+                if c_id:
+                    assign_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/{c_id}", headers=headers)
+                    if assign_res.status_code < 400:
+                        assigned_count += 1
+            except Exception as e:
+                comp_errors += 1
+                logger.warning(f"[CV_STEP] competencies — failed to assign '{name}': {e}", extra={"step": "competencies", "cv_url": url})
+
+        dur = int((time.monotonic() - t0) * 1000)
+        comp_detail = f"{assigned_count}/{nb_competencies} compétences assignées"
+        if comp_errors > 0:
+            comp_detail += f", {comp_errors} erreurs d'assignation"
+            pipeline_warnings.append(f"{comp_errors} compétence(s) n'ont pas pu être assignées")
+            _step_warn("competencies", "Mapping des compétences RAG", dur, comp_detail)
+        else:
+            _step_ok("competencies", "Mapping des compétences RAG", dur, comp_detail)
+
+        # ── Étape 5 : Extraction des missions ─────────────────────────────────
+        t0 = time.monotonic()
+        missions_list = structured_cv.get("missions", [])
+        logger.info(f"[CV_STEP] missions — start", extra={"step": "missions", "count": len(missions_list), "cv_url": url})
+
         cat_res = await http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=headers)
         categories = cat_res.json() if cat_res.status_code == 200 else []
-        
+
         def find_cat_id(name):
             for c in categories:
                 if c["name"].lower() == name.lower(): return c["id"]
@@ -512,12 +591,14 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             s_res = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive or confidential missions"}, headers=headers)
             if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
 
-        for m in structured_cv.get("missions", []):
+        mission_errors = 0
+        mission_ok = 0
+        for m in missions_list:
             try:
                 cat_ids = [mission_cat_id] if mission_cat_id else []
                 if m.get("is_sensitive") and sensitive_cat_id:
                     cat_ids.append(sensitive_cat_id)
-                
+
                 item_data = {
                     "name": m["title"],
                     "description": m.get("description", ""),
@@ -530,20 +611,38 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         "source": "CV Analysis"
                     }
                 }
-                await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=headers)
+                m_post = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=headers)
+                if m_post.status_code < 400:
+                    mission_ok += 1
+                else:
+                    mission_errors += 1
+                    logger.warning(f"[CV_STEP] missions — failed to create item '{m['title']}': HTTP {m_post.status_code}", extra={"step": "missions", "cv_url": url})
             except Exception as e:
+                mission_errors += 1
                 logger.error(f"Failed to offload mission '{m['title']}': {e}")
 
-    # 7. LLM Embedding Pass (Vector Dimension Matrix)
+        dur = int((time.monotonic() - t0) * 1000)
+        mission_detail = f"{mission_ok}/{len(missions_list)} missions créées"
+        if mission_errors > 0:
+            mission_detail += f", {mission_errors} erreurs"
+            pipeline_warnings.append(f"{mission_errors} mission(s) n'ont pas pu être créées dans Items API")
+            _step_warn("missions", "Extraction & indexation des missions", dur, mission_detail)
+        else:
+            _step_ok("missions", "Extraction & indexation des missions", dur, mission_detail)
+
+    # hors du bloc httpx
+    # ── Étape 6 : Génération des embeddings vectoriels ────────────────────────
+    t0 = time.monotonic()
     comp_keywords = [c.get("name") for c in structured_cv.get("competencies", []) if c.get("name")]
-    
+
     distilled_content = (
         f"Role: {structured_cv.get('current_role', 'Unknown')}\n"
         f"Experience: {structured_cv.get('years_of_experience', 0)} years\n"
         f"Summary: {structured_cv.get('summary', '')}\n"
         f"Competencies: {', '.join(comp_keywords)}\n"
     )
-    
+
+    vector_data = None
     try:
         emb_res = await embed_content_with_retry(
             client,
@@ -551,39 +650,64 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             contents=distilled_content
         )
         vector_data = emb_res.embeddings[0].values
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_ok("embedding", "Génération des embeddings vectoriels", dur, f"{len(vector_data)} dimensions")
     except Exception as e:
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_warn("embedding", "Génération des embeddings vectoriels", dur, f"Embedding échoué : {e} — profil non recherchable")
+        pipeline_warnings.append("Embedding vectoriel échoué — ce profil ne sera pas retrouvable par recherche sémantique")
         logger.error(f"Embedding failed: {e}", exc_info=True)
-        vector_data = None
 
-    # 8. PostGreSQL Physical Save
-    from sqlalchemy import delete
-    # Critical: Clear any existing profile for this URL to handle identity changes
-    await db.execute(delete(CVProfile).where(CVProfile.source_url == url))
-    
-    cv_record = CVProfile(
-        user_id=user_id,
-        source_url=url,
-        source_tag=source_tag,
-        extracted_competencies=structured_cv.get("competencies", []),
-        current_role=structured_cv.get("current_role"),
-        years_of_experience=structured_cv.get("years_of_experience"),
-        summary=structured_cv.get("summary"),
-        competencies_keywords=comp_keywords,
-        missions=structured_cv.get("missions", []),
-        raw_content=raw_text,
-        semantic_embedding=vector_data,
-        imported_by_id=importer_id
+    # ── Étape 7 : Sauvegarde en base de données ───────────────────────────────
+    t0 = time.monotonic()
+    try:
+        from sqlalchemy import delete
+        await db.execute(delete(CVProfile).where(CVProfile.source_url == url))
+
+        cv_record = CVProfile(
+            user_id=user_id,
+            source_url=url,
+            source_tag=source_tag,
+            extracted_competencies=structured_cv.get("competencies", []),
+            current_role=structured_cv.get("current_role"),
+            years_of_experience=structured_cv.get("years_of_experience"),
+            summary=structured_cv.get("summary"),
+            competencies_keywords=comp_keywords,
+            missions=structured_cv.get("missions", []),
+            raw_content=raw_text,
+            semantic_embedding=vector_data,
+            imported_by_id=importer_id
+        )
+        db.add(cv_record)
+        await db.commit()
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_ok("db_save", "Sauvegarde en base de données", dur, f"CV ID utilisateur {user_id}")
+    except Exception as e:
+        dur = int((time.monotonic() - t0) * 1000)
+        _step_error("db_save", "Sauvegarde en base de données", dur, str(e))
+        logger.error(f"DB save failed: {e}", exc_info=True)
+        CV_PROCESSING_TOTAL.labels(status="failure").inc()
+        raise HTTPException(status_code=500, detail=f"Database save failed: {e}")
+
+    logger.info(
+        f"[CV_STEP] pipeline_complete — success",
+        extra={
+            "step": "pipeline_complete",
+            "cv_url": url,
+            "user_id": user_id,
+            "competencies_assigned": assigned_count,
+            "warnings_count": len(pipeline_warnings),
+            "steps_count": len(pipeline_steps)
+        }
     )
-    db.add(cv_record)
-    await db.commit()
-
-    logger.info(f"Successfully processed CV for {structured_cv.get('first_name')}, assigned {assigned_count} competencies.")
     CV_PROCESSING_TOTAL.labels(status="success").inc()
     return CVResponse(
         message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
         user_id=user_id,
         competencies_assigned=assigned_count,
-        extracted_info=extracted_info
+        extracted_info=extracted_info,
+        steps=pipeline_steps,
+        warnings=pipeline_warnings
     )
 
 async def _execute_search(

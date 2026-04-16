@@ -1,18 +1,17 @@
 from jose import JWTError, jwt
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status
+from typing import Optional
 import os
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
+os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
 ALGORITHM = "HS256"
 
 # Same as items_api, we use HTTPBearer for direct token injection via Swagger UI
 security = HTTPBearer()
-
-from fastapi import Request
-from typing import Optional
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     # 1. Try Authorization header

@@ -140,7 +140,9 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
         
         try:
             AGENT_QUERIES_TOTAL.inc()
-            result = await run_agent_query(request.query, computed_session_id)
+            # Propager le sub JWT comme user_id (FinOps tracing + session isolation)
+            jwt_user_id = jwt_sub or "unknown@zenika.com"
+            result = await run_agent_query(request.query, computed_session_id, auth_token=auth_header, user_id=jwt_user_id)
             span.set_attribute("agent.source", result.get("source", "unknown"))
             return result
             
@@ -155,6 +157,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
         from jose import jwt, JWTError
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         session_id = payload.get("sub")
+        jwt_user_id = payload.get("sub", "user_1")
         if not session_id:
             raise Exception("No user")
     except Exception:
@@ -164,7 +167,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_assistant", 
-        user_id="user_1", 
+        user_id=jwt_user_id,
         session_id=session_id
     )
     if not session:
@@ -401,6 +404,7 @@ async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security))
         from jose import jwt, JWTError
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         session_id = payload.get("sub")
+        jwt_user_id = payload.get("sub", "user_1")
         if not session_id:
             raise Exception("No user")
     except Exception:
@@ -410,11 +414,11 @@ async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security))
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_assistant", 
-        user_id="user_1", 
+        user_id=jwt_user_id,
         session_id=session_id
     )
     if session:
-        session_service._delete_session_impl(app_name="zenika_assistant", user_id="user_1", session_id=session_id)
+        session_service._delete_session_impl(app_name="zenika_assistant", user_id=jwt_user_id, session_id=session_id)
         return {"message": "Historique effacé"}
     else:
         return {"message": "Pas d'historique"}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { Briefcase, Plus, Users, Loader2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
@@ -8,8 +8,33 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const missions = ref<any[]>([])
 const loading = ref(true)
+const activeFilter = ref<string>('ALL')
 
 useHead({ title: 'Fiches Missions - Zenika Console' })
+
+const STATUS_LABELS: Record<string, { label: string; css: string }> = {
+  ALL:                  { label: 'Toutes',           css: '' },
+  DRAFT:                { label: 'Brouillon',        css: 'ml-draft' },
+  ANALYSIS_IN_PROGRESS: { label: 'En analyse',      css: 'ml-analysis' },
+  STAFFED:              { label: 'Équipe proposée', css: 'ml-staffed' },
+  NO_GO:                { label: 'No-Go',            css: 'ml-nogo' },
+  SUBMITTED_TO_CLIENT:  { label: 'Soumis client',    css: 'ml-submitted' },
+  WON:                  { label: 'Gagné',           css: 'ml-won' },
+  LOST:                 { label: 'Perdu',            css: 'ml-lost' },
+  CANCELLED:            { label: 'Annulé',          css: 'ml-cancelled' },
+}
+
+const FILTER_TABS = ['ALL', 'STAFFED', 'SUBMITTED_TO_CLIENT', 'WON', 'LOST', 'NO_GO', 'CANCELLED']
+
+const filteredMissions = computed(() => {
+  if (activeFilter.value === 'ALL') return missions.value
+  return missions.value.filter(m => m.status === activeFilter.value)
+})
+
+const countByStatus = (status: string) => {
+  if (status === 'ALL') return missions.value.length
+  return missions.value.filter(m => m.status === status).length
+}
 
 const fetchMissions = async () => {
   try {
@@ -60,23 +85,49 @@ const newMission = () => {
       <p>Créez une nouvelle fiche mission pour l'analyser.</p>
     </div>
 
-    <div v-else class="missions-grid">
-      <div v-for="mission in missions" :key="mission.id" class="mission-card" @click="viewMission(mission.id)">
-        <div class="card-header">
-          <h3>{{ mission.title }}</h3>
-        </div>
-        <div class="card-body">
-          <p class="desc">{{ mission.description.length > 100 ? mission.description.substring(0, 100) + '...' : mission.description }}</p>
-          <div class="skills">
-            <span v-for="skill in (mission.extracted_competencies || []).slice(0, 3)" :key="skill" class="skill-tag">{{ skill }}</span>
-            <span v-if="(mission.extracted_competencies || []).length > 3" class="skill-tag extra">+{{ mission.extracted_competencies.length - 3 }}</span>
+    <template v-else>
+      <!-- Status Filter Tabs -->
+      <div class="filter-tabs" role="tablist" aria-label="Filtrer par statut">
+        <button
+          v-for="tab in FILTER_TABS"
+          :key="tab"
+          class="filter-tab"
+          :class="[STATUS_LABELS[tab].css, { active: activeFilter === tab }]"
+          @click="activeFilter = tab"
+          role="tab"
+          :aria-selected="activeFilter === tab"
+          :aria-label="STATUS_LABELS[tab].label"
+        >
+          {{ STATUS_LABELS[tab].label }}
+          <span class="tab-count">{{ countByStatus(tab) }}</span>
+        </button>
+      </div>
+
+      <div v-if="filteredMissions.length === 0" class="empty-filtered">
+        <p>Aucune mission avec ce statut.</p>
+      </div>
+
+      <div v-else class="missions-grid">
+        <div v-for="mission in filteredMissions" :key="mission.id" class="mission-card" @click="viewMission(mission.id)">
+          <div class="card-header">
+            <div class="card-title-row">
+              <h3>{{ mission.title }}</h3>
+              <span class="ml-badge" :class="STATUS_LABELS[mission.status]?.css || 'ml-staffed'">{{ STATUS_LABELS[mission.status]?.label || mission.status }}</span>
+            </div>
           </div>
-          <div class="team-summary">
-            <Users size="16" /> {{ (mission.proposed_team || []).filter((m: any) => m.user_id !== 0).length }} consultants proposés
+          <div class="card-body">
+            <p class="desc">{{ mission.description.length > 100 ? mission.description.substring(0, 100) + '...' : mission.description }}</p>
+            <div class="skills">
+              <span v-for="skill in (mission.extracted_competencies || []).slice(0, 3)" :key="skill" class="skill-tag">{{ skill }}</span>
+              <span v-if="(mission.extracted_competencies || []).length > 3" class="skill-tag extra">+{{ mission.extracted_competencies.length - 3 }}</span>
+            </div>
+            <div class="team-summary">
+              <Users size="16" /> {{ (mission.proposed_team || []).filter((m: any) => m.user_id !== 0).length }} consultants proposés
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -199,4 +250,71 @@ p { color: #666; font-size: 0.95rem; }
 .empty-icon { color: #ccc; margin-bottom: 1rem; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── Status Filters ─────────────────────────────── */
+.filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+}
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #64748b;
+}
+.filter-tab:hover { border-color: var(--zenika-red); color: var(--zenika-red); }
+.filter-tab.active { border-color: transparent; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.tab-count {
+  background: rgba(0,0,0,0.08);
+  color: inherit;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.filter-tab.active.ml-staffed   { background: #f0fdf4; color: #16a34a; }
+.filter-tab.active.ml-nogo      { background: #fef2f2; color: #dc2626; }
+.filter-tab.active.ml-submitted { background: #f5f3ff; color: #7c3aed; }
+.filter-tab.active.ml-won       { background: #ecfdf5; color: #059669; }
+.filter-tab.active.ml-lost      { background: #fff7ed; color: #ea580c; }
+.filter-tab.active.ml-cancelled { background: #f8fafc; color: #64748b; }
+.filter-tab.active.ml-analysis  { background: #eff6ff; color: #2563eb; }
+.filter-tab.active.ml-draft     { background: #f1f5f9; color: #475569; }
+
+/* Mission badge in list */
+.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
+.card-title-row h3 { font-size: 1.1rem; font-weight: 600; color: #1a1a1a; margin: 0; }
+.ml-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.ml-draft     { background: #f1f5f9; color: #475569; }
+.ml-analysis  { background: #eff6ff; color: #2563eb; }
+.ml-staffed   { background: #f0fdf4; color: #16a34a; }
+.ml-nogo      { background: #fef2f2; color: #dc2626; }
+.ml-submitted { background: #f5f3ff; color: #7c3aed; }
+.ml-won       { background: #ecfdf5; color: #059669; }
+.ml-lost      { background: #fff7ed; color: #ea580c; }
+.ml-cancelled { background: #f8fafc; color: #64748b; }
+
+.empty-filtered {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+  background: white;
+  border-radius: 12px;
+}
 </style>

@@ -91,6 +91,42 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["mission_id"]
             }
+        ),
+        Tool(
+            name="update_mission_status",
+            description=(
+                "Modifie le statut d'une mission. "
+                "Réservé aux rôles commercial et admin. "
+                "Transitions autorisées : "
+                "STAFFED→NO_GO, STAFFED→SUBMITTED_TO_CLIENT, STAFFED→CANCELLED, "
+                "SUBMITTED_TO_CLIENT→WON, SUBMITTED_TO_CLIENT→LOST, SUBMITTED_TO_CLIENT→CANCELLED. "
+                "Utiliser quand l'utilisateur dit 'marquer la mission X comme No-Go', 'on a gagné l\'appel d\'offres Y', 'envoyer la proposition au client', etc. "
+                "Toujours préciser un reason (motif) pour l'audit."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "mission_id": { "type": "integer", "description": "L'ID de la mission à mettre à jour" },
+                    "status": {
+                        "type": "string",
+                        "enum": ["NO_GO", "SUBMITTED_TO_CLIENT", "WON", "LOST", "CANCELLED"],
+                        "description": "Le nouveau statut à appliquer"
+                    },
+                    "reason": { "type": "string", "description": "Motif du changement de statut (obligatoire pour l'audit)" }
+                },
+                "required": ["mission_id", "status"]
+            }
+        ),
+        Tool(
+            name="get_mission_status_history",
+            description="Retourne l'historique complet des changements de statut d'une mission (audit trail). Utiliser pour répondre à 'quel est l\'historique de la mission X ?', 'qui a changé le statut ?' etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "mission_id": { "type": "integer", "description": "L'ID de la mission" }
+                },
+                "required": ["mission_id"]
+            }
         )
     ]
 
@@ -145,7 +181,30 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "update_mission_status":
+                mission_id = arguments.get("mission_id")
+                new_status = arguments.get("status")
+                reason = arguments.get("reason")
+                try:
+                    response = await client.patch(
+                        f"{API_BASE_URL}/missions/{mission_id}/status",
+                        json={"status": new_status, "reason": reason},
+                        headers=headers,
+                        timeout=20.0,
+                    )
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "get_mission_status_history":
+                mission_id = arguments.get("mission_id")
+                try:
+                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/status/history", headers=headers, timeout=20.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
 

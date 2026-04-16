@@ -15,6 +15,7 @@ RED='\033[0;31m'
 GREY='\033[1;30m'
 RESET='\033[0m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 
 # Aide (vérifié avant tout autre traitement)
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -37,11 +38,14 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo -e "  frontend       Frontend Vue.js"
   echo -e "  db_migrations  Migrations de base de données (non inclus dans 'all')"
   echo -e "  db_init       Initialise la base de données via Cloud Run Job"
+  echo -e "  sync_prompts  Synchronise uniquement les system prompts vers prompts_api"
   echo ""
   echo "Bump Types (SemVer):"
   echo "  patch (défaut), minor, major, none"
+  echo "Note: sync_prompts est aussi exécuté automatiquement après tout déploiement."
   echo ""
   echo "Exemples:"
+
   echo "  $0 all minor"
   echo "  $0 users_api cv_api minor"
   echo "  $0 db_migrations"
@@ -298,7 +302,7 @@ sync_system_prompts() {
   local ADMIN_PWD=$(cd "$TF_DIR" && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw admin_password 2>/dev/null || echo "")
   
   if [ -z "$ADMIN_PWD" ]; then
-    echo -e "${YELLOW}[!] Impossible de récupérer le mot de passe admin via Terraform. Skip sync.{RESET}"
+    echo -e "${YELLOW}[!] Impossible de récupérer le mot de passe admin via Terraform. Skip sync.${RESET}"
     return
   fi
   
@@ -319,7 +323,7 @@ sync_system_prompts() {
 # Liste des services applicatifs (déployés par 'all')
 APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp")
 # Liste de tous les services possibles pour la validation
-VALID_SERVICES=("db_migrations" "db_init" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "${APP_MICROSERVICES[@]}")
+VALID_SERVICES=("db_migrations" "db_init" "sync_prompts" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "${APP_MICROSERVICES[@]}")
 
 BUMP_TYPE="patch"
 TARGET_SERVICES=()
@@ -384,12 +388,18 @@ for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
   elif [ "$TARGET_SERVICE" = "frontend" ]; then
     show_progress "frontend"
     build_and_upload_frontend "$BUMP_TYPE"
+  elif [ "$TARGET_SERVICE" = "sync_prompts" ]; then
+    sync_system_prompts
   else
     echo -e "${RED}Erreur : Service '${TARGET_SERVICE}' inconnu.${RESET}"
     echo "Utilisez --help pour voir la liste des services disponibles."
     exit 1
   fi
 done
-sync_system_prompts
+
+# Sync automatique des prompts en fin de déploiement (sauf si c'était la seule action demandée)
+if [ "${TARGET_SERVICES[*]}" != "sync_prompts" ]; then
+  sync_system_prompts
+fi
 
 echo -e "\n${GREEN}=== Déploiement terminé avec succès ! ===${RESET}"

@@ -291,3 +291,59 @@ def test_get_competency_stats(client):
     assert items_filter[0]["name"] == "CommonSkill"
     assert items_filter[0]["count"] == 1
 
+
+
+# ── Tests P2 : Intégrité des données ────────────────────────────────────────────
+
+def test_delete_parent_competency_with_children(client):
+    """
+    Supprimer une compétence parent avec des enfants doit :
+    - soit retourner 409 Conflict (protection cascade)
+    - soit cascader la suppression des enfants (204 + enfants absents)
+    """
+    parent_resp = client.post("/", json={"name": "ParentToDelete", "description": "Parent"})
+    assert parent_resp.status_code == 201
+    parent_id = parent_resp.json()["id"]
+
+    child_resp = client.post("/", json={"name": "ChildOfParent", "description": "Child", "parent_id": parent_id})
+    assert child_resp.status_code == 201
+
+    del_resp = client.delete(f"/{parent_id}")
+    assert del_resp.status_code in [204, 409], \
+        f"Suppression d\'un parent avec enfant doit retourner 204 (cascade) ou 409 (protection), got {del_resp.status_code}"
+
+    if del_resp.status_code == 204:
+        list_resp = client.get("/")
+        all_names = [i["name"] for i in list_resp.json()["items"]]
+        assert "ChildOfParent" not in all_names, \
+            "Si suppression cascade, l\'enfant doit également être supprimé"
+
+
+def test_competency_name_uniqueness(client):
+    """
+    Deux compétences avec le même nom déclenche un Upsert Idempotent.
+    Attendu : 201 Created sur le doublon avec l'objet pré-existant retourné silencieusement.
+    """
+    client.post("/", json={"name": "UniqueCompetency", "description": "First"})
+    resp2 = client.post("/", json={"name": "UniqueCompetency", "description": "Second"})
+    assert resp2.status_code == 201
+    assert resp2.json()["name"] == "UniqueCompetency"
+
+
+def test_version_accessible(client):
+    """GET /version doit retourner un champ version valide."""
+    resp = client.get("/version")
+    assert resp.status_code == 200
+    assert "version" in resp.json()
+
+
+def test_competency_update_does_not_allow_self_parent(client):
+    """
+    Assigner une compétence comme parent d\'elle-même (référence circulaire)
+    doit retourner 400 Bad Request.
+    """
+    resp = client.post("/", json={"name": "SelfRefComp", "description": "Circular"})
+    comp_id = resp.json()["id"]
+    put_resp = client.put(f"/{comp_id}", json={"parent_id": comp_id})
+    assert put_resp.status_code == 400
+    assert "circular" in put_resp.json()["detail"].lower() or "parent" in put_resp.json()["detail"].lower()

@@ -37,7 +37,7 @@ Une fois le mot de passe obtenu, vérifie que `httpx` est disponible :
 pip3 install --target=/tmp/py_deps httpx 2>&1 | tail -1 && PYTHONPATH=/tmp/py_deps /opt/homebrew/bin/python3.13 -c "import httpx; print('httpx OK')"
 ```
 
-**Catégories disponibles :** `hr`, `ops`, `routing`, `schema`, `anti-hallucination`, `edge-cases`, `finops`, `multi-domain`, `missions`
+**Catégories disponibles :** `hr`, `ops`, `routing`, `schema`, `anti-hallucination`, `edge-cases`, `finops`, `multi-domain`, `missions`, `hr-persona`, `staffing-persona`, `commercial-persona`, `dir-commerciale-persona`, `agence-niort-persona`, `tech-manager-persona`, `consultant-persona`, `security`, `robustness`
 
 > Le rapport LLM est généré automatiquement dans `reports/llm_analysis_<catégorie>_<timestamp>.md` à la fin de chaque run.
 

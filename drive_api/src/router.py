@@ -126,6 +126,20 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
     """
     logger.info("Début de la synchronisation avec Google Drive.")
     
+    # 1. Verification synchrone des droits d'accès
+    try:
+        from src.google_auth import get_drive_service
+        drive = get_drive_service()
+        # Fast API call to verify the OAuth binding hasn't been lost or deleted
+        drive.about().get(fields="user").execute()
+    except Exception as e:
+        logger.error(f"[DRIVE_API_AUTH_LOSS] Le Service Account a perdu l'accès au Drive: {e}")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=403,
+            content={"status": "error", "message": "SERVICE_ACCOUNT_ACCESS_LOSS", "details": str(e)}
+        )
+
     async def run_sync():
         # Get a new DB session since the one in dependency might close
         from database import SessionLocal

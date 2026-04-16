@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import axios from 'axios'
 import { Settings, ShieldCheck } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import DriveAdminPanel from '../components/DriveAdminPanel.vue'
+import CVImportMonitor from '../components/CVImportMonitor.vue'
 
-const isLoading = ref(false)
 const error = ref('')
 </script>
 
@@ -15,7 +14,7 @@ const error = ref('')
       <div class="banner-icon"><Settings size="32" /></div>
       <div class="banner-text">
         <h2>Centre d'Administration Sécurisé</h2>
-        <p>Espace réservé aux opérateurs système pour piloter les fonctions liées au stockage Drive.</p>
+        <p>Espace réservé aux opérateurs système pour piloter les fonctions liées au stockage Drive et à l'ingestion IA.</p>
       </div>
       <div class="status-badge" v-if="authService.state.user?.role === 'admin'">
         <ShieldCheck size="16" /> Rôle Vérifié
@@ -23,13 +22,20 @@ const error = ref('')
     </div>
 
     <div class="dashboard-grid">
-      <DriveAdminPanel />
+      <!-- Moniteur d'analyses CV — temps réel -->
+      <div class="full-width">
+        <CVImportMonitor />
+      </div>
+
+      <!-- Panel Drive -->
+      <div class="full-width">
+        <DriveAdminPanel />
+      </div>
     </div>
 
     <div class="error-panel fade-in-up" v-if="error">
        <strong>Erreur Système :</strong> {{ error }}
     </div>
-
   </div>
 </template>
 
@@ -59,6 +65,7 @@ const error = ref('')
   padding: 1.25rem;
   border-radius: 16px;
   color: var(--zenika-red);
+  flex-shrink: 0;
 }
 
 .banner-text h2 {
@@ -90,9 +97,13 @@ const error = ref('')
 }
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 2rem;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .error-panel {

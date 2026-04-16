@@ -5,7 +5,21 @@
 echo "Démarrage des tests en parallèle..."
 
 pids=()
-apis=("agent_hr_api" "agent_ops_api" "agent_router_api" "missions_api" "competencies_api" "cv_api" "drive_api" "items_api" "prompts_api" "users_api" "market_mcp")
+apis=()
+
+echo "Détection dynamique des modules de test..."
+for dir in */; do
+    # On ignore test_env et les dossiers cachés
+    if [[ "$dir" != "test_env/" ]] && [[ "$dir" != .* ]]; then
+        # On vérifie s'il y a un pytest.ini ou des fichiers test_*.py dans le dossier
+        if find "$dir" -maxdepth 3 \( -name 'test_*.py' -o -name '*_test.py' -o -name 'pytest.ini' \) 2>/dev/null | grep -q .; then
+            clean_name="${dir%/}"
+            apis+=("$clean_name")
+        fi
+    fi
+done
+
+echo "Modules détectés : ${apis[*]}"
 
 for api in "${apis[@]}"; do
     echo "Lancement des tests pour $api..."

@@ -20,7 +20,8 @@ locals {
     "roles/alloydb.admin",
     "roles/pubsub.admin",
     "roles/run.admin",
-    "roles/bigquery.admin"
+    "roles/bigquery.admin",
+    "roles/compute.networkAdmin"
   ]
 }
 
@@ -79,6 +80,9 @@ resource "google_cloud_run_v2_job" "platform_engineering_job" {
 
   lifecycle {
     ignore_changes = [
+      client,
+      client_version,
+      
       template[0].template[0].containers[0].image,
       template[0].template[0].containers[0].args,
       template[0].template[0].containers[0].env,
@@ -88,4 +92,19 @@ resource "google_cloud_run_v2_job" "platform_engineering_job" {
   depends_on = [
     google_project_iam_member.platform_sa_roles
   ]
+}
+
+# =========================================================
+# Google Drive API Service Accounts (Persistent)
+# =========================================================
+resource "google_service_account" "drive_sa_dev" {
+  account_id   = "sa-drive-dev-v2"
+  display_name = "Drive API Service Account (dev)"
+  description  = "Service Account interact with Drive API in dev environment"
+}
+
+resource "google_service_account" "drive_sa_staging" {
+  account_id   = "sa-drive-staging-v2"
+  display_name = "Drive API Service Account (staging)"
+  description  = "Service Account interact with Drive API in staging environment"
 }

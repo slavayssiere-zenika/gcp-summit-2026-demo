@@ -15,6 +15,11 @@
       </div>
     </div>
 
+    <!-- Alert for OAuth loss -->
+    <div class="error-panel fade-in-up auth-alert" v-if="syncAuthError">
+      <strong>🚨 Alerte Critique :</strong> {{ syncAuthError }}
+    </div>
+
     <!-- Dashboard Widget -->
     <div class="stats-grid" v-if="syncStatus">
       <div class="stat-card">
@@ -251,16 +256,21 @@ const deleteFolder = async (id: number) => {
 }
 
 const syncStartedMsg = ref('')
+const syncAuthError = ref('')
 
 const triggerSync = async () => {
   isSyncing.value = true
+  syncAuthError.value = ''
   try {
     await axios.post('/api/drive/sync')
     syncStartedMsg.value = 'Synchronisation démarrée en arrière-plan...'
     setTimeout(() => { syncStartedMsg.value = '' }, 3000)
     await fetchStatus()
-  } catch (error) {
+  } catch (error: any) {
     console.error("Sync failed", error)
+    if (error.response?.data?.message === 'SERVICE_ACCOUNT_ACCESS_LOSS') {
+      syncAuthError.value = "Le Service Account a perdu ses droits sur le Google Drive (Permissions/OAuth annulées)."
+    }
   } finally {
     isSyncing.value = false
   }

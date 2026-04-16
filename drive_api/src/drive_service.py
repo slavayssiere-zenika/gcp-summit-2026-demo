@@ -99,7 +99,8 @@ class DriveService:
             sa_email = about.get('user', {}).get('emailAddress', 'Unknown')
             logger.info(f"Authentifié sur Google Drive en tant que : {sa_email}")
         except Exception as e:
-            logger.warning(f"Could not fetch user profile: {e}")
+            logger.error(f"[DRIVE_API_AUTH_LOSS] Le Service Account a perdu l'accès au Drive: {e}")
+            raise e
             
         q = f"mimeType='application/vnd.google-apps.document' and trashed=false{date_query}"
         

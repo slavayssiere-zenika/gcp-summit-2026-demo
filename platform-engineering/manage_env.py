@@ -787,7 +787,9 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
                                 }
                                 
-                                base_dir = os.path.dirname(os.path.dirname(__file__))
+                                packaged_dir = os.path.join(os.path.dirname(__file__), "bundled_prompts")
+                                base_dir = packaged_dir if os.path.exists(packaged_dir) else os.path.dirname(os.path.dirname(__file__))
+                                
                                 headers = {
                                     "Content-Type": "application/json",
                                     "Authorization": f"Bearer {access_token}"

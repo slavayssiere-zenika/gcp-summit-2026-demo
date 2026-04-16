@@ -14,6 +14,44 @@ from typing import Optional
 
 app_logger = logging.getLogger(__name__)
 
+# Outils de recherche de candidats dont les résultats vides doivent déclencher le guardrail anti-hallucination.
+# Si l'un de ces outils est appelé et retourne une liste vide (ou 0 résultats), l'agent NE DOIT PAS
+# compléter avec des profils inventés. Le guardrail COM-006 intercepte ce cas.
+CANDIDATE_SEARCH_TOOLS = {
+    "search_best_candidates",
+    "search_users",
+    "list_users",
+    "get_users_by_tag",
+}
+
+
+def _is_empty_candidate_result(result_data: object) -> bool:
+    """Retourne True si le résultat d'un outil de recherche de candidats est vide.
+
+    Détecte les formats courants retournés par les MCPs :
+    - Liste vide : []
+    - Dict avec clé connue vide : {"results": [], "total": 0}
+    - Dict avec count/total à 0
+    - None
+
+    Utilisé par le guardrail COM-006 pour prévenir les hallucinations post-outil.
+    """
+    if result_data is None:
+        return True
+    if isinstance(result_data, list) and len(result_data) == 0:
+        return True
+    if isinstance(result_data, dict):
+        # Formats courants : {"results": [], "total": 0} ou {"users": [], "count": 0}
+        for key in ("results", "candidates", "users", "items", "data"):
+            if key in result_data:
+                val = result_data[key]
+                if isinstance(val, list) and len(val) == 0:
+                    return True
+        # Champ générique "total" ou "count" à 0
+        if result_data.get("total", -1) == 0 or result_data.get("count", -1) == 0:
+            return True
+    return False
+
 _session_service = None
 
 def get_session_service():
@@ -240,6 +278,9 @@ async def run_agent_query(query: str, session_id: str | None = None, user_id: st
     thoughts = []
     total_input_tokens = 0
     total_output_tokens = 0
+    # COM-006 : Accumule les résultats des outils de recherche de candidats
+    # pour détecter les cas où tous les outils retournent des listes vides.
+    candidate_search_results: list = []
     
     new_message = types.Content(role="user", parts=[types.Part(text=query)])
     
@@ -285,6 +326,19 @@ async def run_agent_query(query: str, session_id: str | None = None, user_id: st
                         last_tool_data = res_data # Propagate data to sub-agent output
                         steps.append({"type": "result", "data": res_data})
                         seen_steps.add(sig)
+                    
+                    # COM-006 : Associer le résultat à l'outil appelé pour le guardrail post-run
+                    # On cherche le dernier tool_call qui correspond à un outil de recherche de candidats
+                    tool_name_for_result = None
+                    for s in reversed(steps):
+                        if s.get("type") == "call" and s.get("tool") in CANDIDATE_SEARCH_TOOLS:
+                            tool_name_for_result = s["tool"]
+                            break
+                    if tool_name_for_result:
+                        candidate_search_results.append({
+                            "tool": tool_name_for_result,
+                            "result": res_data
+                        })
 
         # 1.1 Alternative extraction for some ADK event structures (actions/helpers)
         if hasattr(event, 'actions') and event.actions:
@@ -374,13 +428,11 @@ async def run_agent_query(query: str, session_id: str | None = None, user_id: st
         except Exception:
             pass
 
-    # --- HALLUCINATION GUARDRAIL ---
-    # If the agent produced a text response but called NO tools, flag it.
-    # This is the primary signal for hallucination (response from training data, not from DB).
+    # --- GUARDRAIL 1 : Zéro appel d'outil ---
+    # Si l'agent produit une réponse sans avoir appelé aucun outil, c'est une hallucination certaine.
     tool_calls_made = [s for s in steps if s.get("type") == "call"]
     if response_text and not tool_calls_made:
         app_logger.warning("[HR] ⚠️ HALLUCINATION RISK: Agent produced a response with ZERO tool calls. The response may be fabricated.")
-        # Inject a diagnostic step visible in Expert Mode
         steps.insert(0, {
             "type": "warning",
             "tool": "GUARDRAIL",
@@ -388,12 +440,44 @@ async def run_agent_query(query: str, session_id: str | None = None, user_id: st
                 "message": "AUCUN OUTIL N'A ÉTÉ APPELÉ. La réponse ci-dessus provient de la mémoire du modèle, PAS de la base Zenika. Elle est potentiellement hallucinée."
             }
         })
-        # Prepend a warning to the response text itself
         response_text = (
             "⚠️ ATTENTION : Cette réponse n'est pas fondée sur des données réelles (aucun outil MCP consulté).\n"
             "Les profils ci-dessous peuvent être inventés. Veuillez relancer la recherche.\n\n"
             + response_text
         )
+
+    # --- GUARDRAIL 2 : COM-006 — Résultats de recherche vides (search_best_candidates / search_users) ---
+    # Si tous les outils de recherche de candidats ont été appelés et ont tous retourné des listes vides,
+    # l'agent NE DOIT PAS produire de profils. On remplace la réponse par un message d'absence de résultat.
+    # Note: _is_empty_candidate_result est définie au niveau module pour être testable par import.
+    if candidate_search_results:
+        all_searches_empty = all(
+            _is_empty_candidate_result(r["result"]) for r in candidate_search_results
+        )
+        searched_tools = list({r["tool"] for r in candidate_search_results})
+        if all_searches_empty and response_text:
+            app_logger.warning(
+                "[HR] 🚨 COM-006 GUARDRAIL TRIGGERED: %d candidate search tool(s) (%s) returned EMPTY results, "
+                "but agent still produced a candidate list. Overriding response to prevent hallucination.",
+                len(candidate_search_results),
+                ", ".join(searched_tools)
+            )
+            steps.insert(0, {
+                "type": "warning",
+                "tool": "GUARDRAIL_COM006",
+                "args": {
+                    "message": (
+                        f"COM-006 DÉCLENCHÉ : Les outils {searched_tools} ont retourné 0 résultat. "
+                        "La réponse originale de l'agent a été remplacée pour éviter l'hallucination de profils fictifs."
+                    )
+                }
+            })
+            response_text = (
+                "Aucun profil trouvé dans la base Zenika pour cette recherche.\n"
+                "Les outils de recherche consultés n'ont retourné aucun consultant correspondant à vos critères.\n"
+                "Souhaitez-vous élargir la recherche (modifier les critères, retirer un filtre géographique) ?"
+            )
+            last_tool_data = None
 
     final_result = {
         "response": response_text,

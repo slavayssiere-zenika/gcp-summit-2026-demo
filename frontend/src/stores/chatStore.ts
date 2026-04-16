@@ -56,7 +56,8 @@ export const useChatStore = defineStore('chat', {
         activeTab: 'preview' as const
       }
     ] as Message[],
-    isTyping: false
+    isTyping: false,
+    isLoadingHistory: false
   }),
   actions: {
     addMessage(msg: Message) {
@@ -157,7 +158,8 @@ export const useChatStore = defineStore('chat', {
     },
 
     async fetchHistory() {
-      this.isTyping = true
+      const uxStore = useUxStore()
+      this.isLoadingHistory = true
       try {
         const response = await agentApi.history()
         if (response.history && response.history.length > 0) {
@@ -189,8 +191,9 @@ export const useChatStore = defineStore('chat', {
         }
       } catch (e) {
         console.warn('Could not load agent history', e)
+        uxStore.showToast("Impossible de charger l'historique de conversation", 'error')
       } finally {
-        this.isTyping = false
+        this.isLoadingHistory = false
       }
     },
 

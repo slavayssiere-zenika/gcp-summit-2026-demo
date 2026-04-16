@@ -49,14 +49,17 @@ Ce micro-service se base sur :
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
-- **GET** `/missions` : List Missions
 - **POST** `/missions` : Create And Analyze Mission
+- **GET** `/missions` : List Missions
 - **POST** `/missions/{mission_id}/reanalyze` : Reanalyze Mission
 - **GET** `/missions/task/{task_id}` : Get Mission Task Status
 - **POST** `/cache/invalidate` : Force Invalidate
+- **PATCH** `/missions/{mission_id}/status` : Update Mission Status
+- **GET** `/missions/{mission_id}/status/history` : Get Mission Status History
+- **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **GET** `/missions/{mission_id}` : Get Mission
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec

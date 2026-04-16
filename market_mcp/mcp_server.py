@@ -32,6 +32,36 @@ def get_gcp_project_id():
         pass
     return "slavayssiere-sandbox-462015"
 
+
+async def get_gcp_project_id_from_metadata() -> str:
+    """Récupère le Project ID GCP depuis le Metadata Server (http://metadata.google.internal).
+
+    Utilisé préférentiellement à google.auth.default() pour les appels async en milieu Cloud Run.
+    Ordre de priorité :
+    1. Variable d'environnement GCP_PROJECT_ID (override explicite)
+    2. GCP Metadata Server (disponible sur Cloud Run, GCE, GKE)
+    3. Fallback sync google.auth.default() + valeur hardcodée
+    """
+    pid = os.getenv("GCP_PROJECT_ID")
+    if pid:
+        return pid
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            res = await client.get(
+                "http://metadata.google.internal/computeMetadata/v1/project/project-id",
+                headers={"Metadata-Flavor": "Google"}
+            )
+            if res.status_code == 200:
+                project_id = res.text.strip()
+                logger.info("[metadata] GCP Project ID retrieved from metadata server: %s", project_id)
+                return project_id
+    except Exception as e:
+        logger.debug("[metadata] Metadata server unavailable (expected in local dev): %s", e)
+    # Fallback sur la méthode sync
+    return get_gcp_project_id()
+
+
 PROJECT_ID = get_gcp_project_id()
 DATASET_ID = os.getenv("DATASET_ID", "market_data")
 TABLE_ID = os.getenv("TABLE_ID", "job_offers")
@@ -607,15 +637,27 @@ async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lo
         return {"error": str(e), "service": service_name}
 
 async def list_gcp_services_internal() -> list:
-    """List Cloud Run services filtered for Zenika platform."""
+    """Liste les services Cloud Run de la plateforme Zenika déployés dans le projet GCP.
+
+    Correctif OPS-006 :
+    - ServicesAsyncClient() est initialisé SANS l'argument `project` (argument obsolète).
+    - Le project_id est récupéré dynamiquement via le Metadata Server GCP.
+    - Le filtre de projet est appliqué via le paramètre `parent` de list_services().
+    """
     try:
-        client_run = run_v2.ServicesAsyncClient(project=PROJECT_ID)
-        parent = f"projects/{PROJECT_ID}/locations/-" # Search in all locations
-        
+        # Récupération dynamique du project_id (Metadata Server > env var > google.auth.default)
+        project_id = await get_gcp_project_id_from_metadata()
+
+        # Correctif : ServicesAsyncClient() sans argument `project` (supprimé de l'API)
+        client_run = run_v2.ServicesAsyncClient()
+        # Le filtre projet est passé via le paramètre `parent`
+        # locations/- permet une recherche multi-régions
+        parent = f"projects/{project_id}/locations/-"
+
         services_pager = await client_run.list_services(parent=parent)
-        
+
         zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive"]
-        
+
         results = []
         async for service in services_pager:
             name = service.name.split("/")[-1]
@@ -626,6 +668,7 @@ async def list_gcp_services_internal() -> list:
                     "location": service.name.split("/")[3],
                     "labels": dict(service.labels) if service.labels else {}
                 })
+        logger.info("[list_gcp_services] Found %d Zenika services in project %s", len(results), project_id)
         return results
     except Exception as e:
         logger.exception(f"Error listing Cloud Run services: {e}")
