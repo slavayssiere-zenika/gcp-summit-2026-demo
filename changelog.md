@@ -1,3 +1,37 @@
+## Mise à jour automatique - 2026-04-20 12:49:17
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1181  | 322  |  73% |
+| cv_api           | 1996  | 640  |  68% |
+| drive_api        | 1050  | 371  |  65% |
+| items_api        | 1107  | 250  |  77% |
+| prompts_api      | 676   | 143  |  79% |
+| users_api        | 1368  | 432  |  68% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Fix test regressions with fakeredis isolation
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/.coverage` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-20 12:37:10
 
 ### Couverture de Code
