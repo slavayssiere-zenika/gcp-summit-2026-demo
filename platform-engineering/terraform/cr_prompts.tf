@@ -100,7 +100,7 @@ resource "google_cloud_run_v2_service" "prompts_api" {
     ignore_changes = [
       client,
       client_version,
-      
+
       template[0].containers[0].resources[0].limits["cpu"]
     ]
   }
@@ -156,7 +156,7 @@ resource "google_alloydb_user" "prompts_db_user" {
   depends_on = [google_alloydb_instance.primary]
   lifecycle {
     ignore_changes = [
-      database_roles]
+    database_roles]
   }
 }
 

@@ -150,3 +150,10 @@ variable "finops_anomaly_threshold" {
   type        = number
   default     = 500000
 }
+
+# SEC-F06 — Semantic Cache LLM
+variable "gemini_embedding_model" {
+  description = "Modèle Gemini Embedding pour le cache sémantique (agent_router_api)"
+  type        = string
+  default     = "gemini-embedding-001"
+}

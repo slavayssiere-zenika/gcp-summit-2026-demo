@@ -56,6 +56,43 @@ def discover_versions():
             
     return versions
 
+
+# Mapping clé Terraform → nom du dossier/image Docker.
+# Utilisé par build_image_urls() pour construire les URLs d'images.
+# Doit rester synchronisé avec deploy.sh (DOCKER_REPO + service name).
+SERVICE_IMAGE_MAP = {
+    "users":          "users_api",
+    "items":          "items_api",
+    "competencies":   "competencies_api",
+    "cv":             "cv_api",
+    "missions":       "missions_api",
+    "prompts":        "prompts_api",
+    "db_migrations":  "db_migrations",
+    "market":         "market_mcp",
+    "agent_router":   "agent_router_api",
+    "agent_hr":       "agent_hr_api",
+    "agent_ops":      "agent_ops_api",
+    "agent_missions": "agent_missions_api",
+    "drive":          "drive_api",
+}
+
+
+def build_image_urls(registry: str, versions: dict) -> dict:
+    """
+    Construit les URLs d'images Docker pour Terraform depuis le registre et les versions.
+
+    Format de sortie : image_{tf_name} = {registry}/{docker_name}:{version}
+
+    La version est lue depuis 'versions' (priorité YAML > fichier VERSION local),
+    ce qui permet d'utiliser ':latest' en dev et ':v0.1.0' en uat/prd.
+    Les mêmes tags sont produits par deploy.sh (build_and_push_standard/agent).
+    """
+    images = {}
+    for tf_name, docker_name in SERVICE_IMAGE_MAP.items():
+        version = versions.get(f"{docker_name}_version", "latest")
+        images[f"image_{tf_name}"] = f"{registry}/{docker_name}:{version}"
+    return images
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -985,19 +1022,45 @@ if __name__ == "__main__":
             logger.error(f"[!] Configuration file not found: {config_path}")
             sys.exit(1)
             
-        # Auto-discover component versions
-        final_config = discover_versions()
-        
+        # Auto-discover component versions from local VERSION files
+        local_versions = discover_versions()
+
         # Load YAML Configuration
         config = load_config(config_path)
-        
-        # YAML overrides auto-discovery
-        final_config.update(config)
-            
+
+        # Versions declared in the YAML take priority over local VERSION files.
+        # This allows pinning a specific version in UAT/PRD without a local rebuild.
+        # Priority chain: env var > YAML _version > local VERSION file
+        yaml_versions = {k: v for k, v in config.items() if k.endswith("_version") and v}
+        merged_versions = {**local_versions, **yaml_versions}
+
+        # If the YAML declares image_registry, build all image URLs from it.
+        # Otherwise fall back to legacy behaviour (image_* keys declared directly in YAML).
+        registry = config.get("image_registry")
+        if registry:
+            images = build_image_urls(registry, merged_versions)
+        else:
+            # Legacy: image_* keys come directly from YAML (rétrocompatibilité)
+            images = {k: v for k, v in config.items() if k.startswith("image_")}
+            logger.warning(
+                "[!] 'image_registry' absent du YAML — utilisation des clés image_* directes. "
+                "Migrez vers 'image_registry' pour simplifier la configuration."
+            )
+
+        # Base config = everything except image_* and *_version keys (handled above)
+        base_config = {
+            k: v for k, v in config.items()
+            if not k.startswith("image_") and not k.endswith("_version")
+        }
+
+        # Final flat config for Terraform
+        final_config = {**base_config, **merged_versions, **images}
+
         # Dump it as auto.tfvars.json for Terraform to ingest automatically
         tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")
         with open(tfvars_path, "w") as f:
             json.dump(final_config, f, indent=2)
+        logger.info(f"[+] {args.env}.auto.tfvars.json généré ({len(final_config)} variables).")
 
         project_id = final_config.get("project_id", "slavayssiere-sandbox-462015")
         base_domain = final_config.get("base_domain", "slavayssiere-zenika.com")

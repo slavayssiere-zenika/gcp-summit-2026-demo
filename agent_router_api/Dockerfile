@@ -45,6 +45,12 @@ ENV AGENT_OPS_API_URL=http://agent_ops_api:8080
 ENV AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
 ENV PROMPTS_API_URL=http://prompts_api:8000
 ENV MARKET_MCP_URL=http://market_mcp:8080
+ENV REDIS_URL=redis://redis:6379/1
+# SEC-F06 — Semantic Cache LLM
+ENV SEMANTIC_CACHE_ENABLED=true
+ENV SEMANTIC_CACHE_THRESHOLD=0.95
+ENV SEMANTIC_CACHE_TTL=900
+ENV GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 EXPOSE 8080
 
 RUN useradd -m appuser && chown -R appuser /app

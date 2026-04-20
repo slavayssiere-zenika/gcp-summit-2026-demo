@@ -31,11 +31,17 @@ elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
 else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
+import asyncio
+
 from prometheus_fastapi_instrumentator import Instrumentator
 from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
 from agent import run_agent_query, get_session_service
 from logger import setup_logging, LoggingMiddleware
 from mcp_client import auth_header_var
+from semantic_cache import SemanticCache
+
+# SEC-F06 — Singleton du cache sémantique (instancié au démarrage)
+_semantic_cache: SemanticCache = SemanticCache()
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -142,8 +148,41 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             AGENT_QUERIES_TOTAL.inc()
             # Propager le sub JWT comme user_id (FinOps tracing + session isolation)
             jwt_user_id = jwt_sub or "unknown@zenika.com"
+
+            # SEC-F06 — Tentative de cache sémantique AVANT l'appel LLM
+            cached_response = await _semantic_cache.get(request.query)
+            if cached_response is not None:
+                span.set_attribute("agent.source", "semantic_cache")
+                span.set_attribute("semantic_cache.hit", True)
+                # Log BigQuery en fire-and-forget (coût zéro pour l'utilisateur)
+                async def _log_cache_hit_bq():
+                    try:
+                        market_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8080")
+                        headers_bq = {"Authorization": auth_header}
+                        inject(headers_bq)
+                        async with httpx.AsyncClient(timeout=10.0) as bq_client:
+                            await bq_client.post(f"{market_url.rstrip('/')}/mcp/call", json={
+                                "name": "log_ai_consumption",
+                                "arguments": {
+                                    "user_email": jwt_user_id,
+                                    "action": "semantic_cache_hit",
+                                    "model": os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
+                                    "input_tokens": 0,
+                                    "output_tokens": 0,
+                                    "metadata": {"query": request.query[:100], "cache_hit": True}
+                                }
+                            }, headers=headers_bq)
+                    except Exception:
+                        pass
+                asyncio.create_task(_log_cache_hit_bq())
+                return cached_response
+
             result = await run_agent_query(request.query, computed_session_id, auth_token=auth_header, user_id=jwt_user_id)
             span.set_attribute("agent.source", result.get("source", "unknown"))
+
+            # SEC-F06 — Stockage du résultat en cache (fire-and-forget, ne bloque pas la réponse)
+            asyncio.create_task(_semantic_cache.set(request.query, result))
+
             return result
             
         except Exception as e:

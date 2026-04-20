@@ -90,6 +90,23 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         name  = "MARKET_MCP_URL"
         value = "http://api.internal.zenika/api/market/"
       }
+      # SEC-F06 — Semantic Cache LLM
+      env {
+        name  = "SEMANTIC_CACHE_ENABLED"
+        value = "true"
+      }
+      env {
+        name  = "SEMANTIC_CACHE_THRESHOLD"
+        value = "0.95"
+      }
+      env {
+        name  = "SEMANTIC_CACHE_TTL"
+        value = "900"
+      }
+      env {
+        name  = "GEMINI_EMBEDDING_MODEL"
+        value = var.gemini_embedding_model
+      }
       env {
         name  = "USERS_API_URL"
         value = "http://api.internal.zenika/api/users/"
@@ -150,7 +167,7 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
     ignore_changes = [
       client,
       client_version,
-      
+
       template[0].containers[0].resources[0].limits["cpu"]
     ]
   }
