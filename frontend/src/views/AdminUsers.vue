@@ -52,8 +52,9 @@
                   <span class="role-badge" :class="user.role">
                     <ShieldCheck v-if="user.role === 'admin'" size="14" />
                     <Shield v-else-if="user.role === 'rh'" size="14" />
+                    <Briefcase v-else-if="user.role === 'commercial'" size="14" />
                     <UserIcon v-else size="14" />
-                    {{ user.role === 'admin' ? 'Administrateur' : (user.role === 'rh' ? 'RH' : 'Utilisateur') }}
+                    {{ user.role === 'admin' ? 'Administrateur' : (user.role === 'rh' ? 'RH' : (user.role === 'commercial' ? 'Commercial' : 'Utilisateur')) }}
                   </span>
                 </td>
                 <td>
@@ -76,6 +77,15 @@
                         :disabled="isUpdating === user.id"
                       >
                         RH
+                      </button>
+                      <button 
+                        @click="setRole(user, 'commercial')" 
+                        class="btn-mini btn-commercial" 
+                        :class="{ 'active': user.role === 'commercial' }"
+                        title="Commercial"
+                        :disabled="isUpdating === user.id"
+                      >
+                        CO
                       </button>
                       <button 
                         @click="setRole(user, 'admin')" 
@@ -122,7 +132,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import {
-  Users, RefreshCw, Network, ShieldCheck, ShieldAlert, Shield,
+  Users, RefreshCw, Network, ShieldCheck, ShieldAlert, Shield, Briefcase,
   User as UserIcon, CheckCircle2, XCircle, UserX, UserCheck, Loader2
 } from 'lucide-vue-next'
 
@@ -340,6 +350,9 @@ onMounted(() => {
 .role-badge.rh {
   background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2);
 }
+.role-badge.commercial {
+  background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2);
+}
 .role-badge.user {
   background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
 }
@@ -387,6 +400,11 @@ onMounted(() => {
 .btn-mini.btn-rh.active {
   background: #3b82f6;
   border-color: #3b82f6;
+}
+
+.btn-mini.btn-commercial.active {
+  background: #f59e0b;
+  border-color: #f59e0b;
 }
 
 .btn-mini.btn-admin.active {

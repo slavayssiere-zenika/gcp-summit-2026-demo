@@ -603,6 +603,14 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
 async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lookback: int = 1, severity: str = "DEFAULT") -> list:
     """Fetch logs from Cloud Logging for a specific Cloud Run service."""
     try:
+        # Autocomplétion intelligente du nom de service via GCP (Fuzzy Matching)
+        services = await list_gcp_services_internal()
+        valid_services = [s["name"] for s in services if isinstance(s, dict) and "name" in s]
+        
+        normalized_query = service_name.lower().replace(" ", "-")
+        matched_service = next((s for s in valid_services if normalized_query in s.lower()), None)
+        target_service = matched_service if matched_service else service_name
+
         client_logging = logging_cloud.Client(project=PROJECT_ID)
         
         # Calculate time filter
@@ -611,7 +619,7 @@ async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lo
         
         filter_str = (
             f'resource.type="cloud_run_revision" '
-            f'AND resource.labels.service_name="{service_name}" '
+            f'AND resource.labels.service_name="{target_service}" '
             f'AND timestamp >= "{start_time}"'
         )
         if severity != "DEFAULT":
@@ -621,12 +629,18 @@ async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lo
         
         logs = []
         for entry in entries:
+            log_content = entry.text_payload
+            if hasattr(entry, 'json_payload') and entry.json_payload:
+                if isinstance(entry.json_payload, dict):
+                    log_content = entry.json_payload.get("message", entry.json_payload)
+                else:
+                    log_content = entry.json_payload
+
             logs.append({
                 "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
                 "severity": entry.severity,
-                "text_payload": entry.text_payload,
-                "json_payload": entry.json_payload if hasattr(entry, 'json_payload') else None,
-                "resource_name": entry.resource.labels.get("revision_name", "unknown")
+                "cloud_run_service": target_service,
+                "message": log_content
             })
             if len(logs) >= limit:
                 break

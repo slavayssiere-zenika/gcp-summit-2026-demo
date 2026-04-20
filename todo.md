@@ -55,6 +55,11 @@
 - [ ] **Amélioration de CV ciblée (IA)** : Fonctionnalité permettant à l'utilisateur de demander à l'agent de réviser ou d'adapter son CV de façon générale ou pour correspondre spécifiquement à une opportunité de mission.
 - [ ] **Catalogue ADR Frontend** : Implémenter une interface dans la SPA (Vue.js) pour consulter et indexer visuellement l'ensemble des Architecture Decision Records (ADR) du projet.
 - [ ] **Lifecycle d'une Mission** : Mettre en place la suite de la gestion de la mission (depuis le statut de proposition `draft`, jusqu'au `staffing` actif, puis à la `clôture`). Permettre de lier des consultants à une mission de façon persistante.
+- [ ] **Amélioration continue des CV** : Fonction - "comment améliorer mon CV ?"
+- [ ] **Data Quality CVs** : Identifier : "quels CV sont trop vieux ?"
+- [ ] **RGPD / Démo** : Créer une agence fake pour le GCP Summit avec données anonymisées
+- [ ] **Évaluation des compétences** : Processus de validation et d'évaluation de la compétence pour chaque consultant
+- [ ] **Data Ingestion** : Exclure systématiquement les dossiers nommés `_archives` du scan et de l'indexation
 
 ---
 
