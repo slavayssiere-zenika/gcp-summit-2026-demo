@@ -1,3 +1,61 @@
+## Mise à jour automatique - 2026-04-20 13:55:06
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1181  | 322  |  73% |
+| cv_api           | 1996  | 640  |  68% |
+| drive_api        | 1050  | 371  |  65% |
+| items_api        | 1107  | 250  |  77% |
+| prompts_api      | 676   | 143  |  79% |
+| users_api        | 1368  | 432  |  68% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/Dockerfile` (M)
+- `agent_hr_api/agent.py` (M)
+- `agent_hr_api/main.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_hr_api/test_guardrail.py` (M)
+- `agent_hr_api/test_main.py` (M)
+- `agent_missions_api/Dockerfile` (M)
+- `agent_missions_api/agent.py` (M)
+- `agent_missions_api/main.py` (M)
+- `agent_ops_api/Dockerfile` (M)
+- `agent_ops_api/agent.py` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/test_guardrail.py` (M)
+- `agent_ops_api/test_main.py` (M)
+- `agent_router_api/main.py` (M)
+- `agent_router_api/metrics.py` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `frontend/src/components/agent/FinopsBadge.vue` (M)
+- `frontend/src/components/ui/ToastNotification.vue` (M)
+- `frontend/src/stores/chatStore.ts` (M)
+- `frontend/src/stores/uxStore.ts` (M)
+- `frontend/src/types/index.ts` (M)
+- `frontend/src/views/Home.vue` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `scripts/run_tests.sh` (M)
+- `todo.md` (M)
+- `users_api/spec.md` (M)
+- `agent_commons/` (??)
+- `agent_router_api/tests/test_health_agents.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-20 12:49:17
 
 ### Couverture de Code

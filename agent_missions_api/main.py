@@ -22,11 +22,12 @@ from opentelemetry.trace import SpanKind
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
-from agent import MISSIONS_TOOLS, _get_cached_tools, run_agent_query
+from agent import MISSIONS_TOOLS, run_agent_query
 from logger import setup_logging, LoggingMiddleware
-from metadata import extract_metadata_from_session
+from agent_commons.metadata import extract_metadata_from_session
+from agent_commons.schemas import A2ARequest, A2AResponse
 from metrics import QUERY_COUNT, QUERY_LATENCY
-from mcp_client import auth_header_var
+from agent_commons.mcp_client import auth_header_var
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,11 @@ _session_service = None
 def get_session_service():
     global _session_service
     if _session_service is None:
-        from session import RedisSessionService
-        _session_service = RedisSessionService()
+        from agent_commons.session import RedisSessionService
+        _session_service = RedisSessionService(
+            redis_key_prefix="adk:missions:sessions",
+            redis_url=os.getenv("REDIS_URL", "redis://redis:6379/12"),
+        )
     return _session_service
 
 
@@ -102,7 +106,9 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("[MISSIONS] 🚀 Starting agent_missions_api %s", APP_VERSION)
     try:
-        tools = await _get_cached_tools()
+        from agent_commons.mcp_proxy import get_cached_tools
+        from agent import _MISSIONS_CLIENTS_MAP, _MISSIONS_TOOLS_CACHE
+        tools = await get_cached_tools(_MISSIONS_CLIENTS_MAP, "[MISSIONS]", ttl=300, _cache=_MISSIONS_TOOLS_CACHE)
         logger.info("[MISSIONS] ✅ Pre-warmed %d MCP tools at startup.", len(tools))
     except Exception as e:
         logger.warning("[MISSIONS] Could not pre-warm tools cache: %s", e)
@@ -142,14 +148,6 @@ class QueryRequest(BaseModel):
     user_id: Optional[str] = None  # None par défaut : le sub JWT est utilisé comme fallback
 
 
-class QueryResponse(BaseModel):
-    response: str
-    data: Optional[Any] = None
-    steps: Optional[list] = []
-    thoughts: Optional[str] = ""
-    usage: Optional[dict] = None
-
-
 # ── Public endpoints (no JWT) ──────────────────────────────────────────────────
 @app.get("/health")
 async def health():
@@ -165,7 +163,7 @@ async def version():
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 
-async def _execute_query(request: QueryRequest, payload: dict) -> QueryResponse:
+async def _execute_query(request: QueryRequest, payload: dict) -> A2AResponse:
     """Logique partagée entre /query et /a2a/query."""
     start_time = time.time()
     user_id = request.user_id or payload.get("sub") or "unknown@zenika.com"
@@ -180,7 +178,15 @@ async def _execute_query(request: QueryRequest, payload: dict) -> QueryResponse:
             user_id=user_id,
         )
         QUERY_COUNT.labels(agent="missions", status="success").inc()
-        return QueryResponse(**result)
+        return A2AResponse(
+            response=result.get("response", ""),
+            data=result.get("data"),
+            steps=result.get("steps", []),
+            thoughts=result.get("thoughts", ""),
+            usage=result.get("usage", {}),
+            source=result.get("source"),
+            session_id=result.get("session_id"),
+        )
     except Exception as e:
         QUERY_COUNT.labels(agent="missions", status="error").inc()
         logger.error("[MISSIONS] Agent error: %s", e, exc_info=True)
@@ -191,8 +197,8 @@ async def _execute_query(request: QueryRequest, payload: dict) -> QueryResponse:
         logger.info("[MISSIONS] Query completed in %.2fs", elapsed)
 
 
-@protected_router.post("/query", response_model=QueryResponse)
-async def query_agent(request: QueryRequest, payload: dict = Depends(verify_jwt)):
+@protected_router.post("/query", response_model=A2AResponse)
+async def query_agent(request: A2ARequest, payload: dict = Depends(verify_jwt)):
     """
     Point d'entrée direct — utilisé par le frontend ou pour les tests directs.
     Exécute le pipeline de staffing et retourne le résultat structuré.
@@ -200,14 +206,15 @@ async def query_agent(request: QueryRequest, payload: dict = Depends(verify_jwt)
     return await _execute_query(request, payload)
 
 
-@protected_router.post("/a2a/query", response_model=QueryResponse)
+@protected_router.post("/a2a/query", response_model=A2AResponse)
 async def a2a_query_agent(
-    request: QueryRequest,
+    request: A2ARequest,
     http_request: Request,
     payload: dict = Depends(verify_jwt),
 ):
     """
     Point d'entrée A2A — appelé exclusivement par agent_router_api.
+    Valide le payload entrant (A2ARequest) et la réponse (A2AResponse) via le contrat Pydantic ADR12-4.
     Rattache le span OTel au contexte de trace propagé par le Router.
     """
     ctx = extract(http_request.headers)

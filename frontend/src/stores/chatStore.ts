@@ -111,6 +111,13 @@ export const useChatStore = defineStore('chat', {
         }
 
         if (responseData.response) {
+          // ADR12-4 — Alerte si le sous-agent répond en mode dégradé (erreur réseau A2A)
+          if (responseData.degraded) {
+            uxStore.showToast(
+              '⚠️ Réponse partielle — un sous-agent est temporairement indisponible',
+              'warning'
+            )
+          }
           this.addMessage({
             role: 'assistant',
             content: replyText,
@@ -122,7 +129,8 @@ export const useChatStore = defineStore('chat', {
             rawResponse: responseData.response,
             activeTab: 'preview',
             pagination: { currentPage: 1, itemsPerPage: 10 },
-            usage: responseData.usage
+            usage: responseData.usage,
+            semanticCacheHit: responseData.semantic_cache_hit === true
           })
         } else {
           this.addMessage({

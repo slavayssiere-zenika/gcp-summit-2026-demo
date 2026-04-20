@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 interface Toast {
   id: number
   message: string
-  type: 'success' | 'error' | 'info'
+  type: 'success' | 'error' | 'info' | 'warning'
 }
 
 export const useUxStore = defineStore('ux', {
@@ -12,7 +12,7 @@ export const useUxStore = defineStore('ux', {
     toastIdCounter: 0
   }),
   actions: {
-    showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    showToast(message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') {
       const id = this.toastIdCounter++
       this.toasts.push({ id, message, type })
       

@@ -10,7 +10,8 @@ Couvre :
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from agent import CANDIDATE_SEARCH_TOOLS, _is_empty_candidate_result
+from agent import CANDIDATE_SEARCH_TOOLS
+from agent_commons.guardrails import is_empty_candidate_result as _is_empty_candidate_result
 import agent as agent_module
 
 
@@ -145,7 +146,7 @@ def _setup_runner_mock(mocker, events: list):
 
     mocker.patch("agent.get_session_service", return_value=mock_session_svc)
     mocker.patch("agent.create_agent", return_value=mock_agent)
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.Runner", return_value=mock_runner)
 
 
 # ---------------------------------------------------------------------------

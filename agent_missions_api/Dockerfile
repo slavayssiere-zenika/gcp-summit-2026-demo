@@ -7,8 +7,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# 1. Service dependencies
+COPY agent_missions_api/requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+
+# 2. Shared package agent_commons
+COPY agent_commons/ /agent_commons/
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels /agent_commons/
 
 # ---- Runtime Stage ----
 FROM python:3.11-slim
@@ -20,12 +25,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/wheels /wheels
-COPY requirements.txt .
+COPY agent_missions_api/requirements.txt .
 
-RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt agent_commons \
     && rm -rf /wheels
 
-COPY . ./
+# Copy service sources (context is repo root)
+COPY agent_missions_api/ ./
 
 # ── Comportement applicatif (Level 1 — safe defaults) ─────────────────────────
 ENV PYTHONPATH=/app

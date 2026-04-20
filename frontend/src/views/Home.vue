@@ -179,7 +179,7 @@ onUnmounted(() => {
         <div v-if="msg.role === 'assistant'" class="assistant-content">
           <!-- FinOps Cost Display (Floating Badge) -->
           <div class="usage-container">
-            <FinopsBadge :usage="msg.usage" />
+            <FinopsBadge :usage="msg.usage" :semanticCacheHit="msg.semanticCacheHit" />
           </div>
 
           <!-- Multi-View Tabs -->
