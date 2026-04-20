@@ -17,14 +17,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import jwt as pyjwt
+from jose import jwt as jose_jwt
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "testsecret")
 ALGORITHM = "HS256"
 
 
 def make_jwt(sub: str = "router@zenika.com") -> str:
-    return pyjwt.encode({"sub": sub, "exp": 9999999999}, SECRET_KEY, algorithm=ALGORITHM)
+    """Génère un JWT signé avec python-jose, cohérent avec le décodeur de main.py."""
+    return jose_jwt.encode({"sub": sub, "exp": 9999999999}, SECRET_KEY, algorithm=ALGORITHM)
 
 
 # ---------------------------------------------------------------------------
