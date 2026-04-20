@@ -34,9 +34,10 @@ else:
 from prometheus_fastapi_instrumentator import Instrumentator
 from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
 from agent import run_agent_query, OPS_TOOLS, get_session_service
-from metadata import extract_metadata_from_session
+from agent_commons.metadata import extract_metadata_from_session
+from agent_commons.schemas import A2ARequest, A2AResponse
 from logger import setup_logging, LoggingMiddleware
-from mcp_client import auth_header_var
+from agent_commons.mcp_client import auth_header_var
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -88,7 +89,7 @@ class QueryRequest(BaseModel):
     user_id: Optional[str] = None  # Prb 7: propagated from Router JWT to isolate sessions
 
 
-from mcp_client import auth_header_var
+from agent_commons.mcp_client import auth_header_var
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -146,8 +147,11 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             app_logger.exception("CRITICAL: Exception in /query (Ops)")
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
-@protected_router.post("/a2a/query")
-async def a2a_query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+@protected_router.post("/a2a/query", response_model=A2AResponse)
+async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+    """Point d'entrée A2A — appelé exclusivement par agent_router_api.
+    Valide le payload entrant (A2ARequest) et la réponse (A2AResponse) via le contrat Pydantic ADR12-4.
+    """
     # Standard A2A Entrypoint
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
@@ -166,13 +170,15 @@ async def a2a_query(request: QueryRequest, http_request: Request, auth: HTTPAuth
     with tracer.start_as_current_span("a2a.query", context=ctx, kind=SpanKind.SERVER) as span:
         try:
             result = await run_agent_query(request.query, computed_session_id, user_id=effective_user_id)
-            return {
-                "response": result.get("response", ""),
-                "data": result.get("data"),
-                "steps": result.get("steps", []),
-                "thoughts": result.get("thoughts", ""),
-                "usage": result.get("usage", {})
-            }
+            return A2AResponse(
+                response=result.get("response", ""),
+                data=result.get("data"),
+                steps=result.get("steps", []),
+                thoughts=result.get("thoughts", ""),
+                usage=result.get("usage", {}),
+                source=result.get("source"),
+                session_id=result.get("session_id"),
+            )
         except Exception as e:
             app_logger.exception("CRITICAL: Exception in /a2a/query (Ops)")
             raise HTTPException(status_code=500, detail=str(e))
@@ -235,7 +241,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
             
         elif is_assistant and current_assistant_msg is None:
             # Reconstruct metadata using the shared foolproof utility
-            from metadata import extract_metadata_from_session
+            from agent_commons.metadata import extract_metadata_from_session
             meta = extract_metadata_from_session(session)
             
             current_assistant_msg = {

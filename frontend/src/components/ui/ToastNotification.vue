@@ -4,6 +4,7 @@
       <div v-for="toast in uxStore.toasts" :key="toast.id" :class="['toast', toast.type]">
         <CheckCircle v-if="toast.type === 'success'" size="18" />
         <AlertCircle v-else-if="toast.type === 'error'" size="18" />
+        <AlertTriangle v-else-if="toast.type === 'warning'" size="18" />
         <Info v-else size="18" />
         <span>{{ toast.message }}</span>
         <button @click="uxStore.removeToast(toast.id)" class="close-btn"><X size="14" /></button>
@@ -13,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { CheckCircle, AlertCircle, Info, X } from 'lucide-vue-next'
+import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-vue-next'
 import { useUxStore } from '@/stores/uxStore'
 
 const uxStore = useUxStore()
@@ -54,6 +55,9 @@ const uxStore = useUxStore()
 
 .toast.info { border-left: 4px solid #3b82f6; }
 .toast.info svg { color: #3b82f6; }
+
+.toast.warning { border-left: 4px solid #f59e0b; background: #fffbeb; }
+.toast.warning svg { color: #d97706; }
 
 .close-btn {
   background: transparent;

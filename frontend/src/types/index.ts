@@ -59,4 +59,6 @@ export interface Message {
   // Controls
   pagination?: Pagination
   usage?: Usage
+  // ADR12-4 — Semantic cache metadata
+  semanticCacheHit?: boolean
 }

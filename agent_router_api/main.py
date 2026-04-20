@@ -3,12 +3,14 @@ import os
 import re
 import json
 import inspect
+import time
 from typing import Optional
 from contextlib import asynccontextmanager
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from jose import jwt, JWTError
@@ -75,7 +77,7 @@ app = FastAPI(
 )
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,health/agents,metrics")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
@@ -602,9 +604,76 @@ async def mcp_registry(auth: HTTPAuthorizationCredentials = Depends(security)):
 async def health():
     return {"status": "healthy"}
 
+
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
+
+
+@app.get("/health/agents")
+async def health_agents():
+    """ADR12-5 — Agrège la santé des 3 sous-agents (HR, Ops, Missions).
+
+    Public (pas de JWT). Appelé par le frontend au démarrage pour adapter l'UI.
+    Sonde GET /health + GET /version de chaque sous-agent en parallèle (timeout 3s).
+
+    Returns:
+        200 + {status: "healthy"|"degraded"}  si au moins 1 agent répond
+        503 + {status: "unhealthy"}             si tous les agents sont KO
+    """
+    from metrics import AGENT_HEALTH_PROBE_TOTAL
+
+    _AGENTS = {
+        "hr":       os.getenv("AGENT_HR_API_URL",       "http://agent_hr_api:8080"),
+        "ops":      os.getenv("AGENT_OPS_API_URL",      "http://agent_ops_api:8080"),
+        "missions": os.getenv("AGENT_MISSIONS_API_URL", "http://agent_missions_api:8080"),
+    }
+
+    async def _probe(agent_name: str, base_url: str) -> dict:
+        start = time.monotonic()
+        ok = False
+        version = "unknown"
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as c:
+                # /health et /version en parallèle sur le même sous-agent
+                h_res, v_res = await asyncio.gather(
+                    c.get(f"{base_url.rstrip('/')}/health"),
+                    c.get(f"{base_url.rstrip('/')}/version"),
+                    return_exceptions=True,
+                )
+            if not isinstance(h_res, Exception) and h_res.status_code == 200:
+                ok = True
+            if not isinstance(v_res, Exception) and v_res.status_code == 200:
+                version = v_res.json().get("version", "unknown")
+        except Exception:
+            ok = False
+        finally:
+            latency_ms = round((time.monotonic() - start) * 1000)
+            status = "up" if ok else "down"
+            AGENT_HEALTH_PROBE_TOTAL.labels(agent=agent_name, status=status).inc()
+        return {
+            "name": agent_name,
+            "status": status,
+            "version": version,
+            "latency_ms": latency_ms,
+        }
+
+    results = await asyncio.gather(*[_probe(n, u) for n, u in _AGENTS.items()])
+    agents_detail = {r["name"]: {k: v for k, v in r.items() if k != "name"} for r in results}
+
+    up_count = sum(1 for r in results if r["status"] == "up")
+    if up_count == len(_AGENTS):
+        agg_status = "healthy"
+    elif up_count > 0:
+        agg_status = "degraded"
+    else:
+        agg_status = "unhealthy"
+
+    http_code = 200 if up_count > 0 else 503
+    return JSONResponse(
+        content={"status": agg_status, "agents": agents_detail},
+        status_code=http_code,
+    )
 
 
 @protected_router.api_route("/mcp/proxy/{server_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])

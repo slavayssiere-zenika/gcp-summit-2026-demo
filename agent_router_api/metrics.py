@@ -35,3 +35,11 @@ SEMANTIC_CACHE_SIMILARITY_HISTOGRAM = Histogram(
     "Distribution des scores de similarité cosine calculés",
     buckets=[0.5, 0.7, 0.8, 0.85, 0.90, 0.92, 0.95, 0.97, 0.99, 1.0]
 )
+
+# ADR12-5 — Agent health probe metrics
+AGENT_HEALTH_PROBE_TOTAL = Counter(
+    "agent_health_probe_total",
+    "Nombre de sondes /health/agents par sous-agent et résultat",
+    ["agent", "status"],  # status: "up" | "down"
+)
+

@@ -71,7 +71,7 @@ def _patch_agent_infra(mocker):
 
     mocker.patch("agent.get_session_service", return_value=mock_session_svc)
     # Runner est importé localement dans run_agent_query : 'from google.adk.runners import Runner'
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.Runner", return_value=mock_runner)
 
     return mock_session_svc, mock_agent, mock_runner
 
