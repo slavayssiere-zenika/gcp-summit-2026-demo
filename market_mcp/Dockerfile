@@ -43,4 +43,4 @@ RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 # Exécute l'application FastAPI wrapper
-CMD ["python", "mcp_app.py"]
+CMD ["python3", "mcp_app.py"]

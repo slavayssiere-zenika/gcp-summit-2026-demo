@@ -53,8 +53,8 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
 - **GET** `/folders` : List Folders
@@ -62,6 +62,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **DELETE** `/folders/{folder_id}` : Delete Folder
 - **GET** `/status` : Get Status
 - **GET** `/files` : List Files
+- **GET** `/files/{google_file_id}` : Get File State
 - **POST** `/retry-errors` : Retry Errors
 - **GET** `/tokens/google` : Get Google Token
 - **PATCH** `/files/{file_id}` : Update File

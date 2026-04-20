@@ -53,7 +53,9 @@ async def list_tools() -> list[Tool]:
                 "useful to explain what happened), and 'warnings' (non-blocking issues such as truncated document, "
                 "zero competencies extracted, missing email, or identity conflicts). "
                 "If 'warnings' is non-empty, report them to the user. "
-                "If a step has status='error', the import failed at that stage."
+                "If a step has status='error', the import failed at that stage. "
+                "Si vous connaissez le nom du consultant (ex: depuis un dossier Drive 'Prénom Nom'), "
+                "fournissez-le dans 'folder_name' pour une résolution d'identité Zenika prioritaire."
             ),
             inputSchema={
                 "type": "object",
@@ -65,6 +67,13 @@ async def list_tools() -> list[Tool]:
                     "source_tag": {
                         "type": "string",
                         "description": "Optional thematic tag (e.g., location, department) to associate with this CV."
+                    },
+                    "folder_name": {
+                        "type": "string",
+                        "description": (
+                            "Optionnel — Nom du consultant au format 'Prénom Nom' tel qu'il apparaît dans "
+                            "le dossier Drive (nomenclature Zenika). Fait foi sur l'analyse LLM si fourni."
+                        )
                     }
                 },
                 "required": ["url"]
@@ -211,6 +220,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if name == "analyze_cv":
                 url = arguments.get("url")
                 source_tag = arguments.get("source_tag")
+                folder_name = arguments.get("folder_name")
                 if not url:
                     return [TextContent(type="text", text="Error: Missing url argument.")]
                 
@@ -218,6 +228,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     payload = {"url": url}
                     if source_tag:
                         payload["source_tag"] = source_tag
+                    if folder_name:
+                        payload["folder_name"] = folder_name
                     response = await client.post(f"{API_BASE_URL}/import", json=payload, headers=headers, timeout=60.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]

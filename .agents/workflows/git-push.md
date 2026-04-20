@@ -27,6 +27,7 @@ test_env/bin/pytest platform-engineering/tests/test_manage_env.py -v --tb=short
    Pré-requis : la variable `$DEV_BASE_URL` doit être définie. Le mot de passe admin est récupéré via Terraform output.
 // turbo
 ```bash
+export PATH="/opt/homebrew/bin:$PATH"
 if [ -n "$DEV_BASE_URL" ]; then
   ADMIN_PWD=$(cd platform-engineering/terraform && terraform output -raw admin_password 2>/dev/null || echo "")
   if [ -n "$ADMIN_PWD" ]; then
@@ -60,6 +61,7 @@ test_env/bin/python scripts/generate_changelog.py
    Applique le formatage standard HashiCorp sur les fichiers d'infrastructure du dossier bootstrap.
 // turbo
 ```bash
+export PATH="/opt/homebrew/bin:$PATH"
 terraform -chdir=bootstrap fmt -recursive
 terraform -chdir=platform-engineering/terraform fmt -recursive
 ```

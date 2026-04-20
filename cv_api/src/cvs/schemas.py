@@ -2,9 +2,11 @@ from pydantic import BaseModel, HttpUrl
 from typing import List, Optional
 
 class CVImportRequest(BaseModel):
-    url: str # A Google Docs export URL or public CV link
+    url: str  # A Google Docs export URL or public CV link
     google_access_token: Optional[str] = None
     source_tag: Optional[str] = None
+    # Nomenclature Zenika : nom du dossier parent direct ("Prénom Nom"), transmis par drive_api
+    folder_name: Optional[str] = None
 
 # Output expected from LLM
 class ExtractedCompetency(BaseModel):

@@ -45,17 +45,28 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="add_drive_folder",
-            description="Add a new Google Drive folder to be tracked for CV ingestion. Requires a folder ID and a business tag.",
+            description=(
+                "Enregistre un dossier Google Drive pour la synchronisation automatique des CVs. "
+                "Le nom du dossier est automatiquement récupéré depuis l'API Drive. "
+                "Convention Zenika : les dossiers consultants sont nommés 'Prénom Nom' (ex: 'Marie Dupont'). "
+                "Ce nom sera utilisé comme identité prioritaire lors de l'ingestion du CV. "
+                "Les dossiers commençant par '_' (underscore) sont exclus de toute synchronisation. "
+                "Requires a folder ID and a business tag."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "google_folder_id": {
                         "type": "string",
-                        "description": "The unique Google Drive Folder ID"
+                        "description": "L'ID unique Google Drive du dossier (ou son URL complète — l'ID sera extrait automatiquement)"
                     },
                     "tag": {
                         "type": "string",
-                        "description": "The logical business tag to apply to all CVs found in this folder (e.g. 'Paris', 'Nantes', 'Data')"
+                        "description": "Tag métier logique à appliquer à tous les CVs trouvés (ex: 'Paris', 'Nantes', 'Data')"
+                    },
+                    "folder_name": {
+                        "type": "string",
+                        "description": "Optionnel — Nom du dossier (nomenclature 'Prénom Nom'). Si absent, récupéré automatiquement via l'API Drive."
                     }
                 },
                 "required": ["google_folder_id", "tag"]
@@ -99,6 +110,24 @@ async def list_tools() -> list[Tool]:
             name="trigger_drive_sync",
             description="Manually trigger a deep sync delta discovery across all tracked Drive folders to find new or updated CVs.",
             inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="get_drive_file_state",
+            description=(
+                "Retourne l'état de synchronisation d'un fichier Drive par son ID Google. "
+                "Inclut le parent_folder_name (nomenclature Zenika 'Prénom Nom') utilisé "
+                "pour la résolution d'identité prioritaire lors de la réanalyse de CV."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "google_file_id": {
+                        "type": "string",
+                        "description": "L'ID Google Drive du fichier (ex: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs')"
+                    }
+                },
+                "required": ["google_file_id"]
+            }
         )
     ]
 
@@ -150,7 +179,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     res = await client.post(f"{API_BASE_URL}/sync", headers=headers, timeout=300.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
+                elif name == "get_drive_file_state":
+                    gfid = arguments.get("google_file_id")
+                    if not gfid:
+                        return [TextContent(type="text", text="Erreur : paramètre 'google_file_id' manquant.")]
+                    res = await client.get(f"{API_BASE_URL}/files/{gfid}", headers=headers, timeout=10.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
                 else:
                     return [TextContent(type="text", text=f"Unknown tool: {name}")]
             except httpx.HTTPStatusError as e:

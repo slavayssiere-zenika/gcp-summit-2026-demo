@@ -1,3 +1,91 @@
+## Mise à jour automatique - 2026-04-20 15:40:53
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1181  | 322  |  73% |
+| cv_api           | 2337  | 585  |  75% |
+| drive_api        | 1271  | 427  |  66% |
+| items_api        | 1107  | 250  |  77% |
+| prompts_api      | 794   | 258  |  68% |
+| users_api        | 1368  | 432  |  68% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/git-push.md` (M)
+- `AGENTS.md` (M)
+- `agent_hr_api/Dockerfile` (M)
+- `agent_hr_api/main.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/Dockerfile` (M)
+- `agent_ops_api/Dockerfile` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/Dockerfile` (M)
+- `agent_router_api/main.py` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/Dockerfile` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/Dockerfile` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/__pycache__/mcp_server.cpython-313.pyc` (M)
+- `cv_api/__pycache__/test_main.cpython-313-pytest-9.0.2.pyc` (M)
+- `cv_api/mcp_server.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `cv_api/src/cvs/__pycache__/schemas.cpython-313.pyc` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `cv_api/src/cvs/schemas.py` (M)
+- `cv_api/test_main.py` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `docker-compose.yml` (M)
+- `drive_api/Dockerfile` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/main.py` (M)
+- `drive_api/mcp_server.py` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/src/router.py` (M)
+- `drive_api/src/schemas.py` (M)
+- `drive_api/test.db` (M)
+- `drive_api/tests/test_drive_business.py` (M)
+- `items_api/Dockerfile` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/Dockerfile` (M)
+- `market_mcp/auth.py` (M)
+- `missions_api/Dockerfile` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/terraform/cr_agent_hr.tf` (M)
+- `platform-engineering/terraform/cr_agent_missions.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_agent_router.tf` (M)
+- `platform-engineering/terraform/cr_competencies.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/cr_drive.tf` (M)
+- `platform-engineering/terraform/cr_items.tf` (M)
+- `platform-engineering/terraform/cr_market.tf` (M)
+- `platform-engineering/terraform/cr_missions.tf` (M)
+- `platform-engineering/terraform/cr_prompts.tf` (M)
+- `platform-engineering/terraform/cr_users.tf` (M)
+- `prompts_api/.coverage` (M)
+- `prompts_api/Dockerfile` (M)
+- `prompts_api/main.py` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/Dockerfile` (M)
+- `users_api/spec.md` (M)
+- `agent_commons/VERSION` (??)
+- `prompts_api/mcp_server.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-20 13:55:06
 
 ### Couverture de Code

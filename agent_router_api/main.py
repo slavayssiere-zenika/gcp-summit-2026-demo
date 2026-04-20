@@ -107,8 +107,25 @@ if not SECRET_KEY:
 os.environ.pop("SECRET_KEY", None)
 ALGORITHM = "HS256"
 
+
+def verify_jwt(auth: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """Validate JWT signature, expiry and mandatory 'sub' claim.
+    Used as dependency on protected_router to enforce Zero-Trust (AGENTS.md §4)."""
+    try:
+        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload.get("sub"):
+            raise HTTPException(status_code=401, detail="Token invalide : claim 'sub' manquant")
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+
 from fastapi import APIRouter
-protected_router = APIRouter(dependencies=[Depends(security)])
+protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @protected_router.get("/spec")
 async def get_spec():
