@@ -28,3 +28,6 @@ tenacity
 opentelemetry-instrumentation-httpx
 
 opentelemetry-instrumentation-redis
+
+# Tests — Redis in-memory (pas de dépendance infra locale)
+fakeredis>=2.0.0

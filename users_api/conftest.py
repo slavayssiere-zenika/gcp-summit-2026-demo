@@ -1,5 +1,6 @@
 import os
 import pytest
+import fakeredis
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -12,8 +13,14 @@ os.environ["ITEMS_API_URL"] = "http://items-api:8001"
 os.environ["USERS_API_URL"] = "http://users-api:8000"
 os.environ["SECRET_KEY"] = "testsecret"
 
-# Mock OpenTelemetry before importing the app
-with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+# Remplace le client Redis par FakeRedis in-memory AVANT l'import de main.
+# cache.py crée `client = redis.from_url(...)` au niveau module.
+_fake_redis_server = fakeredis.FakeServer()
+_fake_redis_client = fakeredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
+
+# Mock OpenTelemetry + Redis avant les imports
+with patch("redis.from_url", return_value=_fake_redis_client), \
+     patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     from main import app
     from database import get_db, engine
     from src.users.models import Base

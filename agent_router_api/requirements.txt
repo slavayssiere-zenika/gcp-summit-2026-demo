@@ -27,3 +27,6 @@ opentelemetry-instrumentation-redis
 
 # SEC-F06 — Semantic Cache (cosine similarity sans dépendance lourde)
 numpy>=1.24.0
+
+# Tests — Redis in-memory (pas de dépendance infra locale)
+fakeredis>=2.0.0
