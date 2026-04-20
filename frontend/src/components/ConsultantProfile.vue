@@ -14,6 +14,8 @@ import {
   ShieldCheck
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import CompetencyEvaluationPanel from './CompetencyEvaluationPanel.vue'
+
 
 const props = defineProps<{
   userId: number
@@ -145,6 +147,15 @@ const goToProfile = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Evaluations Section (Admin — lecture seule) -->
+        <div class="section eval-section-admin">
+          <div class="section-title">
+            <ShieldCheck size="18" class="icon-red" />
+            <h3>Évaluations des compétences</h3>
+          </div>
+          <CompetencyEvaluationPanel :userId="props.userId" :readonly="true" />
         </div>
 
         <div class="profile-footer">
@@ -290,13 +301,24 @@ const goToProfile = () => {
 }
 
 .profile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.profile-columns {
   display: grid;
   grid-template-columns: 1fr 1.5fr;
   gap: 2.5rem;
 }
 
 @media (max-width: 768px) {
-  .profile-content { grid-template-columns: 1fr; gap: 1.5rem; }
+  .profile-columns { grid-template-columns: 1fr; gap: 1.5rem; }
+}
+
+.eval-section-admin {
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding-top: 1.5rem;
 }
 
 .section-title {

@@ -126,7 +126,8 @@ Services exposant uniquement des tools MCP via HTTP, sans logique métier en bas
 
 Aucune API n'est considérée comme sécurisée par défaut dans le réseau interne.
 
-- **Verrouillage par défaut** : TOUS les endpoints (sauf `/health`, `/metrics`, `/docs`) **DOIVENT** être protégés statiquement par le validateur `dependencies=[Depends(verify_jwt)]` sur leur `APIRouter`.
+- **Verrouillage par défaut** : TOUS les endpoints (sauf `/health`, `/metrics`, `/docs`, `/openapi.json`, `/spec`, `/version`) **DOIVENT** être protégés statiquement par le validateur `dependencies=[Depends(verify_jwt)]` sur leur `APIRouter`.
+  > **🚨 RÈGLE ANTI-HALLUCINATION IA** : L'Agent (toi) a l'interdiction formelle d'écrire `APIRouter()`. L'instanciation DOIT systématiquement s'écrire avec les dépendances : `APIRouter(dependencies=[Depends(verify_jwt)])`. Si tu écris un router public par inadvertance, c'est une violation critique de cette instruction. Pour garantir ceci, un test global Zero-Trust `test_zero_trust.py` doit exister dans les suites pytest de chaque service pour inspecter statiquement l'arbre des routes FastAPI.
 - **Implémentation `verify_jwt`** :
   - Pour les **APIs data** 🔵 : utiliser `from src.auth import verify_jwt` (module partagé).
   - Pour les **agents** 🟣 et **MCP natifs** 🟤 : définir `verify_jwt()` localement dans `main.py`. La fonction DOIT valider la signature HS256, l'expiration ET la présence du claim `sub`.
@@ -150,6 +151,26 @@ Aucune API n'est considérée comme sécurisée par défaut dans le réseau inte
 - **Propagation de l'Identité (Synchrone)** : Lorsqu'un microservice (ou un appel MCP) contacte un autre microservice, le Header HTTP `Authorization: Bearer <token>` **DOIT** être capturé depuis la requête entrante et transmis explicitement dans la requête sortante.
 - **Propagation de l'Identité (Asynchrone & Tâches de Fond)** : Pour toute exécution en arrière-plan (ex: Bulk reanalysis) ou déclenchée par un système ordonnanceur (Cloud Scheduler), le token d'authentification (`auth_token`) ou l'identité du compte de service **DOIT IMPÉRATIVEMENT** être propagé. Cela garantit l'imputation correcte des coûts associés dans le système FinOps.
 - **Durée de vie & Refresh** : Les tokens JWT ont une durée de vie courte (configurable via `JWT_EXPIRE_MINUTES`). Pour les tâches longues ou asynchrones, utiliser un token de service dédié (compte de service GCP) plutôt qu'un token utilisateur susceptible d'expirer en mid-flight. Il n'existe **pas** de mécanisme de refresh automatique côté microservice — la responsabilité du renouvellement incombe au client initiateur.
+- **🚨 RÈGLE ABSOLUE — INTERDICTION D'UTILISER LE COMPTE ADMIN POUR REFRESHER UN TOKEN** :
+  Il est **STRICTEMENT ET ABSOLUMENT INTERDIT** d'utiliser le compte `admin` (ou tout identifiant d'utilisateur humain) pour obtenir, rafraîchir ou relayer un token dans le cadre d'une tâche de fond, d'un batch ou d'un processus automatisé. Cette pratique est une faille de sécurité critique :
+  - Elle donne aux tâches automatisées les droits illimités d'un superadmin
+  - Elle rend les logs FinOps non-traçables (toutes les actions sont imputées à "admin")
+  - Elle contourne le principe de moindre privilège
+  
+  **La seule approche autorisée pour les background tasks** est d'appeler `POST /auth/internal/service-token` AVANT de lancer la tâche, en transmettant le JWT de l'utilisateur appelant (qui doit avoir le rôle `admin`) afin d'obtenir un token de service à longue durée de vie imputé à l'identité du service :
+  ```python
+  # ✅ CORRECT — appel avant de lancer la background task
+  async with httpx.AsyncClient() as client:
+      res = await client.post(
+          f"{USERS_API_URL}/auth/internal/service-token",
+          headers={"Authorization": auth_header}  # JWT de l'appelant
+      )
+      service_token = res.json()["access_token"]
+  background_tasks.add_task(my_bg_task, service_token)
+
+  # ❌ INTERDIT — ne jamais faire
+  service_token = login_as_admin_and_get_token()  # violation absolue
+  ```
 - **Rotation des secrets** : La clé de signature JWT (`SECRET_KEY`) ne doit jamais être committée. Elle est injectée via Secret Manager GCP. Elle DOIT être purgée de l'environnement processus après lecture (`os.environ.pop("SECRET_KEY", None)`) pour empêcher sa lecture par le LLM.
 
 ---
@@ -251,3 +272,87 @@ Tous les conteneurs du projet doivent impérativement respecter les règles dict
    - Le backend Terraform doit pointer sur un bucket GCS dédié avec versioning activé et state locking (via le backend `gcs`).
    - Les fichiers `terraform.tfvars` contenant des valeurs sensibles **DOIVENT** être listés dans `.gitignore` et ne jamais être committés.
    - Un `terraform plan` **DOIT** être exécuté et relu avant tout `terraform apply` en environnement non-dev.
+
+---
+
+## 🧠 11. MÉMOIRE PERSISTANTE ANTIGRAVITY (OBLIGATOIRE)
+
+> **RÈGLE ABSOLUE** : Ces workflows s'exécutent automatiquement, sans attendre que le user le demande. Le service tourne sur `localhost:8000`. La CLI peut échouer avec "Operation not permitted" — utiliser alors l'API HTTP directement.
+
+```bash
+# Méthode 1 : CLI (peut échouer dans les shells non-interactifs)
+CLI="python3 /Users/sebastien.lavayssiere/Code/mcp-local/antigravity-memory/scripts/antigravity_cli.py"
+
+# Méthode 2 : API HTTP directe (fallback systématique si la CLI échoue)
+# POST /api/errors  |  POST /api/learnings  |  GET /api/search?q=...
+```
+
+### 🔴 WORKFLOW A — FACE À UNE ERREUR (avant tout fix)
+
+**Déclenché par :** un log d'erreur, un stack trace, un comportement inattendu.
+
+**Étape 1 — Chercher en mémoire AVANT de coder :**
+```bash
+$CLI search-error "<technologie ou mots-clés de l'erreur>"
+# Fallback HTTP :
+curl -s "http://localhost:8000/api/search?q=<mots-cles>&type=error" | python3 -m json.tool
+```
+- Résultat trouvé → appliquer la solution mémorisée directement
+- Aucun résultat → analyser manuellement, puis logger après fix
+
+**Étape 2 — Logger immédiatement après résolution (pas à la fin de session) :**
+```bash
+# Fallback HTTP (champs requis : task_context, error_message, successful_solution)
+curl -s -X POST http://localhost:8000/api/errors \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_context": "<service, fonction, action>",
+    "error_message": "<message d erreur exact copié depuis les logs>",
+    "successful_solution": "<fix précis : fichier, ligne, changement>",
+    "tags": ["<tech>", "<service>"]
+  }' | python3 -m json.tool
+```
+
+### 🔴 WORKFLOW B — AVANT TOUTE IMPLÉMENTATION COMPLEXE (pré-vol)
+
+**Déclenché si :** modifier ≥2 fichiers, migration DB, configuration service, changement architectural.
+```bash
+$CLI search-error "<technologie concernée>"
+$CLI search-learning "<pattern ou concept>"
+# Si résultat → lire et appliquer avant d'écrire du code
+```
+
+### 🟠 WORKFLOW C — DÈS QU'UN SAVOIR RÉUTILISABLE EST ACQUIS
+
+**Le déclencheur est la DÉCOUVERTE, pas la fin de la tâche.**
+Exemples : dépendance manquante, ENV Contract violé, bug architectural, convention implicite du projet.
+
+```bash
+# Fallback HTTP (champs requis : topic, content, context, tags)
+curl -s -X POST http://localhost:8000/api/learnings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "<titre concis — ce que quelqun chercherait dans 3 mois>",
+    "content": "<explication complete et autonome avec exemple de code>",
+    "context": "<source : fichier, ligne, service, erreur>",
+    "tags": ["<tech>"]
+  }' | python3 -m json.tool
+```
+
+**Test de qualité :** Le `content` doit permettre d'appliquer le savoir sans accès au contexte original.
+
+### 🟡 WORKFLOW D — OUTIL MANQUANT DÉTECTÉ
+
+```bash
+$CLI suggest-tool "<nom>" "<description>" "<use_case>"
+```
+
+### ❌ ANTI-PATTERNS INTERDITS
+
+| Comportement interdit | Comportement attendu |
+|---|---|
+| Fixer un bug sans `search-error` d'abord | `search-error` systématique avant tout debug |
+| Logger les apprentissages "à la fin" de la session | Logger **au moment de la découverte** |
+| Sauter le log parce que le user ne l'a pas demandé | Le log est automatique, jamais optionnel |
+| CLI sans fallback en cas d'échec | Tenter CLI → si échoue → API HTTP immédiatement |
+| Logger un message vague | Logger le message d'erreur **exact** + fichier + ligne |

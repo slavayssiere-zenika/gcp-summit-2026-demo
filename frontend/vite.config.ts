@@ -57,6 +57,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/missions-api/, ''),
       },
+      '/market-mcp': {
+        target: 'http://localhost:8008',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/market-mcp/, ''),
+      },
+      '/monitoring-mcp': {
+        target: 'http://localhost:8010',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/monitoring-mcp/, ''),
+      },
     },
   },
 })

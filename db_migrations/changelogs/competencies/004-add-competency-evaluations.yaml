@@ -1,0 +1,59 @@
+databaseChangeLog:
+  - changeSet:
+      id: "004-add-competency-evaluations"
+      author: "antigravity"
+      changes:
+        - createTable:
+            tableName: "competency_evaluations"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "competency_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+                    foreignKeyName: "fk_eval_competency"
+                    references: "competencies(id)"
+              - column:
+                  name: "ai_score"
+                  type: "float"
+              - column:
+                  name: "ai_justification"
+                  type: "text"
+              - column:
+                  name: "ai_scored_at"
+                  type: "datetime"
+              - column:
+                  name: "user_score"
+                  type: "float"
+              - column:
+                  name: "user_comment"
+                  type: "varchar(500)"
+              - column:
+                  name: "user_scored_at"
+                  type: "datetime"
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+              - column:
+                  name: "updated_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+        - addUniqueConstraint:
+            tableName: "competency_evaluations"
+            columnNames: "user_id, competency_id"
+            constraintName: "uq_user_competency_eval"
+      rollback:
+        - dropTable:
+            tableName: "competency_evaluations"

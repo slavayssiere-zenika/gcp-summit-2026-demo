@@ -83,6 +83,10 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = "http://api.internal.zenika/api/market/"
       }
       env {
+        name  = "MONITORING_MCP_URL"
+        value = "http://api.internal.zenika/monitoring-mcp/"
+      }
+      env {
         name  = "LOKI_MCP_URL"
         value = "http://api.internal.zenika/loki-mcp/" # Proxy directly if internal
       }
@@ -148,7 +152,9 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
   }
 
   depends_on = [
-    null_resource.run_db_migrations_job
+    null_resource.run_db_migrations_job,
+    google_secret_manager_secret_iam_member.agent_ops_jwt_access,
+    google_secret_manager_secret_iam_member.agent_ops_gemini_access
   ]
 }
 

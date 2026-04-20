@@ -42,6 +42,10 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo ""
   echo "Bump Types (SemVer):"
   echo "  patch (défaut), minor, major, none"
+  echo ""
+  echo "Options:"
+  echo "  --no-deploy    Construit et pousse les images Docker uniquement, ignore le déploiement Cloud Run"
+  echo "  --skip-unchanged Ignore le build/deploy des services qui n'ont pas changé depuis leur dernier tag"
   echo "Note: sync_prompts est aussi exécuté automatiquement après tout déploiement."
   echo ""
   echo "Exemples:"
@@ -117,6 +121,36 @@ get_service_tag() {
 }
 
 # ==============================================================================
+# Git Diff Helper
+# ==============================================================================
+
+has_changes() {
+  local SERVICE=$1
+  if [ ! -f "${SERVICE}/VERSION" ]; then
+    return 0 # Pas de fichier VERSION -> Nouveau service -> on build
+  fi
+  
+  local CURRENT_VERSION=$(cat "${SERVICE}/VERSION")
+  local OLD_TAG="${SERVICE}-${CURRENT_VERSION}"
+  
+  if ! git rev-parse "$OLD_TAG" >/dev/null 2>&1; then
+    return 0 # Tag Git introuvable localement -> on build par sécurité
+  fi
+
+  local DIRS_TO_CHECK=("./${SERVICE}")
+  if [[ "$SERVICE" == "agent_hr_api" || "$SERVICE" == "agent_ops_api" || "$SERVICE" == "agent_missions_api" ]]; then
+    DIRS_TO_CHECK+=("./agent_commons")
+  fi
+
+  # git diff --quiet retourne 0 si AUCUNE différence, 1 si différence trouvée
+  if git diff --quiet "$OLD_TAG" HEAD -- "${DIRS_TO_CHECK[@]}"; then
+    return 1 # Pas de changement
+  else
+    return 0 # Changements détectés
+  fi
+}
+
+# ==============================================================================
 # Helper Functions
 # ==============================================================================
 
@@ -124,9 +158,15 @@ update_cloudrun() {
   local SERVICE=$1
   local TAG=$2
   
-  echo "--- Déploiement de $SERVICE sur Cloud Run (dev) ---"
   local CLEAN_NAME="${SERVICE//_/-}"
   local SVC_NAME="${CLEAN_NAME}-dev"
+  
+  if ! gcloud run services describe "$SVC_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+    echo -e "${YELLOW}--- Skipped Cloud Run update for $SERVICE (Service $SVC_NAME introuvable, config Terraform requise d'abord) ---${RESET}"
+    return 0
+  fi
+  
+  echo "--- Déploiement de $SERVICE sur Cloud Run (dev) ---"
   local IMAGE_URL="${DOCKER_REPO}/${SERVICE}:${TAG}"
   
   local CMD_ARGS=(
@@ -138,7 +178,7 @@ update_cloudrun() {
   )
   
   if [[ "$SERVICE" == "users_api" || "$SERVICE" == "items_api" || "$SERVICE" == "competencies_api" || "$SERVICE" == "cv_api" || "$SERVICE" == "drive_api" || "$SERVICE" == "missions_api" ]]; then
-    CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_URL" )
+    CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_URL" "--update-env-vars" "APP_VERSION=$TAG" )
   fi
   
   "${CMD_ARGS[@]}" || echo "/!\ Échec partiel du déploiement Cloud Run pour $SERVICE"
@@ -193,6 +233,11 @@ build_and_push_standard() {
   local SERVICE=$1
   local BUMP=${2:-"patch"}
   
+  if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_migrations" ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
+    echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
+    return 0
+  fi
+
   local TAG=$(get_service_tag "$SERVICE" "$BUMP")
   echo "--- Building $SERVICE ($TAG) ---"
   local IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
@@ -205,29 +250,33 @@ build_and_push_standard() {
   docker push "${IMAGE_NAME}:${TAG}"
   docker push "${IMAGE_NAME}:latest"
   
-  if [ "$SERVICE" != "db_migrations" ]; then
-    update_cloudrun "$SERVICE" "$TAG"
+  if [ "$SKIP_CLOUDRUN" = true ]; then
+    echo "--- Skipping update_cloudrun/jobs for $SERVICE ---"
   else
-    # Chaine automatiquement avec le init_job
-    run_db_init_job
-
-    local CLEAN_NAME="${SERVICE//_/-}"
-    local JOB_NAME="${CLEAN_NAME}-job-dev"
-    
-    if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
-      echo "--- Mise à jour de l'image du Cloud Run Job: $JOB_NAME ---"
-      gcloud run jobs update "$JOB_NAME" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --image "${IMAGE_NAME}:${TAG}"
-      
-      echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
-      gcloud run jobs execute "$JOB_NAME" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --wait
+    if [ "$SERVICE" != "db_migrations" ]; then
+      update_cloudrun "$SERVICE" "$TAG"
     else
-      echo "--- Skipping update_cloudrun for $SERVICE (Cloud Run Job $JOB_NAME introuvable) ---"
+      # Chaine automatiquement avec le init_job
+      run_db_init_job
+
+      local CLEAN_NAME="${SERVICE//_/-}"
+      local JOB_NAME="${CLEAN_NAME}-job-dev"
+      
+      if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+        echo "--- Mise à jour de l'image du Cloud Run Job: $JOB_NAME ---"
+        gcloud run jobs update "$JOB_NAME" \
+          --region "$REGION" \
+          --project "$PROJECT_ID" \
+          --image "${IMAGE_NAME}:${TAG}"
+        
+        echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
+        gcloud run jobs execute "$JOB_NAME" \
+          --region "$REGION" \
+          --project "$PROJECT_ID" \
+          --wait
+      else
+        echo "--- Skipping update_cloudrun for $SERVICE (Cloud Run Job $JOB_NAME introuvable) ---"
+      fi
     fi
   fi
 }
@@ -235,21 +284,37 @@ build_and_push_standard() {
 build_and_push_agent() {
   local SERVICE=$1
   local BUMP=${2:-"patch"}
+  
+  if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "$SERVICE"; then
+    echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
+    return 0
+  fi
+
   local TAG=$(get_service_tag "$SERVICE" "$BUMP")
   
-  # Build context doit être le dossier de l'agent
+  # Build context doit être la racine pour inclure agent_commons
   echo "--- Building $SERVICE ($TAG) ---"
   local AGENT_IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
-  docker build --platform linux/amd64 -t "${AGENT_IMAGE_NAME}:${TAG}" -t "${AGENT_IMAGE_NAME}:latest" "./${SERVICE}"
+  docker build --platform linux/amd64 -t "${AGENT_IMAGE_NAME}:${TAG}" -t "${AGENT_IMAGE_NAME}:latest" -f "./${SERVICE}/Dockerfile" .
   echo "--- Pushing $SERVICE ---"
   docker push "${AGENT_IMAGE_NAME}:${TAG}"
   docker push "${AGENT_IMAGE_NAME}:latest"
   
-  update_cloudrun "$SERVICE" "$TAG"
+  if [ "$SKIP_CLOUDRUN" = true ]; then
+    echo "--- Skipping update_cloudrun for $SERVICE ---"
+  else
+    update_cloudrun "$SERVICE" "$TAG"
+  fi
 }
 
 build_and_upload_frontend() {
   local BUMP=${1:-"patch"}
+
+  if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "frontend"; then
+    echo -e "${YELLOW}--- Skipped frontend (no changes detected since last deployment) ---${RESET}"
+    return 0
+  fi
+
   local TAG=$(get_service_tag "frontend" "$BUMP")
 
   echo "=== Traitement du Frontend ($TAG) ==="
@@ -321,16 +386,21 @@ sync_system_prompts() {
 # Main logic
 # ==============================================================================
 # Liste des services applicatifs (déployés par 'all')
-APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp")
+APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp" "monitoring_mcp")
 # Liste de tous les services possibles pour la validation
 VALID_SERVICES=("db_migrations" "db_init" "sync_prompts" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "${APP_MICROSERVICES[@]}")
 
 BUMP_TYPE="patch"
 TARGET_SERVICES=()
+SKIP_CLOUDRUN=false
 
 for arg in "$@"; do
   if [[ "$arg" == "patch" || "$arg" == "minor" || "$arg" == "major" || "$arg" == "none" ]]; then
     BUMP_TYPE="$arg"
+  elif [[ "$arg" == "--no-deploy" ]]; then
+    SKIP_CLOUDRUN=true
+  elif [[ "$arg" == "--skip-unchanged" ]]; then
+    SKIP_UNCHANGED=true
   else
     # Normalize input (e.g. agent-api -> agent_api)
     TARGET_SERVICES+=("${arg//-/_}")
@@ -341,43 +411,26 @@ if [ ${#TARGET_SERVICES[@]} -eq 0 ]; then
   TARGET_SERVICES=("all")
 fi
 
-# Si "all" est dans la liste, on le place seul et on ignore le reste
+# Expansion de 'all' par la liste complète des services et ajout des services explicites
+NEW_TARGETS=()
 for svc in "${TARGET_SERVICES[@]}"; do
   if [ "$svc" == "all" ]; then
-    TARGET_SERVICES=("all")
-    break
+    NEW_TARGETS+=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend")
+  else
+    NEW_TARGETS+=("$svc")
   fi
 done
 
-if [ "${TARGET_SERVICES[0]}" = "all" ]; then
-  ALL_TASKS=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend")
-else
-  ALL_TASKS=("${TARGET_SERVICES[@]}")
-fi
+# Déduplication tout en conservant l'ordre (au cas où "all users_api" est lancé)
+ALL_TASKS=()
+for svc in "${NEW_TARGETS[@]}"; do
+  if [[ ! " ${ALL_TASKS[*]} " =~ " ${svc} " ]]; then
+    ALL_TASKS+=("$svc")
+  fi
+done
 
-for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
-  if [ "$TARGET_SERVICE" = "all" ]; then
-    # 1. Build and Push des Microservices Applicatifs
-    for SERVICE in "${APP_MICROSERVICES[@]}"; do
-      show_progress "$SERVICE"
-      build_and_push_standard "$SERVICE" "$BUMP_TYPE"
-    done
-
-    # 2. Build des Agents A2A
-    show_progress "agent_ops_api"
-    build_and_push_agent "agent_ops_api" "$BUMP_TYPE"
-    show_progress "agent_hr_api"
-    build_and_push_agent "agent_hr_api" "$BUMP_TYPE"
-    show_progress "agent_missions_api"
-    build_and_push_agent "agent_missions_api" "$BUMP_TYPE"
-    show_progress "agent_router_api"
-    build_and_push_agent "agent_router_api" "$BUMP_TYPE"
-    
-    # 3. Build and Upload du Frontend
-    show_progress "frontend"
-    build_and_upload_frontend "$BUMP_TYPE"
-
-  elif [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
+for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
+  if [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
     show_progress "$TARGET_SERVICE"
     build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
   elif [ "$TARGET_SERVICE" = "db_init" ]; then

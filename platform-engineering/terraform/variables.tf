@@ -107,6 +107,11 @@ variable "image_market" {
   type        = string
 }
 
+variable "image_monitoring" {
+  description = "Image for Monitoring MCP container"
+  type        = string
+}
+
 variable "image_db_migrations" {
   description = "Image for DB Migrations container"
   type        = string
@@ -142,6 +147,7 @@ variable "missions_api_version" { type = string }
 variable "prompts_api_version" { type = string }
 variable "drive_api_version" { type = string }
 variable "market_mcp_version" { type = string }
+variable "monitoring_mcp_version" { type = string }
 variable "db_migrations_version" { type = string }
 variable "frontend_version" { type = string }
 

@@ -1,21 +1,55 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
+import logging
+import os
+import re
+import secrets as pysecrets
+import string
+import unicodedata
+from datetime import timedelta
+from typing import List
+from urllib.parse import urlencode
+
+import requests
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import RedirectResponse
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
+from jose import jwt, JWTError
+from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
-from typing import List
+from sqlalchemy.orm import Session
 
-from database import get_db
+import httpx
+from opentelemetry.propagate import inject
+
 from cache import get_cache, set_cache, delete_cache, delete_cache_pattern
-from src.users.models import User
-from src.users.schemas import UserCreate, UserUpdate, UserResponse, PaginationResponse, UserStatsResponse, LoginRequest, TokenResponse
-from src.auth import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM, verify_jwt
-from jose import jwt, JWTError
-from fastapi import Response
-import unicodedata
-import re
-from .pubsub import publish_user_event
+from database import get_db
 from metrics import USER_LOGINS_TOTAL, USER_CREATIONS_TOTAL
+from src.auth import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    SECRET_KEY,
+    ALGORITHM,
+    verify_jwt,
+)
+from src.users.models import User, UserAuditLog
+from src.users.schemas import (
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    PaginationResponse,
+    UserStatsResponse,
+    LoginRequest,
+    TokenResponse,
+    MergeRequest,
+    DuplicateCandidate,
+    ServiceAccountLoginRequest,
+)
+from .pubsub import publish_user_event
+
+_log = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="", tags=["users"], dependencies=[Depends(verify_jwt)])
@@ -226,7 +260,6 @@ async def login(login_data: LoginRequest, request: Request, response: Response, 
         "allowed_category_ids": allowed_ids,
         "role": user.role
     }
-    from src.auth import create_refresh_token
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data={"sub": user.username})
 
@@ -246,7 +279,6 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
         raise HTTPException(status_code=401, detail="Refresh token manquant")
 
     try:
-        from src.auth import SECRET_KEY, ALGORITHM
         payload = jwt.decode(refresh_token_cookie, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Token de type invalide")
@@ -267,7 +299,6 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
         "allowed_category_ids": allowed_ids,
         "role": user.role
     }
-    from src.auth import create_refresh_token
     new_access = create_access_token(data=token_data)
     new_refresh = create_refresh_token(data={"sub": user.username})
 
@@ -310,7 +341,6 @@ async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSessio
              raise HTTPException(status_code=403, detail="Ce token n'appartient pas à un Service Account autorisé")
 
         # Give it a service account role in our system
-        from src.auth import create_refresh_token
         access_token = create_access_token(data={
             "sub": email,
             "role": "service_account",
@@ -329,15 +359,10 @@ async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSessio
 
 
 
-import os
-import requests
-from urllib.parse import urlencode
-from fastapi.responses import RedirectResponse
-import string
-import secrets as pysecrets
-
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_SECRET_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_SECRET_KEY", "")
+
+
 @auth_router.get("/google/config")
 async def get_google_config():
     if not GOOGLE_CLIENT_ID:
@@ -428,7 +453,6 @@ async def google_callback(request: Request, code: str, response: Response, db: A
 
     # Generate JWT
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
-    from src.auth import create_refresh_token
     access_token = create_access_token(data={
         "sub": user.username,
         "allowed_category_ids": allowed_ids,
@@ -448,6 +472,50 @@ async def google_callback(request: Request, code: str, response: Response, db: A
 async def router_health():
     return {"status": "healthy"}
 
+
+@auth_router.post("/internal/service-token", response_model=TokenResponse)
+async def create_service_token(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt)
+):
+    """Génère un access token de longue durée pour les tâches de fond (bulk reanalyse, etc.).
+
+    Accessible uniquement aux admins. Le TTL est configurable via SERVICE_TOKEN_TTL_MINUTES
+    (défaut: 90 min) pour couvrir les traitements batch dépassant la durée standard de 15 min.
+    Ce token inclut le même payload que l'appelant (sub, role, allowed_category_ids).
+    """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis pour générer un service token.")
+
+    username = token_payload.get("sub")
+    if not username:
+        raise HTTPException(status_code=401, detail="Claim 'sub' manquant dans le token appelant.")
+
+    user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=403, detail="Compte inactif ou introuvable.")
+
+    allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
+    ttl_minutes = int(os.getenv("SERVICE_TOKEN_TTL_MINUTES", "90"))
+
+    service_token_data = {
+        "sub": user.username,
+        "allowed_category_ids": allowed_ids,
+        "role": user.role,
+    }
+    access_token = create_access_token(data=service_token_data, expires_delta=timedelta(minutes=ttl_minutes))
+
+    _log.info(f"[service-token] Token de service généré pour '{username}' (TTL={ttl_minutes}min)")
+
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        username=user.username,
+        role=user.role
+    )
+
+
 @auth_router.post("/suspend/{email}")
 async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
     result = await db.execute(select(User).where(User.username == email))
@@ -456,6 +524,17 @@ async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_pay
         raise HTTPException(status_code=404, detail="Utilisateur inexistant.")
 
     user.is_active = False
+    
+    audit_log = UserAuditLog(
+        user_id=user.id,
+        admin_username=token_payload.get("sub", "system"),
+        action="SUSPEND",
+        field_changed="is_active",
+        old_value="True",
+        new_value="False"
+    )
+    db.add(audit_log)
+    
     await db.commit()
 
     # Blacklist JWT : invalider immédiatement tous les tokens actifs du compte (F-05)
@@ -472,10 +551,6 @@ async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_pay
 
     return {"status": "suspended", "email": email}
 
-from src.users.schemas import MergeRequest, DuplicateCandidate
-import httpx
-from opentelemetry.propagate import inject
-
 def normalize_for_matching(text: str) -> str:
     if not text:
         return ""
@@ -487,23 +562,9 @@ def normalize_for_matching(text: str) -> str:
     return re.sub(r'[^a-z0-9]', '', only_base.lower())
 
 @router.get("/duplicates", response_model=List[DuplicateCandidate])
-async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db)):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header:
-        token = request.cookies.get("access_token")
-    else:
-        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
-    
-    if not token:
-        raise HTTPException(status_code=401, detail="Non autorisé")
-        
-    try:
-        from src.auth import SECRET_KEY, ALGORITHM
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("role") not in ["admin", "rh"]:
-            raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
-    except Exception:
-        raise HTTPException(status_code=403, detail="Token invalide")
+async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+    if payload.get("role") not in ["admin", "rh"]:
+        raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
 
     users = (await db.execute(select(User).filter(User.is_active == True))).scalars().all()
     grouped = {}
@@ -523,23 +584,9 @@ async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db)):
     return duplicates
 
 @router.post("/merge")
-async def merge_users(req: MergeRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header:
-        token = request.cookies.get("access_token")
-    else:
-        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
-
-    if not token:
-        raise HTTPException(status_code=401, detail="Non autorisé")
-        
-    try:
-        from src.auth import SECRET_KEY, ALGORITHM
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("role") not in ["admin", "rh"]:
-            raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
-    except Exception:
-        raise HTTPException(status_code=403, detail="Token invalide")
+async def merge_users(req: MergeRequest, request: Request, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+    if payload.get("role") not in ["admin", "rh"]:
+        raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
 
     source = (await db.execute(select(User).filter(User.id == req.source_id))).scalars().first()
     target = (await db.execute(select(User).filter(User.id == req.target_id))).scalars().first()
@@ -554,6 +601,17 @@ async def merge_users(req: MergeRequest, request: Request, db: AsyncSession = De
             
     source.is_active = False
     source.merged_into_id = req.target_id
+    
+    audit_log = UserAuditLog(
+        user_id=source.id,
+        admin_username=payload.get("sub", "system"),
+        action="MERGE_DISABLE",
+        field_changed="is_active",
+        old_value="True",
+        new_value="False"
+    )
+    db.add(audit_log)
+    
     await db.commit()
     
     delete_cache_pattern(f"users:{req.source_id}")
@@ -647,13 +705,35 @@ async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = 
         raise HTTPException(status_code=404, detail="User not found")
 
     update_data = user_update.model_dump(exclude_unset=True)
+    
+    admin_username = payload.get("sub", "system")
+    audit_logs = []
+    
     for field, value in update_data.items():
         if field == "email" and value is None:
             continue # We don't allow setting email to null
+            
+        old_val = getattr(user, field, None)
+        
         if field == "allowed_category_ids" and value is not None:
-            setattr(user, field, ",".join(map(str, value)))
+            new_val = ",".join(map(str, value))
+            setattr(user, field, new_val)
         else:
-            setattr(user, field, value)
+            new_val = value
+            setattr(user, field, new_val)
+            
+        if field in ["is_active", "role", "seniority"] and str(old_val) != str(new_val):
+            audit_logs.append(UserAuditLog(
+                user_id=user.id,
+                admin_username=admin_username,
+                action="UPDATE",
+                field_changed=field,
+                old_value=str(old_val),
+                new_value=str(new_val)
+            ))
+
+    if audit_logs:
+        db.add_all(audit_logs)
 
     await db.commit()
     await db.refresh(user)

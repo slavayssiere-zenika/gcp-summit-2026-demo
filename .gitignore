@@ -59,3 +59,10 @@ patch*.py
 test_*.py.antigravity_env
 .venv_test/
 */\.venv_test/
+
+# =========================
+# Temp / Scratch
+# =========================
+.tmp/
+scratch_*.py
+reports/

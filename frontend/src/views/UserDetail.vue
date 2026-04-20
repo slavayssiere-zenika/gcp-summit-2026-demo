@@ -15,6 +15,7 @@ import {
   History
 } from 'lucide-vue-next'
 import axios from 'axios'
+import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -429,6 +430,17 @@ onMounted(() => {
             </div>
           </div>
         </section>
+
+        <!-- Évaluations des Compétences (lecture seule) -->
+        <section class="profile-card eval-card-ro">
+          <div class="card-header">
+            <Award class="icon" />
+            <h2>Évaluations des Compétences</h2>
+          </div>
+          <p class="section-desc">Notes Gemini et auto-évaluations du consultant · Vue lecture seule.</p>
+          <CompetencyEvaluationPanel :userId="Number(userId)" :readonly="true" />
+        </section>
+
       </div>
     </template>
   </div>
@@ -655,6 +667,10 @@ h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
+}
+
+.eval-card-ro {
+  grid-column: 1 / -1;
 }
 
 .profile-card {

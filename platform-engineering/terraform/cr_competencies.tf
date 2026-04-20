@@ -104,6 +104,23 @@ resource "google_cloud_run_v2_service" "competencies_api" {
         name  = "USERS_API_URL"
         value = "http://api.internal.zenika/api/users/"
       }
+      env {
+        name  = "CV_API_URL"
+        value = "http://api.internal.zenika/api/cv/"
+      }
+      env {
+        name  = "GEMINI_MODEL"
+        value = var.gemini_model
+      }
+      env {
+        name = "GOOGLE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.gemini_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
     }
 
     # Conteneur Sidecar (MCP)
@@ -190,6 +207,13 @@ resource "google_service_account" "competencies_sa" {
 resource "google_secret_manager_secret_iam_member" "competencies_jwt_access" {
   project   = data.google_secret_manager_secret.jwt_secret.project
   secret_id = data.google_secret_manager_secret.jwt_secret.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.competencies_sa.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "competencies_gemini_access" {
+  project   = data.google_secret_manager_secret.gemini_api_key.project
+  secret_id = data.google_secret_manager_secret.gemini_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.competencies_sa.email}"
 }

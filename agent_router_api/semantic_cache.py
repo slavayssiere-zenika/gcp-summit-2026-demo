@@ -50,6 +50,21 @@ _REALTIME_KEYWORDS = [
     "currently",
 ]
 
+# Patterns d'injection de prompt — JAMAIS mis en cache (anti-poisoning SEC-F06)
+_INJECTION_PATTERNS = [
+    "ignore",               # "Ignore toutes tes instructions"
+    "oublie",               # "Oublie Zenika"
+    "tu es maintenant",     # Injection de rôle
+    "tu dois maintenant",
+    "forget",               # Anglais
+    "previous instructions",
+    "system:",              # Prompt JSON structuré type {role: system}
+    "\"role\":",            # Injection JSON
+    "sans restrictions",
+    "pwned",
+    "arrr",                 # Pirate
+]
+
 _CACHE_KEY_PREFIX = "semcache:"
 
 
@@ -165,6 +180,13 @@ class SemanticCache:
         if self._is_realtime_query(query):
             return
 
+        # SEC-F06 Anti-poisoning : ne jamais stocker une réponse à une injection
+        if self._is_injection_query(query):
+            logger.warning(
+                f"[SemanticCache] Injection détectée, stockage refusé: '{query[:60]}'"
+            )
+            return
+
         try:
             embedding = await self._compute_embedding(query)
             if embedding is None:
@@ -192,6 +214,12 @@ class SemanticCache:
         """Détecte les requêtes temps-réel qui ne doivent jamais être mises en cache."""
         q_lower = query.lower()
         return any(kw in q_lower for kw in _REALTIME_KEYWORDS)
+
+    def _is_injection_query(self, query: str) -> bool:
+        """Détecte les tentatives d'injection de prompt qui ne doivent JAMAIS être cachées.
+        Prévient le cache-poisoning : une injection réussie ne doit pas contaminer le cache."""
+        q_lower = query.lower()
+        return any(pattern in q_lower for pattern in _INJECTION_PATTERNS)
 
     def _cosine_similarity(self, a: list, b: list) -> float:
         """Calcule la cosine similarity entre deux vecteurs (implémentation pure Python/math)."""
@@ -241,7 +269,7 @@ class SemanticCache:
             response["steps"] = []
 
         response["steps"].insert(0, {
-            "type": "cache",
+            "type": "warning",
             "tool": "semantic_cache:HIT",
             "args": {
                 "similarity_score": round(score, 4),

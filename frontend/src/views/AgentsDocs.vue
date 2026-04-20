@@ -180,7 +180,7 @@ onMounted(() => {
           <component :is="activeAgent.icon" :size="20" class="mini-icon" :style="{ color: activeAgent.color }" />
           <h3>{{ activeAgent.name }} — {{ activeAgent.role }}</h3>
           <span v-if="versions[activeAgentId]" class="badge" :style="{ background: `${activeAgent.color}18`, color: activeAgent.color }">
-            v{{ versions[activeAgentId] }}
+            {{ versions[activeAgentId].startsWith('v') ? versions[activeAgentId] : 'v' + versions[activeAgentId] }}
           </span>
         </div>
         <button class="icon-btn" @click="fetchSpec" :disabled="loading" title="Actualiser">

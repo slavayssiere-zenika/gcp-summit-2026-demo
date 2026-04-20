@@ -98,6 +98,10 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
         name  = "MARKET_MCP_URL"
         value = "http://api.internal.zenika/api/market/"
       }
+      env {
+        name  = "MONITORING_MCP_URL"
+        value = "http://api.internal.zenika/monitoring-mcp/"
+      }
       # MCP Sidecars: /mcp/tools and /mcp/call are now public endpoints (no JWT)
       # on each API service. They proxy to the co-located MCP sidecar (port 8081).
       # These URLs must NOT go through the EXTERNAL LB — they use the INTERNAL LB.

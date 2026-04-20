@@ -111,54 +111,72 @@
       </div>
     </div>
 
-    <!-- Files Table -->
+    <!-- Files Accordion -->
     <div class="files-section">
       <h3>Fichiers Historisés</h3>
-      <div class="card table-card">
-        <table v-if="files.length > 0" class="data-table">
-          <thead>
-            <tr>
-              <th>Nom du Fichier</th>
-              <th>Tag</th>
-              <th>Statut</th>
-              <th>Dernière exécution</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="file in files" :key="file.google_file_id">
-              <td class="font-medium">{{ file.file_name || file.google_file_id }}</td>
-              <td><span class="tag-badge">{{ getFolderTag(file.folder_id) }}</span></td>
-              <td>
-                <span class="status-badge" :class="file.status.toLowerCase()">
-                  {{ formatStatus(file.status) }}
-                </span>
-                <router-link 
-                  v-if="file.status === 'IMPORTED_CV' && file.user_id != null" 
-                  :to="`/user/${file.user_id}`" 
-                  class="btn-icon btn-user-link" 
-                  title="Voir le profil"
-                >
-                  <User class="icon-xs" />
-                </router-link>
-              </td>
-              <td class="text-sm">{{ formatDate(file.last_processed_at || file.modified_time) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-if="groupedFiles.length > 0" class="accordion-container">
         
-        <div v-else class="empty-state">
-          <p>Aucun fichier encore analysé.</p>
+        <div v-for="group in groupedFiles" :key="group.name" class="accordion-item card">
+          <div class="accordion-header" @click="toggleGroup(group.name)">
+            <div class="accordion-title">
+              <ChevronDown v-if="expandedGroups[group.name]" class="icon toggle-icon" />
+              <ChevronRight v-else class="icon toggle-icon" />
+              <h4>{{ group.name }}</h4>
+              <span class="file-count-badge">{{ group.files.length }} CV(s)</span>
+            </div>
+            <div class="accordion-summary-tags">
+               <!-- Show a quick summary of statuses without expanding if we want, or just leave it clean -->
+            </div>
+          </div>
+          
+          <div class="accordion-content" v-show="expandedGroups[group.name]">
+            <table class="data-table grouped-table">
+              <thead>
+                <tr>
+                  <th>Nom du Fichier</th>
+                  <th>Tag</th>
+                  <th>Statut</th>
+                  <th>Dernière exécution</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="file in group.files" :key="file.google_file_id">
+                  <td class="font-medium file-name-col">{{ file.file_name || file.google_file_id }}</td>
+                  <td><span class="tag-badge">{{ getFolderTag(file.folder_id) }}</span></td>
+                  <td>
+                    <span class="status-badge" :class="file.status.toLowerCase()">
+                      {{ formatStatus(file.status) }}
+                    </span>
+                    <router-link 
+                      v-if="file.status === 'IMPORTED_CV' && file.user_id != null" 
+                      :to="`/user/${file.user_id}`" 
+                      class="btn-icon btn-user-link" 
+                      title="Voir le profil"
+                    >
+                      <User class="icon-xs" />
+                    </router-link>
+                  </td>
+                  <td class="text-sm date-col">{{ formatDate(file.last_processed_at || file.modified_time) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
+
+      </div>
+      
+      <div v-else class="card empty-state">
+        <p>Aucun fichier encore analysé.</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User
+  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, ChevronRight, ChevronDown
 } from 'lucide-vue-next'
 
 const folders = ref<any[]>([])
@@ -168,6 +186,32 @@ const isSyncing = ref(false)
 const isAdding = ref(false)
 const isRetrying = ref(false)
 const newFolder = ref({ google_folder_id: '', tag: '' })
+const expandedGroups = ref<Record<string, boolean>>({})
+
+const groupedFiles = computed(() => {
+  const groups: Record<string, any[]> = {}
+  files.value.forEach(f => {
+    const name = f.parent_folder_name || 'Non assigné'
+    if (!groups[name]) groups[name] = []
+    groups[name].push(f)
+  })
+
+  // Sort by name alphabetically, but keep "Non assigné" at the bottom
+  const sortedNames = Object.keys(groups).sort((a, b) => {
+    if (a === 'Non assigné') return 1
+    if (b === 'Non assigné') return -1
+    return a.localeCompare(b, 'fr')
+  })
+
+  return sortedNames.map(name => ({
+    name,
+    files: groups[name]
+  }))
+})
+
+const toggleGroup = (groupName: string) => {
+  expandedGroups.value[groupName] = !expandedGroups.value[groupName]
+}
 
 let pollInterval: any = null
 
@@ -563,5 +607,86 @@ onUnmounted(() => {
 .font-medium {
   font-weight: 500;
   color: var(--text-color);
+}
+
+/* Accordion Specific Styles */
+.accordion-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.accordion-item {
+  padding: 0;
+  overflow: hidden;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  cursor: pointer;
+  background: var(--surface-light);
+  transition: background 0.2s ease;
+}
+
+.accordion-header:hover {
+  background: var(--surface-color);
+}
+
+.accordion-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.accordion-title h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.toggle-icon {
+  color: var(--text-light);
+}
+
+.file-count-badge {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-light);
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.accordion-content {
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-color);
+}
+
+.grouped-table {
+  margin-bottom: 0;
+}
+
+.grouped-table th, .grouped-table td {
+  padding: 0.85rem 1.5rem;
+}
+
+.grouped-table tr:last-child td {
+  border-bottom: none;
+}
+
+.file-name-col {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-col {
+  color: var(--text-light);
 }
 </style>

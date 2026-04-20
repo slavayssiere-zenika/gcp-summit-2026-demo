@@ -209,13 +209,64 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "user_ids": {
-                        "type": "array", 
+                        "type": "array",
                         "items": {"type": "integer"},
                         "description": "Optional list of user IDs to filter by (e.g. collected via get_users_by_tag in cv_api)."
                     },
                     "limit": {"type": "integer", "description": "Number of results", "default": 10},
                     "sort_order": {"type": "string", "enum": ["asc", "desc"], "default": "desc", "description": "Use 'asc' for rarest, 'desc' for most common."}
                 }
+            }
+        ),
+        Tool(
+            name="get_user_competency_evaluations",
+            description=(
+                "Recupere toutes les evaluations de competences feuilles pour un consultant. "
+                "Chaque evaluation contient : la note IA (ai_score, calculee par Gemini depuis ses missions reelles), "
+                "la justification textuelle de cette note, et la note auto-evaluee par le consultant (user_score). "
+                "Utilise cet outil pour analyser le niveau reel d'un consultant, identifier les gaps, "
+                "ou declencher un coaching CV personnalise."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID du consultant"}
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="set_user_competency_score",
+            description=(
+                "Enregistre la note auto-evaluee (user_score) d'un consultant pour une competence specifique. "
+                "La note doit etre entre 0 et 5. Un commentaire optionnel peut accompagner la note. "
+                "Cette note est distincte de la note IA (ai_score) calculee depuis les missions du CV."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID du consultant"},
+                    "competency_id": {"type": "integer", "description": "L'ID de la competence feuille"},
+                    "score": {"type": "number", "minimum": 0, "maximum": 5, "description": "Note de 0 a 5 (par pas de 0.5 recommandes)"},
+                    "comment": {"type": "string", "description": "Commentaire optionnel justifiant la note (max 500 chars)"}
+                },
+                "required": ["user_id", "competency_id", "score"]
+            }
+        ),
+        Tool(
+            name="trigger_ai_scoring",
+            description=(
+                "Declenche le calcul IA des notes pour TOUTES les competences feuilles assignees a un consultant. "
+                "Gemini analyse les missions du CV et attribue un score (0-5) avec justification pour chaque competence. "
+                "Le traitement est asynchrone (BackgroundTask). Utilise cet outil apres une reanalyse de CV "
+                "ou quand le consultant demande a connaitre son niveau objectif."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID du consultant"}
+                },
+                "required": ["user_id"]
             }
         )
     ]
@@ -315,8 +366,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
+            elif name == "get_user_competency_evaluations":
+                user_id = arguments["user_id"]
+                response = await client.get(f"{API_BASE_URL}/evaluations/user/{user_id}")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "set_user_competency_score":
+                user_id = arguments["user_id"]
+                competency_id = arguments["competency_id"]
+                body = {"score": arguments["score"]}
+                if arguments.get("comment"):
+                    body["comment"] = arguments["comment"]
+                response = await client.post(
+                    f"{API_BASE_URL}/evaluations/user/{user_id}/competency/{competency_id}/user-score",
+                    json=body
+                )
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "trigger_ai_scoring":
+                user_id = arguments["user_id"]
+                response = await client.post(
+                    f"{API_BASE_URL}/evaluations/user/{user_id}/ai-score-all"
+                )
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 409:

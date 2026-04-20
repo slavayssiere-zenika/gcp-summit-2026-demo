@@ -184,17 +184,6 @@ resource "google_project_iam_member" "market_trace_user" {
   member  = "serviceAccount:${google_service_account.market_sa.email}"
 }
 
-resource "google_project_iam_member" "market_logging_viewer" {
-  project = var.project_id
-  role    = "roles/logging.viewer"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
-}
-
-resource "google_project_iam_member" "market_run_viewer" {
-  project = var.project_id
-  role    = "roles/run.viewer"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
-}
 
 # ==============================================================
 # Monitoring Custom Service & SLOs

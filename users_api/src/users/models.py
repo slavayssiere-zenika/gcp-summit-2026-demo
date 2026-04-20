@@ -28,3 +28,16 @@ class User(Base):
     from sqlalchemy import JSON
     from sqlalchemy.dialects.postgresql import JSONB
     unavailability_periods = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
+
+
+class UserAuditLog(Base):
+    __tablename__ = "user_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    admin_username = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    field_changed = Column(String, nullable=True)
+    old_value = Column(String, nullable=True)
+    new_value = Column(String, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)

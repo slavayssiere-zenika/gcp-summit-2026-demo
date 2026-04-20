@@ -7,7 +7,7 @@
 ### 🛡️ Phase 1 : Gouvernance & Sécurité Admin (Lundi)
 *Focalisation sur l'identité et les accès privilégiés.*
 
-- [ ] **Audit Trail** : Loguer les changements de statut utilisateur dans la base d'audit.
+- [x] **Audit Trail** : Loguer les changements de statut utilisateur dans la base d'audit. (Terminé)
 
 ---
 
@@ -35,7 +35,6 @@
 - [ ] Déploiement dans le cloud GCP via le projet platform-engineering.
 - [ ] **[Platform Engineering] Automatisation du cycle éphémère Matin/Soir** : Créer un Cloud Run Job (`manage-env-job`) + deux Cloud Scheduler Jobs (`07:00 → deploy --env dev`, `19:00 → destroy --env dev`) pour automatiser la création/destruction journalière de la plateforme dev sans intervention manuelle. S'appuyer sur la containerisation de `manage_env` (voir conv. `dee36a0e`).
 
-- [x] **[SEC-F06 — ✅ FAIT] Semantic Cache LLM (`agent_router_api`)** : `semantic_cache.py` + intégration dans `main.py`, cosine similarity Redis, TTL=15min, seuil=0.95, exemptions temps-réel, métriques Prometheus, log BQ `action="semantic_cache_hit"`. Tests dans `tests/test_semantic_cache.py`.
 
 ---
 
@@ -57,7 +56,6 @@
 
 #### 📌 À faire
 
-- [x] **[Axe 2/ADR12-1 — P2] Extraire `agent_commons` partagé (DRY)** : Package Python mutualisé entre HR, Ops et Missions — `mcp_client`, `session`, `metadata`, `mcp_proxy`, `runner`, `guardrails`, `finops` — ~680 lignes supprimées, 32 tests ✅
 
 - [ ] **[Axe 3 — P3] Créer `monitoring_mcp` dédié** : Séparer les outils de monitoring de `market_mcp` pour désencombrer ce dernier. Outils cibles :
   - `get_service_logs` (GCP Cloud Logging)
@@ -75,15 +73,7 @@
 
 ---
 
-### 🎨 Frontend — Nouvelles pages
 
-- [ ] **[P1] Page Documentation Agents** (`/docs/agents`) : Créer une page Vue.js dans le menu Documentation qui :
-  - Affiche les specs méier de chaque agent via son endpoint `GET /spec`
-  - Tabs : Router · HR · Ops · Missions
-  - Les `spec.md` sont générés par `scripts/generate_specs.py` au moment du `/git-push`
-  - Affiche le markdown rendu (comme `Specs.vue`) avec version + statut de santé
-
----
 
 ### 🐛 Bugs ouverts
 
@@ -101,11 +91,6 @@
 
 #### 🟡 Moyen Terme — Structurel
 
-- [x] **[ADR12-3] Cache sémantique pré-délégation** : ✅ Couvert par SEC-F06 — `SemanticCache.get()` intercepte dans `main.py` ligne 153, **avant** `run_agent_query` donc avant toute délégation A2A. TTL=15min, seuil=0.95, metrics Prometheus.
-
-- [x] **[ADR12-4] Contrat Pydantic A2A formalisé** : `agent_commons/schemas.py` — `A2ARequest`, `A2AResponse`, `AgentStep`, `TokenUsage`. Source de vérité unique, validation auto FastAPI, round-trip testé. 20 tests ✅.
-
-- [x] **[ADR12-5] Endpoint `/health/agents` agrégé sur le Router** : `GET /health/agents` public sur `agent_router_api` — sonde HR + Ops + Missions en parallèle (`asyncio.gather`), retourne `healthy`/`degraded`/`unhealthy`, HTTP 503 si tout est KO. Métriques `agent_health_probe_total`. 6 tests ✅.
 
 - [ ] **[ADR12-6] Consumer-Driven Contract Tests (A2A)** : Tests de contrat entre le Router (consumer) et chaque sous-agent (provider) pour détecter les régressions de protocole A2A en CI avant déploiement (ex: avec `pact-python`).
 

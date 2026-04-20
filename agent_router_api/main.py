@@ -457,16 +457,19 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     return {"history": final_history}
 
 @protected_router.delete("/history")
-async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security)):
+async def delete_history(request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
         from jose import jwt, JWTError
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        session_id = payload.get("sub")
         jwt_user_id = payload.get("sub", "user_1")
-        if not session_id:
+        if not jwt_user_id:
             raise Exception("No user")
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
+
+    # Priorité au session_id du query param (isolé par test)
+    # Fallback sur le sub JWT (session utilisateur normale)
+    session_id = request.query_params.get("session_id") or jwt_user_id
         
     from agent import get_session_service
     session_service = get_session_service()

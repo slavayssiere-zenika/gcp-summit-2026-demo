@@ -39,6 +39,7 @@ ENV APP_VERSION=dev
 ENV USE_IAM_AUTH=false
 ENV CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://localhost:8080
 ENV FRONTEND_URL=http://localhost:5173
+ENV SERVICE_TOKEN_TTL_MINUTES=90
 EXPOSE 8000
 
 # Création d'un utilisateur sans privilège

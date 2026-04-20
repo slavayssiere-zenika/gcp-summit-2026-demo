@@ -137,3 +137,51 @@ databaseChangeLog:
         - dropColumn:
             tableName: "users"
             columnName: "seniority"
+
+  - changeSet:
+      id: "8"
+      author: "antigravity"
+      comment: "Ajout de la table user_audit_logs pour tracer les changements de statut, rôle et séniorité."
+      changes:
+        - createTable:
+            tableName: "user_audit_logs"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+                    foreignKeyName: "fk_user_audit_logs_user"
+                    references: "users(id)"
+              - column:
+                  name: "admin_username"
+                  type: "varchar"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "action"
+                  type: "varchar"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "field_changed"
+                  type: "varchar"
+              - column:
+                  name: "old_value"
+                  type: "varchar"
+              - column:
+                  name: "new_value"
+                  type: "varchar"
+              - column:
+                  name: "timestamp"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+      rollback:
+        - dropTable:
+            tableName: "user_audit_logs"

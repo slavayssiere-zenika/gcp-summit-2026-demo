@@ -76,7 +76,12 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/user/{user_id}` : List User Competencies
 - **POST** `/internal/users/merge` : Merge Users
 - **DELETE** `/user/{user_id}/clear` : Clear User Competencies
-- **GET** `/mcp/{path}` : Proxy Mcp
+- **GET** `/evaluations/user/{user_id}` : List User Evaluations
+- **GET** `/evaluations/user/{user_id}/competency/{competency_id}` : Get User Competency Evaluation
+- **POST** `/evaluations/user/{user_id}/competency/{competency_id}/user-score` : Set User Competency Score
+- **POST** `/evaluations/user/{user_id}/competency/{competency_id}/ai-score` : Trigger Ai Score Single
+- **POST** `/evaluations/user/{user_id}/ai-score-all` : Trigger Ai Score All
 - **PUT** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
