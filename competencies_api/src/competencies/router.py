@@ -1,10 +1,11 @@
+import json
 import os
 import httpx
 import logging
 
 logger = logging.getLogger(__name__)
 from opentelemetry.propagate import inject
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, Request
 from sqlalchemy import update, func, desc, asc
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,13 +14,15 @@ from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
 
+import database
 from database import get_db
 from cache import get_cache, set_cache, delete_cache, delete_cache_pattern
-from src.competencies.models import Competency, user_competency
+from src.competencies.models import Competency, user_competency, CompetencyEvaluation
 from src.competencies.schemas import (
-    CompetencyCreate, CompetencyUpdate, CompetencyResponse, 
+    CompetencyCreate, CompetencyUpdate, CompetencyResponse,
     PaginationResponse, UserInfo, TreeImportRequest,
-    StatsRequest, CompetencyCount, CompetencyStatsResponse
+    StatsRequest, CompetencyCount, CompetencyStatsResponse,
+    CompetencyEvaluationResponse, UserScoreRequest, AiScoreAllResponse
 )
 
 from src.auth import verify_jwt
@@ -27,6 +30,8 @@ from src.auth import verify_jwt
 router = APIRouter(prefix="", tags=["competencies"], dependencies=[Depends(verify_jwt)])
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 CACHE_TTL = 60
 
 
@@ -618,6 +623,431 @@ async def clear_user_competencies(
         user_competency.delete().where(user_competency.c.user_id == user_id)
     )
     await db.commit()
-    
+
     delete_cache_pattern(f"competencies:user:{user_id}:*")
     return Response(status_code=204)
+
+
+# ============================================================
+# Competency Evaluations
+# ============================================================
+
+async def _get_or_create_evaluation(
+    db: AsyncSession, user_id: int, competency_id: int
+) -> CompetencyEvaluation:
+    """Retourne l'evaluation existante ou en cree une vide."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    stmt = select(CompetencyEvaluation).where(
+        CompetencyEvaluation.user_id == user_id,
+        CompetencyEvaluation.competency_id == competency_id
+    )
+    ev = (await db.execute(stmt)).scalars().first()
+    if not ev:
+        ev = CompetencyEvaluation(user_id=user_id, competency_id=competency_id)
+        db.add(ev)
+        await db.flush()
+    return ev
+
+
+def _serialize_evaluation(ev: CompetencyEvaluation, competency_name: str = "") -> dict:
+    """Serialise une evaluation en dict.
+
+    Le parametre competency_name DOIT etre fourni explicitement depuis la requete
+    (via JOIN ou chargement eager) — ne jamais acceder a ev.competency.name ici
+    car cela declencherait un lazy load synchrone incompatible avec AsyncSession
+    (sqlalchemy.exc.MissingGreenlet).
+    """
+    return {
+        "id": ev.id,
+        "user_id": ev.user_id,
+        "competency_id": ev.competency_id,
+        "competency_name": competency_name,
+        "ai_score": ev.ai_score,
+        "ai_justification": ev.ai_justification,
+        "ai_scored_at": ev.ai_scored_at,
+        "user_score": ev.user_score,
+        "user_comment": ev.user_comment,
+        "user_scored_at": ev.user_scored_at,
+    }
+
+
+@router.get("/evaluations/user/{user_id}", response_model=List[CompetencyEvaluationResponse])
+async def list_user_evaluations(
+    user_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Liste toutes les evaluations (feuilles uniquement) pour un utilisateur."""
+    # Feuilles uniquement : competences sans enfants
+    leaf_ids_stmt = (
+        select(user_competency.c.competency_id)
+        .where(user_competency.c.user_id == user_id)
+        .where(
+            ~select(Competency.id)
+            .where(Competency.parent_id == user_competency.c.competency_id)
+            .correlate(user_competency)
+            .exists()
+        )
+    )
+    leaf_ids = (await db.execute(leaf_ids_stmt)).scalars().all()
+
+    if not leaf_ids:
+        return []
+
+    # JOIN explicite sur Competency pour eviter le lazy load (MissingGreenlet en AsyncSession)
+    stmt = (
+        select(CompetencyEvaluation, Competency.name.label("comp_name"))
+        .join(Competency, CompetencyEvaluation.competency_id == Competency.id)
+        .where(
+            CompetencyEvaluation.user_id == user_id,
+            CompetencyEvaluation.competency_id.in_(leaf_ids)
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+    evaluations = [(row[0], row[1]) for row in rows]  # (CompetencyEvaluation, comp_name)
+
+    # Aussi retourner les feuilles sans evaluation (score null)
+    evaluated_ids = {ev.competency_id for ev, _ in evaluations}
+    missing_ids = [cid for cid in leaf_ids if cid not in evaluated_ids]
+
+    result = [_serialize_evaluation(ev, comp_name) for ev, comp_name in evaluations]
+
+    if missing_ids:
+        comps = (await db.execute(
+            select(Competency).where(Competency.id.in_(missing_ids))
+        )).scalars().all()
+        for c in comps:
+            result.append({
+                "id": 0,
+                "user_id": user_id,
+                "competency_id": c.id,
+                "competency_name": c.name,
+                "ai_score": None,
+                "ai_justification": None,
+                "ai_scored_at": None,
+                "user_score": None,
+                "user_comment": None,
+                "user_scored_at": None,
+            })
+
+    return result
+
+
+@router.get(
+    "/evaluations/user/{user_id}/competency/{competency_id}",
+    response_model=CompetencyEvaluationResponse
+)
+async def get_user_competency_evaluation(
+    user_id: int,
+    competency_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Evaluation d'une competence specifique pour un utilisateur."""
+    comp = (await db.execute(
+        select(Competency).where(Competency.id == competency_id)
+    )).scalars().first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Competency not found")
+
+    stmt = select(CompetencyEvaluation).where(
+        CompetencyEvaluation.user_id == user_id,
+        CompetencyEvaluation.competency_id == competency_id
+    )
+    ev = (await db.execute(stmt)).scalars().first()
+    if not ev:
+        return CompetencyEvaluationResponse(
+            id=0, user_id=user_id, competency_id=competency_id,
+            competency_name=comp.name
+        )
+    return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
+
+
+@router.post(
+    "/evaluations/user/{user_id}/competency/{competency_id}/user-score",
+    response_model=CompetencyEvaluationResponse
+)
+async def set_user_competency_score(
+    user_id: int,
+    competency_id: int,
+    body: UserScoreRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Saisie de la note manuelle du consultant pour une competence."""
+    comp = (await db.execute(
+        select(Competency).where(Competency.id == competency_id)
+    )).scalars().first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Competency not found")
+
+    ev = await _get_or_create_evaluation(db, user_id, competency_id)
+    ev.user_score = body.score
+    ev.user_comment = body.comment
+    ev.user_scored_at = datetime.utcnow()
+    ev.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(ev)
+
+    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
+
+
+@router.post(
+    "/evaluations/user/{user_id}/competency/{competency_id}/ai-score",
+    response_model=CompetencyEvaluationResponse
+)
+async def trigger_ai_score_single(
+    user_id: int,
+    competency_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Declenche le calcul IA pour une competence specifique."""
+    comp = (await db.execute(
+        select(Competency).where(Competency.id == competency_id)
+    )).scalars().first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Competency not found")
+
+    auth_header = request.headers.get("Authorization", "")
+    headers = {"Authorization": auth_header}
+    inject(headers)
+
+    score, justification = await _compute_ai_score(user_id, comp.name, headers)
+
+    ev = await _get_or_create_evaluation(db, user_id, competency_id)
+    ev.ai_score = score
+    ev.ai_justification = justification
+    ev.ai_scored_at = datetime.utcnow()
+    ev.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(ev)
+
+    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
+
+
+@router.post(
+    "/evaluations/user/{user_id}/ai-score-all",
+    response_model=AiScoreAllResponse
+)
+async def trigger_ai_score_all(
+    user_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """Declenche le calcul IA pour toutes les competences feuilles d'un utilisateur (BackgroundTask).
+
+    Conformément à la règle absolue AGENTS.md §4 : on obtient un service token à longue
+    durée de vie via /auth/internal/service-token AVANT de lancer la tâche. Cela garantit
+    que le token ne expire pas en cours de traitement et que l'identité du service
+    (et non du compte admin) est tracée dans les logs FinOps.
+    """
+    auth_header = request.headers.get("Authorization", "")
+
+    # Feuilles uniquement
+    leaf_ids_stmt = (
+        select(user_competency.c.competency_id)
+        .where(user_competency.c.user_id == user_id)
+        .where(
+            ~select(Competency.id)
+            .where(Competency.parent_id == user_competency.c.competency_id)
+            .correlate(user_competency)
+            .exists()
+        )
+    )
+    leaf_ids = (await db.execute(leaf_ids_stmt)).scalars().all()
+
+    comps_raw = (await db.execute(
+        select(Competency.id, Competency.name).where(Competency.id.in_(leaf_ids))
+    )).all()
+    # Sérialisation en tuples simples (id, name) pour éviter les erreurs cross-session SQLAlchemy
+    comp_tuples = [(row[0], row[1]) for row in comps_raw]
+
+    # RÈGLE ABSOLUE AGENTS.md §4 : obtenir un service token avant la background task.
+    # Ne jamais passer le bearer utilisateur directement — il peut expirer en mid-flight.
+    bg_auth_header = auth_header
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            svc_res = await client.post(
+                f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
+                headers={"Authorization": auth_header},
+            )
+            if svc_res.status_code == 200:
+                service_token = svc_res.json().get("access_token")
+                if service_token:
+                    bg_auth_header = f"Bearer {service_token}"
+                    logger.info(f"[ai-score-all] Service token obtenu pour user={user_id}")
+                else:
+                    logger.warning("[ai-score-all] Service token vide — fallback sur JWT utilisateur")
+            else:
+                logger.warning(
+                    f"[ai-score-all] /auth/internal/service-token status={svc_res.status_code} "
+                    f"— fallback sur JWT utilisateur (tâche risque d'expirer en mid-flight)"
+                )
+    except Exception as e:
+        logger.warning(f"[ai-score-all] Impossible d'obtenir un service token: {e} — fallback JWT utilisateur")
+
+    headers = {"Authorization": bg_auth_header}
+    inject(headers)
+
+    background_tasks.add_task(_score_all_bg, user_id, comp_tuples, dict(headers))
+
+    return AiScoreAllResponse(
+        user_id=user_id,
+        triggered=len(comp_tuples),
+        message=f"Scoring IA lance en arriere-plan pour {len(comp_tuples)} competences."
+    )
+
+
+async def _compute_ai_score(
+    user_id: int, competency_name: str, headers: dict
+) -> tuple[Optional[float], Optional[str]]:
+    """Appelle cv_api pour obtenir les missions puis demande a Gemini de noter la competence.
+
+    Retourne (score: float 0.0-5.0, justification: str) ou (None, message_erreur).
+    Le score est arrondi au pas de 0.5 le plus proche.
+    """
+    try:
+        import google.generativeai as genai
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            return None, "GOOGLE_API_KEY non configurée — scoring IA désactivé."
+        genai.configure(api_key=api_key)
+    except Exception as e:
+        logger.error(f"[AI Score] google-generativeai non disponible: {e}")
+        return None, "Librairie Gemini non disponible."
+
+    # 1. Récupération des missions depuis cv_api
+    missions = []
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.get(
+                f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions",
+                headers=headers
+            )
+            if res.status_code == 200:
+                missions = res.json().get("missions", [])
+    except Exception as e:
+        logger.warning(f"[AI Score] Failed to fetch missions for user {user_id}: {e}")
+        return None, "Missions non disponibles (erreur réseau)."
+
+    if not missions:
+        return 1.0, "Aucune mission trouvée dans le CV — score minimal attribué."
+
+    # 2. Filtrage des missions pertinentes (contenant la compétence)
+    comp_norm = competency_name.lower()
+    relevant_missions = [
+        m for m in missions
+        if any(comp_norm in c.lower() or c.lower() in comp_norm
+               for c in m.get("competencies", []))
+    ]
+    # Si aucune mission n'est directement liée, utiliser les 5 premières comme contexte général
+    context_missions = relevant_missions if relevant_missions else missions[:5]
+
+    # 3. Construction du contexte enrichi : titre + entreprise + durée + description + compétences
+    def _format_mission(m: dict) -> str:
+        parts = []
+        title = m.get('title', 'Mission sans titre')
+        company = m.get('company', '?')
+        parts.append(f"Mission : {title} chez {company}")
+        if m.get('duration'):
+            parts.append(f"  Durée : {m['duration']}")
+        if m.get('description'):
+            # Limiter à 300 chars pour ne pas dépasser la fenêtre de contexte
+            desc_text = str(m['description'])[:300]
+            parts.append(f"  Description : {desc_text}")
+        comps = m.get("competencies", [])
+        if comps:
+            parts.append(f"  Compétences utilisées : {', '.join(comps)}")
+        return "\n".join(parts)
+
+    missions_text = "\n\n".join([_format_mission(m) for m in context_missions])
+    context_label = "directement liées à cette compétence" if relevant_missions else "générales du consultant"
+
+    # 4. Prompt enrichi — exige score + justification factuelle basée sur les missions réelles
+    prompt = (
+        f"Tu es un évaluateur expert de consultants IT et tech."
+        f" Tu dois noter objectivement la maîtrise de la compétence '{competency_name}' "
+        f"pour ce consultant, de 0.0 à 5.0 (par pas de 0.5)."
+        f" Niveaux de référence :\n"
+        f"  - 0.0 : Aucune trace dans le CV\n"
+        f"  - 1.0 : Notions de base, mentionné une fois\n"
+        f"  - 2.0 : Utilisation ponctuelle, 1 mission\n"
+        f"  - 3.0 : Maîtrise confirmée, plusieurs missions\n"
+        f"  - 4.0 : Expert, utilisation intense et répétée\n"
+        f"  - 5.0 : Référence / Lead reconnu\n\n"
+        f"Missions {context_label} (extrait du CV) :\n"
+        f"{missions_text}\n\n"
+        f"Réponds UNIQUEMENT en JSON valide avec exactement deux champs :\n"
+        f"- score : float entre 0.0 et 5.0, arrondi au pas de 0.5\n"
+        f"- justification : string factuelle de 50 à 200 caractères en français,"
+        f" citant les missions concrètes qui justifient le score\n\n"
+        f'Exemple : {{"score": 3.5, "justification": "Utilisé intensivement sur 2 missions chez Airbus et Thales, rôle de lead technique."}}'  # noqa
+    )
+
+    # 5. Appel Gemini avec JSON forcé
+    try:
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        response = model.generate_content(
+            prompt,
+            generation_config={"response_mime_type": "application/json", "temperature": 0.1}
+        )
+        raw = response.text.strip()
+        # Nettoyage robuste : extraire le bloc JSON si le modèle ajoute du texte autour
+        if not raw.startswith("{"):
+            import re
+            json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+            raw = json_match.group(0) if json_match else raw
+        data = json.loads(raw)
+        score = max(0.0, min(5.0, float(data.get("score", 0.0))))
+        # Arrondir au pas de 0.5
+        score = round(score * 2) / 2
+        justification = str(data.get("justification", ""))[:500]
+        logger.info(f"[AI Score] user={user_id} comp='{competency_name}' score={score} (missions_contexte={len(context_missions)})")
+        return score, justification
+    except json.JSONDecodeError as e:
+        logger.error(f"[AI Score] JSON parse error for '{competency_name}': {e} — raw='{raw[:200]}'")
+        return None, "Réponse Gemini non parseable en JSON."
+    except Exception as e:
+        logger.error(f"[AI Score] Gemini call failed for '{competency_name}': {e}")
+
+    return None, "Calcul IA échoué."
+
+
+async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], headers: dict):
+    """BackgroundTask : score toutes les competences feuilles d'un utilisateur.
+
+    Recoit des tuples (competency_id, competency_name) pour eviter toute
+    contamination cross-session SQLAlchemy (les objets ORM de la requete HTTP
+    ne peuvent pas etre utilises dans une nouvelle session AsyncSession).
+    """
+    async with database.SessionLocal() as db:
+        for comp_id, comp_name in comp_tuples:
+            try:
+                score, justification = await _compute_ai_score(user_id, comp_name, headers)
+                ev = await _get_or_create_evaluation(db, user_id, comp_id)
+                ev.ai_score = score
+                ev.ai_justification = justification
+                ev.ai_scored_at = datetime.utcnow()
+                ev.updated_at = datetime.utcnow()
+                # Pas d'assignation ev.competency = <objet ORM externe> — charger
+                # via db.refresh() uniquement si necessaire pour la serialisation.
+                await db.commit()
+                if score is not None:
+                    logger.info(
+                        f"[AI Score BG] user={user_id} competency='{comp_name}' "
+                        f"comp_id={comp_id} score={score}"
+                    )
+                else:
+                    logger.warning(
+                        f"[AI Score BG] score=None user={user_id} competency='{comp_name}' "
+                        f"comp_id={comp_id} — raison: {justification}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"[AI Score BG] Failed for user={user_id} comp='{comp_name}': {e}"
+                )
+                await db.rollback()
+    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    logger.info(f"[AI Score BG] Scoring terminé pour user={user_id} — {len(comp_tuples)} compétences traitées.")
+

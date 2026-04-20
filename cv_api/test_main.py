@@ -10,6 +10,7 @@ from database import get_db
 from src.auth import verify_jwt
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportStep, CVResponse
+from src.cvs.task_state import tree_task_manager
 
 # 1. Provide dependency overrides for testing
 async def override_get_db():
@@ -313,43 +314,12 @@ def test_cv_response_has_steps_and_warnings():
     assert len(r.warnings) == 2
     assert "Doc tronqué" in r.warnings
 def test_recalculate_tree(mocker):
-    mock_db = AsyncMock()
-    app.dependency_overrides[get_db] = lambda: mock_db
-    
-    mock_profile = MagicMock(raw_content="My CV content")
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [mock_profile]
-    mock_db.execute.return_value = mock_result
-    
-    mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
-    
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
-    client_instance = AsyncMock()
-    mock_httpx.return_value.__aenter__.return_value = client_instance
-    
-    mock_genai = mocker.patch("src.cvs.router.client")
-    mock_genai.aio.models.generate_content = AsyncMock()
-    mock_genai.aio.models.generate_content.return_value.text = '{"some": "tree"}'
-    
-    mock_resp_prompts = MagicMock(status_code=200)
-    mock_resp_prompts.json.return_value = {"value": "Prompt {{EXISTING_COMPETENCIES}}"}
-    
-    mock_resp_comps = MagicMock(status_code=200)
-    mock_resp_comps.json.return_value = {"items": [{"name": "Java"}]}
-
-    def side_effect(*args, **kwargs):
-        url = args[0] if args else kwargs.get("url", "")
-        if "prompts_api" in url:
-            return mock_resp_prompts
-        if "/competencies/" in url:
-            return mock_resp_comps
-        return MagicMock(status_code=200)
-    
-    client_instance.get.side_effect = side_effect
+    mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=False))
+    mocker.patch("src.cvs.task_state.TreeTaskState.initialize_task", new=AsyncMock())
     
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
-    assert response.json()["tree"] == {"some": "tree"}
+    assert response.json()["message"] == "Calcul de l'arbre lancé"
 
 
 def test_fetch_cv_content_internal_url(mocker):
@@ -433,21 +403,18 @@ def test_recalculate_tree_not_admin(mocker):
 
 def test_recalculate_tree_no_client(mocker):
     mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
-    mocker.patch("src.cvs.router.client", None)
+    mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=False))
+    mocker.patch("src.cvs.task_state.TreeTaskState.initialize_task", new=AsyncMock())
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
-    assert response.status_code == 500
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
 
-def test_recalculate_tree_no_profiles(mocker):
-    mocker.patch("src.cvs.router.client", MagicMock())
-    mock_db = AsyncMock()
-    app.dependency_overrides[get_db] = lambda: mock_db
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = []
-    mock_db.execute.return_value = mock_result
+def test_recalculate_tree_already_running(mocker):
     mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
-    
+    mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=True))
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json()["message"] == "Un calcul de l'arbre est déjà en cours"
 
 
 def test_import_cv_not_a_cv_boolean_check(mocker):

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 import json
@@ -22,10 +22,11 @@ import urllib.parse
 import logging
 
 from database import get_db
+import database
 from src.auth import verify_jwt, security
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportRequest, CVImportStep, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
-from .task_state import task_state_manager
+from .task_state import task_state_manager, tree_task_manager
 from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
 from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
 
@@ -38,8 +39,13 @@ PROMPTS_API_URL = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
 DRIVE_API_URL = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
 ITEMS_API_URL = os.getenv("ITEMS_API_URL", "http://items_api:8001")
 
-# Initialize Gemini Client
-GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+# Credentials admin pour les tâches de fond (bulk reanalyse)
+# Permettent de générer un service token indépendamment du token utilisateur appelant.
+# AGENTS.md §4 : les tâches longues doivent utiliser un compte de service dédié.
+ADMIN_SERVICE_USERNAME = os.getenv("ADMIN_SERVICE_USERNAME", "")
+ADMIN_SERVICE_PASSWORD = os.getenv("ADMIN_SERVICE_PASSWORD", "")
+
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 MARKET_MCP_URL = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
 
 if not GEMINI_API_KEY:
@@ -50,7 +56,6 @@ else:
 
 logger = logging.getLogger(__name__)
 
-from typing import Any
 async def _log_finops(user_email: str, action: str, model: str, usage_metadata: Any, metadata: dict = None, auth_token: str = None):
     """Utility to log consumption to BigQuery via Market MCP sidecar."""
     if not usage_metadata:
@@ -831,6 +836,23 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         }
     )
     CV_PROCESSING_TOTAL.labels(status="success").inc()
+
+    # ── Hook : Scoring IA automatique des compétences (BackgroundTask) ─────────
+    # Déclenché à chaque import/réanalyse CV pour recalculer les notes IA.
+    if user_id:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as _bg_client:
+                _bg_headers = dict(headers)
+                inject(_bg_headers)
+                await _bg_client.post(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{user_id}/ai-score-all",
+                    headers=_bg_headers,
+                    timeout=5.0
+                )
+            logger.info(f"[CV_STEP] ai_scoring_triggered — user_id={user_id}")
+        except Exception as _e:
+            logger.warning(f"[CV_STEP] ai_scoring_trigger_failed — {_e} (non-bloquant)")
+
     return CVResponse(
         message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
         user_id=user_id,
@@ -1203,102 +1225,86 @@ async def get_consultants_experience_ranking(limit: int = 5, request: Request = 
             item = {
                 "user_id": p.user_id,
                 "years_of_experience": p.years_of_experience,
-                "current_role": p.current_role,
-                "is_anonymous": False
             }
-            try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{p.user_id}", headers=headers_downstream)
-                if u_res.status_code == 200:
-                    u_data = u_res.json()
-                    item["full_name"] = u_data.get("full_name")
-                    item["email"] = u_data.get("email")
-                    item["is_anonymous"] = u_data.get("is_anonymous", False)
-            except Exception as e:
-                logger.warning(f"Failed to enrich user info for {p.user_id}: {e}")
-            
-            results.append(RankedExperienceResponse(**item))
-            
+            results.append(item)
     return results
 
-@router.post("/recalculate_tree")
-async def recalculate_competencies_tree(
-    request: Request, 
-    db: AsyncSession = Depends(get_db), 
-    token_payload: dict = Depends(verify_jwt)
-):
-    """
-    (Admin Only) Lit tous les CVs de la base et donne à Gemini la mission de synthétiser 
-    le modèle hiérarchique optimal pour l'entreprise (Catégories -> Spécialités -> Compétences).
-    """
-    if token_payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Opération refusée: privilèges administrateur requis.")
-    
-    auth_header = request.headers.get("Authorization")
-             
-    if not client:
-        raise HTTPException(status_code=500, detail="Gemini SDK non configuré (Google API Key manquante).")
-
-    profiles = (await db.execute(select(CVProfile))).scalars().all()
-    if not profiles:
-        raise HTTPException(status_code=404, detail="Aucun CV dans la base pour générer un arbre.")
-
-    combined_text = "\n\n--- CV SUIVANT ---\n\n".join([p.raw_content for p in profiles])
+async def _recalculate_bg(auth_header: str, user_caller: str):
     try:
-        async with httpx.AsyncClient() as http_client:
-            headers_downstream = {"Authorization": auth_header}
-            res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.generate_taxonomy_tree", headers=headers_downstream, timeout=5.0)
-            res_prompt.raise_for_status()
-            instruction = res_prompt.json()["value"]
-    except Exception as e:
-        logger.warning(f"Prompt cv_api.generate_taxonomy_tree indisponible (erreur: {e}). Fallback local.")
-        if os.path.exists("cv_api.generate_taxonomy_tree.txt"):
-            with open("cv_api.generate_taxonomy_tree.txt", "r", encoding="utf-8") as f:
-                instruction = f.read()
-        else:
-            raise HTTPException(status_code=500, detail=f"Cannot fetch taxonomy prompt and no fallback: {e}")
+        if not client:
+            await tree_task_manager.update_progress(error="Gemini SDK non configuré (Google API Key manquante).", status="error")
+            return
 
-    try:
-        async with httpx.AsyncClient() as http_client:
-            headers = {"Authorization": auth_header}
-            all_comps = []
-            skip = 0
-            limit = 100
-            while True:
-                comp_res = await http_client.get(
-                    f"{COMPETENCIES_API_URL.rstrip('/')}/", 
-                    params={"skip": skip, "limit": limit}, 
-                    headers=headers,
-                    timeout=10.0
-                )
-                comp_res.raise_for_status()
-                comp_data = comp_res.json()
-                
-                # Handling both direct list and PaginationResponse
-                items = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
-                all_comps.extend(items)
-                
-                if isinstance(comp_data, dict) and "total" in comp_data:
-                    if len(all_comps) >= comp_data["total"]:
+        await tree_task_manager.update_progress(new_log="Extraction des CVs de la base de données...")
+        async with database.SessionLocal() as db:
+            profiles = (await db.execute(select(CVProfile))).scalars().all()
+            
+        if not profiles:
+            await tree_task_manager.update_progress(error="Aucun CV dans la base pour générer un arbre.", status="error")
+            return
+
+        combined_text = "\n\n--- CV SUIVANT ---\n\n".join([p.raw_content for p in profiles])
+        
+        await tree_task_manager.update_progress(new_log="Récupération du prompt de taxonomie...")
+        try:
+            async with httpx.AsyncClient() as http_client:
+                headers_downstream = {"Authorization": auth_header}
+                res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.generate_taxonomy_tree", headers=headers_downstream, timeout=5.0)
+                res_prompt.raise_for_status()
+                instruction = res_prompt.json()["value"]
+        except Exception as e:
+            logger.warning(f"Prompt cv_api.generate_taxonomy_tree indisponible (erreur: {e}). Fallback local.")
+            if os.path.exists("cv_api.generate_taxonomy_tree.txt"):
+                with open("cv_api.generate_taxonomy_tree.txt", "r", encoding="utf-8") as f:
+                    instruction = f.read()
+            else:
+                await tree_task_manager.update_progress(error=f"Cannot fetch taxonomy prompt and no fallback: {e}", status="error")
+                return
+
+        await tree_task_manager.update_progress(new_log="Récupération des compétences existantes...")
+        try:
+            async with httpx.AsyncClient() as http_client:
+                headers = {"Authorization": auth_header}
+                all_comps = []
+                skip = 0
+                limit = 100
+                while True:
+                    comp_res = await http_client.get(
+                        f"{COMPETENCIES_API_URL.rstrip('/')}/", 
+                        params={"skip": skip, "limit": limit}, 
+                        headers=headers,
+                        timeout=10.0
+                    )
+                    comp_res.raise_for_status()
+                    comp_data = comp_res.json()
+                    
+                    items = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
+                    all_comps.extend(items)
+                    
+                    if isinstance(comp_data, dict) and "total" in comp_data:
+                        if len(all_comps) >= comp_data["total"]:
+                            break
+                    elif len(items) < limit:
                         break
-                elif len(items) < limit:
-                    break
-                skip += limit
-            
-            def get_all_names(nodes):
-                names = []
-                for n in nodes:
-                    names.append(n["name"])
-                    if "sub_competencies" in n and n["sub_competencies"]:
-                        names.extend(get_all_names(n["sub_competencies"]))
-                return names
-            
-            existing_names = get_all_names(all_comps)
-            skills_str = ", ".join(existing_names) if existing_names else "Aucune compétence existante"
-            instruction = instruction.replace("{{EXISTING_COMPETENCIES}}", skills_str)
-    except Exception as e:
-        print(f"WARNING: Failed to inject existing competencies: {e}")
+                    skip += limit
+                
+                def get_all_names(nodes):
+                    names = []
+                    for n in nodes:
+                        names.append(n["name"])
+                        if "sub_competencies" in n and n["sub_competencies"]:
+                            names.extend(get_all_names(n["sub_competencies"]))
+                    return names
+                
+                existing_names = get_all_names(all_comps)
+                skills_str = ", ".join(existing_names) if existing_names else "Aucune compétence existante"
+                instruction = instruction.replace("{{EXISTING_COMPETENCIES}}", skills_str)
+        except Exception as e:
+            msg = f"Failed to inject existing competencies: {e}"
+            print(msg)
+            await tree_task_manager.update_progress(new_log=msg)
 
-    try:
+        await tree_task_manager.update_progress(new_log="Lancement du modèle Gemini...")
         response = await generate_content_with_retry(
             client,
             model=os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"),
@@ -1309,8 +1315,7 @@ async def recalculate_competencies_tree(
             )
         )
         
-        # FinOps Logging (Safe access)
-        user_caller = token_payload.get("sub", "unknown")
+        # FinOps Logging
         r_meta = None
         try:
             r_meta = response.usage_metadata
@@ -1323,19 +1328,48 @@ async def recalculate_competencies_tree(
         if r_meta:
             input_tokens = getattr(r_meta, 'prompt_token_count', 0)
             output_tokens = getattr(r_meta, 'candidates_token_count', 0)
-            # Prix Gemini Pro : ~1.25$ / 1M in, 5.00$ / 1M out
             estimated_cost_usd = (input_tokens * 1.25 + output_tokens * 5.0) / 1000000
 
-        # Parse JSON string from model implicitly as it's guaranteed to be valid by `response_mime_type`
-        return {
-            "tree": json.loads(response.text),
-            "usage": {
-                "estimated_cost_usd": estimated_cost_usd
-            }
-        }
+        res_tree = json.loads(response.text)
+        await tree_task_manager.update_progress(
+            new_log="Calcul terminé avec succès.",
+            tree=res_tree,
+            usage={"estimated_cost_usd": estimated_cost_usd},
+            status="completed"
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur Gemini: {str(e)}")
+        await tree_task_manager.update_progress(error=f"Erreur Gemini: {str(e)}", status="error")
 
+@router.post("/recalculate_tree")
+async def recalculate_competencies_tree(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    token_payload: dict = Depends(verify_jwt)
+):
+    """
+    (Admin Only) Lance le recalcul asynchrone de l'arbre de compétences.
+    """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Opération refusée: privilèges administrateur requis.")
+    
+    if await tree_task_manager.is_task_running():
+        return {"message": "Un calcul de l'arbre est déjà en cours", "status": "running"}
+
+    auth_header = request.headers.get("Authorization")
+    user_caller = token_payload.get("sub", "unknown")
+    
+    await tree_task_manager.initialize_task()
+    background_tasks.add_task(_recalculate_bg, auth_header, user_caller)
+
+    return {"message": "Calcul de l'arbre lancé", "status": "running"}
+
+@router.get("/recalculate_tree/status")
+async def get_recalculate_tree_status():
+    """Récupère le statut du recalcul de l'arbre."""
+    status = await tree_task_manager.get_latest_status()
+    if not status:
+        return {"status": "idle", "message": "Aucune tâche lancée récemment."}
+    return status
 @router.get("/reanalyze/status")
 async def get_reanalyze_status():
     """Récupère le statut de la dernière tâche de réanalyse."""
@@ -1343,6 +1377,20 @@ async def get_reanalyze_status():
     if not status:
         return {"status": "idle", "message": "Aucune tâche lancée récemment."}
     return status
+
+@router.delete("/reanalyze/reset")
+async def reset_reanalyze_task(token_payload: dict = Depends(verify_jwt)):
+    """(Admin Only) Force la réinitialisation du verrou de réanalyse.
+
+    À utiliser lorsque '/reanalyze' retourne 'Une tâche de réanalyse est déjà en cours'
+    alors qu'aucune tâche n'est réellement active (tâche zombie suite à un crash ou une
+    déconnexion client). Le watchdog automatique corrige après 30 min d'inactivité ;
+    cet endpoint permet un déblocage immédiat.
+    """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    await task_state_manager.force_reset()
+    return {"status": "reset", "message": "Verrou de réanalyse réinitialisé. Vous pouvez relancer une réanalyse."}
 
 @router.post("/reanalyze")
 async def reanalyze_cvs(
@@ -1393,156 +1441,252 @@ async def reanalyze_cvs(
     
     async def generate():
         async with httpx.AsyncClient(timeout=60.0) as http_client:
-            # 1.5 Get Google token
-            google_access_token = None
             try:
-                tok_res = await http_client.get(f"{DRIVE_API_URL.rstrip('/')}/tokens/google", headers=headers, timeout=5.0)
-                if tok_res.status_code == 200:
-                    google_access_token = tok_res.json().get("access_token")
-                    msg = "Successfully acquired Google Access Token."
-                    await task_state_manager.update_progress(new_log=msg)
-                    yield json.dumps({"status": "info", "message": msg}) + "\n"
-                else:
-                    msg = f"Could not fetch Google Token (status {tok_res.status_code}). Proceeding as public."
+                # 0. Obtention d'un token de service longue durée (TTL=90min par défaut)
+                # pour éviter les expirations JWT en cours de réanalyse bulk (> 15 CVs).
+                # Conforme à AGENTS.md §4 : les tâches asynchrones longues DOIVENT utiliser
+                # un token de service plutôt qu'un token utilisateur susceptible d'expirer.
+                effective_headers = dict(headers)
+                effective_auth_token = auth_token
+                try:
+                    # Stratégie 1 : service token via caller token (admin requis)
+                    svc_res = await http_client.post(
+                        f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
+                        headers=headers,
+                        timeout=10.0
+                    )
+                    if svc_res.status_code == 200:
+                        svc_data = svc_res.json()
+                        effective_auth_token = svc_data.get("access_token", auth_token)
+                        effective_headers = {"Authorization": f"Bearer {effective_auth_token}"}
+                        inject(effective_headers)
+                        msg = "Token de service longue durée obtenu (TTL étendu pour batch)."
+                        await task_state_manager.update_progress(new_log=msg)
+                        yield json.dumps({"status": "info", "message": msg}) + "\n"
+                        logger.info("[reanalyze] Service token acquis via caller token.")
+                    else:
+                        # Stratégie 2 : fallback login admin depuis env vars (AGENTS.md §4)
+                        # Utilisé quand le token caller est expiré ou invalide.
+                        logger.warning(f"[reanalyze] Service token via caller échoué (HTTP {svc_res.status_code}) — tentative fallback admin credentials.")
+                        if ADMIN_SERVICE_USERNAME and ADMIN_SERVICE_PASSWORD:
+                            try:
+                                login_res = await http_client.post(
+                                    f"{USERS_API_URL.rstrip('/')}/auth/login",
+                                    json={"username": ADMIN_SERVICE_USERNAME, "password": ADMIN_SERVICE_PASSWORD},
+                                    timeout=10.0
+                                )
+                                if login_res.status_code == 200:
+                                    login_token = login_res.json().get("access_token", "")
+                                    if login_token:
+                                        admin_h = {"Authorization": f"Bearer {login_token}"}
+                                        svc_res2 = await http_client.post(
+                                            f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
+                                            headers=admin_h, timeout=10.0
+                                        )
+                                        effective_auth_token = svc_res2.json().get("access_token", login_token) if svc_res2.status_code == 200 else login_token
+                                        effective_headers = {"Authorization": f"Bearer {effective_auth_token}"}
+                                        inject(effective_headers)
+                                        msg = "Token de service obtenu via credentials admin (fallback — token caller expiré)."
+                                        await task_state_manager.update_progress(new_log=msg)
+                                        yield json.dumps({"status": "info", "message": msg}) + "\n"
+                                        logger.info("[reanalyze] Service token acquis via fallback admin credentials.")
+                                    else:
+                                        raise ValueError("Login admin : access_token vide")
+                                else:
+                                    raise ValueError(f"Login admin HTTP {login_res.status_code}: {login_res.text[:100]}")
+                            except Exception as e_admin:
+                                msg = f"WARN: Fallback admin credentials échoué: {e_admin} — token original conservé (risque d'expiration JWT)."
+                                await task_state_manager.update_progress(new_log=msg)
+                                yield json.dumps({"status": "warn", "message": msg}) + "\n"
+                                logger.warning(f"[reanalyze] Fallback admin credentials échoué: {e_admin}")
+                        else:
+                            msg = f"WARN: Service token indisponible (HTTP {svc_res.status_code}) et ADMIN_SERVICE_USERNAME/PASSWORD non configurés — token original conservé."
+                            await task_state_manager.update_progress(new_log=msg)
+                            yield json.dumps({"status": "warn", "message": msg}) + "\n"
+                            logger.warning(f"[reanalyze] Pas de fallback admin disponible. {svc_res.text[:200]}")
+                except Exception as e_svc:
+                    msg = f"WARN: Exception service token: {e_svc} — token original conservé."
                     await task_state_manager.update_progress(new_log=msg)
                     yield json.dumps({"status": "warn", "message": msg}) + "\n"
-            except Exception as e:
-                msg = f"Error fetching Google Token: {str(e)}"
-                await task_state_manager.update_progress(new_log=msg)
-                yield json.dumps({"status": "error", "message": msg}) + "\n"
+                    logger.warning(f"[reanalyze] Exception service token: {e_svc}")
 
-            # 2. Clear user competencies
-            for uid in user_ids_to_clear:
+
+                # 1.5 Get Google token
+                google_access_token = None
                 try:
-                    clear_res = await http_client.delete(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{uid}/clear", headers=headers)
-                    clear_res.raise_for_status()
-                    msg = f"Cleared competencies for user {uid}"
-                    await task_state_manager.update_progress(new_log=msg)
-                    yield json.dumps({"status": "info", "message": msg}) + "\n"
+                    tok_res = await http_client.get(f"{DRIVE_API_URL.rstrip('/')}/tokens/google", headers=effective_headers, timeout=5.0)
+                    if tok_res.status_code == 200:
+                        google_access_token = tok_res.json().get("access_token")
+                        msg = "Successfully acquired Google Access Token."
+                        await task_state_manager.update_progress(new_log=msg)
+                        yield json.dumps({"status": "info", "message": msg}) + "\n"
+                    else:
+                        msg = f"Could not fetch Google Token (status {tok_res.status_code}). Proceeding as public."
+                        await task_state_manager.update_progress(new_log=msg)
+                        yield json.dumps({"status": "warn", "message": msg}) + "\n"
                 except Exception as e:
-                    msg = f"Failed to clear competencies for user {uid}: {str(e)}"
-                    await task_state_manager.update_progress(new_log=msg, error_msg=msg)
+                    msg = f"Error fetching Google Token: {str(e)}"
+                    await task_state_manager.update_progress(new_log=msg)
                     yield json.dumps({"status": "error", "message": msg}) + "\n"
 
-            # 3. Process each CV
-            total_cvs = len(cvs)
-            
-            for index, cv in enumerate(cvs):
-                try:
-                    url = cv.source_url
-                    s_tag = cv.source_tag
-                    u_id = cv.user_id
-                    
-                    msg = f"Processing CV {index+1}/{total_cvs} (User ID: {u_id})..."
-                    await task_state_manager.update_progress(new_log=msg)
-                    yield json.dumps({"status": "processing", "message": msg, "url": url}) + "\n"
-                    
-                    # 3.1 Fetch current user name for identity check
-                    user_name = "Inconnu"
+                # 2. Clear user competencies
+                for uid in user_ids_to_clear:
                     try:
-                        u_info = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers)
-                        if u_info.status_code == 200:
-                            u_data = u_info.json()
-                            user_name = u_data.get("full_name") or u_data.get("username")
-                    except: pass
+                        clear_res = await http_client.delete(
+                            f"{COMPETENCIES_API_URL.rstrip('/')}/user/{uid}/clear",
+                            headers=effective_headers
+                        )
+                        if clear_res.status_code == 401:
+                            # Le token est invalide pour competencies_api — diagnostic explicite
+                            err_detail = clear_res.text[:300]
+                            msg = f"401 Unauthorized sur /user/{uid}/clear — le token (service ou original) est rejeté par competencies_api. Detail: {err_detail}"
+                            await task_state_manager.update_progress(new_log=msg, error_msg=msg)
+                            yield json.dumps({"status": "error", "message": msg}) + "\n"
+                            logger.error(f"[reanalyze] 401 clear user={uid}: {err_detail}")
+                            continue
+                        clear_res.raise_for_status()
+                        msg = f"Cleared competencies for user {uid}"
+                        await task_state_manager.update_progress(new_log=msg)
+                        yield json.dumps({"status": "info", "message": msg}) + "\n"
+                    except Exception as e:
+                        msg = f"Failed to clear competencies for user {uid}: {str(e)}"
+                        await task_state_manager.update_progress(new_log=msg, error_msg=msg)
+                        yield json.dumps({"status": "error", "message": msg}) + "\n"
 
-                    # 3.15 Récupérer parent_folder_name depuis drive_api
-                    # (nomenclature Zenika "Prénom Nom" — fait foi pour la résolution d'identité)
-                    reanalysis_folder_name: Optional[str] = None
-                    doc_id_match_early = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
-                    if doc_id_match_early:
-                        g_file_id = doc_id_match_early.group(1)
+                # 3. Process each CV
+                total_cvs = len(cvs)
+
+                for index, cv in enumerate(cvs):
+                    try:
+                        url = cv.source_url
+                        s_tag = cv.source_tag
+                        u_id = cv.user_id
+
+                        msg = f"Processing CV {index+1}/{total_cvs} (User ID: {u_id})..."
+                        await task_state_manager.update_progress(new_log=msg)
+                        yield json.dumps({"status": "processing", "message": msg, "url": url}) + "\n"
+
+                        # 3.1 Fetch current user name for identity check
+                        user_name = "Inconnu"
                         try:
-                            drive_state_res = await http_client.get(
-                                f"{DRIVE_API_URL.rstrip('/')}/files/{g_file_id}",
-                                headers=headers,
-                                timeout=5.0
-                            )
-                            if drive_state_res.status_code == 200:
-                                drive_state = drive_state_res.json()
-                                reanalysis_folder_name = drive_state.get("parent_folder_name")
-                                if reanalysis_folder_name:
-                                    pfn_msg = (
-                                        f"[Nomenclature Zenika] Dossier parent récupéré : "
-                                        f"'{reanalysis_folder_name}' (CV {index+1}/{total_cvs})"
-                                    )
-                                    logger.info(pfn_msg)
-                                    await task_state_manager.update_progress(new_log=pfn_msg)
-                                    yield json.dumps({"status": "info", "message": pfn_msg}) + "\n"
-                            elif drive_state_res.status_code == 404:
-                                logger.info(
-                                    f"[Reanalyze] Fichier {g_file_id} absent de drive_api (import manuel) — "
-                                    f"folder_name ignoré pour ce CV."
+                            u_info = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=effective_headers)
+                            if u_info.status_code == 200:
+                                u_data = u_info.json()
+                                user_name = u_data.get("full_name") or u_data.get("username")
+                        except Exception:
+                            pass
+
+                        # 3.15 Récupérer parent_folder_name depuis drive_api
+                        # (nomenclature Zenika "Prénom Nom" — fait foi pour la résolution d'identité)
+                        reanalysis_folder_name: Optional[str] = None
+                        doc_id_match_early = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+                        if doc_id_match_early:
+                            g_file_id = doc_id_match_early.group(1)
+                            try:
+                                drive_state_res = await http_client.get(
+                                    f"{DRIVE_API_URL.rstrip('/')}/files/{g_file_id}",
+                                    headers=effective_headers,
+                                    timeout=5.0
                                 )
-                        except Exception as e_drive:
-                            logger.warning(
-                                f"[Reanalyze] Impossible de récupérer le folder_name Drive "
-                                f"pour {g_file_id}: {e_drive}"
-                            )
-
-                    # 3.2 Re-process (avec folder_name Zenika si disponible)
-                    process_res = await _process_cv_core(
-                        url=url,
-                        google_access_token=google_access_token,
-                        source_tag=s_tag,
-                        folder_name=reanalysis_folder_name,
-                        headers=headers,
-                        token_payload=token_payload,
-                        db=db,
-                        auth_token=auth_token
-                    )
-                    
-                    # 3.3 Identity Verification logic
-                    ext = process_res.extracted_info
-                    if ext and not ext.get("is_anonymous"):
-                        def normalize(s):
-                            if not s: return ""
-                            return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
-                        
-                        ext_full = f"{normalize(ext.get('first_name'))} {normalize(ext.get('last_name'))}"
-                        cur_full = normalize(user_name)
-                        
-                        # Simple inclusion/match check
-                        if ext_full not in cur_full and cur_full not in ext_full:
-                            new_u_id = process_res.user_id
-                            warn_msg = f"⚠️ ALERTE IDENTITÉ CV #{cv.id}: Extrait='{ext.get('first_name')} {ext.get('last_name')}' (ID:{new_u_id}) vs Actuel='{user_name}' (ID:{u_id})"
-                            
-                            # Update Drive API to fix the link in Scanner page
-                            doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
-                            if doc_id_match:
-                                g_id = doc_id_match.group(1)
-                                try:
-                                    await http_client.patch(
-                                        f"{DRIVE_API_URL.rstrip('/')}/files/{g_id}", 
-                                        json={"user_id": new_u_id},
-                                        headers=headers
+                                if drive_state_res.status_code == 200:
+                                    drive_state = drive_state_res.json()
+                                    reanalysis_folder_name = drive_state.get("parent_folder_name")
+                                    if reanalysis_folder_name:
+                                        pfn_msg = (
+                                            f"[Nomenclature Zenika] Dossier parent récupéré : "
+                                            f"'{reanalysis_folder_name}' (CV {index+1}/{total_cvs})"
+                                        )
+                                        logger.info(pfn_msg)
+                                        await task_state_manager.update_progress(new_log=pfn_msg)
+                                        yield json.dumps({"status": "info", "message": pfn_msg}) + "\n"
+                                elif drive_state_res.status_code == 404:
+                                    logger.info(
+                                        f"[Reanalyze] Fichier {g_file_id} absent de drive_api (import manuel) — "
+                                        f"folder_name ignoré pour ce CV."
                                     )
-                                    warn_msg += " -> Synchronisation Drive effectuée."
-                                except Exception as e:
-                                    logger.error(f"Failed to sync drive identity for {g_id}: {e}")
-                                    warn_msg += f" (Synchro Drive échouée)"
-                            
-                            await task_state_manager.update_progress(new_log=warn_msg, mismatch_inc=1)
-                            yield json.dumps({"status": "warn", "message": warn_msg}) + "\n"
+                            except Exception as e_drive:
+                                logger.warning(
+                                    f"[Reanalyze] Impossible de récupérer le folder_name Drive "
+                                    f"pour {g_file_id}: {e_drive}"
+                                )
 
-                    msg_fin = f"Finished re-processing CV {index+1}/{total_cvs}"
-                    await task_state_manager.update_progress(processed_inc=1, new_log=msg_fin)
-                    yield json.dumps({"status": "success", "message": msg_fin, "url": url}) + "\n"
+                        # 3.2 Re-process (avec folder_name Zenika si disponible)
+                        process_res = await _process_cv_core(
+                            url=url,
+                            google_access_token=google_access_token,
+                            source_tag=s_tag,
+                            folder_name=reanalysis_folder_name,
+                            headers=effective_headers,
+                            token_payload=token_payload,
+                            db=db,
+                            auth_token=effective_auth_token
+                        )
 
-                except Exception as e:
-                    err_msg = f"CV {cv.id}: {str(e)}"
-                    await task_state_manager.update_progress(error_inc=1, new_log=f"ERREUR: {err_msg}", error_msg=err_msg)
-                    yield json.dumps({"status": "error", "message": f"Failed CV {index+1}/{total_cvs}: {err_msg}"}) + "\n"
+                        # 3.3 Identity Verification logic
+                        ext = process_res.extracted_info
+                        if ext and not ext.get("is_anonymous"):
+                            def normalize(s):
+                                if not s: return ""
+                                return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
 
-            final_status = await task_state_manager.get_latest_status()
-            yield json.dumps({
-                "status": "completed", 
-                "message": f"Réanalyse terminée. {final_status['processed_count']} succès, {final_status['error_count']} erreurs, {final_status['mismatch_count']} alertes.",
-                "count": final_status["processed_count"],
-                "errors": final_status["errors"]
-            }) + "\n"
+                            ext_full = f"{normalize(ext.get('first_name'))} {normalize(ext.get('last_name'))}"
+                            cur_full = normalize(user_name)
+
+                            # Simple inclusion/match check
+                            if ext_full not in cur_full and cur_full not in ext_full:
+                                new_u_id = process_res.user_id
+                                warn_msg = f"⚠️ ALERTE IDENTITÉ CV #{cv.id}: Extrait='{ext.get('first_name')} {ext.get('last_name')}' (ID:{new_u_id}) vs Actuel='{user_name}' (ID:{u_id})"
+
+                                # Update Drive API to fix the link in Scanner page
+                                doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+                                if doc_id_match:
+                                    g_id = doc_id_match.group(1)
+                                    try:
+                                        await http_client.patch(
+                                            f"{DRIVE_API_URL.rstrip('/')}/files/{g_id}",
+                                            json={"user_id": new_u_id},
+                                            headers=effective_headers
+                                        )
+                                        warn_msg += " -> Synchronisation Drive effectuée."
+                                    except Exception as e:
+                                        logger.error(f"Failed to sync drive identity for {g_id}: {e}")
+                                        warn_msg += f" (Synchro Drive échouée)"
+
+                                await task_state_manager.update_progress(new_log=warn_msg, mismatch_inc=1)
+                                yield json.dumps({"status": "warn", "message": warn_msg}) + "\n"
+
+                        msg_fin = f"Finished re-processing CV {index+1}/{total_cvs}"
+                        await task_state_manager.update_progress(processed_inc=1, new_log=msg_fin)
+                        yield json.dumps({"status": "success", "message": msg_fin, "url": url}) + "\n"
+
+                    except Exception as e:
+                        err_msg = f"CV {cv.id}: {str(e)}"
+                        await task_state_manager.update_progress(error_inc=1, new_log=f"ERREUR: {err_msg}", error_msg=err_msg)
+                        yield json.dumps({"status": "error", "message": f"Failed CV {index+1}/{total_cvs}: {err_msg}"}) + "\n"
+
+                final_status = await task_state_manager.get_latest_status()
+                yield json.dumps({
+                    "status": "completed",
+                    "message": f"Réanalyse terminée. {final_status['processed_count']} succès, {final_status['error_count']} erreurs, {final_status['mismatch_count']} alertes.",
+                    "count": final_status["processed_count"],
+                    "errors": final_status["errors"]
+                }) + "\n"
+
+            except Exception as _global_err:
+                # Erreur globale non catchée (ex: perte connexion DB, crash OOM, déconnexion)
+                err_detail = f"Erreur fatale du pipeline de réanalyse: {_global_err}"
+                logger.error(err_detail, exc_info=True)
+                await task_state_manager.mark_failed(err_detail)
+                yield json.dumps({"status": "error", "message": err_detail}) + "\n"
+            finally:
+                # Garantit toujours la libération du verrou, même en cas de déconnexion client.
+                # mark_failed() est idempotent : ne modifie rien si le statut est déjà completed/error.
+                await task_state_manager.mark_failed(
+                    "Stream interrompu avant la fin (déconnexion client ou crash inattendu)."
+                )
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
+
 
 @router.post("/internal/users/merge")
 async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):

@@ -10,8 +10,12 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-project")
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from main import app
-    from database import get_db
+    mock_redis = AsyncMock()
+    # It needs to return a valid JSON string or None for get()
+    mock_redis.get.return_value = None
+    with patch("redis.asyncio.from_url", return_value=mock_redis):
+        from main import app
+        from database import get_db
     from src.auth import verify_jwt
 
 def override_verify_jwt():

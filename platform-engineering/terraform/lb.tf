@@ -232,6 +232,17 @@ resource "google_compute_url_map" "default" {
       }
     }
 
+    route_rules {
+      priority = 36
+      match_rules { prefix_match = "/monitoring-mcp/" }
+      service = google_compute_backend_service.monitoring_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
 
 
     # SPA routing for all frontend views to avoid 404s on direct navigation or refresh

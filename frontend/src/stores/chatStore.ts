@@ -27,6 +27,10 @@ function unwrapToolData(toolData: any): any[] {
       if (looksLikeJson(raw)) {
         try {
           const parsed = JSON.parse(raw)
+          // Paginated MCP responses: { items: [...], total, skip, limit }
+          if (!Array.isArray(parsed) && parsed.items && Array.isArray(parsed.items)) {
+            return parsed.items
+          }
           return Array.isArray(parsed) ? parsed : [parsed]
         } catch (e) {
           // Malformed JSON — surface raw text as a readable string item

@@ -172,7 +172,19 @@ async def get_cached_tools(
         seen_names.add(fn_name)
         tools.append(proxy)
 
-    _cache["tools"] = tools
-    _cache["ts"] = now
-    logger.info("%s Cached %d unique business MCP tools (TTL=%ds).", agent_prefix, len(tools), ttl)
+    if not tools:
+        # Ne pas mettre en cache un résultat vide : cela arrive typiquement au démarrage
+        # quand auth_header_var est None (pas de requête HTTP en cours) → les APIs
+        # data retournent 401 → list_tools() échoue → 0 tools chargés.
+        # Sans ce guard, le cache vide est conservé pendant `ttl` secondes, rendant
+        # l'agent incapable d'appeler des outils pendant toute cette durée.
+        logger.warning(
+            "%s ⚠️ 0 tools loaded — cache NOT persisted so the next real request "
+            "(with a valid JWT) will trigger a fresh fetch.",
+            agent_prefix,
+        )
+    else:
+        _cache["tools"] = tools
+        _cache["ts"] = now
+        logger.info("%s Cached %d unique business MCP tools (TTL=%ds).", agent_prefix, len(tools), ttl)
     return tools

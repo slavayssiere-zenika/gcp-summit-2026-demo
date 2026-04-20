@@ -306,6 +306,26 @@ services:
     environment:
       - GCP_PROJECT_ID=slavayssiere-zenika
       - MCP_PORT=8008
+      - SECRET_KEY=${SECRET_KEY}
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=market-mcp
+    networks:
+      - monitoring_net
+
+  monitoring_mcp:
+    build: ./monitoring_mcp
+    container_name: monitoring_mcp
+    hostname: monitoring_mcp
+    ports:
+      - "8010:8010"
+    environment:
+      - GCP_PROJECT_ID=slavayssiere-zenika
+      - MCP_PORT=8010
+      - SECRET_KEY=${SECRET_KEY}
+      - OTEL_SERVICE_NAME=monitoring-mcp
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
     networks:
       - monitoring_net
 
@@ -326,6 +346,7 @@ services:
       - AGENT_OPS_API_URL=http://agent_ops_api:8080
       - AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
       - MARKET_MCP_URL=http://market_mcp:8008
+      - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/2
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
@@ -374,6 +395,7 @@ services:
       - MISSIONS_MCP_URL=http://missions_mcp:8000
       - PROMPTS_API_URL=http://prompts_api:8005
       - MARKET_MCP_URL=http://market_mcp:8008
+      - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/10
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
@@ -414,6 +436,7 @@ services:
       - PROMPTS_API_URL=http://prompts_api:8005
       - DRIVE_MCP_URL=http://drive_mcp:8000
       - MARKET_MCP_URL=http://market_mcp:8008
+      - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - LOKI_MCP_URL=http://loki_mcp:8080/sse
       - REDIS_URL=redis://redis:6379/11
       - TRACE_EXPORTER=http
@@ -448,6 +471,7 @@ services:
       - USERS_MCP_URL=http://users_api:8001
       - COMPETENCIES_MCP_URL=http://competencies_api:8003
       - MARKET_MCP_URL=http://market_mcp:8008
+      - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/12
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318

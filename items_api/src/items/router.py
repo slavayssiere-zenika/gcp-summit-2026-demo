@@ -160,12 +160,13 @@ async def get_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    # Authorization Check
-    allowed_ids = set(auth_payload.get("allowed_category_ids", []))
-    item_categories = {c.id for c in item.categories}
-    
-    if not item_categories.intersection(allowed_ids):
-        raise HTTPException(status_code=403, detail="Not authorized to view this item")
+    # Authorization Check — admin/rh bypass dynamic categories (e.g. "Missions")
+    user_role = auth_payload.get("role", "")
+    if user_role not in ("admin", "rh"):
+        allowed_ids = set(auth_payload.get("allowed_category_ids", []))
+        item_categories = {c.id for c in item.categories}
+        if not item_categories.intersection(allowed_ids):
+            raise HTTPException(status_code=403, detail="Not authorized to view this item")
 
     result = await enrich_item(item, request)
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
@@ -188,13 +189,17 @@ async def create_item(
         raise HTTPException(status_code=400, detail="One or more category IDs are invalid")
 
     # Check if user has permission for ALL requested categories using JWT payload
-    allowed_ids = auth_payload.get("allowed_category_ids", [])
-    forbidden_ids = [cid for cid in item.category_ids if cid not in allowed_ids]
-    if forbidden_ids:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"User does not have rights for categories: {forbidden_ids}"
-        )
+    # Admin and RH roles bypass category ACL (they operate on behalf of services/other users,
+    # and categories like "Missions" are created dynamically — never in JWT at login time).
+    user_role = auth_payload.get("role", "")
+    if user_role not in ("admin", "rh"):
+        allowed_ids = auth_payload.get("allowed_category_ids", [])
+        forbidden_ids = [cid for cid in item.category_ids if cid not in allowed_ids]
+        if forbidden_ids:
+            raise HTTPException(
+                status_code=403,
+                detail=f"User does not have rights for categories: {forbidden_ids}"
+            )
 
     db_item = Item(
         name=item.name,
@@ -227,16 +232,18 @@ async def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    # Only authorized user or admin can update it? We use the logic: Check if category overlap.
+    # Authorization — admin/rh bypass dynamic categories (e.g. "Missions")
+    user_role = auth_payload.get("role", "")
     allowed_ids = set(auth_payload.get("allowed_category_ids", []))
-    item_categories = {c.id for c in item.categories}
-    if not item_categories.intersection(allowed_ids):
-        raise HTTPException(status_code=403, detail="Not authorized to update this item")
+    if user_role not in ("admin", "rh"):
+        item_categories = {c.id for c in item.categories}
+        if not item_categories.intersection(allowed_ids):
+            raise HTTPException(status_code=403, detail="Not authorized to update this item")
 
     update_data = item_update.model_dump(exclude_unset=True)
     if "category_ids" in update_data:
         forbidden_ids = [cid for cid in update_data["category_ids"] if cid not in allowed_ids]
-        if forbidden_ids:
+        if user_role not in ("admin", "rh") and forbidden_ids:
             raise HTTPException(status_code=403, detail=f"User does not have rights for categories: {forbidden_ids}")
         cats = (await db.execute(select(Category).filter(Category.id.in_(update_data["category_ids"])))).scalars().all()
         item.categories = cats
@@ -267,10 +274,12 @@ async def delete_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    allowed_ids = set(auth_payload.get("allowed_category_ids", []))
-    item_categories = {c.id for c in item.categories}
-    if not item_categories.intersection(allowed_ids):
-        raise HTTPException(status_code=403, detail="Not authorized to delete this item")
+    user_role = auth_payload.get("role", "")
+    if user_role not in ("admin", "rh"):
+        allowed_ids = set(auth_payload.get("allowed_category_ids", []))
+        item_categories = {c.id for c in item.categories}
+        if not item_categories.intersection(allowed_ids):
+            raise HTTPException(status_code=403, detail="Not authorized to delete this item")
 
     await db.delete(item)
     await db.commit()

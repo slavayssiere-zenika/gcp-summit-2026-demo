@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText, MessageSquare } from 'lucide-vue-next'
+import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText, MessageSquare, Activity } from 'lucide-vue-next'
 
 const md = markdownit({
   html: true,
@@ -26,7 +26,8 @@ const tabs: SpecTab[] = [
   { id: 'competencies', name: 'Competencies API', url: '/api/competencies/spec', versionUrl: '/api/competencies/version', icon: Network },
   { id: 'cv', name: 'CV API', url: '/api/cv/spec', versionUrl: '/api/cv/version', icon: FileText },
   { id: 'drive', name: 'Drive API', url: '/api/drive/spec', versionUrl: '/api/drive/version', icon: Database },
-  { id: 'market', name: 'Market (MCP)', url: '/market-mcp/mcp/tools', versionUrl: '/market-mcp/version', icon: Network }
+  { id: 'market', name: 'Market (MCP)', url: '/market-mcp/spec', versionUrl: '/market-mcp/version', icon: Network },
+  { id: 'monitoring', name: 'Monitoring (MCP)', url: '/monitoring-mcp/spec', versionUrl: '/monitoring-mcp/version', icon: Activity }
 ]
 
 const versions = ref<Record<string, string>>({})

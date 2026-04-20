@@ -90,6 +90,10 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         name  = "MARKET_MCP_URL"
         value = "http://api.internal.zenika/api/market/"
       }
+      env {
+        name  = "MONITORING_MCP_URL"
+        value = "http://api.internal.zenika/monitoring-mcp/"
+      }
       # SEC-F06 — Semantic Cache LLM
       env {
         name  = "SEMANTIC_CACHE_ENABLED"

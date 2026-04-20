@@ -193,6 +193,17 @@ resource "google_compute_region_url_map" "internal_url_map" {
         }
       }
     }
+
+    route_rules {
+      priority = 201
+      match_rules { prefix_match = "/monitoring-mcp/" }
+      service = google_compute_region_backend_service.monitoring_internal_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
   }
 }
 

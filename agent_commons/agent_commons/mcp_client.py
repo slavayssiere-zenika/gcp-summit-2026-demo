@@ -202,6 +202,7 @@ _clients: dict[str, Optional[MCPHttpClient]] = {
     "drive": None,
     "missions": None,
     "market": None,
+    "monitoring": None,
 }
 
 
@@ -222,6 +223,8 @@ def init_mcp_clients() -> None:
             _clients["missions"] = MCPHttpClient(os.getenv("MISSIONS_MCP_URL", os.getenv("MISSIONS_API_URL", "http://missions_mcp:8009")))
         if _clients["market"] is None:
             _clients["market"] = MCPHttpClient(os.getenv("MARKET_MCP_URL", "http://market_mcp:8008"))
+        if _clients["monitoring"] is None:
+            _clients["monitoring"] = MCPHttpClient(os.getenv("MONITORING_MCP_URL", "http://monitoring_mcp:8010"))
 
 
 async def get_users_mcp() -> MCPHttpClient:
@@ -257,3 +260,7 @@ async def get_market_mcp() -> MCPHttpClient:
 async def get_missions_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return _clients["missions"]  # type: ignore[return-value]
+
+async def get_monitoring_mcp() -> MCPHttpClient:
+    init_mcp_clients()
+    return _clients["monitoring"]  # type: ignore[return-value]

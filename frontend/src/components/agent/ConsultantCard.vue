@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Mail, CheckCircle2, XCircle, ArrowRight, Hash, EyeOff } from 'lucide-vue-next'
+import { Mail, CheckCircle2, XCircle, ArrowRight, Hash, EyeOff, ShieldCheck } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 
 const props = defineProps<{
@@ -11,6 +11,8 @@ const props = defineProps<{
     email?: string
     is_active?: boolean
     is_anonymous?: boolean
+    picture_url?: string
+    role?: string
   }
 }>()
 
@@ -30,8 +32,15 @@ const goToProfile = () => {
 <template>
   <div class="consultant-card" @click="goToProfile" aria-label="Voir le profil du consultant">
     <!-- Avatar -->
-    <div class="avatar" :class="{ anonymous: consultant.is_anonymous }">
-      {{ getInitials(consultant.full_name || consultant.username) }}
+    <div class="avatar" :class="{ anonymous: consultant.is_anonymous, 'has-picture': !!consultant.picture_url }">
+      <img
+        v-if="consultant.picture_url && !consultant.is_anonymous"
+        :src="consultant.picture_url"
+        :alt="consultant.full_name || consultant.username"
+        class="avatar-img"
+        @error="($event.target as HTMLImageElement).style.display='none'"
+      />
+      <span v-else>{{ getInitials(consultant.full_name || consultant.username) }}</span>
     </div>
 
     <!-- Info -->
@@ -50,12 +59,16 @@ const goToProfile = () => {
       </div>
     </div>
 
-    <!-- Status + Arrow -->
+    <!-- Status + Role + Arrow -->
     <div class="right-col">
+      <span v-if="consultant.role === 'admin'" class="role-badge">
+        <ShieldCheck size="10" />
+        Admin
+      </span>
       <span class="status-badge" :class="{ active: consultant.is_active !== false }">
         <CheckCircle2 v-if="consultant.is_active !== false" size="11" />
         <XCircle v-else size="11" />
-        {{ consultant.is_active !== false ? 'Dispo' : 'Indispo' }}
+        {{ consultant.is_active !== false ? 'Actif' : 'Inactif' }}
       </span>
       <ArrowRight size="14" class="arrow" />
     </div>
@@ -95,6 +108,19 @@ const goToProfile = () => {
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(227, 25, 55, 0.2);
+  overflow: hidden;
+}
+
+.avatar.has-picture {
+  background: transparent;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
 }
 
 .avatar.anonymous {
@@ -185,6 +211,20 @@ const goToProfile = () => {
 .status-badge:not(.active) {
   background: rgba(100, 116, 139, 0.08);
   color: #64748b;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(227, 25, 55, 0.08);
+  color: var(--zenika-red);
 }
 
 .arrow {

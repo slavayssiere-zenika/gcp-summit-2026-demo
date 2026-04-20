@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, APIRouter
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, APIRouter, Response
 from pydantic import BaseModel
 import asyncio
 import os
@@ -28,11 +28,8 @@ from mcp_server import list_tools, call_tool, get_aiops_dashboard_data_internal
 from auth import verify_jwt
 from logger import setup_logging, LoggingMiddleware
 
-# --- Purge des secrets sensibles dès le démarrage (anti prompt-injection) ---
-_SECRET_KEY = os.getenv("SECRET_KEY")
-if not _SECRET_KEY and os.getenv("ENVIRONMENT") == "prod":
-    raise ValueError("SECRET_KEY must be set in environment variables")
-os.environ.pop("SECRET_KEY", None)
+# La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py, 
+# importé ci-dessus, ce qui empêche une disparition prématurée de la variable d'env lors des imports.
 
 provider = TracerProvider(
     resource=Resource.create({
@@ -297,6 +294,14 @@ async def health():
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
+
+@app.get("/spec")
+async def get_spec():
+    try:
+        with open("spec.md", "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/markdown")
+    except Exception:
+        return Response(content="# Market MCP — Spécification introuvable", media_type="text/markdown")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))

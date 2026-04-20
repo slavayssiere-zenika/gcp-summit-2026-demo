@@ -7,7 +7,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY agent_router_api/requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # ---- Runtime Stage ----
@@ -24,12 +24,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/wheels /wheels
-COPY requirements.txt .
+COPY agent_router_api/requirements.txt .
 
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
-COPY . ./
+COPY agent_router_api/ ./
 
 ENV PYTHONPATH=/app
 ENV GEMINI_MODEL=gemini-2.5-flash
@@ -45,6 +45,7 @@ ENV AGENT_OPS_API_URL=http://agent_ops_api:8080
 ENV AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
 ENV PROMPTS_API_URL=http://prompts_api:8000
 ENV MARKET_MCP_URL=http://market_mcp:8080
+ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
 ENV REDIS_URL=redis://redis:6379/1
 # SEC-F06 — Semantic Cache LLM
 ENV SEMANTIC_CACHE_ENABLED=true

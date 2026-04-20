@@ -58,8 +58,8 @@ Ce micro-service se base sur :
 - **GET** `/missions/{mission_id}/status/history` : Get Mission Status History
 - **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **GET** `/missions/{mission_id}` : Get Mission
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec

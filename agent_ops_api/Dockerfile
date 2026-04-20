@@ -59,6 +59,7 @@ ENV CV_MCP_URL=http://cv_api:8004
 ENV MISSIONS_MCP_URL=http://missions_api:8009
 ENV DRIVE_MCP_URL=http://drive_api:8080
 ENV LOKI_MCP_URL=http://loki:3100/mcp
+ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
 EXPOSE 8080
 
 RUN useradd -m appuser && chown -R appuser /app

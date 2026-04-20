@@ -89,6 +89,99 @@ async def test_mcp_tools_generic_error(mock_httpx_mcp):
     assert "Error: Boom" in result[0].text
 
 
+# ── Evaluation MCP Tools Tests ────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_mcp_tools_get_user_evaluations(mock_httpx_mcp):
+    """get_user_competency_evaluations doit retourner la liste des evaluations."""
+    mock_resp = MagicMock(status_code=200)
+    mock_resp.json.return_value = [
+        {
+            "id": 1, "user_id": 42, "competency_id": 7,
+            "competency_name": "Kubernetes",
+            "ai_score": 3.5, "ai_justification": "Utilise en mission sur 2 ans.",
+            "user_score": 4.0, "user_comment": "Je me sens a l aise."
+        }
+    ]
+    mock_httpx_mcp.get.return_value = mock_resp
+
+    result = await call_tool("get_user_competency_evaluations", {"user_id": 42})
+    assert result, "Doit retourner au moins un element"
+    data = json.loads(result[0].text)
+    assert isinstance(data, list)
+    assert data[0]["competency_name"] == "Kubernetes"
+    assert data[0]["ai_score"] == 3.5
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_set_user_score(mock_httpx_mcp):
+    """set_user_competency_score doit POSTer et retourner l'evaluation mise a jour."""
+    mock_resp = MagicMock(status_code=200)
+    mock_resp.json.return_value = {
+        "id": 1, "user_id": 42, "competency_id": 7,
+        "competency_name": "Kubernetes",
+        "ai_score": 3.5, "user_score": 4.0, "user_comment": "OK"
+    }
+    mock_httpx_mcp.post.return_value = mock_resp
+
+    result = await call_tool("set_user_competency_score", {
+        "user_id": 42,
+        "competency_id": 7,
+        "score": 4.0,
+        "comment": "OK"
+    })
+    data = json.loads(result[0].text)
+    assert data["user_score"] == 4.0
+    assert data["competency_name"] == "Kubernetes"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_set_user_score_without_comment(mock_httpx_mcp):
+    """Le commentaire est optionnel — le body ne doit pas inclure la cle comment si absent."""
+    mock_resp = MagicMock(status_code=200)
+    mock_resp.json.return_value = {
+        "id": 1, "user_id": 1, "competency_id": 3,
+        "competency_name": "Python", "ai_score": 4.0, "user_score": 3.5, "user_comment": None
+    }
+    mock_httpx_mcp.post.return_value = mock_resp
+
+    result = await call_tool("set_user_competency_score", {
+        "user_id": 1,
+        "competency_id": 3,
+        "score": 3.5
+        # Pas de comment
+    })
+    data = json.loads(result[0].text)
+    assert data["user_score"] == 3.5
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_trigger_ai_scoring(mock_httpx_mcp):
+    """trigger_ai_scoring doit declencher le scoring IA et retourner le nombre de competences traitees."""
+    mock_resp = MagicMock(status_code=200)
+    mock_resp.json.return_value = {
+        "user_id": 42,
+        "triggered": 15,
+        "message": "Scoring IA lance en arriere-plan pour 15 competences."
+    }
+    mock_httpx_mcp.post.return_value = mock_resp
+
+    result = await call_tool("trigger_ai_scoring", {"user_id": 42})
+    data = json.loads(result[0].text)
+    assert data["user_id"] == 42
+    assert data["triggered"] == 15
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_evaluation_list_includes_new_tools():
+    """La liste des tools MCP doit contenir les 3 nouveaux tools d'evaluation."""
+    tools = await list_tools()
+    tool_names = {t.name for t in tools}
+    assert "get_user_competency_evaluations" in tool_names, "Tool manquant: get_user_competency_evaluations"
+    assert "set_user_competency_score" in tool_names, "Tool manquant: set_user_competency_score"
+    assert "trigger_ai_scoring" in tool_names, "Tool manquant: trigger_ai_scoring"
+
+
 # MCP App Tests
 def test_mcp_app_tools_list():
     resp = client.get("/mcp/tools")

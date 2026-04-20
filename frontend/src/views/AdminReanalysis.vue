@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   Network,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Unlock
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
@@ -122,10 +123,29 @@ const triggerReanalysis = async () => {
       }
     }
   } catch (e: any) {
-    error.value = e.message || "Erreur lors de la réanalyse"
+    const errData = e?.response?.data || {}
+    const detail = errData?.detail || e.message || 'Erreur lors de la réanalyse'
+    // Détection du verrou zombie
+    if (detail.includes('déjà en cours') || detail.includes('already running')) {
+      error.value = detail + ' Utilisez le bouton "Écraser le verrou" si aucune opération n\'est réellement active.'
+    } else {
+      error.value = detail
+    }
     addLog(`ÉCHEC CRITIQUE: ${error.value}`)
   } finally {
     isLoading.value = false
+  }
+}
+
+const resetReanalysisLock = async () => {
+  if (!confirm('Forcer la réinitialisation du verrou de réanalyse ? À utiliser uniquement si une tâche est bloquée sans raison.')) return
+  try {
+    await axios.delete('/api/cv/reanalyze/reset')
+    isLoading.value = false
+    error.value = ''
+    addLog('✅ Verrou réinitialisé. Vous pouvez relancer une réanalyse.')
+  } catch (e: any) {
+    addLog(`Erreur reset verrou: ${e?.response?.data?.detail || e.message}`)
   }
 }
 
@@ -133,6 +153,7 @@ const triggerReanalysis = async () => {
 const isTreeLoading = ref(false)
 const treeResult = ref<any>(null)
 const treeCost = ref<number | null>(null)
+const treePollingInterval = ref<any>(null)
 
 const triggerRemapping = async () => {
   if (confirm("Générer la nouvelle taxonomie écrasera votre affichage actuel. Êtes-vous sûr ?")) {
@@ -140,19 +161,60 @@ const triggerRemapping = async () => {
     error.value = ''
     treeResult.value = null
     treeCost.value = null
-    addLog("Calcul de la nouvelle taxonomie via Gemini...")
+    addLog("Lancement du calcul de la nouvelle taxonomie via Gemini...")
     
     try {
-      const resp = await axios.post('/api/cv/recalculate_tree')
-      treeResult.value = resp.data.tree || resp.data
-      treeCost.value = resp.data.usage?.estimated_cost_usd || null
-      addLog("Nouvelle taxonomie générée avec succès.")
+      await axios.post('/api/cv/recalculate_tree')
+      checkTreeTaskStatus()
     } catch (e: any) {
-      error.value = e.response?.data?.detail || e.message || "Erreur lors du calcul de l'arbre"
+      error.value = e.response?.data?.detail || e.message || "Erreur lors du lancement du calcul de l'arbre"
       addLog(`ERREUR arbre: ${error.value}`)
-    } finally {
       isTreeLoading.value = false
     }
+  }
+}
+
+const checkTreeTaskStatus = async () => {
+  try {
+    const resp = await axios.get('/api/cv/recalculate_tree/status')
+    const data = resp.data
+    
+    if (data.status === 'running') {
+      isTreeLoading.value = true
+      treeResult.value = null
+      
+      if (data.logs && data.logs.length > 0) {
+          const latestLog = data.logs[data.logs.length - 1]
+          const msg = latestLog.includes('] ') ? latestLog.split('] ')[1] : latestLog
+          if (logs.value.length === 0 || !logs.value[0].includes(msg)) {
+              addLog(msg)
+          }
+      }
+      
+      if (!treePollingInterval.value) {
+        treePollingInterval.value = setInterval(checkTreeTaskStatus, 3000)
+      }
+    } else {
+      isTreeLoading.value = false
+      if (treePollingInterval.value) {
+        clearInterval(treePollingInterval.value)
+        treePollingInterval.value = null
+      }
+      
+      if (data.status === 'completed' && data.tree) {
+        treeResult.value = data.tree
+        treeCost.value = data.usage?.estimated_cost_usd || null
+        if (!successMessage.value.includes('Taxonomie')) {
+            successMessage.value = "Nouvelle taxonomie générée avec succès."
+            addLog("Nouvelle taxonomie générée avec succès.")
+        }
+      } else if (data.status === 'error') {
+        error.value = data.error || "Erreur lors du calcul de l'arbre"
+        addLog(`ERREUR arbre: ${error.value}`)
+      }
+    }
+  } catch (e) {
+    console.error('Failed to check tree task status', e)
   }
 }
 
@@ -208,10 +270,14 @@ const checkTaskStatus = async () => {
 
 onMounted(() => {
   checkTaskStatus()
+  checkTreeTaskStatus()
 })
 onUnmounted(() => {
   if (pollingInterval.value) {
     clearInterval(pollingInterval.value)
+  }
+  if (treePollingInterval.value) {
+    clearInterval(treePollingInterval.value)
   }
 })
 </script>
@@ -315,9 +381,20 @@ onUnmounted(() => {
             class="action-btn danger-btn" 
             @click="triggerReanalysis" 
             :disabled="isLoading || (filterType === 'tag' && !filterTag) || (filterType === 'user' && !selectedUser)"
+            id="btn-launch-reanalysis"
           >
             <RefreshCw :class="{ spin: isLoading }" size="20" />
             {{ isLoading ? 'Réanalyse en cours...' : 'Lancer la Réanalyse' }}
+          </button>
+          <button
+            v-if="isLoading"
+            class="action-btn reset-btn"
+            @click="resetReanalysisLock"
+            id="btn-reset-reanalysis-lock"
+            title="Forcer la réinitialisation du verrou si la tâche est bloquée"
+          >
+            <Unlock size="16" />
+            Écraser le verrou (tâche zombie)
           </button>
         </div>
       </div>
@@ -632,6 +709,23 @@ onUnmounted(() => {
 .secondary-btn:hover:not(:disabled) {
   border-color: var(--zenika-red);
   color: var(--zenika-red);
+}
+
+.reset-btn {
+  background: rgba(251, 146, 60, 0.1);
+  border: 1px dashed #fb923c;
+  color: #ea580c;
+  font-size: 0.82rem;
+  padding: 0.6rem 1rem;
+  opacity: 0.85;
+  transition: all 0.2s;
+}
+
+.reset-btn:hover {
+  background: rgba(251, 146, 60, 0.2);
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(251, 146, 60, 0.2);
 }
 
 .action-btn:disabled {

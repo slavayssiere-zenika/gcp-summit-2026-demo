@@ -450,7 +450,7 @@ async def reanalyze_mission(
     return {"task_id": task_id, "status": "processing"}
 
 @router.get("/missions/task/{task_id}")
-async def get_mission_task_status(task_id: str):
+async def get_mission_task_status(task_id: str, _: dict = Depends(verify_jwt)):
     stat = await task_manager.get_task(task_id)
     if not stat:
         raise HTTPException(status_code=404, detail="Task introuvable.")
@@ -465,6 +465,7 @@ async def force_invalidate(prompt_key: str, token_payload: dict = Depends(verify
 async def list_missions(
     db: AsyncSession = Depends(database.get_db),
     status: str = None,
+    _: dict = Depends(verify_jwt),
 ):
     query = select(Mission).order_by(Mission.created_at.desc())
     if status:
@@ -568,7 +569,7 @@ async def get_mission_status_history(
     return history_result.scalars().all()
 
 @router.get("/missions/user/{user_id}/active")
-async def get_active_missions_for_user(user_id: int, db: AsyncSession = Depends(database.get_db)):
+async def get_active_missions_for_user(user_id: int, db: AsyncSession = Depends(database.get_db), _: dict = Depends(verify_jwt)):
     """Retourne toutes les missions où l'utilisateur (user_id) figure dans proposed_team.
 
     Utilisé par le tool MCP get_user_availability (users_api) pour détecter les conflits
@@ -604,7 +605,7 @@ async def get_active_missions_for_user(user_id: int, db: AsyncSession = Depends(
 
 
 @router.get("/missions/{mission_id}", response_model=MissionAnalyzeResponse)
-async def get_mission(mission_id: int, db: AsyncSession = Depends(database.get_db)):
+async def get_mission(mission_id: int, db: AsyncSession = Depends(database.get_db), _: dict = Depends(verify_jwt)):
     result = await db.execute(select(Mission).where(Mission.id == mission_id))
     m = result.scalars().first()
     if not m:

@@ -37,6 +37,8 @@ ENV ROOT_PATH=/comp-api
 ENV APP_VERSION=dev
 ENV USE_IAM_AUTH=false
 ENV USERS_API_URL=http://users_api:8000
+ENV CV_API_URL=http://cv_api:8004
+ENV GEMINI_MODEL=gemini-3.1-flash-lite-preview
 EXPOSE 8003
 
 RUN useradd -m appuser && chown -R appuser /app

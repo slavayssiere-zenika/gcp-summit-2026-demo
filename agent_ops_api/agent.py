@@ -31,13 +31,16 @@ app_logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 DRIVE_MCP_URL = os.getenv("DRIVE_MCP_URL", "http://drive_api:8006")
 MARKET_MCP_URL = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+MONITORING_MCP_URL = os.getenv("MONITORING_MCP_URL", "http://monitoring_mcp:8010")
 
 drive_client = MCPHttpClient(DRIVE_MCP_URL)
 market_client = MCPHttpClient(MARKET_MCP_URL)
+monitoring_client = MCPHttpClient(MONITORING_MCP_URL)
 
 _OPS_CLIENTS_MAP = [
     ("drive", drive_client),
     ("market", market_client),
+    ("monitoring", monitoring_client),
 ]
 
 # Cache isolé pour cet agent

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
@@ -25,7 +25,7 @@ class CompetencyResponse(CompetencyBase):
     id: int
     created_at: datetime
     sub_competencies: List['CompetencyResponse'] = []
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -68,3 +68,34 @@ class CompetencyCount(BaseModel):
 
 class CompetencyStatsResponse(BaseModel):
     items: List[CompetencyCount]
+
+
+# ── Evaluation Schemas ────────────────────────────────────────────────────────
+
+class CompetencyEvaluationResponse(BaseModel):
+    """Réponse complète d'une évaluation : note IA + note utilisateur."""
+    id: int
+    user_id: int
+    competency_id: int
+    competency_name: str
+    ai_score: Optional[float] = None
+    ai_justification: Optional[str] = None
+    ai_scored_at: Optional[datetime] = None
+    user_score: Optional[float] = None
+    user_comment: Optional[str] = None
+    user_scored_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserScoreRequest(BaseModel):
+    """Saisie manuelle de la note auto-évaluée par le consultant."""
+    score: float = Field(..., ge=0.0, le=5.0, description="Note de 0 à 5 (multiples de 0.5 recommandés)")
+    comment: Optional[str] = Field(None, max_length=500)
+
+
+class AiScoreAllResponse(BaseModel):
+    """Résultat du déclenchement du scoring IA batch."""
+    user_id: int
+    triggered: int
+    message: str

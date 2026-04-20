@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { User, Activity, Mail, Award, CheckCircle2, FileText, Briefcase } from 'lucide-vue-next'
+import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.vue'
+
 
 const route = useRoute()
 const userId = route.params.id
@@ -135,6 +137,12 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+      <!-- Evaluation Panel (pleine largeur) -->
+      <div v-if="userProfile" class="eval-section">
+        <CompetencyEvaluationPanel :userId="Number(userId)" :readonly="true" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -170,6 +178,11 @@ onMounted(async () => {
   grid-template-columns: 320px 1fr;
   gap: 2rem;
   align-items: start;
+}
+
+.eval-section {
+  grid-column: 1 / -1;
+  margin-top: 1.5rem;
 }
 
 .glass-card {

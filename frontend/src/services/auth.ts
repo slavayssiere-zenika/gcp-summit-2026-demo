@@ -37,8 +37,11 @@ axios.interceptors.response.use((response) => {
 }, async (error) => {
   const originalRequest = error.config;
 
-  // Prevent refreshing logic if 401 comes from any auth route (login, refresh, me)
-  if (error.response?.status === 401 && !originalRequest._retry && !(originalRequest.url && originalRequest.url.includes('/auth/'))) {
+  // Prevent refreshing logic if 401 comes from auth routes or if it's the refresh call itself
+  const authRoutes = ['/auth/login', '/auth/refresh', '/auth/me', '/auth/logout'];
+  const isAuthRoute = originalRequest.url && authRoutes.some(route => originalRequest.url.includes(route));
+
+  if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
     originalRequest._retry = true;
 
     if (isRefreshing) {
@@ -59,7 +62,10 @@ axios.interceptors.response.use((response) => {
     isRefreshing = true;
 
     try {
-      const { data } = await axios.post('/auth/refresh', {}, { withCredentials: true });
+      const { data } = await axios.post('/auth/refresh', {}, { 
+        withCredentials: true,
+        headers: { '_isRefreshCall': 'true' } as any 
+      });
       const newAccessToken = data.access_token;
 
       localStorage.setItem('access_token', newAccessToken);

@@ -34,7 +34,7 @@ def discover_versions():
     components = [
         "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
         "users_api", "items_api", "competencies_api",
-        "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp",
+        "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp", "monitoring_mcp",
         "db_migrations", "frontend"
     ]
     
@@ -69,6 +69,7 @@ SERVICE_IMAGE_MAP = {
     "prompts":        "prompts_api",
     "db_migrations":  "db_migrations",
     "market":         "market_mcp",
+    "monitoring":     "monitoring_mcp",
     "agent_router":   "agent_router_api",
     "agent_hr":       "agent_hr_api",
     "agent_ops":      "agent_ops_api",
@@ -295,6 +296,7 @@ def build_importable_resources_map(env, project_id, region):
         "google_cloud_run_v2_service.agent_router_api":   f"{cr_base}/agent-router-api-{env}",
         "google_cloud_run_v2_service.agent_missions_api": f"{cr_base}/agent-missions-api-{env}",
         "google_cloud_run_v2_service.market_mcp":         f"{cr_base}/market-mcp-{env}",
+        "google_cloud_run_v2_service.monitoring_mcp":     f"{cr_base}/monitoring-mcp-{env}",
         "google_cloud_run_v2_service.prompts_api":      f"{cr_base}/prompts-api-{env}",
         "google_cloud_run_v2_service.users_api":        f"{cr_base}/users-api-{env}",
         "google_cloud_run_v2_service.competencies_api": f"{cr_base}/competencies-api-{env}",
@@ -312,6 +314,7 @@ def build_importable_resources_map(env, project_id, region):
         "google_monitoring_custom_service.drive_api_svc":        f"{mon_base}/drive-api-service-{env}",
         "google_monitoring_custom_service.items_api_svc":        f"{mon_base}/items-api-service-{env}",
         "google_monitoring_custom_service.market_mcp_svc":       f"{mon_base}/market-mcp-service-{env}",
+        "google_monitoring_custom_service.monitoring_mcp_svc":   f"{mon_base}/monitoring-mcp-service-{env}",
         "google_monitoring_custom_service.missions_api_svc":     f"{mon_base}/missions-api-service-{env}",
         "google_monitoring_custom_service.prompts_api_svc":      f"{mon_base}/prompts-api-service-{env}",
         "google_monitoring_custom_service.users_api_svc":        f"{mon_base}/users-api-service-{env}",
