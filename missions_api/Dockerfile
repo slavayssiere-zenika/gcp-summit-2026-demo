@@ -48,4 +48,4 @@ EXPOSE 8004
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--no-server-header"]
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--no-server-header"]

@@ -22,7 +22,7 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
     containers {
       name    = "api"
       image   = var.image_agent_missions
-      command = ["python"]
+      command = ["python3"]
       args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
       ports {
         container_port = 8080

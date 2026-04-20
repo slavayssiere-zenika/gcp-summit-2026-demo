@@ -135,16 +135,21 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
         url=req.url,
         google_access_token=req.google_access_token,
         source_tag=req.source_tag,
+        folder_name=req.folder_name,
         headers=headers,
         token_payload=token_payload,
         db=db,
         auth_token=auth_header.replace("Bearer ", "") if "Bearer " in auth_header else auth_header
     )
 
-async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None) -> CVResponse:
+async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None, folder_name: Optional[str] = None) -> CVResponse:
     """
-    Pipeline principal d'ingestion d'un CV en 8 étapes séquentielles.
+    Pipeline principal d'ingéstion d'un CV en 8 étapes séquentielles.
     Retourne un CVResponse enrichi avec les étapes (steps) et les warnings non-bloquants.
+
+    folder_name: nom du dossier Drive parent direct (ex: "Marie Dupont"), transmis par drive_api
+    selon la nomenclature Zenika («Prénom Nom»). Fait foi pour la résolution d'identité si
+    divergence avec l'analyse LLM.
     """
     pipeline_steps: List[CVImportStep] = []
     pipeline_warnings: List[str] = []
@@ -366,35 +371,93 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         if s.lower() in ("null", "none", "", "unknown"): return None
         return s
 
-    raw_email = sanitize_field(structured_cv.get("email"))
-    first_name = sanitize_field(structured_cv.get("first_name"))
-    last_name = sanitize_field(structured_cv.get("last_name"))
-    is_anonymous = structured_cv.get("is_anonymous", False)
-    trigram = sanitize_field(structured_cv.get("trigram"))
+    def normalize_str(s: str) -> str:
+        if not s: return ""
+        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
 
-    # STAFF-SEC : Valider de façon stricte les prénoms/noms pour éviter une faille de "CSV hallucination" ou string malformée
     NAME_REGEX = r"^[A-Za-zÀ-ÿ\s\-\']+$"
-    if first_name and not re.match(NAME_REGEX, first_name):
-        logger.warning(f"Invalid first_name format rejected: {first_name}")
-        first_name = None
-    if last_name and not re.match(NAME_REGEX, last_name):
-        logger.warning(f"Invalid last_name format rejected: {last_name}")
-        last_name = None
+
+    def is_valid_name(n: Optional[str]) -> bool:
+        return bool(n and re.match(NAME_REGEX, n))
 
     EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
     def is_valid_email(e: Optional[str]) -> bool:
         return bool(e and re.match(EMAIL_REGEX, e))
 
-    def normalize_str(s: str) -> str:
-        if not s: return ""
-        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
+    raw_email = sanitize_field(structured_cv.get("email"))
+    llm_first_name = sanitize_field(structured_cv.get("first_name"))
+    llm_last_name = sanitize_field(structured_cv.get("last_name"))
+    is_anonymous = structured_cv.get("is_anonymous", False)
+    trigram = sanitize_field(structured_cv.get("trigram"))
+
+    # STAFF-SEC : Valider les noms LLM (rejet si format invalide — anti hallucination)
+    if llm_first_name and not is_valid_name(llm_first_name):
+        logger.warning(f"Invalid first_name format rejected from LLM: {llm_first_name}")
+        llm_first_name = None
+    if llm_last_name and not is_valid_name(llm_last_name):
+        logger.warning(f"Invalid last_name format rejected from LLM: {llm_last_name}")
+        llm_last_name = None
+
+    # ── Résolution prioritaire via folder_name (nomenclature Zenika "Prénom Nom") ──
+    # Le folder_name transmis par drive_api fait foi.
+    folder_first_name: Optional[str] = None
+    folder_last_name: Optional[str] = None
+
+    if folder_name and folder_name.strip():
+        parts = folder_name.strip().split(None, 1)  # Split sur le premier espace
+        if len(parts) == 2:
+            folder_first_name = sanitize_field(parts[0])
+            folder_last_name = sanitize_field(parts[1])
+            if not is_valid_name(folder_first_name):
+                folder_first_name = None
+            if not is_valid_name(folder_last_name):
+                folder_last_name = None
+            logger.info(
+                f"[folder_name] Nomenclature Zenika détectée : "
+                f"'{folder_first_name}' '{folder_last_name}' (depuis '{folder_name}')"
+            )
+        elif len(parts) == 1:
+            # Dossier avec un seul mot (ex: trigramme ou alias) — ignorer pour identité
+            logger.info(f"[folder_name] Nom de dossier mono-composant '{folder_name}' — ignoré pour résolution identité.")
+
+    # Détection de divergence LLM vs folder_name (folder fait foi)
+    first_name = folder_first_name or llm_first_name
+    last_name = folder_last_name or llm_last_name
+
+    if folder_first_name and folder_last_name:
+        if llm_first_name and llm_last_name:
+            fn_match = normalize_str(folder_first_name) == normalize_str(llm_first_name)
+            ln_match = normalize_str(folder_last_name) == normalize_str(llm_last_name)
+            if not (fn_match and ln_match):
+                warn_folder = (
+                    f"⚠️ Divergence d'identité — Dossier Drive : '{folder_first_name} {folder_last_name}' "
+                    f"/ LLM : '{llm_first_name} {llm_last_name}'. "
+                    f"Le nom du dossier fait foi."
+                )
+                logger.warning(warn_folder)
+                # Warning visible dans l'UI de synchronisation ET de resynchronisation
+                _step_warn(
+                    "folder_identity",
+                    "Résolution identité — Divergence dossier vs LLM",
+                    0,
+                    warn_folder
+                )
+                pipeline_warnings.append(warn_folder)
+                # Le folder_name fait foi → on utilise folder_first/last_name
+                first_name = folder_first_name
+                last_name = folder_last_name
+
+    if not is_valid_name(first_name):
+        first_name = None
+    if not is_valid_name(last_name):
+        last_name = None
 
     if not is_valid_email(raw_email):
         if first_name and last_name:
             clean_f = normalize_str(first_name).replace(" ", "")
             clean_l = normalize_str(last_name).replace(" ", "")
             email = f"{clean_f}.{clean_l}@zenika.com"
-            logger.info(f"Invalid/Missing email in CV. Generated: {email}")
+            logger.info(f"Email absent/invalide dans le CV. Généré : {email}")
             pipeline_warnings.append(f"Email absent ou invalide dans le CV — email généré : {email}")
         else:
             is_anonymous = True
@@ -402,7 +465,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             first_name = "Anon"
             last_name = trigram
             email = f"anon.{trigram.lower()}@anonymous.zenika.com"
-            logger.warning(f"Total identity absence. Generated random: {email}")
+            logger.warning(f"Identité totalement absente. Profil anonymisé : {email}")
             pipeline_warnings.append("Identité introuvable dans le CV — profil anonymisé automatiquement")
     else:
         email = raw_email
@@ -413,34 +476,80 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         user_id = None
         importer_id = None
 
-        if email:
-            search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
+        # Recherche prioritaire par folder_name (nomenclature Zenika) si disponible
+        if folder_first_name and folder_last_name:
+            folder_search_q = f"{folder_first_name} {folder_last_name}"
+            logger.info(f"[folder_name] Recherche utilisateur prioritaire par dossier : '{folder_search_q}'")
+            fn_res = await http_client.get(
+                f"{USERS_API_URL.rstrip('/')}/search",
+                params={"query": folder_search_q, "limit": 10},
+                headers=headers
+            )
+            if fn_res.status_code == 200:
+                for u in fn_res.json().get("items", []):
+                    if (
+                        normalize_str(u.get("first_name")) == normalize_str(folder_first_name)
+                        and normalize_str(u.get("last_name")) == normalize_str(folder_last_name)
+                    ):
+                        user_id = u["id"]
+                        logger.info(
+                            f"[folder_name] Utilisateur trouvé par dossier Drive : "
+                            f"'{folder_search_q}' → ID {user_id}"
+                        )
+                        break
+
+        # Fallback : recherche par email (si pas trouvé par folder_name)
+        if not user_id and email:
+            search_res = await http_client.get(
+                f"{USERS_API_URL.rstrip('/')}/search",
+                params={"query": email, "limit": 10},
+                headers=headers
+            )
             if search_res.status_code == 200:
                 for u in search_res.json().get("items", []):
                     if u.get("email", "").lower() == email.lower():
-                        u_full_norm = normalize_str(u.get("full_name") or f"{u.get('first_name')} {u.get('last_name')}")
+                        u_full_norm = normalize_str(
+                            u.get("full_name") or f"{u.get('first_name')} {u.get('last_name')}"
+                        )
                         if ext_full_norm and ext_full_norm.strip():
                             if ext_full_norm not in u_full_norm and u_full_norm not in ext_full_norm:
-                                logger.warning(f"Email {email} found but name mismatch: Extracted '{ext_full_norm}' vs System '{u_full_norm}'. Detaching.")
+                                logger.warning(
+                                    f"Email {email} trouvé mais nom divergent : "
+                                    f"extrait='{ext_full_norm}' / système='{u_full_norm}'. Détachement."
+                                )
                                 continue
                         user_id = u["id"]
-                        logger.info(f"User matched by identity: {email} -> ID: {user_id}")
+                        logger.info(f"Utilisateur trouvé par email : {email} → ID {user_id}")
                         break
 
+        # Fallback sémantique par nom LLM (si ni folder_name ni email n'ont matchés)
         if not user_id and first_name and last_name:
-            logger.info(f"Identity {email} not matched in system. Attempting semantic fallback on name: {first_name} {last_name}.")
+            logger.info(
+                f"Identité non trouvée. Fallback sémantique LLM : '{first_name} {last_name}'."
+            )
             search_q = f"{first_name} {last_name}"
-            name_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": search_q, "limit": 10}, headers=headers)
+            name_res = await http_client.get(
+                f"{USERS_API_URL.rstrip('/')}/search",
+                params={"query": search_q, "limit": 10},
+                headers=headers
+            )
             if name_res.status_code == 200:
                 for u in name_res.json().get("items", []):
-                    if normalize_str(u.get("first_name")) == normalize_str(first_name) and normalize_str(u.get("last_name")) == normalize_str(last_name):
+                    if (
+                        normalize_str(u.get("first_name")) == normalize_str(first_name)
+                        and normalize_str(u.get("last_name")) == normalize_str(last_name)
+                    ):
                         user_id = u["id"]
-                        logger.info(f"User matched semantically by name -> ID: {user_id}")
+                        logger.info(f"Utilisateur trouvé par nom sémantique → ID {user_id}")
                         break
 
         importer_username = token_payload.get("sub")
         if importer_username:
-            importer_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": importer_username, "limit": 10}, headers=headers)
+            importer_res = await http_client.get(
+                f"{USERS_API_URL.rstrip('/')}/search",
+                params={"query": importer_username, "limit": 10},
+                headers=headers
+            )
             if importer_res.status_code == 200:
                 for u in importer_res.json().get("items", []):
                     if u.get("username", "").lower() == importer_username.lower():
@@ -450,7 +559,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         filename = os.path.basename(url).lower()
         if not is_anonymous:
             if "annonym" in filename or "anon" in filename or "abc" in filename:
-                logger.info("Anonymity detected based on filename.")
+                logger.info("Anonymité détectée d'après le nom du fichier.")
                 is_anonymous = True
                 if first_name != "Anon":
                     trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
@@ -462,11 +571,14 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             "first_name": first_name,
             "last_name": last_name,
             "email": email,
-            "is_anonymous": is_anonymous
+            "is_anonymous": is_anonymous,
+            "folder_name": folder_name,
         }
 
         if user_id and is_anonymous:
-            user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+            user_info_res = await http_client.get(
+                f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers
+            )
             if user_info_res.status_code == 200:
                 user_data = user_info_res.json()
                 if not user_data.get("is_anonymous", False):
@@ -475,10 +587,10 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                     await task_state_manager.update_progress(new_log=warn_msg)
                     user_id = None
                 else:
-                    logger.info(f"CV is anonymous and User {user_id} is already anonymous. Keeping link.")
+                    logger.info(f"CV anonyme sur User déjà anonyme {user_id}. Maintenu.")
 
         if not user_id:
-            logger.info(f"User not found, creating {'anonymous ' if is_anonymous else ''}user...")
+            logger.info(f"Utilisateur non trouvé — création {'anonyme ' if is_anonymous else ''}...")
             new_u = {
                 "username": f"{first_name[0].lower()}{last_name.lower()}{random.randint(100, 999)}",
                 "email": email,
@@ -488,16 +600,22 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                 "password": "zenikacv123",
                 "is_anonymous": is_anonymous
             }
-            create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+            create_res = await http_client.post(
+                f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers
+            )
 
-            if create_res.status_code == 409 or (create_res.status_code >= 400 and "already exists" in create_res.text.lower()):
+            if create_res.status_code == 409 or (
+                create_res.status_code >= 400 and "already exists" in create_res.text.lower()
+            ):
                 host = email.split('@')[1] if '@' in email else "zenika.com"
                 prefix = email.split('@')[0] if '@' in email else "conflict"
                 conflict_email = f"{prefix}.conflict.{random.randint(1000, 9999)}@{host}"
-                logger.warning(f"Email conflict for {email}. Detaching identity via {conflict_email}")
+                logger.warning(f"Conflit email {email}. Détachement vers {conflict_email}")
                 pipeline_warnings.append(f"Conflit d'email ({email}) — identité détachée vers {conflict_email}")
                 new_u["email"] = conflict_email
-                create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+                create_res = await http_client.post(
+                    f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers
+                )
 
             if create_res.status_code >= 400:
                 dur = int((time.monotonic() - t0) * 1000)
@@ -507,11 +625,14 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                 raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
 
             user_id = create_res.json()["id"]
-            logger.info(f"User created with ID {user_id}")
+            logger.info(f"Utilisateur créé avec ID {user_id}")
 
         dur = int((time.monotonic() - t0) * 1000)
+        identity_detail = f"User ID {user_id}"
+        if folder_name:
+            identity_detail += f" | dossier='{folder_name}'"
         mode = "anonyme" if is_anonymous else f"email={email}"
-        _step_ok("user_resolve", "Résolution & création d'identité", dur, f"User ID {user_id} ({mode})")
+        _step_ok("user_resolve", "Résolution & création d'identité", dur, f"{identity_detail} ({mode})")
 
         # ── Étape 4 : Mapping des compétences ─────────────────────────────────
         t0 = time.monotonic()
@@ -1325,11 +1446,46 @@ async def reanalyze_cvs(
                             user_name = u_data.get("full_name") or u_data.get("username")
                     except: pass
 
-                    # 3.2 Re-process
+                    # 3.15 Récupérer parent_folder_name depuis drive_api
+                    # (nomenclature Zenika "Prénom Nom" — fait foi pour la résolution d'identité)
+                    reanalysis_folder_name: Optional[str] = None
+                    doc_id_match_early = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+                    if doc_id_match_early:
+                        g_file_id = doc_id_match_early.group(1)
+                        try:
+                            drive_state_res = await http_client.get(
+                                f"{DRIVE_API_URL.rstrip('/')}/files/{g_file_id}",
+                                headers=headers,
+                                timeout=5.0
+                            )
+                            if drive_state_res.status_code == 200:
+                                drive_state = drive_state_res.json()
+                                reanalysis_folder_name = drive_state.get("parent_folder_name")
+                                if reanalysis_folder_name:
+                                    pfn_msg = (
+                                        f"[Nomenclature Zenika] Dossier parent récupéré : "
+                                        f"'{reanalysis_folder_name}' (CV {index+1}/{total_cvs})"
+                                    )
+                                    logger.info(pfn_msg)
+                                    await task_state_manager.update_progress(new_log=pfn_msg)
+                                    yield json.dumps({"status": "info", "message": pfn_msg}) + "\n"
+                            elif drive_state_res.status_code == 404:
+                                logger.info(
+                                    f"[Reanalyze] Fichier {g_file_id} absent de drive_api (import manuel) — "
+                                    f"folder_name ignoré pour ce CV."
+                                )
+                        except Exception as e_drive:
+                            logger.warning(
+                                f"[Reanalyze] Impossible de récupérer le folder_name Drive "
+                                f"pour {g_file_id}: {e_drive}"
+                            )
+
+                    # 3.2 Re-process (avec folder_name Zenika si disponible)
                     process_res = await _process_cv_core(
                         url=url,
                         google_access_token=google_access_token,
                         source_tag=s_tag,
+                        folder_name=reanalysis_folder_name,
                         headers=headers,
                         token_payload=token_payload,
                         db=db,

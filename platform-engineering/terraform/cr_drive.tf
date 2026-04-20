@@ -19,7 +19,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
     containers {
       name    = "api"
       image   = var.image_drive
-      command = ["python"]
+      command = ["python3"]
       args    = ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]
       ports {
         container_port = 8080
@@ -110,7 +110,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
     containers {
       name    = "mcp"
       image   = var.image_drive
-      command = ["python"]
+      command = ["python3"]
       args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081", "--no-server-header"]
       dynamic "startup_probe" {
         for_each = terraform.workspace == "dev" ? [] : [1]

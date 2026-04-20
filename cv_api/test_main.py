@@ -483,3 +483,485 @@ def test_import_cv_not_a_cv_boolean_check(mocker):
     
     assert response.status_code == 400
     assert "Not a CV" in response.json()["detail"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests — Nomenclature Zenika : folder_name dans /import
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email="jean.dupont@zenika.com"):
+    """Helper : configure tous les mocks nécessaires pour un import CV complet."""
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Contenu du CV de test")
+
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.aio.models.generate_content = AsyncMock()
+    mock_genai.aio.models.generate_content.return_value.text = (
+        f'{{"is_cv": true, "first_name": "{first_name}", "last_name": "{last_name}", '
+        f'"email": "{email}", "summary": "Expert", "current_role": "Dev", '
+        f'"years_of_experience": 5, "competencies": [{{"name": "Python", "parent": "Lang"}}], '
+        f'"missions": [], "is_anonymous": false}}'
+    )
+    mock_genai.aio.models.embed_content = AsyncMock()
+    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    prompt_mock = MagicMock()
+    prompt_mock.raise_for_status = MagicMock()
+    prompt_mock.json.return_value = {"value": "Prompt systeme"}
+
+    users_mock = MagicMock(status_code=200)
+    users_mock.json.return_value = {"items": []}
+
+    create_mock = MagicMock(status_code=200)
+    create_mock.json.return_value = {"id": 42}
+
+    comps_mock = MagicMock(status_code=200)
+    comps_mock.json.return_value = {"items": []}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "prompts_api" in url:
+            return prompt_mock
+        if "/users/" in url or "search" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
+        return MagicMock(status_code=200)
+
+    def post_se(*a, **kw):
+        return create_mock
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = post_se
+    return ci
+
+
+def test_import_cv_with_folder_name_zenika_nomenclature(mocker):
+    """
+    UC1 — Import avec folder_name 'Prénom Nom' : le user_resolve doit réussir
+    et extracted_info doit contenir folder_name.
+    """
+    _make_full_import_mocks(mocker)
+
+    response = client.post(
+        "/import",
+        json={
+            "url": "http://docs.google.com/document/d/abc123/edit",
+            "folder_name": "Marie Dupont"
+        },
+        headers={"Authorization": "Bearer token"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == 42
+    assert "steps" in data
+    assert "warnings" in data
+
+    # extracted_info doit porter folder_name
+    if data.get("extracted_info"):
+        assert data["extracted_info"].get("folder_name") == "Marie Dupont"
+
+    # Aucun step ne doit être en erreur
+    error_steps = [s for s in data["steps"] if s["status"] == "error"]
+    assert not error_steps, f"Des steps sont en erreur: {error_steps}"
+
+
+def test_import_cv_folder_name_priority_over_llm(mocker):
+    """
+    UC2 — folder_name fait foi sur l'identité LLM.
+    LLM renvoie 'Pierre Martin', folder_name = 'Marie Durand'.
+    Un warning divergence doit apparaître ET folder_name doit être utilisé.
+    """
+    ci = _make_full_import_mocks(mocker, first_name="Pierre", last_name="Martin")
+
+    # Simuler que la recherche par folder_name ('Marie Durand') trouve l'utilisateur ID 99
+    folder_match_mock = MagicMock(status_code=200)
+    folder_match_mock.json.return_value = {
+        "items": [{"id": 99, "first_name": "Marie", "last_name": "Durand", "email": "marie.durand@zenika.com"}]
+    }
+
+    create_mock = MagicMock(status_code=200)
+    create_mock.json.return_value = {"id": 99}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "prompts_api" in url:
+            m = MagicMock(); m.raise_for_status = MagicMock(); m.json.return_value = {"value": "P"}; return m
+        if "search" in url:
+            return folder_match_mock
+        if "/competencies/" in url:
+            m = MagicMock(status_code=200); m.json.return_value = {"items": []}; return m
+        return MagicMock(status_code=200)
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = lambda *a, **kw: create_mock
+
+    response = client.post(
+        "/import",
+        json={
+            "url": "http://docs.google.com/document/d/diverge456/edit",
+            "folder_name": "Marie Durand"
+        },
+        headers={"Authorization": "Bearer token"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    # Un warning de divergence doit être présent
+    divergence_warnings = [w for w in data.get("warnings", []) if "divergence" in w.lower() or "dossier" in w.lower()]
+    assert divergence_warnings, (
+        f"Un warning de divergence LLM/dossier attendu. Warnings reçus: {data.get('warnings')}"
+    )
+
+    # L'étape folder_identity doit être présente (statut warning)
+    folder_step = next((s for s in data["steps"] if s["step"] == "folder_identity"), None)
+    assert folder_step is not None, "L'étape 'folder_identity' doit être présente en cas de divergence"
+    assert folder_step["status"] == "warning"
+
+
+def test_import_cv_folder_name_single_word_ignored(mocker):
+    """
+    UC3 — Un folder_name mono-composant (trigramme, alias) est ignoré pour l'identité.
+    Pas de warning divergence, résolution LLM classique.
+    """
+    _make_full_import_mocks(mocker)
+
+    response = client.post(
+        "/import",
+        json={
+            "url": "http://docs.google.com/document/d/mono789/edit",
+            "folder_name": "JDU"   # trigramme — 1 seul mot
+        },
+        headers={"Authorization": "Bearer token"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    # Aucun warning de divergence dossier/LLM
+    divergence_warnings = [w for w in data.get("warnings", []) if "divergence" in w.lower()]
+    assert not divergence_warnings, f"Pas de warning divergence attendu pour un trigramme. Reçu: {divergence_warnings}"
+
+    # Pas d'étape folder_identity (pas de divergence détectée)
+    folder_step = next((s for s in data["steps"] if s["step"] == "folder_identity"), None)
+    assert folder_step is None, "Pas d'étape folder_identity attendue pour un nom mono-composant"
+
+
+def test_import_cv_without_folder_name_llm_fallback(mocker):
+    """
+    UC4 — Import sans folder_name (frontend manuel, MCP sans hint) :
+    la résolution LLM classique doit fonctionner normalement.
+    """
+    _make_full_import_mocks(mocker)
+
+    response = client.post(
+        "/import",
+        json={"url": "http://docs.google.com/document/d/nofolder/edit"},
+        headers={"Authorization": "Bearer token"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == 42
+
+    # Aucune étape folder_identity (aucun dossier fourni)
+    folder_step = next((s for s in data["steps"] if s["step"] == "folder_identity"), None)
+    assert folder_step is None, "Pas d'étape folder_identity attendue sans folder_name"
+
+
+def test_import_cv_schema_folder_name_optional():
+    """
+    UC5 — folder_name est optionnel dans CVImportRequest (rétrocompatibilité).
+    Un payload sans folder_name ne doit pas provoquer d'erreur de validation.
+    """
+    from src.cvs.schemas import CVImportRequest
+    req = CVImportRequest(url="https://docs.google.com/document/d/abc/edit")
+    assert req.folder_name is None
+
+    req2 = CVImportRequest(url="https://docs.google.com/document/d/abc/edit", folder_name="Alice Martin")
+    assert req2.folder_name == "Alice Martin"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests — /reanalyze : récupération folder_name depuis drive_api
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _make_reanalyze_mocks(mocker):
+    """Helper : mocks standards pour le flux /reanalyze."""
+    mock_db = AsyncMock()
+    mock_cv = MagicMock()
+    mock_cv.id = 1
+    mock_cv.user_id = 10
+    mock_cv.source_url = "https://docs.google.com/document/d/GFILE123/edit"
+    mock_cv.source_tag = "Nantes"
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_cv]
+    mock_db.execute.return_value = mock_result
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Contenu CV")
+
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.aio.models.generate_content = AsyncMock()
+    mock_genai.aio.models.generate_content.return_value.text = (
+        '{"is_cv": true, "first_name": "Alice", "last_name": "Beaumont", '
+        '"email": "alice.beaumont@zenika.com", "summary": "Expert", "current_role": "Dev", '
+        '"years_of_experience": 3, "competencies": [{"name": "Go"}], "missions": [], "is_anonymous": false}'
+    )
+    mock_genai.aio.models.embed_content = AsyncMock()
+    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
+
+    return mock_db
+
+
+def test_reanalyze_uses_folder_name_from_drive_api(mocker):
+    """
+    UC6 — /reanalyze : quand drive_api retourne 200 avec parent_folder_name,
+    le nom est transmis à _process_cv_core (vérifié via les warnings CVResponse).
+    """
+    _make_reanalyze_mocks(mocker)
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    # drive_api/files/GFILE123 → 200 avec parent_folder_name
+    drive_state_mock = MagicMock(status_code=200)
+    drive_state_mock.json.return_value = {
+        "google_file_id": "GFILE123",
+        "parent_folder_name": "Alice Beaumont",
+        "status": "IMPORTED_CV"
+    }
+
+    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": [], "full_name": "Alice Beaumont"}
+    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 10}
+    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "tokens/google" in url:
+            return google_tok_mock
+        if "/files/GFILE123" in url:
+            return drive_state_mock
+        if "prompts_api" in url:
+            return prompt_mock
+        if "search" in url or "/users/" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
+        return MagicMock(status_code=200)
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = lambda *a, **kw: create_mock
+    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+
+    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
+    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
+        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
+    ))
+
+    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+    # Consommer le streaming
+    lines = [l for l in response.text.strip().split("\n") if l]
+    assert response.status_code == 200
+
+    # Vérifier que drive_api a bien été appelé pour récupérer le folder
+    drive_calls = [
+        call for call in ci.get.call_args_list
+        if "files/GFILE123" in str(call)
+    ]
+    assert drive_calls, "drive_api GET /files/GFILE123 doit être appelé pendant /reanalyze"
+
+
+def test_reanalyze_drive_api_404_manual_import(mocker):
+    """
+    UC7 — /reanalyze : quand drive_api retourne 404 (import manuel),
+    folder_name reste None et on continue sans erreur (mode dégradé propre).
+    """
+    _make_reanalyze_mocks(mocker)
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    drive_404_mock = MagicMock(status_code=404)
+    drive_404_mock.json.return_value = {"detail": "Not found"}
+
+    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 10}
+    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "tokens/google" in url:
+            return google_tok_mock
+        if "/files/GFILE123" in url:
+            return drive_404_mock
+        if "prompts_api" in url:
+            return prompt_mock
+        if "search" in url or "/users/" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
+        return MagicMock(status_code=200)
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = lambda *a, **kw: create_mock
+    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+
+    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
+    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
+        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
+    ))
+
+    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+
+    # Le streaming ne doit pas contenir d'erreur liée au 404 drive
+    content = response.text
+    drive_error_lines = [
+        l for l in content.split("\n") if l
+        and "error" in l.lower()
+        and "folder" in l.lower()
+    ]
+    assert not drive_error_lines, f"Pas d'erreur attendue sur 404 drive_api. Trouvé: {drive_error_lines}"
+
+
+def test_reanalyze_drive_api_network_error_degraded(mocker):
+    """
+    UC8 — /reanalyze : quand drive_api est inaccessible (timeout/réseau),
+    folder_name = None et le pipeline continue normalement (mode dégradé).
+    Aucune exception ne doit remonter au client.
+    """
+    _make_reanalyze_mocks(mocker)
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 10}
+    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "tokens/google" in url:
+            return google_tok_mock
+        if "/files/GFILE123" in url:
+            raise ConnectionError("drive_api unreachable")   # Simule une erreur réseau
+        if "prompts_api" in url:
+            return prompt_mock
+        if "search" in url or "/users/" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
+        return MagicMock(status_code=200)
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = lambda *a, **kw: create_mock
+    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+
+    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
+    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
+        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
+    ))
+
+    # Le pipeline doit retourner 200 malgré l'erreur drive_api
+    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+
+    # Le stream doit se terminer par "completed"
+    lines = [l for l in response.text.strip().split("\n") if l]
+    last_event = json.loads(lines[-1]) if lines else {}
+    assert last_event.get("status") == "completed", f"Dernier événement attendu 'completed'. Reçu: {last_event}"
+
+
+def test_reanalyze_url_without_google_doc_id(mocker):
+    """
+    UC9 — /reanalyze : si la source_url n'est pas un Google Doc (pas de /d/{id}),
+    l'étape drive_api est ignorée silencieusement.
+    """
+    mock_db = AsyncMock()
+    mock_cv = MagicMock()
+    mock_cv.id = 2
+    mock_cv.user_id = 20
+    mock_cv.source_url = "https://external-cv-host.com/cv.pdf"  # pas de /d/{id}
+    mock_cv.source_tag = "Paris"
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_cv]
+    mock_db.execute.return_value = mock_result
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mocker.patch("src.cvs.router._fetch_cv_content", return_value="CV externe")
+
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.aio.models.generate_content = AsyncMock()
+    mock_genai.aio.models.generate_content.return_value.text = (
+        '{"is_cv": true, "first_name": "Bob", "last_name": "External", '
+        '"email": "bob@external.com", "summary": "", "current_role": "Dev", '
+        '"years_of_experience": 1, "competencies": [{"name": "Rust"}], "missions": [], "is_anonymous": false}'
+    )
+    mock_genai.aio.models.embed_content = AsyncMock()
+    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 20}
+    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
+
+    def get_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "tokens/google" in url:
+            return google_tok_mock
+        if "prompts_api" in url:
+            return prompt_mock
+        if "search" in url or "/users/" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
+        return MagicMock(status_code=200)
+
+    ci.get.side_effect = get_se
+    ci.post.side_effect = lambda *a, **kw: create_mock
+    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+
+    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
+    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
+    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
+        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
+    ))
+
+    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+
+    # drive_api /files ne doit PAS être appelé (pas d'ID Google Doc dans l'URL)
+    drive_calls = [c for c in ci.get.call_args_list if "/files/" in str(c)]
+    assert not drive_calls, f"drive_api /files ne doit pas être appelé pour une URL non-GDoc. Appels: {drive_calls}"

@@ -76,4 +76,4 @@ RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 # Graceful Shutdown — pas de shell wrapper (Golden Rules §9.3)
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]

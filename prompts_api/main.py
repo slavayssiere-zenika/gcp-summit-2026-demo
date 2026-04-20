@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import os
+
 from fastapi import FastAPI, Response, Request
 from contextlib import asynccontextmanager
 import database
@@ -6,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from opentelemetry import trace
-import os
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
@@ -52,9 +54,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-import asyncio
-import os
-import logging
 
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
@@ -77,8 +76,11 @@ async def health_check(response: Response):
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
-from src.prompts.router import verify_jwt
+import httpx
 from fastapi import APIRouter, Depends
+from src.prompts.router import verify_jwt
+from opentelemetry.propagate import inject
+
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @protected_router.get("/spec")
@@ -88,6 +90,38 @@ async def get_spec():
             return Response(content=f.read(), media_type="text/markdown")
     except Exception:
         return Response(content="# Specification introuvable", media_type="text/markdown")
+
+# Rule §3 (AGENTS.md): Toute logique métier expose un proxy vers son MCP sidecar
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+async def proxy_mcp(path: str, request: Request):
+    sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://prompts_mcp:8000")
+    url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("content-length", None)
+    inject(headers)  # Rule §5 (AGENTS.md): inject OTel trace context
+
+    body = await request.body()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.request(
+                request.method,
+                url,
+                content=body,
+                headers=headers,
+                timeout=60.0
+            )
+            res_headers = dict(res.headers)
+            res_headers.pop("content-encoding", None)
+            res_headers.pop("content-length", None)
+            return Response(content=res.content, status_code=res.status_code, headers=res_headers)
+        except Exception as e:
+            return Response(content=str(e), status_code=502)
 
 app.include_router(protected_router)  # /spec MUST be registered before /{key} wildcard
 app.include_router(router.router, prefix="", tags=["prompts"])

@@ -91,3 +91,40 @@ databaseChangeLog:
                   type: "integer"
                   constraints:
                     nullable: true
+
+  - changeSet:
+      id: "5"
+      author: "antigravity"
+      comment: "Ajout du nom du dossier Drive racine (nomenclature Zenika Prénom Nom)"
+      changes:
+        - addColumn:
+            tableName: "drive_folders"
+            columns:
+              - column:
+                  name: "folder_name"
+                  type: "varchar(255)"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_folders"
+            columnName: "folder_name"
+
+  - changeSet:
+      id: "6"
+      author: "antigravity"
+      comment: "Ajout du nom du dossier parent direct du fichier (résolution identité Zenika)"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "parent_folder_name"
+                  type: "varchar(255)"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "parent_folder_name"
+

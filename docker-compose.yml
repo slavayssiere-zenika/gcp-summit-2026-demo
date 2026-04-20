@@ -326,7 +326,7 @@ services:
       - AGENT_OPS_API_URL=http://agent_ops_api:8080
       - AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
       - MARKET_MCP_URL=http://market_mcp:8008
-      - REDIS_URL=redis://redis:6379/1
+      - REDIS_URL=redis://redis:6379/2
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=agent-router-api

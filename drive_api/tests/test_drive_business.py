@@ -277,3 +277,253 @@ def test_version_matches_version_file(client):
         # version peut être injectée via APP_VERSION env var
         # le test vérifie juste que la clé existe
         assert "version" in resp.json()
+
+
+# ── Tests folder_name — Nomenclature Zenika ──────────────────────────────────
+
+def test_add_folder_stores_folder_name(client, mocker):
+    """POST /folders avec un folder Google Drive doit stocker le folder_name récupéré via l'API Drive."""
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Marie Dupont"}
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+
+    resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_xyz", "tag": "Paris"},
+        headers=AUTH_HEADER
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["folder_name"] == "Marie Dupont"
+
+
+def test_add_folder_uses_manual_folder_name_if_drive_fails(client, mocker):
+    """POST /folders : si l'API Drive échoue, le folder_name fourni manuellement est retenu."""
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.side_effect = Exception("Drive unavailable")
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+
+    resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_abc2", "tag": "Lyon", "folder_name": "Jean Martin"},
+        headers=AUTH_HEADER
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["folder_name"] == "Jean Martin"
+
+
+def test_add_folder_folder_name_nullable_when_drive_fails(client, mocker):
+    """POST /folders : si Drive échoue ET pas de folder_name manuel, folder_name est null."""
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.side_effect = Exception("Drive unavailable")
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+
+    resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_abc3", "tag": "Bordeaux"},
+        headers=AUTH_HEADER
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["folder_name"] is None
+
+
+def test_add_folder_invalidates_redis_cache(client, mocker):
+    """POST /folders doit invalider la clé Redis drive:roots."""
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Test Folder"}
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+
+    mock_redis = MagicMock()
+    mocker.patch("src.router.get_redis", return_value=mock_redis)
+
+    resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_cache_test", "tag": "Nantes"},
+        headers=AUTH_HEADER
+    )
+    assert resp.status_code == 200
+    mock_redis.delete.assert_called_with("drive:roots")
+
+
+def test_delete_folder_invalidates_redis_cache(client, mocker):
+    """DELETE /folders/{id} doit invalider la clé Redis drive:roots."""
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Delete Test"}
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+
+    mock_redis = MagicMock()
+    mocker.patch("src.router.get_redis", return_value=mock_redis)
+
+    # Créer un folder
+    create_resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_del_cache", "tag": "Rennes"},
+        headers=AUTH_HEADER
+    )
+    folder_id = create_resp.json()["id"]
+
+    mock_redis.reset_mock()
+    del_resp = client.delete(f"/folders/{folder_id}", headers=AUTH_HEADER)
+    assert del_resp.status_code == 200
+    mock_redis.delete.assert_called_with("drive:roots")
+
+
+# ── Tests règle d'exclusion underscore ────────────────────────────────────────
+
+def test_underscore_folder_excluded_in_resolve(mocker):
+    """
+    _resolve_root_and_parent doit retourner (None, None, None) quand un dossier
+    commence par underscore, signalant son exclusion du périmètre de sync.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+    from src.drive_service import DriveService
+
+    mock_db = AsyncMock()
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # Mock Drive API : le folder parent s'appelle "_Archive"
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.return_value = {
+        "name": "_Archive",
+        "parents": []
+    }
+
+    # Instanciation manuelle (sans passer par DI)
+    service = DriveService.__new__(DriveService)
+    service.db = mock_db
+    service.drive = mock_drive
+    service.redis = mock_redis
+
+    import asyncio
+    roots = [{"id": 1, "google_folder_id": "root_id_abc", "tag": "Paris", "folder_name": "CVs Paris"}]
+
+    result = asyncio.get_event_loop().run_until_complete(
+        service._resolve_root_and_parent("some_parent_id", roots)
+    )
+    root, parent_id, parent_name = result
+    assert root is None, "Un dossier '_Archive' doit être exclu (préfixe underscore)"
+    assert parent_id is None
+    assert parent_name is None
+
+
+def test_filestate_response_has_parent_folder_name(client):
+    """GET /files doit retourner parent_folder_name dans chaque FileStateResponse."""
+    resp = client.get("/files", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    # Liste vide OK, mais on vérifie que le schéma est accepté
+    assert isinstance(resp.json(), list)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests — GET /files/{google_file_id} (nouveau endpoint)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_get_file_state_by_id_with_parent_folder_name(client, mocker):
+    """
+    UC-DRIVE-1 — GET /files/{google_file_id} : retourne le DriveSyncState du fichier
+    avec parent_folder_name (nomenclature Zenika 'Prénom Nom').
+    """
+    # Créer un folder d'abord
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Sophia Weber"}
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.redis_client.get_redis", return_value=MagicMock())
+
+    folder_resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_sw", "tag": "Strasbourg"},
+        headers=AUTH_HEADER
+    )
+    assert folder_resp.status_code == 200
+    folder_id = folder_resp.json()["id"]
+
+    # Insérer un DriveSyncState manuellement via DB
+    from sqlalchemy.orm import sessionmaker, Session
+    from src.models import DriveSyncState, DriveSyncStatus
+    with sync_engine.connect() as conn:
+        conn.execute(
+            DriveSyncState.__table__.insert().values(
+                google_file_id="GFILE_SW_001",
+                folder_id=folder_id,
+                file_name="CV Sophia Weber.gdoc",
+                status="IMPORTED_CV",
+                parent_folder_name="Sophia Weber",
+            )
+        )
+        conn.commit()
+
+    resp = client.get("/files/GFILE_SW_001", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["google_file_id"] == "GFILE_SW_001"
+    assert data["parent_folder_name"] == "Sophia Weber"
+    assert data["file_name"] == "CV Sophia Weber.gdoc"
+
+
+def test_get_file_state_by_id_found_without_folder_name(client, mocker):
+    """
+    UC-DRIVE-2 — GET /files/{google_file_id} : fichier sans parent_folder_name
+    (import manuel, avant la mise en place de la nomenclature Zenika).
+    parent_folder_name doit être null.
+    """
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "CVs Bordeaux"}
+    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.redis_client.get_redis", return_value=MagicMock())
+
+    folder_resp = client.post(
+        "/folders",
+        json={"google_folder_id": "folder_bx", "tag": "Bordeaux"},
+        headers=AUTH_HEADER
+    )
+    folder_id = folder_resp.json()["id"]
+
+    from src.models import DriveSyncState
+    with sync_engine.connect() as conn:
+        conn.execute(
+            DriveSyncState.__table__.insert().values(
+                google_file_id="GFILE_BX_MANUAL",
+                folder_id=folder_id,
+                file_name="CV externe.gdoc",
+                status="IMPORTED_CV",
+                parent_folder_name=None,  # import manuel — pas de dossier Drive
+            )
+        )
+        conn.commit()
+
+    resp = client.get("/files/GFILE_BX_MANUAL", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["google_file_id"] == "GFILE_BX_MANUAL"
+    assert data["parent_folder_name"] is None, "Un import manuel ne doit pas avoir de parent_folder_name"
+
+
+def test_get_file_state_by_id_not_found(client):
+    """
+    UC-DRIVE-3 — GET /files/{google_file_id} : fichier inconnu → 404 propre.
+    Cas : import manuel ou ID Google Drive incorrect — drive_api répond 404.
+    Le cv_api/reanalyze gère ce cas en mode dégradé (folder_name = None).
+    """
+    resp = client.get("/files/GFILE_UNKNOWN_XYZ", headers=AUTH_HEADER)
+    assert resp.status_code == 404
+    data = resp.json()
+    assert "detail" in data
+    assert "GFILE_UNKNOWN_XYZ" in data["detail"]
+
+
+def test_get_file_state_by_id_requires_jwt(client):
+    """
+    UC-DRIVE-4 — GET /files/{google_file_id} nécessite un JWT valide (Zero-Trust).
+    """
+    original = app.dependency_overrides.pop(verify_jwt, None)
+    try:
+        resp = client.get("/files/GFILE_ANY", headers={})
+        assert resp.status_code == 401
+    finally:
+        if original:
+            app.dependency_overrides[verify_jwt] = original
+        else:
+            app.dependency_overrides[verify_jwt] = override_verify_jwt

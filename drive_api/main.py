@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, title="Drive Synchronization API", root_path=os.getenv("ROOT_PATH", ""))
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")  # Rule §5 (AGENTS.md): OTel auto-instrumentation
 
 from fastapi.middleware.cors import CORSMiddleware
 

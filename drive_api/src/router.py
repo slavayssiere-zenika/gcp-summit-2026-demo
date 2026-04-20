@@ -4,9 +4,11 @@ from sqlalchemy.future import select
 from src.schemas import FolderCreate, FolderResponse, StatusResponse
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from database import get_db
+import re
 import traceback
 
 from src.drive_service import DriveService
+from src.redis_client import get_redis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,7 +28,6 @@ def verify_admin(request: Request):
     # In production, decode JWT and check role="admin"
     return True
 
-import re
 
 @router.post("/folders", response_model=FolderResponse)
 async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
@@ -34,15 +35,38 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
     match = re.search(r"folders/([a-zA-Z0-9_-]+)", raw_id)
     if match:
         raw_id = match.group(1)
-        
+
     existing = (await db.execute(select(DriveFolder).filter(DriveFolder.google_folder_id == raw_id))).scalars().first()
     if existing:
         raise HTTPException(status_code=400, detail="Folder ID already registered.")
-        
-    db_f = DriveFolder(google_folder_id=raw_id, tag=folder.tag.strip())
+
+    # Récupération automatique du nom du dossier Drive (nomenclature Zenika "Prénom Nom")
+    resolved_folder_name = folder.folder_name  # Fallback sur la valeur manuelle si fournie
+    try:
+        from src.google_auth import get_drive_service
+        drive = get_drive_service()
+        folder_meta = drive.files().get(
+            fileId=raw_id,
+            fields="name",
+            supportsAllDrives=True
+        ).execute()
+        resolved_folder_name = folder_meta.get("name") or resolved_folder_name
+        logger.info(f"[add_folder] Nom Drive récupéré pour {raw_id}: '{resolved_folder_name}'")
+    except Exception as e:
+        logger.warning(f"[add_folder] Impossible de récupérer le nom Drive pour {raw_id}: {e}")
+
+    db_f = DriveFolder(google_folder_id=raw_id, tag=folder.tag.strip(), folder_name=resolved_folder_name)
     db.add(db_f)
     await db.commit()
     await db.refresh(db_f)
+
+    # Invalider le cache drive:roots
+    try:
+        get_redis().delete("drive:roots")
+        logger.info("[Cache] drive:roots invalidé (nouveau folder enregistré).")
+    except Exception as e_redis:
+        logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
+
     return db_f
 
 @router.get("/folders", response_model=list[FolderResponse])
@@ -56,6 +80,12 @@ async def delete_folder(folder_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Not Found")
     await db.delete(f)
     await db.commit()
+    # Invalider le cache drive:roots
+    try:
+        get_redis().delete("drive:roots")
+        logger.info(f"[Cache] drive:roots invalidé (folder {folder_id} supprimé).")
+    except Exception as e_redis:
+        logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
     return {"status": "deleted"}
 
 @router.get("/status", response_model=StatusResponse)
@@ -97,6 +127,21 @@ from sqlalchemy import update
 async def list_files(db: AsyncSession = Depends(get_db)):
     # Returns all tracked files ordered by most recent first
     return (await db.execute(select(DriveSyncState).order_by(DriveSyncState.last_processed_at.desc().nullslast()))).scalars().all()
+
+@router.get("/files/{google_file_id}", response_model=FileStateResponse)
+async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Retourne l'état de synchronisation Drive pour un fichier donné par son ID Google.
+    Utilisé par cv_api (reanalyze) pour récupérer le parent_folder_name (nomenclature Zenika).
+    """
+    state = (
+        await db.execute(
+            select(DriveSyncState).filter(DriveSyncState.google_file_id == google_file_id)
+        )
+    ).scalars().first()
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Fichier Drive '{google_file_id}' inconnu.")
+    return state
 
 @router.post("/retry-errors")
 async def retry_errors(db: AsyncSession = Depends(get_db)):

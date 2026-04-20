@@ -2,21 +2,36 @@
 
 Ce document dicte le comportement, les standards et les contraintes non négociables pour l'Agent Antigravity et les développeurs. **Le non-respect de ces règles cassera la plateforme.**
 
+> **Convention de lecture** : Les règles marquées 🔵 s'appliquent aux **APIs data** (`users_api`, `items_api`, etc.), celles marquées 🟣 aux **agents** (`agent_*`), et celles sans marqueur s'appliquent **à tous les services**.
+
 ---
 
 ## ✅ CHECKLIST DE CONFORMITÉ (Nouvelles fonctionnalités)
 
-Avant tout PR / déploiement, vérifiez chaque point :
+Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 
+**Pour toute API data** 🔵 :
 - [ ] Endpoint protégé par `dependencies=[Depends(verify_jwt)]` sur son `APIRouter` ?
 - [ ] Tool MCP créé ou mis à jour dans `mcp_server.py` ?
+- [ ] Route `/mcp/{path:path}` proxy vers le sidecar MCP présente dans `main.py` ?
 - [ ] `inject(headers)` présent dans **chaque** appel `httpx` sortant ?
 - [ ] Changeset Liquibase ajouté dans `db_migrations/changelogs/` (avec section `rollback`) ?
 - [ ] Cache Redis invalidé sur les mutations (POST, PUT, DELETE) ?
+- [ ] Tests de contrat MCP ajoutés dans `test_mcp_tools.py` ?
+
+**Pour tout agent** 🟣 :
+- [ ] `verify_jwt()` (validation signature HS256 + claim `sub`) présente localement dans `main.py` ?
+- [ ] `protected_router = APIRouter(dependencies=[Depends(verify_jwt)])` utilisé ?
+- [ ] `inject(headers)` présent dans chaque appel HTTP sortant vers les APIs ou sous-agents ?
+- [ ] `auth_header_var` propagé aux clients MCP pour transmettre le JWT aux APIs cibles ?
+- [ ] Tests de session, guardrail, et JWT ajoutés ?
+
+**Pour tous les services** :
 - [ ] `Instrumentator().instrument(app).expose(app)` dans `main.py` ?
+- [ ] `FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")` dans `main.py` ?
 - [ ] Fichier `VERSION` mis à jour (semver) ?
-- [ ] Tests unitaires / contrats MCP ajoutés ou mis à jour ?
 - [ ] Aucun modèle IA hardcodé (utiliser les variables d'environnement) ?
+- [ ] Dockerfile multi-stage, USER non-root, CMD sans shell, `.dockerignore` présent ?
 
 ---
 
@@ -40,29 +55,70 @@ Avant tout PR / déploiement, vérifiez chaque point :
 
 L'environnement est strictement micro-serviciel et repose sur **Docker Compose** (dev local) et **Cloud Run** (GCP).
 
-- **Microservices natifs** : `users_api`, `items_api`, `competencies_api`, `cv_api`, `missions_api` (gestion multimodale de documents).
-- **Orchestrateur Multi-Agent (A2A)** :
-  - `agent_router_api` : routeur intelligent, délègue aux sous-agents via le protocole A2A (FastAPI + Google ADK + Gemini).
-  - `agent_hr_api` : sous-agent spécialisé RH (compétences, CVs, utilisateurs).
-  - `agent_ops_api` : sous-agent spécialisé Ops (missions, items, opérationnel).
-  - Les sous-agents communiquent via HTTP (A2A) et **non** via SSE pour rester stateless.
+### APIs Data (producteurs MCP) 🔵
+Services exposant une logique métier et un serveur MCP consommable par les agents :
+- `users_api` — Gestion des utilisateurs, authentification, JWT
+- `items_api` — Gestion des items et catégories
+- `competencies_api` — Arbre de compétences
+- `cv_api` — Analyse et stockage multimodale des CVs
+- `missions_api` — Gestion des missions client (documents)
+- `drive_api` — Synchronisation Google Drive
+- `prompts_api` — Gestion des system prompts des agents
+
+### Agents IA (consommateurs MCP) 🟣
+Services orchestrant des LLMs via Google ADK. Ils **consomment** des tools MCP — ils n'en exposent **pas** :
+- `agent_router_api` : routeur intelligent, délègue aux sous-agents via le protocole A2A (FastAPI + Google ADK + Gemini).
+- `agent_hr_api` : sous-agent spécialisé RH (compétences, CVs, utilisateurs).
+- `agent_ops_api` : sous-agent spécialisé Ops (missions, items, opérationnel).
+- `agent_missions_api` : sous-agent spécialisé gestion documentaire des missions.
+- Les sous-agents communiquent via HTTP (A2A) et **non** via SSE pour rester stateless.
+
+### MCP Natif (services MCP standalone) 🟤
+Services exposant uniquement des tools MCP via HTTP, sans logique métier en base propre :
+- `market_mcp` — Données marché BigQuery, tracking FinOps (`log_ai_consumption`), outils GCP infra (Cloud Logging, Cloud Run). Exposé via HTTP (`/mcp/tools` + `/mcp/call`) et non via sidecar stdio. **À terme, à scinder en `market_mcp` + `monitoring_mcp`** (voir todo.md ADR12 Axe 3).
+
+### Infrastructure
 - **Frontend** : `frontend` (Vue.js + proxy Nginx pointant `/api/` vers `agent_router_api`).
-- **Data Layer** : PostgreSQL (namespaces partagés), Redis (Cache/Queue, incluant un Cache Sémantique pour bypasser les appels LLM redondants).
-- **FinOps & Data Analytics** : L'utilisation de l'IA est trackée et centralisée dans Google BigQuery (table `ai_usage` partitionnée par jour) pour l'optimisation des coûts.
+- **Data Layer** : PostgreSQL (pgvector) · Redis (namespaces DB isolés, un DB par service — voir règle §6) · Cache Sémantique dans `agent_router_api`.
+- **FinOps & Data Analytics** : L'utilisation de l'IA est trackée et centralisée dans Google BigQuery (table `ai_usage` partitionnée par jour) via `market_mcp`.
 - **Réseau interne** : `monitoring_net` est obligatoire pour la résolution DNS.
 
 ---
 
 ## 🤖 3. MCP & AGENT ORCHESTRATION
 
-L'Agent intelligent dialogue avec l'écosystème via le protocole MCP (Model Context Protocol).
+### Principe fondamental — Producteurs vs Consommateurs
 
-- **Serveurs MCP Autonomes** : Chaque sous-service possède son propre serveur MCP (incluant des services externes type `market_mcp`). **ATTENTION** : La directive architecturale principale est de privilégier les flux **HTTP standards (REST)** dès que possible au détriment du protocole SSE (Server-Sent Events) pour des raisons de scalabilité et de simplicité (stateless).
-- **Règle de Fonctionnalité** :
-  - **Règle** : Toute nouvelle route / logique métier implémentée dans une API **DOIT IMPÉRATIVEMENT** faire l'objet d'un outil (`Tool`) exposé dans le `mcp_server.py` de cette même API.
-  - **Convention de nommage** : Les tools MCP utilisent le format `snake_case` VERBE_RESSOURCE (ex: `get_user_by_id`, `create_competency`, `list_missions`).
-  - **Gestion d'erreur** : Un tool ne doit **jamais** laisser propager une exception non catchée. Il retourne systématiquement un dictionnaire structuré : `{"success": false, "error": "message lisible"}` en cas d'échec, sans lever de `ToolException` non gérée.
-- **Enregistrement ADK (`agent.py`)** : Les outils distants doivent être mappés en tant que fonctions ou instances natives dans le fichier `agent.py` de chaque agent avec des **Docstrings riches** (cruciales pour que le LLM sache quand les appeler). Attention à correctement scoper et initialiser les instances de clients MCP pour éviter les fuites de variable.
+> **RÈGLE IMPÉRATIVE** : Les APIs data **exposent** un serveur MCP (`mcp_server.py`). Les agents **consomment** des tools MCP via `agent_commons.mcp_client`. Ne jamais créer de `mcp_server.py` dans un dossier `agent_*`.
+
+| Type de service | `mcp_server.py` | `mcp_client` | Route `/mcp/{path}` | BDD propre |
+|---|---|---|---|---|
+| API data 🔵 | ✅ Sidecar stdio | ❌ Non | ✅ Proxy vers sidecar | ✅ PostgreSQL |
+| Agent 🟣 | ❌ Interdit | ✅ Consume | ❌ Non pertinent | ❌ Stateless |
+| MCP Natif 🟤 | ✅ HTTP direct | ❌ Non | ✅ Exposé directement | ❌ IAM/externe |
+
+### APIs data — Règles MCP 🔵
+
+- **Serveur MCP** (`mcp_server.py`) : Chaque API data expose ses fonctionnalités en tant que tools MCP via un processus sidecar stdio.
+- **Règle de fonctionnalité** : Toute nouvelle route / logique métier implémentée dans une API data **DOIT IMPÉRATIVEMENT** faire l'objet d'un outil (`Tool`) exposé dans le `mcp_server.py` de cette même API.
+- **Route proxy** : La route `@app.api_route("/mcp/{path:path}")` doit être présente dans `main.py` pour relayer les appels MCP vers le sidecar (`MCP_SIDECAR_URL`).
+- **Convention de nommage** : Les tools MCP utilisent le format `snake_case` VERBE_RESSOURCE (ex: `get_user_by_id`, `create_competency`, `list_missions`).
+- **Gestion d'erreur** : Un tool ne doit **jamais** laisser propager une exception non catchée. Il retourne systématiquement un dictionnaire structuré : `{"success": false, "error": "message lisible"}` en cas d'échec.
+
+### Agents — Règles d'orchestration MCP 🟣
+
+- **Enregistrement ADK (`agent.py`)** : Les outils distants doivent être mappés en tant que fonctions ou instances natives dans le fichier `agent.py` de chaque agent avec des **Docstrings riches** (cruciales pour que le LLM sache quand les appeler).
+- **Propagation JWT** : L'`auth_header_var` (contextvars) doit être alimenté depuis le Bearer reçu sur `/query` ou `/a2a/query` avant tout appel MCP sortant.
+- **Direction HTTP uniquement** : Privilégier les flux **HTTP standards (REST)** au détriment du SSE pour rester stateless.
+- **Pas de `mcp_server.py`** : Un agent ne doit jamais exposer un serveur MCP — il n'a rien à offrir aux autres agents via ce protocole. La communication inter-agents utilise exclusivement le protocole A2A (HTTP).
+- **Résilience A2A** : Chaque appel inter-agent DOIT implémenter un retry sur les erreurs réseau/5xx et un **mode dégradé** (`degraded: True` dans la réponse) si toutes les tentatives échouent, plutôt que de propaguer une exception 500.
+
+### MCP Natif — Règles spécifiques 🟤
+
+- **Exposition HTTP** : Les services MCP natifs exposent leurs tools via `GET /mcp/tools` (liste) et `POST /mcp/call` (invocation) — pas via sidecar stdio.
+- **Pas de BDD propre** : Un MCP natif consomme des APIs externes (BigQuery, Cloud Logging…) via IAM — jamais via une base PostgreSQL interne.
+- **JWT obligatoire** : Même règle Zero-Trust que les APIs data — `APIRouter(dependencies=[Depends(verify_jwt)])` sans exception.
+- **Pas de fallback JWT en dev** : Il est **STRICTEMENT INTERDIT** de retourner un payload par défaut `{"sub": "dev-user"}` quand `SECRET_KEY` est absente. L'absence de secret doit lever une erreur au démarrage (`raise ValueError(...)`) indépendamment de l'environnement.
 
 ---
 
@@ -71,10 +127,30 @@ L'Agent intelligent dialogue avec l'écosystème via le protocole MCP (Model Con
 Aucune API n'est considérée comme sécurisée par défaut dans le réseau interne.
 
 - **Verrouillage par défaut** : TOUS les endpoints (sauf `/health`, `/metrics`, `/docs`) **DOIVENT** être protégés statiquement par le validateur `dependencies=[Depends(verify_jwt)]` sur leur `APIRouter`.
+- **Implémentation `verify_jwt`** :
+  - Pour les **APIs data** 🔵 : utiliser `from src.auth import verify_jwt` (module partagé).
+  - Pour les **agents** 🟣 et **MCP natifs** 🟤 : définir `verify_jwt()` localement dans `main.py`. La fonction DOIT valider la signature HS256, l'expiration ET la présence du claim `sub`.
+  ```python
+  def verify_jwt(auth: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+      try:
+          payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=["HS256"])
+          if not payload.get("sub"):
+              raise HTTPException(status_code=401, detail="Claim 'sub' manquant")
+          return payload
+      except JWTError:
+          raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+  ```
+- **INTERDIT — Fallback JWT permissif** : Le pattern suivant est **strictement proscrit** dans tout service, quel que soit l'environnement :
+  ```python
+  # ❌ DANGEREUX — NE JAMAIS FAIRE
+  if not SECRET_KEY:
+      return {"sub": "dev-user", "role": "admin"}  # bypass silencieux
+  ```
+  Si `SECRET_KEY` est absente, le service **DOIT lever une erreur au démarrage**. Pour le dev local sans secret, utiliser `.env` avec une valeur de dev dédiée.
 - **Propagation de l'Identité (Synchrone)** : Lorsqu'un microservice (ou un appel MCP) contacte un autre microservice, le Header HTTP `Authorization: Bearer <token>` **DOIT** être capturé depuis la requête entrante et transmis explicitement dans la requête sortante.
 - **Propagation de l'Identité (Asynchrone & Tâches de Fond)** : Pour toute exécution en arrière-plan (ex: Bulk reanalysis) ou déclenchée par un système ordonnanceur (Cloud Scheduler), le token d'authentification (`auth_token`) ou l'identité du compte de service **DOIT IMPÉRATIVEMENT** être propagé. Cela garantit l'imputation correcte des coûts associés dans le système FinOps.
 - **Durée de vie & Refresh** : Les tokens JWT ont une durée de vie courte (configurable via `JWT_EXPIRE_MINUTES`). Pour les tâches longues ou asynchrones, utiliser un token de service dédié (compte de service GCP) plutôt qu'un token utilisateur susceptible d'expirer en mid-flight. Il n'existe **pas** de mécanisme de refresh automatique côté microservice — la responsabilité du renouvellement incombe au client initiateur.
-- **Rotation des secrets** : La clé de signature JWT (`JWT_SECRET_KEY`) ne doit jamais être committée. Elle est injectée via Secret Manager GCP.
+- **Rotation des secrets** : La clé de signature JWT (`SECRET_KEY`) ne doit jamais être committée. Elle est injectée via Secret Manager GCP. Elle DOIT être purgée de l'environnement processus après lecture (`os.environ.pop("SECRET_KEY", None)`) pour empêcher sa lecture par le LLM.
 
 ---
 
@@ -83,26 +159,31 @@ Aucune API n'est considérée comme sécurisée par défaut dans le réseau inte
 Le monitoring n'est pas une option, c'est l'épine dorsale du debugging asynchrone.
 
 - **Métrique (Prometheus)** :
-  - **Règle** : `Instrumentator().instrument(app).expose(app)` est obligatoire dans le `main.py` de toute nouvelle API.
-  - **Raison** : Sans cette ligne, le service disparaît des dashboards Grafana et des alertes.
+  - **Règle** : `Instrumentator().instrument(app).expose(app)` est obligatoire dans le `main.py` de **tout** service (API data et agent).
+  - **Règle** : `FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")` est **également obligatoire** — sans lui, les routes HTTP ne génèrent pas de spans OTel automatiques.
+  - **Raison** : Sans ces deux lignes, le service disparaît des dashboards Grafana et des traces Tempo.
 - **Trace (Tempo/OTel)** :
   - **Règle** : *L'oubli de cette règle brise toute la chaîne.* Lors de toute exécution distribuée (ex: Ingestion RAG, import inter-APIs), `inject(headers)` est **STRICTEMENT obligatoire** avant chaque requête HTTP sortante `httpx` pour propager le Span.
   - **Raison** : Sans propagation, les traces sont fragmentées et le debugging distribué devient impossible.
   - **Exemple** : `from opentelemetry.propagate import inject; inject(headers); httpx.post(..., headers=headers)`
-  - Le `OTEL_SERVICE_NAME` doit strictement correspondre au `container_name` Docker.
-- **Qualité de la Topologie** : Lors de l'interrogation du traçage (ex: via Google Cloud Trace ou MCP filter), les métriques de bruit comme les `healthchecks` ou `metrics` **DOIVENT ÊTRE FILTRÉES** pour ne conserver que la topologie pertinente de la logique métier. Le formatage des requêtes doit scrupuleusement suivre l'API Google Cloud Trace.
+  - Le `OTEL_SERVICE_NAME` (dans `TracerProvider`) doit strictement correspondre au `container_name` Docker (ex: `"agent-hr-api"` ↔ `agent_hr_api`).
+- **Qualité de la Topologie** : Lors de l'interrogation du traçage (ex: via Google Cloud Trace ou MCP filter), les métriques de bruit comme les `healthchecks` ou `metrics` **DOIVENT ÊTRE FILTRÉES** pour ne conserver que la topologie pertinente de la logique métier.
 
 ---
 
 ## 💾 6. DATA, CACHE & SEEDING
 
-- **Synchronisation BDD (Liquibase)** :
+- **Synchronisation BDD (Liquibase)** 🔵 *(APIs data uniquement — les agents sont stateless et n'ont pas de BDD)* :
   - **Règle** : Toute modification de la structure de données (nouveau champ, nouvelle table) ou ajout de nouvelle API **DOIT impérativement** être accompagnée d'une mise à jour du fichier `changelog.yaml` Liquibase correspondant dans `db_migrations/changelogs/`.
   - **Rollback obligatoire** : Chaque changeset modifiant le schéma (ALTER TABLE, DROP COLUMN, DROP TABLE) **DOIT** inclure une section `rollback` explicite pour permettre un retour en arrière propre en cas de déploiement raté.
   - Le script de réinitialisation (`seed_data.py`) doit être ajusté si des données initiales sont impactées.
-- **Cache Redis** :
-  - **Règle** : Toute modification métier (POST, PUT, DELETE) **DOIT** purger ou invalider le cache Redis associé (ex: suppression des patterns `items:list:*`).
-  - **Raison** : Un cache périmé génère des incohérences silencieuses difficiles à diagnostiquer.
+- **Cache Redis — Isolation des namespaces** *(critique)* :
+  - **Règle** : Chaque service utilisant Redis **DOIT** avoir son propre DB Redis dédié (0-15) ou un préfixe de clé unique. **Une collision de DB entre deux services est un bug à corriger immédiatement** — elle provoque des invalidations de cache erronées et des fuites de données silencieuses.
+  - **Matrice de référence** : Documenter l'attribution des DB Redis dans le KI `env-vars-matrix` (colonne `REDIS_URL`). Toute nouvelle attribution doit y être enregistrée.
+  - **Invalidation** : Toute modification métier (POST, PUT, DELETE) **DOIT** purger ou invalider le cache Redis associé (ex: suppression des patterns `items:list:*`).
+- **Cache Sémantique** 🟣 *(agent_router_api)* :
+  - Le cache sémantique Redis (`SemanticCache`) est géré exclusivement par `agent_router_api`. Les sous-agents n'y accèdent pas directement.
+  - Toute modification du prompt ou du contexte de session doit considérer l'invalidation du cache sémantique.
 - **Sessions** : Injection par dépendance stricte via `Depends(get_db)`.
 
 ---
@@ -126,7 +207,12 @@ L'apparence de la SPA (Vue.js) doit refléter le branding premium de Zenika.
 Les tests ne sont pas optionnels — ils sont le contrat de non-régression de la plateforme.
 
 - **Tests unitaires** : Toute logique métier non triviale (calcul, transformation, validation) doit être couverte par des tests `pytest` dans un fichier `test_*.py` au niveau du service.
-- **Tests de contrats MCP** : Les tools exposés dans `mcp_server.py` doivent disposer d'un test d'invocation de base dans `test_mcp_tools.py` (appel du tool avec des paramètres valides, vérification de la structure de retour).
+- **Tests de contrats MCP** 🔵 *(APIs data uniquement)* : Les tools exposés dans `mcp_server.py` doivent disposer d'un test d'invocation de base dans `test_mcp_tools.py` (appel du tool avec des paramètres valides, vérification de la structure de retour).
+- **Tests d'agents** 🟣 : Les agents doivent disposer de tests couvrant :
+  - `test_session.py` — Cycle de vie d'une session ADK
+  - `test_guardrail.py` — Comportement des guardrails (réponses hors périmètre)
+  - `test_jwt_propagation.py` — Propagation correcte du token JWT entre agents
+  - `test_mcp.py` — Appels MCP sortants mockés (vérification que le client MCP est correctement initialisé et que le JWT est propagé)
 - **Tests d'intégration** : Les endpoints critiques (auth, mutations de données) doivent être couverts par des tests d'intégration utilisant un client HTTP de test (ex: `httpx.AsyncClient` avec `app` FastAPI).
 - **CI Gate** : La pipeline CI doit bloquer un merge si les tests échouent. La couverture minimale est à définir par équipe, mais ne doit pas régresser entre deux PRs.
 
@@ -138,7 +224,8 @@ Tous les conteneurs du projet doivent impérativement respecter les règles dict
 
 1. **Zéro-Trust Non-Root** : L'exécution de processus en tant que `root` (UID 0) est interdite. Les conteneurs Python doivent créer et switcher sur un `USER appuser`. Le front-end doit utiliser une image `nginx-unprivileged` sur le port `8080`.
 2. **Multi-Stage Builds** : Chaque Dockerfile se doit d'utiliser des étapes de build (`AS builder`) pour séparer les outils de compilation (ex: `gcc`) du binaire final en prod. Cela renforce la sécurité et réduit l'empreinte de l'image.
-3. **Graceful Shutdown (CMD System)** : Interdiction d'utiliser des appels shell comme `CMD ["sh", "-c", "..."]`. Favorisez l'appel de module cible : `CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]` pour palier l'absence potentielle de shell liés aux packages `distroless` ou les wrappers pip.
+3. **Graceful Shutdown (CMD System)** : Interdiction d'utiliser des appels shell comme `CMD ["sh", "-c", "..."]`. Favorisez l'appel de module cible : `CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]` pour pallier l'absence potentielle de shell liés aux packages `distroless` ou les wrappers pip. **Utiliser `python3`, jamais `python`.**
+   - **Cette règle s'applique également aux fichiers Terraform `cr_*.tf`** : `command = ["python3"]` et non `command = ["python"]` dans les définitions `containers {}` de Cloud Run.
 4. **Hygiène du Cache (.dockerignore)** : Les directives `COPY . .` doivent être sécurisées par des fichiers `.dockerignore` stricts (interdisant l'inclusion de `__pycache__`, environnements virtuels ou données de tests) pour maximiser la vitesse de Build.
 5. **Dockerfile comme Contrat de Configuration (ENV Contract)** : Le `Dockerfile` est la **source de vérité exhaustive** des variables d'environnement qu'un service consomme. Les règles sont :
    - Toute variable lue via `os.getenv()` dans le code **DOIT** avoir un `ENV nom=valeur_locale` correspondant dans le Dockerfile (avec une valeur de dev local safe).
@@ -155,6 +242,7 @@ Tous les conteneurs du projet doivent impérativement respecter les règles dict
 ## 🚀 10. DÉPLOIEMENT, VERSIONING & TERRAFORM
 
 1. **Semantic Versioning** : Chaque microservice évolue indépendamment. **DOIT** posséder un fichier `VERSION` (Patch/Minor/Major) à sa racine. Cette version est lue pour le cycle de déploiement et est injectée dynamiquement.
+   - **`agent_commons` doit impérativement avoir un fichier `VERSION`** — c'est une bibliothèque partagée critique dont toute modification impacte les 4 agents. Son version doit être gérée indépendamment et référencée dans les `requirements.txt` des agents (ex: `agent-commons>=1.2.0`).
 2. **Injection Environnementale** : La variable d'environnement `APP_VERSION` doit toujours être synchronisée et injectée sur les conteneurs Cloud Run pour une parfaite observabilité (notamment via un endpoint `/version`).
 3. **Idempotence des Déploiements** : Un script de déploiement (ex: `manage_env.py`) doit pouvoir être exécuté de façon répétée sans causer d'erreur HTTP asynchrone ; des invalidations de CDN ou d'imports non conditionnés doivent être évités s'ils génèrent des erreurs `409 Conflict`.
 4. **Cycle de vie Cloud Run (Terraform)** : La balise `deletion_protection = false` n'est plus supportée sur les ressources `google_cloud_run_v2_service` et se doit d'être retirée des manifests HCL.
