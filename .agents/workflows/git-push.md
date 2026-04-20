@@ -13,7 +13,16 @@ Voici les étapes strictes à suivre pour l'exécution d'un workflow de prépara
 bash scripts/run_tests.sh
 ```
 
-2. **Synchronisation des System Prompts vers `prompts_api`**
+2. **Tester la logique d'infrastructure (`manage_env.py`)**
+   Valide les fonctions critiques de déploiement : construction des URLs d'images, priorité des versions (YAML > VERSION local), cohérence des fichiers `envs/*.yaml`.
+   L'arrêt est requis si les tests échouent.
+// turbo
+```bash
+test_env/bin/pytest platform-engineering/tests/test_manage_env.py -v --tb=short
+```
+
+
+3. **Synchronisation des System Prompts vers `prompts_api`**
    Met à jour tous les system prompts des agents en base (AlloyDB via `prompts_api`) pour que GCP dev reçoive les dernières instructions. Invalide les caches Redis associés.
    Pré-requis : la variable `$DEV_BASE_URL` doit être définie. Le mot de passe admin est récupéré via Terraform output.
 // turbo
@@ -33,21 +42,21 @@ else
 fi
 ```
 
-3. **Génération automatique ou mise à jour des spécifications techniques (`spec.md`)**
+4. **Génération automatique ou mise à jour des spécifications techniques (`spec.md`)**
    Régénère le document API via OpenAPI.
 // turbo
 ```bash
 test_env/bin/python scripts/generate_specs.py
 ```
 
-3. **Génération et mise à jour dynamique du `changelog.md`**
+5. **Génération et mise à jour dynamique du `changelog.md`**
    Insère les nouveaux bilans de couverture.
 // turbo
 ```bash
 test_env/bin/python scripts/generate_changelog.py
 ```
 
-4. **Formater le code Terraform**
+6. **Formater le code Terraform**
    Applique le formatage standard HashiCorp sur les fichiers d'infrastructure du dossier bootstrap.
 // turbo
 ```bash
@@ -55,7 +64,7 @@ terraform -chdir=bootstrap fmt -recursive
 terraform -chdir=platform-engineering/terraform fmt -recursive
 ```
 
-5. **Nettoyer les fichiers temporaires**
+7. **Nettoyer les fichiers temporaires**
    Supprime les archives, logs et gros exécutables obsolètes avant le commit pour éviter les rejets de push.
    > ⚠️ **ATTENTION** : Ne jamais supprimer les fichiers `test_*.py` —
    > ce sont les tests unitaires, leur suppression serait catastrophique pour la CI.
@@ -66,14 +75,14 @@ rm -f */pytest.log */coverage.json *_test.db
 rm -f *.tar.gz otelcol-contrib output.log *.patch patch_*.py
 ```
 
-6. **Ajouter les fichiers via git add**
+8. **Ajouter les fichiers via git add**
    Ajoute l'ensemble des fichiers modifiés (y compris le nouveau `changelog.md` et les scripts modifiés) au staging Git.
 // turbo
 ```bash
 git add .
 ```
 
-7. **Vérifier la non-divulgation des secrets**
+9. **Vérifier la non-divulgation des secrets**
    Parse le fichier `secrets.sh` et s'assure qu'aucune des valeurs des variables secrètes n'est introduite dans les fichiers prêts à être commités. Arrête le script en erreur si une faille est détectée.
 // turbo
 ```bash
@@ -91,7 +100,7 @@ if [ -f "secrets.sh" ]; then
 fi
 ```
 
-8. **Ajouter les fichiers via git commit**
+10. **Ajouter les fichiers via git commit**
    Rédige un message de commit très court résumant la fonctionnalité.
    **Contrainte stricte :** Le texte du commit doit faire **entre 5 et 8 mots maximum**.
 ```bash
@@ -99,6 +108,6 @@ fi
 git commit -m "<MESSAGE>"
 ```
 
-9. **Informer l'utilisateur**
+11. **Informer l'utilisateur**
    Indiquer à l'utilisateur que le commit est prêt et qu'il peut faire `git push` manuellement depuis son terminal (l'agent n'a pas les droits SSH nécessaires).
 

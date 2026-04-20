@@ -45,7 +45,7 @@ resource "google_alloydb_user" "admin_user" {
 
   lifecycle {
     ignore_changes = [
-      database_roles]
+    database_roles]
   }
 }
 

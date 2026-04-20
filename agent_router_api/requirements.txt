@@ -24,3 +24,6 @@ tenacity
 opentelemetry-instrumentation-httpx
 
 opentelemetry-instrumentation-redis
+
+# SEC-F06 — Semantic Cache (cosine similarity sans dépendance lourde)
+numpy>=1.24.0

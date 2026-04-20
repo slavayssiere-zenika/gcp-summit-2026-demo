@@ -20,3 +20,18 @@ A2A_CALL_RETRIES_TOTAL = Counter(
     "Total number of A2A call retries per sub-agent",
     ["agent"]
 )
+
+# SEC-F06 — Semantic Cache metrics
+SEMANTIC_CACHE_HITS_TOTAL = Counter(
+    "semantic_cache_hits_total",
+    "Requêtes servies depuis le cache sémantique (économie LLM)"
+)
+SEMANTIC_CACHE_MISSES_TOTAL = Counter(
+    "semantic_cache_misses_total",
+    "Requêtes ayant nécessité un appel LLM réel (cache miss)"
+)
+SEMANTIC_CACHE_SIMILARITY_HISTOGRAM = Histogram(
+    "semantic_cache_similarity_score",
+    "Distribution des scores de similarité cosine calculés",
+    buckets=[0.5, 0.7, 0.8, 0.85, 0.90, 0.92, 0.95, 0.97, 0.99, 1.0]
+)

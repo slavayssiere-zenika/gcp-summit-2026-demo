@@ -1,3 +1,59 @@
+## Mise à jour automatique - 2026-04-20 12:37:10
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1182  | 757  |  36% |
+| cv_api           | 1996  | 640  |  68% |
+| drive_api        | 1050  | 371  |  65% |
+| items_api        | 1105  | 656  |  41% |
+| prompts_api      | 676   | 143  |  79% |
+| users_api        | 1365  | 548  |  60% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/git-push.md` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/Dockerfile` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/main.py` (M)
+- `agent_router_api/metrics.py` (M)
+- `agent_router_api/requirements.txt` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/.coverage` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/envs/dev.yaml` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/envs/uat.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/cr_agent_router.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `scripts/agent_prompt_tests.py` (M)
+- `users_api/spec.md` (M)
+- `agent_router_api/.venv_test/lib/python3.9/site-packages/async_timeout-5.0.1.dist-info/` (??)
+- `agent_router_api/.venv_test/lib/python3.9/site-packages/async_timeout/` (??)
+- `agent_router_api/.venv_test/lib/python3.9/site-packages/redis-7.0.1.dist-info/` (??)
+- `agent_router_api/.venv_test/lib/python3.9/site-packages/redis/` (??)
+- `agent_router_api/semantic_cache.py` (??)
+- `agent_router_api/tests/conftest.py` (??)
+- `agent_router_api/tests/test_semantic_cache.py` (??)
+- `platform-engineering/pytest.ini` (??)
+- `platform-engineering/tests/` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-20 11:17:41
 
 ### Couverture de Code

@@ -196,7 +196,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
     ignore_changes = [
       client,
       client_version,
-      
+
       template[0].containers[0].resources[0].limits["cpu"],
       template[0].containers[1].resources[0].limits["cpu"]
     ]
@@ -254,7 +254,7 @@ resource "google_alloydb_user" "cv_db_user" {
   depends_on = [google_alloydb_instance.primary]
   lifecycle {
     ignore_changes = [
-      database_roles]
+    database_roles]
   }
 }
 

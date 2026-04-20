@@ -1,38 +1,48 @@
-project_id: "slavayssiere-sandbox-462015"
-base_domain: "zenika.slavayssiere.fr"
+# ══════════════════════════════════════════════════════════
+# Environnement : PRD — production
+# ══════════════════════════════════════════════════════════
+
+# ── GCP ───────────────────────────────────────────────────
+project_id:       "slavayssiere-sandbox-462015"
+base_domain:      "zenika.slavayssiere.fr"
 parent_zone_name: "slavayssiere-zenika"
+
+# ── Registre d'images ─────────────────────────────────────
+# manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}
+image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services"
+
+# ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
+# Déclarez ici les versions à déployer en production pour épingler une release précise.
+# Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
+agent_router_api_version:   "v0.1.0"
+agent_hr_api_version:       "v0.0.50"
+agent_ops_api_version:      "v0.0.50"
+agent_missions_api_version: "v0.0.50"
+users_api_version:          "v0.0.50"
+items_api_version:          "v0.0.50"
+competencies_api_version:   "v0.0.50"
+cv_api_version:             "v0.0.50"
+prompts_api_version:        "v0.0.50"
+drive_api_version:          "v0.0.50"
+market_mcp_version:         "v0.0.50"
+db_migrations_version:      "v0.0.50"
+missions_api_version:       "v0.0.50"
+frontend_version:           "v0.0.50"
+
+# ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 2
 cloudrun_max_instances: 50
-alloydb_cpu: 8
+
+# ── AlloyDB ───────────────────────────────────────────────
+alloydb_cpu: 8   # 8 vCPU pour supporter la charge production
+
+# ── Sécurité / WAF ────────────────────────────────────────
 waf_rate_limit: 10000
 
-image_users: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/users_api:latest"
-image_items: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/items_api:latest"
-image_competencies: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/competencies_api:latest"
-image_cv: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/cv_api:latest"
-image_missions: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/missions_api:latest"
-image_prompts: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/prompts_api:latest"
-image_agent_router: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_router_api:latest"
-image_agent_hr: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_hr_api:latest"
-image_agent_ops: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_ops_api:latest"
-image_agent_missions: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/agent_missions_api:latest"
-image_db_migrations: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/db_migrations:latest"
-image_market: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/market_mcp:latest"
-image_drive: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest"
-admin_user: "sebastien.lavayssiere@zenika.com"
-gemini_model: "gemini-3.1-flash-lite-preview"
+# ── Administration ─────────────────────────────────────────
+admin_user:               "sebastien.lavayssiere@zenika.com"
+finops_anomaly_threshold: 500000
 
-# Versions (automatiquement mis à jour par manage_env.py si synchronisé)
-agent_router_api_version: "v0.0.1"
-agent_hr_api_version: "v0.0.1"
-agent_ops_api_version: "v0.0.1"
-agent_missions_api_version: "v0.0.1"
-users_api_version: "v0.0.1"
-items_api_version: "v0.0.1"
-competencies_api_version: "v0.0.1"
-cv_api_version: "v0.0.1"
-prompts_api_version: "v0.0.1"
-drive_api_version: "v0.0.1"
-market_mcp_version: "v0.0.1"
-db_migrations_version: "v0.0.1"
-frontend_version: "v0.0.1"
+# ── IA / Modèles ──────────────────────────────────────────
+gemini_model:           "gemini-3.1-flash-lite-preview"
+gemini_embedding_model: "gemini-embedding-001"   # SEC-F06 Semantic Cache
