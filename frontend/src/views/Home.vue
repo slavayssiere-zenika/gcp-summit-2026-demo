@@ -17,6 +17,7 @@ import ConsultantCard from '@/components/agent/ConsultantCard.vue'
 import ItemCard from '@/components/agent/ItemCard.vue'
 import ToolExecutionList from '@/components/agent/ToolExecutionList.vue'
 import CandidateProfileCard from '@/components/agent/CandidateProfileCard.vue'
+import ConsultantAvailabilityCard from '@/components/agent/ConsultantAvailabilityCard.vue'
 import SystemHealthCard from '@/components/agent/SystemHealthCard.vue'
 
 const isHealthComponent = (obj: any) => obj && typeof obj.status === 'string' && typeof obj.component === 'string'
@@ -33,7 +34,8 @@ const techKeys = [
 ];
 const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
 const isProfileObj = (obj: any) => obj && !obj.email && (obj.user_id || obj.summary) && (obj.missions || obj.competencies_keywords || obj.current_role)
-const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj);
+const isAvailabilityObj = (obj: any) => obj && obj.summary && obj.active_missions !== undefined && obj.is_available !== undefined;
+const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj) || isAvailabilityObj(obj);
 const hasBusinessData = (obj: any) => filteredKeys(obj).length > 0 || isBusinessObj(obj);
 const hasAnyBusinessData = (msg: any) => {
   if (msg.displayType === 'text_only') return false;
@@ -233,6 +235,7 @@ onUnmounted(() => {
                   <MissionCard v-if="isMissionObj(obj)" :mission="obj" />
                   <ConsultantCard v-else-if="isUserObj(obj)" :consultant="obj" />
                   <CandidateProfileCard v-else-if="isProfileObj(obj)" :profile="obj" />
+                  <ConsultantAvailabilityCard v-else-if="isAvailabilityObj(obj)" :availability="obj" />
                   <ItemCard v-else-if="isItemObj(obj)" :item="obj" />
                   
                   <!-- Generic Fallback Card Render -->

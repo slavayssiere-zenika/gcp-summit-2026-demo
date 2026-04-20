@@ -34,44 +34,49 @@ async def override_get_db():
     finally:
         await db.close()
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(autouse=True)
+def app_with_overrides():
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[verify_jwt] = override_verify_jwt
+    yield app
+    app.dependency_overrides.clear()
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[verify_jwt] = override_verify_jwt
-
-client = TestClient(app)
+@pytest.fixture
+def client(app_with_overrides):
+    return TestClient(app_with_overrides)
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
     yield
     Base.metadata.drop_all(bind=sync_engine)
 
-def test_health(mocker):
+def test_health(client, mocker):
     mocker.patch("database.check_db_connection", new_callable=AsyncMock, return_value=True)
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
-def test_add_folder():
+def test_add_folder(client):
     response = client.post("/folders", json={"google_folder_id": "12345", "tag": "Paris"})
     assert response.status_code == 200
     assert response.json()["google_folder_id"] == "12345"
     assert response.json()["tag"] == "Paris"
     
-def test_add_duplicate_folder():
+def test_add_duplicate_folder(client):
     client.post("/folders", json={"google_folder_id": "12345", "tag": "Paris"})
     response = client.post("/folders", json={"google_folder_id": "12345", "tag": "Lille"})
     assert response.status_code == 400
 
-def test_list_folders():
+def test_list_folders(client):
     client.post("/folders", json={"google_folder_id": "abc", "tag": "Nice"})
     response = client.get("/folders")
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["tag"] == "Nice"
 
-def test_status_empty():
+def test_status_empty(client):
     response = client.get("/status")
     assert response.status_code == 200
     data = response.json()

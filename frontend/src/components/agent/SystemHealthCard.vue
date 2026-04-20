@@ -123,9 +123,10 @@ const formatComponentName = (name: string) => {
         <div class="comp-detail">
           <span v-if="comp.message">{{ comp.message }}</span>
           <span v-else-if="comp.error" class="error-text">{{ comp.error }}</span>
-          <span v-else-if="comp.url" class="url-text">
-            <Wifi size="11" /> {{ comp.url }}
-            <span v-if="comp.code" class="code-badge">{{ comp.code }}</span>
+          <span v-else-if="comp.url" class="url-text" :title="comp.url">
+            <Wifi size="11" class="shrink-0" />
+            <span class="url-path">{{ comp.url }}</span>
+            <span v-if="comp.code" class="code-badge shrink-0">{{ comp.code }}</span>
           </span>
           <span v-else class="unknown-text">Aucun détail disponible</span>
         </div>
@@ -268,6 +269,7 @@ const formatComponentName = (name: string) => {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .component-card:hover {
@@ -337,10 +339,31 @@ const formatComponentName = (name: string) => {
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
+  min-width: 0;
+  width: 100%;
 }
 
 .error-text { color: #dc2626; font-style: italic; }
-.url-text   { display: flex; align-items: center; gap: 4px; color: #475569; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; }
+.url-text { 
+  display: flex; 
+  align-items: center; 
+  gap: 4px; 
+  color: #475569; 
+  font-family: 'JetBrains Mono', monospace; 
+  font-size: 0.68rem;
+  width: 100%;
+  overflow: hidden;
+}
+
+.shrink-0 { flex-shrink: 0; }
+
+.url-path {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
 .unknown-text { color: #94a3b8; font-style: italic; }
 
 .code-badge {

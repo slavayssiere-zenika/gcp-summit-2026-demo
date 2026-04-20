@@ -37,7 +37,7 @@ const fetchTopology = async () => {
   error.value = null
   try {
     const token = localStorage.getItem('access_token')
-    const response = await axios.get(`/market-mcp/topology?hours_lookback=${hoursLookback.value}`, {
+    const response = await axios.get(`/market-mcp/api/topology?hours_lookback=${hoursLookback.value}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
     

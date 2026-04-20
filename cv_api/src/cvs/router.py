@@ -372,6 +372,15 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     is_anonymous = structured_cv.get("is_anonymous", False)
     trigram = sanitize_field(structured_cv.get("trigram"))
 
+    # STAFF-SEC : Valider de façon stricte les prénoms/noms pour éviter une faille de "CSV hallucination" ou string malformée
+    NAME_REGEX = r"^[A-Za-zÀ-ÿ\s\-\']+$"
+    if first_name and not re.match(NAME_REGEX, first_name):
+        logger.warning(f"Invalid first_name format rejected: {first_name}")
+        first_name = None
+    if last_name and not re.match(NAME_REGEX, last_name):
+        logger.warning(f"Invalid last_name format rejected: {last_name}")
+        last_name = None
+
     EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
     def is_valid_email(e: Optional[str]) -> bool:
         return bool(e and re.match(EMAIL_REGEX, e))

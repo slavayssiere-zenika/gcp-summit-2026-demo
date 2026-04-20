@@ -1,3 +1,66 @@
+## Mise à jour automatique - 2026-04-20 11:17:41
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1182  | 324  |  73% |
+| cv_api           | 1996  | 640  |  68% |
+| drive_api        | 1050  | 371  |  65% |
+| items_api        | 1105  | 250  |  77% |
+| prompts_api      | 676   | 143  |  79% |
+| users_api        | 1365  | 434  |  68% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/VERSION` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/VERSION` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `db_migrations/VERSION` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/test.db` (M)
+- `drive_api/tests/test_drive_business.py` (M)
+- `drive_api/tests/test_router.py` (M)
+- `frontend/VERSION` (M)
+- `frontend/nginx/default.conf` (M)
+- `frontend/src/components/agent/SystemHealthCard.vue` (M)
+- `frontend/src/views/AdminUsers.vue` (M)
+- `frontend/src/views/FinopsAdmin.vue` (M)
+- `frontend/src/views/Home.vue` (M)
+- `frontend/src/views/InfraMap.vue` (M)
+- `items_api/VERSION` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/VERSION` (M)
+- `market_mcp/mcp_server.py` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/bundled_prompts/agent_router_api/agent_router_api.system_instruction.txt` (M)
+- `prompts_api/VERSION` (M)
+- `roi.md` (M)
+- `todo.md` (M)
+- `users_api/VERSION` (M)
+- `users_api/spec.md` (M)
+- `docs/adr/0013-choix-bdd-vectorielle-alloydb-vs-cloudsql.md` (??)
+- `frontend/src/components/agent/ConsultantAvailabilityCard.vue` (??)
+- `scratch_secret_fetch.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-16 13:25:41
 
 ### Couverture de Code
