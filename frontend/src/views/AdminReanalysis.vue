@@ -93,9 +93,7 @@ const triggerReanalysis = async () => {
     const contentType = response.headers.get("content-type")
     if (contentType && contentType.includes("application/json")) {
        const data = await response.json()
-       if (data.message) {
-         addLog(`TERMINÉ: ${data.message}`)
-       }
+       addLog(JSON.stringify(data, null, 4))
        return
     }
 
@@ -774,6 +772,7 @@ onUnmounted(() => {
   padding: 6px 0;
   border-bottom: 1px solid rgba(255,255,255,0.05);
   line-height: 1.4;
+  white-space: pre-wrap;
 }
 
 .error-log { color: #f87171; font-weight: 600; }
