@@ -369,15 +369,10 @@ class DriveService:
     async def ingest_batch(self) -> int:
         """
         Étape 2 : Traitement des fichiers PENDING par batch (MAX_DRIVE_CV_IMPORT).
-
-        Transmet à cv_api :
-        - url : URL Google Docs
-        - source_tag : tag du folder racine configuré
-        - folder_name : nom du dossier parent direct (nomenclature "Prénom Nom" Zenika)
-        - google_access_token : token ADC pour lecture du document
-
-        Post-import : met à jour le cache drive:file:known:{id} si import réussi.
+        Traitement optimisé : Phase DB -> Phase Parallèle HTTP (Sémaphore) -> Phase DB.
         """
+        import asyncio
+
         base_query = (
             select(DriveSyncState)
             .filter(DriveSyncState.status == DriveSyncStatus.PENDING)
@@ -391,74 +386,85 @@ class DriveService:
 
         m2m_jwt = get_m2m_jwt_token()
         headers = {"Authorization": f"Bearer {m2m_jwt}"}
+        inject(headers)  # OTel propagation (Golden Rule §5)
         google_access_token = get_google_access_token()
 
-        processed_count = 0
-        async with httpx.AsyncClient(timeout=60.0) as http_client:
-            for state in pending_files:
-                folder = (
-                    await self.db.execute(
-                        select(DriveFolder).filter(DriveFolder.id == state.folder_id)
-                    )
-                ).scalars().first()
-                if not folder:
-                    state.status = DriveSyncStatus.ERROR
-                    continue
+        # 1. Préparation BD (Séquentiel)
+        payloads_to_process = []
+        for state in pending_files:
+            folder = (
+                await self.db.execute(
+                    select(DriveFolder).filter(DriveFolder.id == state.folder_id)
+                )
+            ).scalars().first()
+            if not folder:
+                state.status = DriveSyncStatus.ERROR
+                continue
 
-                doc_url = f"https://docs.google.com/document/d/{state.google_file_id}"
-
-                payload = {
+            doc_url = f"https://docs.google.com/document/d/{state.google_file_id}"
+            payloads_to_process.append({
+                "state": state,
+                "payload": {
                     "url": doc_url,
                     "source_tag": folder.tag,
                     "google_access_token": google_access_token,
-                    # Nomenclature Zenika : nom du dossier parent direct (ex: "Marie Dupont")
                     "folder_name": state.parent_folder_name,
                 }
+            })
+            state.status = DriveSyncStatus.PROCESSING
+            logger.info(f"Ingestion CV (Queue) — fichier='{state.file_name}', folder='{state.parent_folder_name}', tag={folder.tag}")
 
-                inject(headers)  # OTel propagation (Golden Rule §5)
+        await self.db.commit()
 
+        if not payloads_to_process:
+            return 0
+
+        # 2. Exécution Parallèle Bounded (max 5 requêtes simultanées)
+        sem = asyncio.Semaphore(5)
+        
+        async def fetch_api(item, client):
+            async with sem:
                 try:
-                    logger.info(
-                        f"Ingestion CV — fichier='{state.file_name}', "
-                        f"folder='{state.parent_folder_name}', tag={folder.tag}"
-                    )
-                    state.status = DriveSyncStatus.PROCESSING
-                    await self.db.commit()
-
-                    res = await http_client.post(
+                    res = await client.post(
                         f"{CV_API_URL.rstrip('/')}/import",
-                        json=payload,
+                        json=item["payload"],
                         headers=headers,
                     )
-                    if res.status_code < 400:
-                        data = res.json()
-                        state.status = DriveSyncStatus.IMPORTED_CV
-                        state.user_id = data.get("user_id")
-                        processed_count += 1
-                        # Mémoriser dans Redis pour skip lors du prochain cycle
-                        self._mark_file_known(state.google_file_id)
-                        logger.info(
-                            f"Import OK — {state.google_file_id} ('{state.file_name}') "
-                            f"→ user_id={state.user_id}"
-                        )
-                    else:
-                        error_detail = res.json().get("detail", "")
-                        if "LLM Parsing failed" in error_detail or "Not a CV" in error_detail:
-                            state.status = DriveSyncStatus.IGNORED_NOT_CV
-                            logger.info(f"Fichier ignoré (non-CV): {state.google_file_id}")
-                        else:
-                            state.status = DriveSyncStatus.ERROR
-                            logger.error(
-                                f"Import échoué '{state.file_name}' ({state.google_file_id}): "
-                                f"{error_detail}"
-                            )
+                    return {"state": item["state"], "status": res.status_code, "data": res.json()}
                 except Exception as e:
+                    return {"state": item["state"], "status": 500, "data": {"detail": str(e)}}
+
+        async with httpx.AsyncClient(timeout=60.0) as http_client:
+            tasks = [fetch_api(item, http_client) for item in payloads_to_process]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        # 3. Résolution BDD (Séquentiel)
+        processed_count = 0
+        from datetime import datetime
+        for res in results:
+            if isinstance(res, Exception):
+                logger.error(f"Erreur d'exécution critique: {res}")
+                continue
+                
+            state = res["state"]
+            status_code = res["status"]
+            data = res["data"]
+            
+            if status_code < 400:
+                state.status = DriveSyncStatus.IMPORTED_CV
+                state.user_id = data.get("user_id")
+                processed_count += 1
+                self._mark_file_known(state.google_file_id)
+                logger.info(f"Import OK — {state.google_file_id} ('{state.file_name}') → user_id={state.user_id}")
+            else:
+                error_detail = data.get("detail", str(data))
+                if "LLM Parsing failed" in error_detail or "Not a CV" in error_detail:
+                    state.status = DriveSyncStatus.IGNORED_NOT_CV
+                    logger.info(f"Fichier ignoré (non-CV): {state.google_file_id}")
+                else:
                     state.status = DriveSyncStatus.ERROR
-                    logger.error(
-                        f"Erreur réseau pour '{state.file_name}' ({state.google_file_id}): {e}"
-                    )
+                    logger.error(f"Import échoué '{state.file_name}' ({state.google_file_id}): {error_detail}")
+            
+            state.last_processed_at = datetime.utcnow()
 
-                state.last_processed_at = datetime.utcnow()
-                await self.db.commit()
-
+        await self.db.commit()
         return processed_count
