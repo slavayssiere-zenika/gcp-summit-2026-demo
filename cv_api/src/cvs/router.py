@@ -1421,7 +1421,7 @@ async def reanalyze_cvs(
     f_type = "all"
     f_val = ""
     if tag:
-        stmt = stmt.filter(CVProfile.source_tag == tag)
+        stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{tag}%"))
         f_type = "tag"
         f_val = tag
     if user_id:

@@ -212,11 +212,17 @@ class DriveService:
         Règle d'exclusion :
         - Les dossiers dont le nom commence par '_' sont ignorés (et leurs descendants).
         """
+        needs_initial_sync = (
+            await self.db.execute(
+                select(DriveFolder).filter(DriveFolder.is_initial_sync_done == False).limit(1)
+            )
+        ).scalars().first() is not None
+
         latest_file = (
             await self.db.execute(select(func.max(DriveSyncState.modified_time)))
         ).scalar()
 
-        if latest_file:
+        if latest_file and not needs_initial_sync:
             safe_time = latest_file - timedelta(minutes=1)
             date_query = f" and modifiedTime > '{safe_time.isoformat()}Z'"
         else:
@@ -344,6 +350,16 @@ class DriveService:
                 page_token = results.get("nextPageToken")
                 if not page_token:
                     break
+
+        if needs_initial_sync:
+            uninitialized_folders = (
+                await self.db.execute(
+                    select(DriveFolder).filter(DriveFolder.is_initial_sync_done == False)
+                )
+            ).scalars().all()
+            for f in uninitialized_folders:
+                f.is_initial_sync_done = True
+            await self.db.commit()
 
         logger.info(f"Delta Discovery terminé. {new_discoveries} fichiers en queue.")
         return new_discoveries

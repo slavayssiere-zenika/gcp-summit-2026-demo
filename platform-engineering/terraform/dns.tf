@@ -14,7 +14,8 @@ resource "google_dns_managed_zone" "env_zone" {
 # Délégation NS automatique vers la zone parente
 # =========================================================
 data "google_dns_managed_zone" "parent_zone" {
-  name = var.parent_zone_name
+  name    = var.parent_zone_name
+  project = var.parent_zone_project_id
 }
 
 resource "google_dns_record_set" "ns_delegation" {

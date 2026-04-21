@@ -3,7 +3,7 @@
 # ══════════════════════════════════════════════════════════
 
 # ── GCP ───────────────────────────────────────────────────
-project_id:       "slavayssiere-sandbox-462015"
+project_id:       "prod-ia-staffing"
 base_domain:      "zenika.slavayssiere.fr"
 parent_zone_name: "slavayssiere-zenika"
 
@@ -14,20 +14,21 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.0"
-agent_hr_api_version:       "v0.0.50"
-agent_ops_api_version:      "v0.0.50"
-agent_missions_api_version: "v0.0.50"
-users_api_version:          "v0.0.50"
-items_api_version:          "v0.0.50"
-competencies_api_version:   "v0.0.50"
+agent_router_api_version:   "v0.1.3"
+agent_hr_api_version:       "v0.0.64"
+agent_ops_api_version:      "v0.0.35"
+agent_missions_api_version: "v0.1.10"
+users_api_version:          "v0.0.35"
+items_api_version:          "v0.0.25"
+competencies_api_version:   "v0.1.7"
 cv_api_version:             "v0.0.50"
-prompts_api_version:        "v0.0.50"
-drive_api_version:          "v0.0.50"
-market_mcp_version:         "v0.0.50"
-db_migrations_version:      "v0.0.50"
-missions_api_version:       "v0.0.50"
-frontend_version:           "v0.0.50"
+prompts_api_version:        "v0.0.21"
+drive_api_version:          "v0.0.32"
+market_mcp_version:         "v0.0.57"
+monitoring_mcp_version:     "v0.0.57"
+db_migrations_version:      "v0.0.10"
+missions_api_version:       "v0.0.43"
+frontend_version:           "v0.0.90"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 2

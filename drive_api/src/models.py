@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Boolean
 from database import Base
 import enum
 from datetime import datetime
@@ -17,6 +17,7 @@ class DriveFolder(Base):
     google_folder_id = Column(String, unique=True, index=True, nullable=False)
     tag = Column(String, nullable=False)
     folder_name = Column(String, nullable=True)  # Nom du dossier Drive (ex: "Marie Dupont")
+    is_initial_sync_done = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class DriveSyncState(Base):
