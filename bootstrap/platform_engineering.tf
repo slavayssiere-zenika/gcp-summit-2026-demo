@@ -97,14 +97,22 @@ resource "google_cloud_run_v2_job" "platform_engineering_job" {
 # =========================================================
 # Google Drive API Service Accounts (Persistent)
 # =========================================================
-resource "google_service_account" "drive_sa_dev" {
-  account_id   = "sa-drive-dev-v2"
-  display_name = "Drive API Service Account (dev)"
-  description  = "Service Account interact with Drive API in dev environment"
+resource "google_service_account" "drive_sa" {
+  account_id   = "sa-drive-${terraform.workspace}-v2"
+  display_name = "Drive API Service Account (${terraform.workspace})"
+  description  = "Service Account interact with Drive API in ${terraform.workspace} environment"
 }
 
-resource "google_service_account" "drive_sa_staging" {
-  account_id   = "sa-drive-staging-v2"
-  display_name = "Drive API Service Account (staging)"
-  description  = "Service Account interact with Drive API in staging environment"
+# =========================================================
+# Cross-Project IAM Binding for Artifact Registry
+# =========================================================
+data "google_project" "current" {}
+
+resource "google_artifact_registry_repository_iam_member" "cr_reader" {
+  count      = var.source_artifact_project_id != "" && var.source_artifact_registry_name != "" ? 1 : 0
+  project    = var.source_artifact_project_id
+  location   = var.region
+  repository = var.source_artifact_registry_name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:service-${data.google_project.current.number}@serverless-robot-prod.iam.gserviceaccount.com"
 }

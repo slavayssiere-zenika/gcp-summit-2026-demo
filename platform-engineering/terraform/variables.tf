@@ -22,6 +22,12 @@ variable "parent_zone_name" {
   default     = "zenika-slavayssiere-fr"
 }
 
+variable "parent_zone_project_id" {
+  description = "Project ID contenant la zone parente"
+  type        = string
+  default     = "slavayssiere-sandbox-462015"
+}
+
 variable "admin_user" {
   description = "Utilisateur administrateur principal"
   type        = string

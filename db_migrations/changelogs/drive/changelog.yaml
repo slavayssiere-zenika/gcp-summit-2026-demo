@@ -128,3 +128,20 @@ databaseChangeLog:
             tableName: "drive_sync_state"
             columnName: "parent_folder_name"
 
+  - changeSet:
+      id: "7"
+      author: "antigravity"
+      comment: "Ajout flag d'initialisation de sync pour eviter de court-circuiter l'historique lors de la decouverte d'un nouveau dossier"
+      changes:
+        - addColumn:
+            tableName: "drive_folders"
+            columns:
+              - column:
+                  name: "is_initial_sync_done"
+                  type: "boolean"
+                  defaultValueBoolean: false
+      rollback:
+        - dropColumn:
+            tableName: "drive_folders"
+            columnName: "is_initial_sync_done"
+

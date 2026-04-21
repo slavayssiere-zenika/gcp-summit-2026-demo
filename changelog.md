@@ -1,3 +1,56 @@
+## Mise à jour automatique - 2026-04-21 11:48:18
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1494  | 488  |  67% |
+| cv_api           | 2530  | 755  |  70% |
+| drive_api        | 1316  | 441  |  66% |
+| items_api        | 1153  | 265  |  77% |
+| prompts_api      | 832   | 266  |  68% |
+| users_api        | 1421  | 435  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/go-to-prod.md` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `bootstrap/platform_engineering.tf` (M)
+- `bootstrap/variables.tf` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/test.db` (M)
+- `frontend/src/components/DriveAdminPanel.vue` (M)
+- `frontend/src/views/AdminUsers.vue` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/terraform/dns.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `prompts_api/spec.md` (M)
+- `scripts/destroy_old_cr.sh` (D)
+- `users_api/spec.md` (M)
+- `cv_api/query_tags.py` (??)
+- `scripts/generate_fake_agencies.py` (??)
+- `scripts/requirements.txt` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-21 00:13:09
 
 ### Couverture de Code

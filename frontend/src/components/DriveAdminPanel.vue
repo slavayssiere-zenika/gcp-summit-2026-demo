@@ -123,6 +123,7 @@
               <ChevronRight v-else class="icon toggle-icon" />
               <h4>{{ group.name }}</h4>
               <span class="file-count-badge">{{ group.files.length }} CV(s)</span>
+              <span class="tag-badge" v-if="group.files.length > 0">{{ getFolderTag(group.files[0].folder_id) }}</span>
             </div>
             <div class="accordion-summary-tags">
                <!-- Show a quick summary of statuses without expanding if we want, or just leave it clean -->

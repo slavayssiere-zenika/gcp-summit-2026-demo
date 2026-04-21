@@ -5,11 +5,13 @@ description: Assistant expert de mise en production (Analyse versions, changelog
 Ce workflow guide l'agent pour vérifier et préparer de manière experte une release en production.
 Toutes les étapes d'audit expertes définies ci-dessous sont **BLOQUANTES**. En cas d'échec sur l'une des vérifications de sécurité ou de conformité, l'agent doit l'imposer à l'utilisateur et proposer une correction immédiate avant de continuer.
 
-### Étape 1 : Analyse des Versions et Détection (`prd.yaml`)
+### Étape 1 : Architecture Multi-Projets et Versions (`prd.yaml`)
 1. Lit le fichier `platform-engineering/envs/prd.yaml`.
-2. Utilise `list_dir` et/ou `view_file` pour lire les fichiers `VERSION` locaux de tous les microservices détectés.
-3. Identifie les différences entre les versions locales et celles définies dans `prd.yaml`.
-4. **Action** : Propose un bloc YAML mis à jour pour `prd.yaml` (prêt à être copié-collé par l'humain ou auto-édité par toi si demandé) pour épingler avec certitude les services concernés.
+2. 🛑 **Check Multi-Projets** : Vérifie explicitement que `project_id` pointe bien vers le projet de production (ex: `prod-ia-staffing`), mais que `image_registry` pointe toujours vers le projet d'origine (Sandbox) pour réutiliser les artefacts validés en amont.
+3. 🛑 **Check IAM Cross-Project (BLOQUANT)** : Rappelle à l'utilisateur de s'assurer que l'Agent de Service Cloud Run de production (`@serverless-robot-prod.iam.gserviceaccount.com`) possède le rôle `roles/artifactregistry.reader` sur le registre d'artefacts du projet Sandbox, sans quoi le déploiement échouera.
+4. Utilise `list_dir` et/ou `view_file` pour lire les fichiers `VERSION` locaux de tous les microservices détectés.
+5. Identifie les différences entre les versions locales et celles définies dans `prd.yaml`.
+6. **Action** : Propose un bloc YAML mis à jour pour `prd.yaml` (prêt à être copié-collé par l'humain ou auto-édité par toi si demandé) pour épingler avec certitude les services concernés.
 
 ### Étape 2 : Bilan Fonctionnel (`changelog.md`)
 1. Scanne avec `view_file` les entrées les plus récentes du fichier `changelog.md` ou utilise `git status` / `git log`.
