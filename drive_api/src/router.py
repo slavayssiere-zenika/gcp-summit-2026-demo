@@ -73,6 +73,17 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
 async def list_folders(db: AsyncSession = Depends(get_db)):
     return (await db.execute(select(DriveFolder))).scalars().all()
 
+
+@router.post("/folders/reset-sync")
+async def reset_folder_sync(tag: str | None = None, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import update
+    stmt = update(DriveFolder).values(is_initial_sync_done=False)
+    if tag:
+        stmt = stmt.where(DriveFolder.tag.ilike(f"%{tag}%"))
+    res = await db.execute(stmt)
+    await db.commit()
+    return {"status": "success", "rows_updated": res.rowcount}
+
 @router.delete("/folders/{folder_id}")
 async def delete_folder(folder_id: int, db: AsyncSession = Depends(get_db)):
     f = (await db.execute(select(DriveFolder).filter(DriveFolder.id == folder_id))).scalars().first()

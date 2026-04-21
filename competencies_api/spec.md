@@ -81,7 +81,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/user-score` : Set User Competency Score
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/ai-score` : Trigger Ai Score Single
 - **POST** `/evaluations/user/{user_id}/ai-score-all` : Trigger Ai Score All
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
