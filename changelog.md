@@ -1,3 +1,44 @@
+## Mise à jour automatique - 2026-04-21 11:55:48
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1494  | 488  |  67% |
+| cv_api           | 2542  | 762  |  70% |
+| drive_api        | 1325  | 448  |  66% |
+| items_api        | 1153  | 265  |  77% |
+| prompts_api      | 832   | 266  |  68% |
+| users_api        | 1421  | 435  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- feat(ui): display fast JSON response in logs
+- fix(cv): case-insensitive tag search
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/router.py` (M)
+- `drive_api/test.db` (M)
+- `frontend/VERSION` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-21 11:48:18
 
 ### Couverture de Code

@@ -1429,9 +1429,23 @@ async def reanalyze_cvs(
         f_type = "user"
         f_val = str(user_id)
         
+    # Force Drive API to reset is_initial_sync_done for this tag
+    try:
+        reset_url = f"{DRIVE_API_URL.rstrip('/')}/folders/reset-sync"
+        if tag:
+            reset_url += f"?tag={tag}"
+        async with httpx.AsyncClient(timeout=5.0) as http_client:
+            await http_client.post(reset_url, headers=headers)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to trigger drive_api reset-sync: {e}")
+
     cvs = (await db.execute(stmt)).scalars().all()
     if not cvs:
-        return {"message": "Aucun CV trouvé pour ces filtres.", "count": 0}
+        msg = "Aucun CV existant trouvé dans la base locale."
+        if tag or f_type == 'all':
+            msg += " Cependant, une re-découverte intégrale (Drive) a été ordonnée. Les CVs seront ingérés d'ici quelques minutes."
+        return {"message": msg, "count": 0}
 
     # Initialiser l'état dans Redis
     await task_state_manager.initialize_task(len(cvs), f_type, f_val)
