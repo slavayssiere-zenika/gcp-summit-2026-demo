@@ -90,6 +90,15 @@ const triggerReanalysis = async () => {
       throw new Error(errorData.detail || 'Erreur lors de la réanalyse')
     }
 
+    const contentType = response.headers.get("content-type")
+    if (contentType && contentType.includes("application/json")) {
+       const data = await response.json()
+       if (data.message) {
+         addLog(`TERMINÉ: ${data.message}`)
+       }
+       return
+    }
+
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     
