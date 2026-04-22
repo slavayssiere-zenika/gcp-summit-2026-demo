@@ -82,3 +82,4 @@ reports/
 # Temp Python envs
 # =========================
 vtmp/
+*.db
