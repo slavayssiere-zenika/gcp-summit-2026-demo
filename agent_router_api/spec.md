@@ -66,7 +66,7 @@ Il ne possède aucun outil MCP direct — il orchestre uniquement d'autres agent
 - **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

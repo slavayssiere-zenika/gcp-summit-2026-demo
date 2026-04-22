@@ -155,10 +155,24 @@
       <div class="errors-section">
         <div class="section-header-flex">
           <h3 class="danger-title"><AlertCircle class="icon-sm inline-icon" /> Actions Requises (Erreurs)</h3>
-          <button v-if="errorFiles.length > 0" class="btn-secondary btn-sm" @click="retryErrors" :disabled="isRetrying">
-            <RefreshCcw class="icon-sm" :class="{ 'spinning': isRetrying }" />
-            Réessayer Tout
-          </button>
+          <div class="btn-group">
+            <!-- Bouton Force Flush : visible uniquement quand des fichiers sont bloqués en QUEUED -->
+            <button
+              v-if="syncStatus?.queued > 0"
+              class="btn-warning btn-sm"
+              @click="forceFlushZombies"
+              :disabled="isFlushingZombies"
+              title="Débloque immédiatement les fichiers bloqués en QUEUED sans attendre 30 min"
+              aria-label="Forcer le déblocage des fichiers zombies bloqués en Pub/Sub"
+            >
+              <Zap class="icon-sm" :class="{ 'spinning': isFlushingZombies }" />
+              {{ isFlushingZombies ? 'Déblocage...' : `Forcer Déblocage (${syncStatus.queued})` }}
+            </button>
+            <button v-if="errorFiles.length > 0" class="btn-secondary btn-sm" @click="retryErrors" :disabled="isRetrying">
+              <RefreshCcw class="icon-sm" :class="{ 'spinning': isRetrying }" />
+              Réessayer Tout
+            </button>
+          </div>
         </div>
 
         <div v-if="errorFiles.length > 0" class="error-list">
@@ -188,7 +202,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio
+  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio, Zap
 } from 'lucide-vue-next'
 
 const folders = ref<any[]>([])
@@ -197,8 +211,10 @@ const syncStatus = ref<any>(null)
 const isSyncing = ref(false)
 const isAdding = ref(false)
 const isRetrying = ref(false)
+const isFlushingZombies = ref(false)
 const newFolder = ref({ google_folder_id: '', tag: '' })
 const showAddFolder = ref(false)
+const flushResult = ref<{zombies_reset: number, errors_reset: number} | null>(null)
 
 const isProcessingOrPending = computed(() => {
   if (!syncStatus.value) return false;
@@ -263,11 +279,35 @@ const retryErrors = async () => {
     await fetchStatus()
     await fetchFolders()
     await fetchErrors()
-    triggerSync() 
+    triggerSync()
   } catch (err) {
     console.error('Failed to retry errors', err)
   } finally {
     isRetrying.value = false
+  }
+}
+
+/**
+ * Force le passage immédiat en PENDING de tous les fichiers QUEUED/PROCESSING
+ * bloqués depuis plus de 0 secondes (bypass du seuil zombie de 30 min).
+ * Utilisé quand des fichiers sont visiblement bloqués en file Pub/Sub.
+ */
+const forceFlushZombies = async () => {
+  if (isFlushingZombies.value) return
+  isFlushingZombies.value = true
+  flushResult.value = null
+  try {
+    const res = await axios.post('/api/drive/retry-errors?force=true')
+    flushResult.value = res.data
+    await fetchStatus()
+    await fetchFolders()
+    await fetchErrors()
+    // Relancer le sync pour republier les PENDING dans Pub/Sub
+    await triggerSync()
+  } catch (err) {
+    console.error('Force flush failed', err)
+  } finally {
+    isFlushingZombies.value = false
   }
 }
 
@@ -699,4 +739,36 @@ onUnmounted(() => {
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .text-sm { font-size: 0.875rem; }
 .text-light { color: var(--text-light); }
+
+.btn-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Bouton d'urgence pour le force flush — orange pour signaler l'aspect critique */
+.btn-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  animation: pulseWarning 2.5s ease-in-out infinite;
+}
+.btn-warning:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
+}
+.btn-warning:disabled { opacity: 0.6; cursor: not-allowed; animation: none; }
+
+@keyframes pulseWarning {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18); }
+}
 </style>

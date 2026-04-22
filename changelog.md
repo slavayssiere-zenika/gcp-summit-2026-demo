@@ -1,3 +1,51 @@
+## Mise à jour automatique - 2026-04-22 08:02:28
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1667  | 620  |  63% |
+| cv_api           | 2657  | 766  |  71% |
+| drive_api        | 1462  | 549  |  62% |
+| items_api        | 1206  | 292  |  76% |
+| prompts_api      | 895   | 315  |  65% |
+| users_api        | 1454  | 453  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- fix: exclure les DBs de test du tracking git
+- chore: bootstrap IAM cross-project et déploiement prd
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/competencies_test.db` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/drive_business_test.db` (M)
+- `drive_api/spec.md` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/components/CVImportMonitor.vue` (M)
+- `frontend/src/components/DriveAdminPanel.vue` (M)
+- `frontend/src/views/Admin.vue` (M)
+- `items_api/items_test.db` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/terraform/pubsub.tf` (M)
+- `prompts_api/prompts_test.db` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/VERSION` (M)
+- `users_api/spec.md` (M)
+- `users_api/src/users/router.py` (M)
+- `users_api/users_test.db` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-22 07:44:32
 
 ### Couverture de Code
