@@ -341,11 +341,19 @@ async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSessio
              raise HTTPException(status_code=403, detail="Ce token n'appartient pas à un Service Account autorisé")
 
         # Give it a service account role in our system
-        access_token = create_access_token(data={
-            "sub": email,
-            "role": "service_account",
-            "allowed_category_ids": []
-        })
+        # TTL étendu à 120 min pour les service accounts Pub/Sub :
+        # le backoff max de Pub/Sub est ~17 min (somme des 5 retries), et avec DLQ
+        # on peut avoir des messages qui attendent encore plus longtemps.
+        # Le fix long terme est le token OIDC Google (1h, échangé au moment du traitement).
+        sa_token_ttl = int(os.getenv("SA_TOKEN_TTL_MINUTES", "120"))
+        access_token = create_access_token(
+            data={
+                "sub": email,
+                "role": "service_account",
+                "allowed_category_ids": []
+            },
+            expires_delta=timedelta(minutes=sa_token_ttl)
+        )
         refresh_token = create_refresh_token(data={"sub": email})
 
         return TokenResponse(

@@ -88,6 +88,15 @@ resource "google_pubsub_topic_iam_member" "pubsub_dlq_publisher" {
   member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
+# Allow Pub/Sub system SA to subscribe to the source subscription (required for DLQ forwarding)
+# Without this, GCP cannot forward dead-lettered messages to the DLQ topic
+resource "google_pubsub_subscription_iam_member" "pubsub_dlq_subscriber" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.cv_import_events_sub.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
 # DLQ Subscription — conserve les messages dead-lettered pour analyse/monitoring
 # TTL : 14 jours (aligné sur le topic DLQ)
 resource "google_pubsub_subscription" "cv_import_events_dlq_sub" {

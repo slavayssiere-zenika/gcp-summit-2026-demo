@@ -35,10 +35,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health Check
 - **GET** `/version` : Get Version
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec
 - **GET** `/user/me` : Get My Prompt
 - **PUT** `/user/me` : Update My Prompt
