@@ -194,17 +194,25 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
     # En dev local (pas de SA configuré), on tolère un bypass contrôlé
     if invoker_sa_email and invoker_sa_email != "sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com":
         try:
-            audience = f"https://{request.headers.get('host', '')}{request.url.path}"
+            # ⚠️ Ne PAS utiliser request.url.path : le LB GCP réécrit le path
+            # (ex: /cv-api/pubsub/import-cv → /pubsub/import-cv) donc il ne
+            # correspond plus à l'audience dans le token OIDC.
+            # On lit l'audience depuis une env var injectée par Terraform,
+            # qui est identique à push_config.oidc_token.audience dans pubsub.tf.
+            pubsub_audience = os.getenv("PUBSUB_CV_IMPORT_AUDIENCE", "")
+            if not pubsub_audience:
+                # Fallback: reconstruction depuis Host + path original (dev local sans LB)
+                pubsub_audience = f"https://{request.headers.get('host', '')}{request.url.path}"
             decoded = google_id_token.verify_oauth2_token(
                 oidc_token,
                 google_requests.Request(),
-                audience=audience
+                audience=pubsub_audience
             )
             token_email = decoded.get("email", "")
             if token_email != invoker_sa_email:
                 logger.warning(f"[PubSub] SA non autorisé: {token_email} (attendu: {invoker_sa_email})")
                 raise HTTPException(status_code=401, detail="Unauthorized Pub/Sub invoker")
-            logger.info(f"[PubSub] OIDC validé pour {token_email}")
+            logger.info(f"[PubSub] OIDC validé pour {token_email} (audience: {pubsub_audience})")
         except HTTPException:
             raise
         except Exception as e:
@@ -453,11 +461,30 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                                 parents.extend(extract_mid_parents(subs))
                         return parents
 
+                    def extract_leaf_names(nodes, _acc=None):
+                        """Retourne les noms des compétences feuilles (nœuds sans sous-compétences)."""
+                        if _acc is None:
+                            _acc = []
+                        for n in nodes:
+                            subs = n.get("sub_competencies", [])
+                            if not subs:
+                                name = n.get("name")
+                                if name:
+                                    _acc.append(name)
+                            else:
+                                extract_leaf_names(subs, _acc)
+                        return _acc
+
                     parent_categories = extract_mid_parents(items)
-                    tree_context = f"\n\nHere is the official list of parent capability domains for this company. Please try to map CV skills to these broad categories directly:\n{json.dumps(parent_categories)}"
+                    leaf_names = extract_leaf_names(items)[:300]  # cap à 300 pour rester dans le contexte
+                    tree_context = (
+                        f"\n\nHere is the official taxonomy for this company's competencies."
+                        f"\n\n1. PARENT DOMAINS — use these as the 'parent' field for each extracted competency:\n{json.dumps(parent_categories)}"
+                        f"\n\n2. EXISTING LEAF COMPETENCIES — if a skill matches one of these exactly (or is an alias/abbreviation), use this EXACT name instead of creating a variant (e.g. map 'K8s' → 'Kubernetes', 'GCP' → 'Google Cloud Platform'):\n{json.dumps(leaf_names)}"
+                    )
                     logger.info(
                         f"[CV_STEP] llm_parse — taxonomy context injected",
-                        extra={"step": "llm_parse", "categories_count": len(parent_categories), "cv_url": url}
+                        extra={"step": "llm_parse", "categories_count": len(parent_categories), "leaf_count": len(leaf_names), "cv_url": url}
                     )
                     _CV_CACHE["tree_context"]["value"] = tree_context
                     _CV_CACHE["tree_context"]["expires"] = datetime.utcnow() + timedelta(minutes=5)

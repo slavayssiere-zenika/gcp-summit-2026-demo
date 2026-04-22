@@ -138,6 +138,13 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = google_service_account.pubsub_invoker.email
       }
       env {
+        # Audience OIDC identique à push_config.oidc_token.audience dans pubsub.tf.
+        # Nécessaire car le LB réécrit /cv-api/pubsub/import-cv → /pubsub/import-cv,
+        # rendant request.url.path inexact pour la vérification côté cv_api.
+        name  = "PUBSUB_CV_IMPORT_AUDIENCE"
+        value = "https://api.${terraform.workspace}.${var.base_domain}/cv-api/pubsub/import-cv"
+      }
+      env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
       }
