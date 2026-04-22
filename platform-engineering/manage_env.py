@@ -323,19 +323,6 @@ def build_importable_resources_map(env, project_id, region):
         "google_dns_managed_zone.internal_zone": f"{dns_base}/internal-zone-{env}",
         # ── SSL Certificate ──────────────────────────────────────────────────
         "google_compute_managed_ssl_certificate.default": f"projects/{project_id}/global/sslCertificates/ssl-{env}",
-        # ── Pub/Sub — Topics & Subscriptions ────────────────────────────────
-        # Sans ces entrées, un state vide sur un GCP existant provoque une
-        # erreur 409 "already exists" non gérée → la Push Subscription n'est
-        # jamais créée/importée → cv_api ne reçoit aucun message Pub/Sub.
-        "google_pubsub_topic.cv_import_events":             f"projects/{project_id}/topics/zenika-cv-import-events-{env}",
-        "google_pubsub_topic.cv_import_events_dead_letter": f"projects/{project_id}/topics/zenika-cv-import-events-dead-letter-{env}",
-        "google_pubsub_topic.user_events":                  f"projects/{project_id}/topics/zenika-user-events-{env}",
-        "google_pubsub_subscription.cv_import_events_sub":      f"projects/{project_id}/subscriptions/cv-import-events-sub-{env}",
-        "google_pubsub_subscription.cv_import_events_dlq_sub":  f"projects/{project_id}/subscriptions/cv-import-events-dlq-sub-{env}",
-        "google_pubsub_subscription.cv_api_sub":                f"projects/{project_id}/subscriptions/cv-api-user-events-sub-{env}",
-        "google_pubsub_subscription.items_api_sub":             f"projects/{project_id}/subscriptions/items-api-user-events-sub-{env}",
-        # ── Pub/Sub Invoker Service Account ──────────────────────────────────
-        "google_service_account.pubsub_invoker": f"projects/{project_id}/serviceAccounts/sa-pubsub-invoker-{env}@{project_id}.iam.gserviceaccount.com",
     }
 
 
