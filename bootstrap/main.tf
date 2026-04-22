@@ -21,6 +21,30 @@ resource "google_artifact_registry_repository" "services" {
   repository_id = var.artifact_registry_name
   description   = "Docker repository for Zenika Console microservices"
   format        = "DOCKER"
+
+  # Politique de nettoyage active (dry_run=false = purge effective)
+  cleanup_policy_dry_run = false
+
+  # Règle 1 : conserver uniquement les N dernières versions par image
+  cleanup_policies {
+    id     = "keep-minimum-versions"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = var.artifact_keep_count
+    }
+  }
+
+  # Règle 2 : supprimer les images non-taguées (couches intermédiaires, builds ratés, etc.)
+  cleanup_policies {
+    id     = "delete-untagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "UNTAGGED"
+      older_than = "${var.artifact_untagged_ttl_days * 24 * 3600}s"
+    }
+  }
+
+  depends_on = [google_project_service.enabled_services]
 }
 
 # =========================================================

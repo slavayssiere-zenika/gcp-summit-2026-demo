@@ -1,3 +1,52 @@
+## Mise à jour automatique - 2026-04-22 07:44:32
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1667  | 620  |  63% |
+| cv_api           | 2657  | 766  |  71% |
+| drive_api        | 1462  | 549  |  62% |
+| items_api        | 1206  | 292  |  76% |
+| prompts_api      | 895   | 315  |  65% |
+| users_api        | 1453  | 452  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `ootstrap/main.tf` (M)
+- `bootstrap/services.tf` (M)
+- `bootstrap/variables.tf` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/cv_api.extract_cv_info.txt` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `cv_api/test_pubsub_handler.py` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/google_auth.py` (M)
+- `drive_api/src/router.py` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/VERSION` (M)
+- `market_mcp/mcp_server.py` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/mcp_server.py` (M)
+- `users_api/VERSION` (M)
+- `users_api/src/users/pubsub.py` (M)
+- `competencies_api/competencies_test.db` (??)
+- `drive_api/drive_business_test.db` (??)
+- `items_api/items_test.db` (??)
+- `prompts_api/prompts_test.db` (??)
+- `scripts/force_flush_queued.sh` (??)
+- `users_api/users_test.db` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-22 07:03:15
 
 ### Couverture de Code

@@ -219,7 +219,7 @@ async def retry_errors(db: AsyncSession = Depends(get_db)):
 
 
 
-async def _reset_errors_to_pending(db: AsyncSession) -> dict:
+async def _reset_errors_to_pending(db: AsyncSession, force: bool = False) -> dict:
     """
     Logique métier partagée : remet en PENDING les fichiers bloqués.
 
@@ -228,6 +228,9 @@ async def _reset_errors_to_pending(db: AsyncSession) -> dict:
        (ou Pub/Sub a épuisé ses 5 retries et envoyé en DLQ).
     2. STATUS = QUEUED/PROCESSING depuis plus de 30 minutes : zombies Pub/Sub
        (message perdu, instance cv_api redémarrée, timeout non géré).
+    3. Si force=True : réinitialise immédiatement TOUS les QUEUED/PROCESSING
+       sans attendre le seuil de 30 min. Utile après une réanalyse massive
+       où des fichiers sont bloqués suite à un JWT expiré (pré-fix #4).
 
     Après reset → status = PENDING → le prochain tour de /sync les republiera
     dans Pub/Sub automatiquement.
@@ -244,12 +247,16 @@ async def _reset_errors_to_pending(db: AsyncSession) -> dict:
     result_errors = await db.execute(stmt_errors)
     error_ids = [r[0] for r in result_errors.fetchall()]
 
-    # Reset des zombies QUEUED/PROCESSING bloqués depuis > 30 min
+    # Reset des zombies QUEUED/PROCESSING — avec ou sans filtre temporel
     stmt_zombies = (
         update(DriveSyncState)
         .where(DriveSyncState.status.in_([DriveSyncStatus.QUEUED, DriveSyncStatus.PROCESSING]))
-        .where(DriveSyncState.last_processed_at < zombie_threshold)
-        .values(status=DriveSyncStatus.PENDING, error_message="Réinitialisé automatiquement (zombie > 30min)")
+    )
+    if not force:
+        stmt_zombies = stmt_zombies.where(DriveSyncState.last_processed_at < zombie_threshold)
+    stmt_zombies = (
+        stmt_zombies
+        .values(status=DriveSyncStatus.PENDING, error_message="Réinitialisé automatiquement (zombie > 30min)" if not force else "Réinitialisé manuellement (force flush)")
         .returning(DriveSyncState.google_file_id)
     )
     result_zombies = await db.execute(stmt_zombies)
@@ -277,21 +284,12 @@ async def _reset_errors_to_pending(db: AsyncSession) -> dict:
 public_router = APIRouter(prefix="", tags=["Drive Sync - IAM Protected"])
 
 @public_router.post("/scheduled/retry-errors")
-async def scheduled_retry_errors(db: AsyncSession = Depends(get_db)):
+async def scheduled_retry_errors(force: bool = False, db: AsyncSession = Depends(get_db)):
     """
     Drain automatique de la DLQ — appelé par Cloud Scheduler toutes les heures.
-
-    Processus DLQ :
-    1. Pub/Sub tente 5 fois de livrer un message à cv_api.
-    2. Après 5 échecs, le message tombe dans la DLQ (topic zenika-cv-import-events-dead-letter).
-    3. Le fichier reste en ERROR dans drive_api (via le PATCH d'erreur de cv_api).
-    4. Toutes les heures, ce scheduler remet les ERROR + zombies en PENDING.
-    5. Le prochain POST /sync republiera les fichiers dans le topic principal.
-    6. Pub/Sub retente → pipeline complète.
-
-    Authentification : OIDC token du SA drive_sa (pas de JWT applicatif).
+    Accepte aussi force=true pour forcer le déblocage immédiat depuis un outil externe.
     """
-    result = await _reset_errors_to_pending(db)
+    result = await _reset_errors_to_pending(db, force=force)
     logger.info(f"[Scheduler] DLQ drain automatique : {result['total_reset']} fichiers remis en queue.")
     return result
 
@@ -310,7 +308,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
         from src.google_auth import get_drive_service
         drive = get_drive_service()
         # Fast API call to verify the OAuth binding hasn't been lost or deleted
-        drive.about().get(fields="user").execute()
+        await asyncio.to_thread(lambda: drive.about().get(fields="user").execute())
     except Exception as e:
         logger.error(f"[DRIVE_API_AUTH_LOSS] Le Service Account a perdu l'accès au Drive: {e}")
         from fastapi.responses import JSONResponse
@@ -372,6 +370,14 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
         file_state.user_id = update_data.user_id
     if update_data.status is not None:
         file_state.status = update_data.status
+        # Fix #3 : invalider le cache Redis quand un fichier repasse en PENDING
+        # pour que discover_files() ne le skippe pas lors du prochain /sync.
+        if str(update_data.status) in ("PENDING", DriveSyncStatus.PENDING.value):
+            try:
+                get_redis().delete(f"drive:file:known:{file_id}")
+                logger.info(f"[Cache] drive:file:known:{file_id} invalidé (status → PENDING).")
+            except Exception as e_redis:
+                logger.warning(f"[Cache] Impossible d'invalider drive:file:known:{file_id}: {e_redis}")
     if update_data.error_message is not None:
         file_state.error_message = update_data.error_message
         

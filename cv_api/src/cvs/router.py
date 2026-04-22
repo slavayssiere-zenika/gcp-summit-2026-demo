@@ -226,11 +226,39 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
     source_tag = payload.get("source_tag", "")
     folder_name = payload.get("folder_name", "")
     google_access_token = payload.get("google_access_token")
-    jwt = payload.get("jwt", "")
+    oidc_token = payload.get("oidc_token", "")   # Production: OIDC ID Token Google (RS256, 1h)
+    jwt = payload.get("jwt", "")                  # Local dev: MOCK_M2M_JWT fallback
 
     if not url or not google_file_id:
         logger.error("[PubSub] Payload incomplet (url ou google_file_id manquant)")
         raise HTTPException(status_code=400, detail="Payload incomplet")
+
+    # ── Fix #4 : Échange du token OIDC Google → JWT applicatif frais ─────────
+    # En production, drive_api embarque un OIDC ID Token (validité 1h) dans le message Pub/Sub
+    # à la place du JWT applicatif HS256 qui expirait pendant le backoff Pub/Sub (30s→600s).
+    # Le worker échange le token OIDC ici, au moment réel du traitement, pour un JWT frais.
+    if oidc_token:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as oidc_client:
+                oidc_res = await oidc_client.post(
+                    f"{USERS_API_URL.rstrip('/')}/service-account/login",
+                    json={"id_token": oidc_token},
+                )
+                if oidc_res.status_code == 200:
+                    jwt = oidc_res.json().get("access_token", "")
+                    logger.info(f"[PubSub] OIDC token échangé → JWT applicatif frais obtenu.")
+                else:
+                    logger.error(f"[PubSub] Échange OIDC échoué (HTTP {oidc_res.status_code}) — retry Pub/Sub.")
+                    raise HTTPException(status_code=500, detail=f"OIDC exchange failed: HTTP {oidc_res.status_code}")
+        except HTTPException:
+            raise
+        except Exception as e_oidc:
+            logger.error(f"[PubSub] Impossible d'échanger l'OIDC token: {e_oidc}")
+            raise HTTPException(status_code=500, detail=f"OIDC exchange error: {e_oidc}")
+
+    if not jwt:
+        logger.error("[PubSub] Aucun token d'authentification dans le payload (ni oidc_token, ni jwt).")
+        raise HTTPException(status_code=500, detail="Configuration error: aucun token dans le message Pub/Sub")
 
     headers = {"Authorization": f"Bearer {jwt}"}
     inject(headers)
@@ -248,23 +276,20 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
     except Exception as e:
         logger.warning(f"[PubSub] Impossible de notifier drive_api (PROCESSING): {e}")
 
-    # ── 4. Décoder le JWT interne pour obtenir token_payload compatible ───────
-    # Le JWT a été généré par drive_api (M2M token) et inclus dans le message Pub/Sub.
+    # ── 4. Décoder le JWT applicatif pour obtenir token_payload compatible ────
+    # Le JWT a été obtenu via échange OIDC (prod) ou MOCK_M2M_JWT (local).
     # Il est nécessaire pour que _process_cv_core puisse appeler les services internes
     # (users_api, competencies_api, missions_api) avec une identité valide.
     # _AUTH_SECRET_KEY est la constante chargée au démarrage par src.auth (avant purge env)
-    # On ne peut pas utiliser os.getenv("SECRET_KEY") ici car auth.py la purge de l'env
-    # pour empêcher son extraction par un LLM (AGENTS.md §4 Rotation des secrets).
     if not _AUTH_SECRET_KEY:
-        # Configuration cassée → 500 (Pub/Sub retentera, la DLQ capturera si persistant)
         logger.error("[PubSub] SECRET_KEY absente — impossible de valider le JWT interne.")
         raise HTTPException(status_code=500, detail="Configuration error: SECRET_KEY manquante")
     try:
         token_payload = jose_jwt.decode(jwt, _AUTH_SECRET_KEY, algorithms=["HS256"])
     except JWTError as e:
-        # JWT corrompu ou expiré → 500 pour forcer le retry Pub/Sub avec un nouveau message
         logger.error(f"[PubSub] JWT interne invalide (corrompu ou expiré): {e}")
         raise HTTPException(status_code=500, detail=f"JWT interne invalide: {e}")
+
 
     # ── 5. Exécution du pipeline LLM synchrone ───────────────────────────────
     try:
@@ -470,9 +495,13 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                                     "aliases": {
                                         "type": "array",
                                         "items": {"type": "string"}
+                                    },
+                                    "practiced": {
+                                        "type": "boolean",
+                                        "description": "True if the consultant has actively used this skill in at least one mission. False if only mentioned contextually (e.g., as an alternative or comparison)."
                                     }
                                 },
-                                "required": ["name"]
+                                "required": ["name", "practiced"]
                             }
                         },
                         "missions": {
@@ -844,6 +873,16 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                     async def process_competency(comp):
                         name = comp["name"]
                         parent = comp.get("parent")
+                        # Option B : ne pas assigner les compétences non pratiquées
+                        # practiced=False signifie que la compétence est mentionnée
+                        # contextuellement (ex: "utilise GitLab CI plutôt que Jenkins")
+                        # mais que le consultant ne la maîtrise pas réellement.
+                        if not comp.get("practiced", True):
+                            logger.info(
+                                f"[BG_TASK] Skipping non-practiced competency '{name}' (practiced=False)",
+                                extra={"cv_url": bg_url}
+                            )
+                            return True  # pas une erreur, juste un skip
                         try:
                             c_id = find_comp_id(all_comps, name)
                             if not c_id:

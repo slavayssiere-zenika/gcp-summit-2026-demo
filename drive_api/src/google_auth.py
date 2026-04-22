@@ -1,8 +1,11 @@
 import os
+import logging
 import google.auth
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from googleapiclient.discovery import build
+
+logger = logging.getLogger(__name__)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
@@ -59,4 +62,36 @@ def get_m2m_jwt_token() -> str:
         return res.json()["access_token"]
     except Exception as e:
         print(f"Failed to acquire M2M JWT: {e}")
+        return ""
+
+
+def get_google_oidc_id_token() -> str:
+    """
+    Génère un OIDC ID Token signé par Google (RS256, validité 1h) pour le SA courant.
+
+    Ce token est embarqué dans les messages Pub/Sub à la place du JWT applicatif HS256
+    à courte durée de vie, éliminant les JWTError 'Signature has expired' lors des
+    relivraisons Pub/Sub avec backoff (30s → 600s).
+
+    Le worker destinataire (cv_api /pubsub/import-cv) l'échange contre un JWT applicatif
+    frais via POST users_api/service-account/login au moment du traitement réel.
+
+    En dev local (USE_IAM_AUTH != 'true') : retourne "" → fallback sur MOCK_M2M_JWT.
+    Sur Cloud Run (USE_IAM_AUTH=true) : appelle le Metadata Server pour un ID Token.
+    """
+    is_local = os.getenv("USE_IAM_AUTH", "false").lower() != "true"
+    if is_local:
+        logger.debug("[OIDC] Env local détecté (USE_IAM_AUTH != true) — ID Token non généré.")
+        return ""
+
+    audience = os.getenv("USERS_API_URL", "http://users_api:8000")
+    try:
+        import google.auth.transport.requests as google_requests
+        from google.oauth2 import id_token as sa_id_token
+        req = google_requests.Request()
+        token = sa_id_token.fetch_id_token(req, audience)
+        logger.info(f"[OIDC] ID Token généré pour audience={audience}")
+        return token
+    except Exception as e:
+        logger.warning(f"[OIDC] Impossible de générer un ID Token (audience={audience}): {e}")
         return ""

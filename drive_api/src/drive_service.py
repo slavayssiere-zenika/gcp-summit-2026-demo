@@ -13,7 +13,7 @@ from opentelemetry.propagate import inject
 
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.redis_client import get_redis
-from src.google_auth import get_drive_service, get_m2m_jwt_token, get_google_access_token
+from src.google_auth import get_drive_service, get_m2m_jwt_token, get_google_access_token, get_google_oidc_id_token
 
 logger = logging.getLogger(__name__)
 
@@ -191,11 +191,13 @@ class DriveService:
             # 3. Appel API Drive pour remonter d'un niveau
             try:
                 logger.info(f"[_resolve_root_and_parent] Appel Drive API pour: {current_id}")
-                folder_meta = self.drive.files().get(
-                    fileId=current_id,
-                    fields="parents,name",
-                    supportsAllDrives=True,
-                ).execute()
+                folder_meta = await asyncio.to_thread(
+                    lambda cid=current_id: self.drive.files().get(
+                        fileId=cid,
+                        fields="parents,name",
+                        supportsAllDrives=True,
+                    ).execute()
+                )
                 folder_name_raw = folder_meta.get("name", "")
                 parents = folder_meta.get("parents", [])
 
@@ -261,7 +263,9 @@ class DriveService:
             date_query = ""
 
         try:
-            about = self.drive.about().get(fields="user").execute()
+            about = await asyncio.to_thread(
+                lambda: self.drive.about().get(fields="user").execute()
+            )
             sa_email = about.get("user", {}).get("emailAddress", "Unknown")
             logger.info(f"Authentifié sur Google Drive en tant que : {sa_email}")
         except Exception as e:
@@ -281,16 +285,18 @@ class DriveService:
         for corpus in ["allDrives", "user"]:
             page_token = None
             while True:
-                results = self.drive.files().list(
-                    q=q,
-                    spaces="drive",
-                    corpora=corpus,
-                    includeItemsFromAllDrives=True,
-                    supportsAllDrives=True,
-                    fields="nextPageToken, files(id, name, modifiedTime, version, parents)",
-                    pageToken=page_token,
-                    pageSize=100,
-                ).execute()
+                results = await asyncio.to_thread(
+                    lambda pt=page_token: self.drive.files().list(
+                        q=q,
+                        spaces="drive",
+                        corpora=corpus,
+                        includeItemsFromAllDrives=True,
+                        supportsAllDrives=True,
+                        fields="nextPageToken, files(id, name, modifiedTime, version, parents)",
+                        pageToken=pt,
+                        pageSize=100,
+                    ).execute()
+                )
 
                 files = results.get("files", [])
                 logger.info(f"Corpus '{corpus}' — {len(files)} fichiers récupérés.")
@@ -430,8 +436,11 @@ class DriveService:
         if not pending_files:
             return 0
 
-        m2m_jwt = get_m2m_jwt_token()
-        google_access_token = get_google_access_token()
+        # Tentative OIDC token (production Cloud Run) — validité 1h, éliminé les JWTError 'expired'
+        # en cas de backoff Pub/Sub. En local (USE_IAM_AUTH != true) — fallback sur M2M JWT.
+        oidc_token = get_google_oidc_id_token()
+        m2m_jwt = get_m2m_jwt_token() if not oidc_token else ""
+        google_access_token = await asyncio.to_thread(get_google_access_token)
         pubsub_topic = PUBSUB_CV_IMPORT_TOPIC
         gcp_project_id = _resolve_gcp_project_id()
 
@@ -457,6 +466,10 @@ class DriveService:
                     "source_tag": folder.tag,
                     "folder_name": state.parent_folder_name or folder.folder_name or "",
                     "google_access_token": google_access_token,
+                    # Fix #4 : OIDC token (validité 1h, non expirable pendant le backoff Pub/Sub)
+                    # En prod : oidc_token contient un token frais, jwt = ""
+                    # En local : oidc_token = "", jwt = MOCK_M2M_JWT
+                    "oidc_token": oidc_token,
                     "jwt": m2m_jwt,
                 }
             })

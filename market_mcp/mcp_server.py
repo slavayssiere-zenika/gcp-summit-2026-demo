@@ -19,18 +19,25 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # Config
-def get_gcp_project_id():
-    pid = os.getenv("GCP_PROJECT_ID")
-    if pid:
+def get_gcp_project_id() -> str:
+    """
+    Résout le GCP project ID dans l'ordre de priorité :
+    1. Variable d'environnement GCP_PROJECT_ID
+    2. ADC via google.auth.default() (natif Cloud Run / gcloud CLI)
+    3. Chaîne vide — le client BigQuery lèvera une erreur explicite
+    """
+    pid = os.getenv("GCP_PROJECT_ID", "").strip()
+    if pid and pid not in ("your-gcp-project-id", "YOUR_GCP_PROJECT_ID"):
         return pid
     try:
         import google.auth
         _, project = google.auth.default()
         if project:
+            logger.info("[GCP] Project ID résolu via ADC : '%s'", project)
             return project
-    except Exception:
-        pass
-    return "slavayssiere-sandbox-462015"
+    except Exception as e:
+        logger.warning("[GCP] Impossible de résoudre le project ID via google.auth.default(): %s", e)
+    return ""
 
 
 async def get_gcp_project_id_from_metadata() -> str:

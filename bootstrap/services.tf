@@ -18,7 +18,9 @@ locals {
     "cloudscheduler.googleapis.com",       # Cloud Scheduler
     "bigquery.googleapis.com",             # BigQuery
     "drive.googleapis.com",                # Drive
-    "documentai.googleapis.com"            # Document AI (OCR / Sandbox RCE PDF)
+    "documentai.googleapis.com",           # Document AI (OCR / Sandbox RCE PDF)
+    "containerscanning.googleapis.com",    # Scanning de vulnérabilités automatique sur chaque push GAR
+    "containeranalysis.googleapis.com"     # Container Analysis (API sous-jacente au vulnerability scanning)
   ]
 }
 

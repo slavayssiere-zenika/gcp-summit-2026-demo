@@ -7,8 +7,31 @@ from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 TOPIC_ID = os.getenv("USER_EVENTS_TOPIC", "zenika-user-events")
+
+
+def _resolve_project_id() -> str:
+    """
+    Résout le GCP project ID :
+    1. Variable d'environnement GCP_PROJECT_ID
+    2. ADC via google.auth.default() (natif Cloud Run)
+    3. Chaîne vide — Pub/Sub sera loggé en mode mock
+    """
+    pid = os.getenv("GCP_PROJECT_ID", "").strip()
+    if pid and pid not in ("your-gcp-project-id", "YOUR_GCP_PROJECT_ID"):
+        return pid
+    try:
+        import google.auth
+        _, project = google.auth.default()
+        if project:
+            logger.info("[PubSub/users] Project ID résolu via ADC : '%s'", project)
+            return project
+    except Exception as e:
+        logger.warning("[PubSub/users] Impossible de résoudre le project ID: %s", e)
+    return ""
+
+
+PROJECT_ID = _resolve_project_id()
 
 publisher = None
 try:
