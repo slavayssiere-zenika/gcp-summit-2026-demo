@@ -1,12 +1,15 @@
 <template>
   <div class="admin-users-wrapper fade-in">
-    <div class="header-banner">
-      <div class="banner-icon"><Users size="32" /></div>
-      <div class="banner-text">
-        <h2>Gestion des Utilisateurs</h2>
-        <p>Annuaire global : gérez les rôles, les accès et visualisez la répartition géographique (Agences).</p>
-      </div>
-    </div>
+
+    <PageHeader
+      title="Comptes & Rôles"
+      subtitle="Annuaire global : gérez les rôles, les accès et visualisez la répartition géographique des consultants."
+      :icon="Users"
+      :breadcrumb="[
+        { label: 'Administration', to: '/admin' },
+        { label: 'Comptes & Rôles' }
+      ]"
+    />
 
     <div class="glass-panel">
       <!-- Toolbar: Search & Filters -->
@@ -166,6 +169,7 @@ import {
   User as UserIcon, CheckCircle2, XCircle, UserX, UserCheck, Loader2,
   Search, Filter, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const users = ref<any[]>([])
 const isLoading = ref(false)
@@ -357,36 +361,7 @@ onMounted(() => {
   padding: 2rem;
 }
 
-.header-banner {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border-radius: 20px;
-  padding: 2.5rem;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.2);
-}
 
-.banner-icon {
-  background: rgba(227, 25, 55, 0.2);
-  padding: 1.25rem;
-  border-radius: 16px;
-  color: var(--zenika-red);
-}
-
-.banner-text h2 {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem 0;
-}
-
-.banner-text p {
-  color: #94a3b8;
-  margin: 0;
-  font-size: 1.05rem;
-}
 
 .glass-panel {
   background: rgba(255, 255, 255, 0.7);

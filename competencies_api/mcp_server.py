@@ -324,6 +324,65 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["user_id"]
             }
+        ),
+        Tool(
+            name="list_competency_suggestions",
+            description=(
+                "Liste les suggestions de compétences soumises automatiquement depuis les analyses de missions. "
+                "Triées par fréquence d'occurrence ('signal marché'), elles indiquent quelles technologies "
+                "les clients demandent régulièrement et qui ne sont pas encore dans la taxonomie. "
+                "Utilise cet outil pour : identifier les compétences à ajouter en priorité, "
+                "préparer les plans de formation, ou enrichir le référentiel de compétences."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["PENDING_REVIEW", "ACCEPTED", "REJECTED"],
+                        "default": "PENDING_REVIEW",
+                        "description": "Filtre par statut de la suggestion"
+                    },
+                    "limit": {"type": "integer", "default": 50, "description": "Nombre maximum de résultats"}
+                }
+            }
+        ),
+        Tool(
+            name="create_competency_suggestion",
+            description=(
+                "Soumet une suggestion de compétence pour révision admin. "
+                "Idémpotent : si la suggestion existe déjà, incrémente son compteur d'occurrence. "
+                "Utilise cet outil lorsque le consultant mentionne une technologie absente de la taxonomie "
+                "et qui mériterait d'être ajoutée au référentiel."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Nom de la compétence à suggérer"},
+                    "source": {"type": "string", "default": "agent", "description": "Source : 'mission', 'cv' ou 'agent'"},
+                    "context": {"type": "string", "description": "Contexte (ex: nom de la mission ou du CV)"}
+                },
+                "required": ["name"]
+            }
+        ),
+        Tool(
+            name="review_competency_suggestion",
+            description=(
+                "(Admin uniquement) Accepte ou rejette une suggestion de compétence. "
+                "Si action='ACCEPT' : la compétence est créée dans la taxonomie officielle. "
+                "Si action='REJECT' : la suggestion est archivée. "
+                "Fournir parent_id pour placer la compétence dans l'arbre hiérarchique correct."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "suggestion_id": {"type": "integer", "description": "L'ID de la suggestion"},
+                    "action": {"type": "string", "enum": ["ACCEPT", "REJECT"], "description": "Action à effectuer"},
+                    "parent_id": {"type": "integer", "description": "(ACCEPT uniquement) ID du parent dans la taxonomie"},
+                    "description": {"type": "string", "description": "(ACCEPT uniquement) Description de la compétence"}
+                },
+                "required": ["suggestion_id", "action"]
+            }
         )
     ]
 
@@ -475,6 +534,30 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 response = await client.get(
                     f"{API_BASE_URL}/analytics/similar-consultants/{user_id}",
                     params={"top_n": top_n}
+                )
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "list_competency_suggestions":
+                params = {}
+                if "status" in arguments:
+                    params["status"] = arguments["status"]
+                if "limit" in arguments:
+                    params["limit"] = arguments["limit"]
+                response = await client.get(f"{API_BASE_URL}/suggestions", params=params)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "create_competency_suggestion":
+                response = await client.post(f"{API_BASE_URL}/suggestions", json=arguments)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "review_competency_suggestion":
+                suggestion_id = arguments.pop("suggestion_id")
+                response = await client.patch(
+                    f"{API_BASE_URL}/suggestions/{suggestion_id}/review",
+                    json=arguments
                 )
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]

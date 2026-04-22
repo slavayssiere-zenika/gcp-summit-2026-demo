@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Search, LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen, FileDown, ChevronDown, Settings, BarChart, Cpu } from 'lucide-vue-next'
+import {
+  LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen,
+  ChevronDown, Settings, BarChart3, Cpu, HardDriveUpload,
+  Users, GitMerge, CalendarDays, BrainCircuit, RefreshCw,
+  ShieldAlert, Briefcase, ExternalLink
+} from 'lucide-vue-next'
 import { authService } from './services/auth'
 import { useRouter } from 'vue-router'
 import ToastNotification from '@/components/ui/ToastNotification.vue'
@@ -17,6 +22,9 @@ const handleSearch = () => {
 const handleLogout = async () => {
   await authService.logout()
 }
+
+const isAdmin = () => authService.state.user?.role === 'admin'
+const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
 </script>
 
 <template>
@@ -35,99 +43,134 @@ const handleLogout = async () => {
           >
         </div>
         <div class="nav-pills" v-if="authService.state.isAuthenticated">
-          <RouterLink to="/" class="nav-pill" active-class="active">
+
+          <!-- Agent IA -->
+          <RouterLink to="/" class="nav-pill" active-class="active" aria-label="Agent conversationnel">
             <Bot size="16" /> Agent
           </RouterLink>
-          <RouterLink to="/missions" class="nav-pill" active-class="active">
-            <Briefcase size="16" /> Hub Missions
+
+          <!-- Hub RH (consultants, compétences) -->
+          <div class="dropdown" v-if="isRh()">
+            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/competencies', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }">
+              <Users size="16" /> Hub RH <ChevronDown size="14" />
+            </button>
+            <div class="dropdown-content">
+              <div class="dropdown-section-label">Consultants</div>
+              <RouterLink to="/" class="nav-pill" aria-label="Rechercher un consultant via l'agent">
+                <Bot size="14" /> Recherche par Agent
+              </RouterLink>
+              <RouterLink to="/competencies" class="nav-pill" active-class="dropdown-active" aria-label="Arbre des compétences">
+                <Network size="14" /> Arbre des Compétences
+              </RouterLink>
+              <div class="dropdown-section-label">Gestion RH</div>
+              <RouterLink to="/admin/availability" class="nav-pill" active-class="dropdown-active" aria-label="Planning des disponibilités">
+                <CalendarDays size="14" /> Planning Disponibilités
+              </RouterLink>
+              <RouterLink to="/admin/deduplication" class="nav-pill" active-class="dropdown-active" aria-label="Déduplication des profils en doublon">
+                <GitMerge size="14" /> Déduplication Profils
+              </RouterLink>
+            </div>
+          </div>
+
+          <!-- Missions -->
+          <RouterLink to="/missions" class="nav-pill" active-class="active" aria-label="Hub des missions clients">
+            <Briefcase size="16" /> Missions
           </RouterLink>
 
-          <!-- Administration Panel (Protected) -->
-          <div class="dropdown" v-if="authService.state.user?.role === 'admin' || authService.state.user?.role === 'rh'">
-            <button class="nav-pill admin-pill dropdown-btn" :class="{ active: router.currentRoute.value.path.startsWith('/admin') }">
-              <Settings size="16" /> Administration <ChevronDown size="14" />
+          <!-- Administration (admin only) -->
+          <div class="dropdown" v-if="isAdmin()">
+            <button
+              class="nav-pill admin-pill dropdown-btn"
+              :class="{ active: router.currentRoute.value.path.startsWith('/admin') }"
+              aria-label="Menu Administration"
+            >
+              <Settings size="16" /> Admin <ChevronDown size="14" />
             </button>
-            <div class="dropdown-content">
-              <template v-if="authService.state.user?.role === 'admin'">
-                <RouterLink to="/admin" active-class="dropdown-active">Configuration Service Drive</RouterLink>
-                <RouterLink to="/admin/users" active-class="dropdown-active">Gestion des Accès</RouterLink>
-                <RouterLink to="/admin/reanalysis" active-class="dropdown-active">Réanalyse Globale</RouterLink>
-              </template>
-              <RouterLink to="/admin/deduplication" active-class="dropdown-active">Déduplication</RouterLink>
-              <RouterLink to="/admin/availability" active-class="dropdown-active">Planning des consultants</RouterLink>
-              <template v-if="authService.state.user?.role === 'admin'">
-                <RouterLink to="/admin/prompts" active-class="dropdown-active">Instructions IA</RouterLink>
-                <RouterLink to="/admin/finops" active-class="dropdown-active">Sécurité & FinOps</RouterLink>
-              </template>
-              <div class="dropdown-divider"></div>
-              <a href="/users_api/docs" target="_blank" class="nav-pill swagger-link" title="Users API Swagger">
-                <BookOpen size="14" /> Swagger Users
-              </a>
-              <a href="/items_api/docs" target="_blank" class="nav-pill swagger-link" title="Items API Swagger">
-                <BookOpen size="14" /> Swagger Items
-              </a>
-              <a href="/comp_api/docs" target="_blank" class="nav-pill swagger-link" title="Competencies API Swagger">
-                <BookOpen size="14" /> Swagger Compétences
-              </a>
-              <a href="/cv_api/docs" target="_blank" class="nav-pill swagger-link" title="CV API Swagger">
-                <BookOpen size="14" /> Swagger CV
-              </a>
-              <a href="/prompts_api/docs" target="_blank" class="nav-pill swagger-link" title="Prompts API Swagger">
-                <BookOpen size="14" /> Swagger Instructions IA
-              </a>
-              <a href="/drive_api/docs" target="_blank" class="nav-pill swagger-link" title="Drive API Swagger">
-                <BookOpen size="14" /> Swagger Drive
-              </a>
-              <a href="/api/docs" target="_blank" class="nav-pill swagger-link" title="Agent API Swagger">
-                <BookOpen size="14" /> Swagger Agent
-              </a>
-              <a href="/api/missions/docs" target="_blank" class="nav-pill swagger-link" title="Missions API Swagger">
-                <BookOpen size="14" /> Swagger Missions
-              </a>
+            <div class="dropdown-content dropdown-wide">
+              <div class="dropdown-section-label">Pipeline de données</div>
+              <RouterLink to="/admin" class="nav-pill" active-class="dropdown-active" aria-label="Gestion du pipeline d'import Drive et supervision CV">
+                <HardDriveUpload size="14" /> Import Drive & Supervision CV
+              </RouterLink>
+              <RouterLink to="/import-cv" class="nav-pill" active-class="dropdown-active" aria-label="Import manuel d'un CV depuis le poste">
+                <BookOpen size="14" /> Import CV Manuel
+              </RouterLink>
+              <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" aria-label="Réanalyse batch des CVs par Gemini">
+                <RefreshCw size="14" /> Réanalyse & Taxonomie IA
+              </RouterLink>
+
+              <div class="dropdown-section-label">Configuration Agents</div>
+              <RouterLink to="/admin/prompts" class="nav-pill" active-class="dropdown-active" aria-label="Gérer les instructions des agents IA">
+                <BrainCircuit size="14" /> Instructions des Agents IA
+              </RouterLink>
+
+              <div class="dropdown-section-label">Utilisateurs & Sécurité</div>
+              <RouterLink to="/admin/users" class="nav-pill" active-class="dropdown-active" aria-label="Gestion des comptes et rôles">
+                <Users size="14" /> Comptes & Rôles
+              </RouterLink>
+              <RouterLink to="/admin/finops" class="nav-pill" active-class="dropdown-active" aria-label="Sécurité, audit et suivi couts IA (FinOps)">
+                <ShieldAlert size="14" /> Sécurité & FinOps IA
+              </RouterLink>
             </div>
           </div>
 
-          <!-- Dropdown: Outils -->
+          <!-- Outils Techniques / Documentation -->
           <div class="dropdown">
-            <button class="nav-pill dropdown-btn">
-              <Network size="16" /> Outils <ChevronDown size="14" />
+            <button class="nav-pill dropdown-btn" aria-label="Menu Outils et Documentation">
+              <BookOpen size="16" /> Docs <ChevronDown size="14" />
             </button>
-            <div class="dropdown-content">
-              <RouterLink to="/competencies" class="nav-pill" active-class="active">
-                <Network size="16" /> Arbre Compétences
+            <div class="dropdown-content dropdown-wide">
+              <div class="dropdown-section-label">Documentation</div>
+              <RouterLink to="/help" class="nav-pill" active-class="dropdown-active">
+                <BookOpen size="14" /> Centre d'Aide
               </RouterLink>
-              <RouterLink to="/registry" class="nav-pill" active-class="active">
-                <ServerCog size="16" /> Serveurs MCP
+              <RouterLink to="/docs/agents" class="nav-pill" active-class="dropdown-active">
+                <Cpu size="14" /> Documentation Agents
               </RouterLink>
-              <RouterLink to="/import-cv" class="nav-pill" active-class="active">
-                <FileDown size="16" /> Import CV
+              <RouterLink to="/specs" class="nav-pill" active-class="dropdown-active">
+                <BookOpen size="14" /> Spécifications Techniques
               </RouterLink>
+
+              <div class="dropdown-section-label">Observabilité</div>
+              <RouterLink to="/infrastructure" class="nav-pill" active-class="dropdown-active">
+                <Network size="14" /> Carte Infrastructure
+              </RouterLink>
+              <RouterLink to="/aiops" class="nav-pill" active-class="dropdown-active">
+                <BarChart3 size="14" /> Indicateurs AIOps
+              </RouterLink>
+              <RouterLink to="/registry" class="nav-pill" active-class="dropdown-active">
+                <ServerCog size="14" /> Serveurs MCP
+              </RouterLink>
+
+              <div class="dropdown-section-label" v-if="isAdmin()">API Swagger</div>
+              <template v-if="isAdmin()">
+                <a href="/users_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Users API">
+                  <ExternalLink size="13" /> Users API
+                </a>
+                <a href="/cv_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger CV API">
+                  <ExternalLink size="13" /> CV API
+                </a>
+                <a href="/comp_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Competencies API">
+                  <ExternalLink size="13" /> Competencies API
+                </a>
+                <a href="/drive_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Drive API">
+                  <ExternalLink size="13" /> Drive API
+                </a>
+                <a href="/prompts_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Prompts API">
+                  <ExternalLink size="13" /> Prompts API
+                </a>
+                <a href="/api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Agent Router API">
+                  <ExternalLink size="13" /> Agent Router API
+                </a>
+                <a href="/api/missions/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Missions API">
+                  <ExternalLink size="13" /> Missions API
+                </a>
+                <a href="/items_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Items API">
+                  <ExternalLink size="13" /> Items API
+                </a>
+              </template>
             </div>
           </div>
-          
-          <!-- Dropdown: Documentation -->
-          <div class="dropdown">
-            <button class="nav-pill dropdown-btn">
-              <BookOpen size="16" /> Documentation <ChevronDown size="14" />
-            </button>
-            <div class="dropdown-content">
-              <RouterLink to="/help" class="nav-pill" active-class="active">
-                <BookOpen size="16" /> Centre d'Aide
-              </RouterLink>
-              <RouterLink to="/docs/agents" class="nav-pill" active-class="active">
-                <Cpu size="16" /> Documentation Agents
-              </RouterLink>
-              <RouterLink to="/specs" class="nav-pill" active-class="active">
-                <BookOpen size="16" /> Spécifications Interne
-              </RouterLink>
-              <RouterLink to="/infrastructure" class="nav-pill" active-class="active">
-                <Network size="16" /> Carte Infrastructure
-              </RouterLink>
-              <RouterLink to="/aiops" class="nav-pill" active-class="active">
-                <BarChart size="16" /> Indicateurs AIOps
-              </RouterLink>
-            </div>
-          </div>
+
         </div>
 
         <div v-if="authService.state.isAuthenticated" class="separator"></div>
@@ -333,17 +376,29 @@ body {
 .dropdown-content {
   display: none;
   position: absolute;
-  top: 100%;
+  top: calc(100% + 6px);
   left: 0;
   background-color: var(--header-bg);
-  min-width: 230px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
-  border-radius: 12px;
+  min-width: 240px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.13);
+  border-radius: 14px;
   z-index: 1000;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   padding: 8px;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  backdrop-filter: blur(12px);
+}
+
+.dropdown-wide {
+  min-width: 280px;
+}
+
+/* Align right-side dropdowns to prevent overflow */
+.dropdown:last-of-type .dropdown-content,
+.dropdown:nth-last-of-type(2) .dropdown-content {
+  left: auto;
+  right: 0;
 }
 
 .dropdown:hover .dropdown-content {
@@ -354,12 +409,37 @@ body {
   width: 100%;
   justify-content: flex-start;
   white-space: nowrap;
+  font-size: 0.85rem;
+  padding: 7px 12px;
+  border-radius: 8px;
+  gap: 9px;
+}
+
+.dropdown-section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  padding: 8px 12px 4px;
+  margin-top: 2px;
+}
+
+.dropdown-section-label:first-child {
+  margin-top: 0;
+  padding-top: 4px;
 }
 
 .dropdown-divider {
   height: 1px;
   background: rgba(0,0,0,0.06);
   margin: 4px 0;
+}
+
+.dropdown-active {
+  background: rgba(227, 25, 55, 0.07);
+  color: var(--zenika-red);
+  font-weight: 600;
 }
 
 .user-profile {

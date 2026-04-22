@@ -66,3 +66,22 @@ class CompetencyEvaluation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     competency = relationship("Competency", back_populates="evaluations")
+
+
+class CompetencySuggestion(Base):
+    """Suggestion de compétence issue d'une analyse de mission ou CV.
+
+    Ces suggestions sont créées automatiquement lorsque le LLM extrait une
+    compétence absente de la taxonomie officielle. Un admin peut les valider
+    (status='ACCEPTED' → crée la compétence) ou rejeter (status='REJECTED').
+    """
+    __tablename__ = "competency_suggestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, index=True)
+    source = Column(String(50), nullable=False)  # 'mission' | 'cv'
+    context = Column(String(500), nullable=True)  # titre mission ou nom CV
+    status = Column(String(20), nullable=False, default="PENDING_REVIEW", index=True)
+    occurrence_count = Column(Integer, nullable=False, default=1)  # fréquence = signal marché
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

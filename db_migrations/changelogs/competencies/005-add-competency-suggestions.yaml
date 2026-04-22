@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: "005-add-competency-suggestions"
+      author: "antigravity"
+      changes:
+        - createTable:
+            tableName: "competency_suggestions"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "name"
+                  type: "varchar(255)"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "source"
+                  type: "varchar(50)"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "context"
+                  type: "varchar(500)"
+              - column:
+                  name: "status"
+                  type: "varchar(20)"
+                  defaultValue: "PENDING_REVIEW"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "occurrence_count"
+                  type: "integer"
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+              - column:
+                  name: "updated_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+        - createIndex:
+            indexName: "idx_suggestions_name"
+            tableName: "competency_suggestions"
+            columns:
+              - column:
+                  name: "name"
+        - createIndex:
+            indexName: "idx_suggestions_status"
+            tableName: "competency_suggestions"
+            columns:
+              - column:
+                  name: "status"
+      rollback:
+        - dropTable:
+            tableName: "competency_suggestions"

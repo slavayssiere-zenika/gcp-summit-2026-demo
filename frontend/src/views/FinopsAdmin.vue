@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import axios from 'axios'
 import { ShieldAlert, PlayCircle, Loader2, CheckCircle, Database } from 'lucide-vue-next'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const isAnalyzing = ref(false)
 const results = ref<any>(null)
@@ -29,14 +30,17 @@ const runAnalysis = async () => {
 </script>
 
 <template>
-  <div class="finops-admin-page">
-    <div class="header">
-      <div class="title-wrap">
-        <ShieldAlert size="28" style="color: var(--zenika-red);" />
-        <h1>Anomaly Detection FinOps</h1>
-      </div>
-      <p>Protection contre l'Exfiltration de Connaissances et l'Epuisement Financier (Denial of Wallet).</p>
-    </div>
+  <div class="finops-admin-page fade-in">
+
+    <PageHeader
+      title="Sécurité & FinOps IA"
+      subtitle="Protéction contre l'exfiltration de données et la consommation abusive de tokens (Denial of Wallet)."
+      :icon="ShieldAlert"
+      :breadcrumb="[
+        { label: 'Administration', to: '/admin' },
+        { label: 'Sécurité & FinOps IA' }
+      ]"
+    />
 
     <div class="action-card">
       <div class="card-info">
@@ -108,30 +112,11 @@ const runAnalysis = async () => {
 <style scoped>
 .finops-admin-page {
   padding: 2rem;
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
 }
-
-.header {
-  margin-bottom: 2rem;
-}
-
-.title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.header h1 {
-  font-size: 1.8rem;
-  color: #1e293b;
-}
-
-.header p {
-  color: #64748b;
-  font-size: 1.05rem;
-}
+.fade-in { animation: fadeIn 0.35s ease forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 .action-card {
   background: white;

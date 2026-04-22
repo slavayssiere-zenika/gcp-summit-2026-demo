@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
-import { 
-  RefreshCw, 
-  Users, 
-  Tag, 
-  Search, 
-  AlertTriangle, 
-  CheckCircle2, 
+import {
+  RefreshCw,
+  Users,
+  Tag,
+  Search,
+  AlertTriangle,
+  CheckCircle2,
   Network,
   ShieldCheck,
   ChevronDown,
   Unlock
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const isLoading = ref(false)
 const error = ref('')
@@ -291,16 +292,15 @@ onUnmounted(() => {
 
 <template>
   <div class="reanalysis-wrapper fade-in">
-    <div class="header-banner">
-      <div class="banner-icon"><RefreshCw size="32" /></div>
-      <div class="banner-text">
-        <h2>Réanalyse Globale & IA Taxonomy</h2>
-        <p>Pilotez la mise à jour massive des profils consultants et structurez vos compétences.</p>
-      </div>
-      <div class="status-badge" v-if="authService.state.user?.role === 'admin'">
-        <ShieldCheck size="16" /> Admin Control
-      </div>
-    </div>
+    <PageHeader
+      title="Réanalyse & Taxonomie IA"
+      subtitle="Relancez l'analyse Gemini sur les CVs existants et reconstruisez la taxonomie des compétences."
+      :icon="RefreshCw"
+      :breadcrumb="[
+        { label: 'Administration', to: '/admin' },
+        { label: 'Réanalyse & Taxonomie IA' }
+      ]"
+    />
 
     <div class="dashboard-grid">
       <!-- Section 1: Recalcul de l'Arbre -->

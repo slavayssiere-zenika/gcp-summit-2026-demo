@@ -1,3 +1,80 @@
+## Mise à jour automatique - 2026-04-22 09:04:09
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1793  | 698  |  61% |
+| cv_api           | 2661  | 767  |  71% |
+| drive_api        | 1462  | 549  |  62% |
+| items_api        | 1206  | 292  |  76% |
+| prompts_api      | 895   | 315  |  65% |
+| users_api        | 1454  | 453  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Fix ModuleNotFoundError: removed forbidden agent_commons import in cv_api
+- Add HTTP error logging to silent drive_api PATCH requests
+- Fix push endpoint domain: remove api. prefix
+- Fix OIDC audience mismatch after LB path rewrite
+- Fix LB routes for Pub/Sub push endpoints
+- Revert pubsub import map (ephemeral resources)
+- Add Pub/Sub resources to manage_env import map
+
+#### Fichiers (non commités)
+- `gent_commons/agent_commons/__init__.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/competencies_test.db` (M)
+- `competencies_api/mcp_server.py` (M)
+- `competencies_api/requirements.txt` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/models.py` (M)
+- `competencies_api/src/competencies/router.py` (M)
+- `competencies_api/src/competencies/schemas.py` (M)
+- `cv_api/spec.md` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/competencies/changelog.yaml` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/drive_business_test.db` (M)
+- `drive_api/spec.md` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/App.vue` (M)
+- `frontend/src/views/Admin.vue` (M)
+- `frontend/src/views/AdminAvailability.vue` (M)
+- `frontend/src/views/AdminDeduplication.vue` (M)
+- `frontend/src/views/AdminReanalysis.vue` (M)
+- `frontend/src/views/AdminUsers.vue` (M)
+- `frontend/src/views/FinopsAdmin.vue` (M)
+- `frontend/src/views/PromptsAdmin.vue` (M)
+- `items_api/VERSION` (M)
+- `items_api/items_test.db` (M)
+- `items_api/spec.md` (M)
+- `market_mcp/VERSION` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `missions_api/src/missions/router.py` (M)
+- `monitoring_mcp/VERSION` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/prompts_test.db` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/VERSION` (M)
+- `users_api/spec.md` (M)
+- `users_api/users_test.db` (M)
+- `agent_commons/agent_commons/taxonomy_utils.py` (??)
+- `check_db.py` (??)
+- `db_migrations/changelogs/competencies/005-add-competency-suggestions.yaml` (??)
+- `fetch_logs.py` (??)
+- `frontend/src/components/TaxonomySuggestions.vue` (??)
+- `frontend/src/components/ui/PageHeader.vue` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-22 08:02:28
 
 ### Couverture de Code

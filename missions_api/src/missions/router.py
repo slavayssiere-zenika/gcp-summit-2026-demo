@@ -22,6 +22,7 @@ import urllib.parse
 from .cache import get_cached_prompt, force_invalidate_prompt
 from .task_state import task_manager
 from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
+from agent_commons.taxonomy_utils import build_taxonomy_context, extract_leaf_names, find_domains_for_skills
 
 router = APIRouter(prefix="", tags=["Missions"])
 public_router = APIRouter(prefix="", tags=["Public"])
@@ -93,20 +94,12 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                 tree_res = await http_client.get(f"{COMPETENCIES_API_URL_LOCAL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
                 if tree_res.status_code == 200:
                     items = tree_res.json().get('items', [])
-                    
-                    def extract_mid_parents(nodes):
-                        parents = []
-                        for n in nodes:
-                            subs = n.get("sub_competencies", [])
-                            if subs:
-                                has_leaf_child = any(not s.get("sub_competencies") for s in subs)
-                                if has_leaf_child and n.get("parent_id") is not None and n.get("name"):
-                                    parents.append(n.get("name"))
-                                parents.extend(extract_mid_parents(subs))
-                        return parents
-                        
-                    parent_categories = extract_mid_parents(items)
-                    gemini_contents.append(f"\n\nHere is the official list of parent capability domains for this company. Please try to map mission required skills to these parent categories directly:\n{json.dumps(parent_categories)}")
+
+                    taxonomy_context, _, _ = build_taxonomy_context(items)
+                    # Mémoriser les feuilles pour la boucle de rétroaction (Axe 4)
+                    _taxonomy_leaf_names = set(extract_leaf_names(items))
+                    gemini_contents.append(taxonomy_context)
+
             except Exception as e:
                 logger.warning(f"Failed to fetch competencies tree for mission context: {e}")
 
@@ -153,9 +146,34 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                 except Exception:
                     pass
             await fast_log_finops("RAG_Mission_Extraction", model_extract, res_extract.usage_metadata)
-            
+
             extracted_data = json.loads(res_extract.text)
             extracted_competencies = extracted_data.get("competencies", [])
+
+            # ── Axe 4 : Boucle de rétroaction Mission → Taxonomie ─────────────────
+            # Les compétences extraites mais absentes de la taxonomie sont soumises
+            # pour révision admin via POST /suggestions dans competencies_api.
+            COMPETENCIES_API_URL_LOCAL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
+            try:
+                known_leaves = _taxonomy_leaf_names if '_taxonomy_leaf_names' in dir() else set()
+                new_skills = [
+                    c for c in extracted_competencies
+                    if c and c.lower() not in {k.lower() for k in known_leaves}
+                ]
+                if new_skills:
+                    logger.info(f"[Mission→Taxonomy] {len(new_skills)} compétences candidates à suggestion : {new_skills}")
+                    suggest_tasks = [
+                        http_client.post(
+                            f"{COMPETENCIES_API_URL_LOCAL.rstrip('/')}/suggestions",
+                            json={"name": skill, "source": "mission", "context": title},
+                            headers=headers,
+                            timeout=3.0,
+                        )
+                        for skill in new_skills
+                    ]
+                    await asyncio.gather(*suggest_tasks, return_exceptions=True)
+            except Exception as e:
+                logger.warning(f"[Mission→Taxonomy] Échec de la soumission des suggestions : {e}")
             
             # Subsituer la description par le résumé de Gemini si on part d'un doc brut
             if not final_description or len(final_description) < 60:
@@ -226,12 +244,15 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                         or cv_details.get("skills")
                         or []
                     )
+                    
+                    skill_domains = find_domains_for_skills(skills, items)
 
                     return {
                         "user_id": u_id,
                         "full_name": u_info.get("full_name") or f"{u_info.get('first_name')} {u_info.get('last_name')}",
                         "seniority": seniority,
                         "skills": skills,
+                        "skill_domains": skill_domains,
                         "similarity_score": p.get("similarity_score"),
                         "unavailabilities": u_info.get("unavailability_periods", []),
                     }
@@ -256,7 +277,13 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             else:
                 # 4. LLM Staffing
                 model_staffing = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-                staffing_prompt = f"{base_staffing_prompt}\nMission: '{title}'. Description: '{final_description}'. Skills: {extracted_competencies}. Candidates: {json.dumps(candidates_data)}."
+                # Expliciter que candidates_data inclut les skill_domains pour aider le LLM
+                staffing_prompt = (
+                    f"{base_staffing_prompt}\n"
+                    f"Mission: '{title}'. Description: '{final_description}'.\n"
+                    f"Required Skills: {extracted_competencies}.\n"
+                    f"Candidates (each mapped with their specific 'skills' and broad 'skill_domains'): {json.dumps(candidates_data)}."
+                )
                 res_staffing = await generate_content_with_retry(
                     client,
                     model=model_staffing,
