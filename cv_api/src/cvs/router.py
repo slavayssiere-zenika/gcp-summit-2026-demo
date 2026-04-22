@@ -31,6 +31,7 @@ from src.cvs.schemas import CVImportRequest, CVImportStep, CVResponse, SearchCan
 from .task_state import task_state_manager, tree_task_manager
 from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
 from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
+from agent_commons.taxonomy_utils import build_taxonomy_context
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["CV_Public"])
@@ -272,15 +273,16 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
     inject(headers)
     logger.info(f"[PubSub] Traitement de {google_file_id} ({url})")
 
-    # ── 3. Mise à jour statut PROCESSING dans drive_api ─────────────────────
     drive_api_url = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
     try:
         async with httpx.AsyncClient(timeout=10.0) as patch_client:
-            await patch_client.patch(
+            res = await patch_client.patch(
                 f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
                 json={"status": "PROCESSING"},
                 headers=headers
             )
+            if res.is_error:
+                logger.error(f"[PubSub] Échec PATCH PROCESSING vers drive_api: HTTP {res.status_code} - {res.text}")
     except Exception as e:
         logger.warning(f"[PubSub] Impossible de notifier drive_api (PROCESSING): {e}")
 
@@ -315,12 +317,15 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
         # ── 6. Notification succès → drive_api ──────────────────────────────
         try:
             async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                await patch_client.patch(
+                res = await patch_client.patch(
                     f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
                     json={"status": "IMPORTED_CV", "user_id": result.user_id, "error_message": None},
                     headers=headers
                 )
-                logger.info(f"[PubSub] Import réussi pour {google_file_id} → user_id={result.user_id}")
+                if res.is_error:
+                    logger.error(f"[PubSub] Échec PATCH IMPORTED_CV vers drive_api: HTTP {res.status_code} - {res.text}")
+                else:
+                    logger.info(f"[PubSub] Import réussi pour {google_file_id} → user_id={result.user_id}")
         except Exception as e:
             logger.warning(f"[PubSub] Impossible de notifier drive_api (IMPORTED_CV): {e}")
 
@@ -333,11 +338,13 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
         # Notification d'erreur → drive_api pour visibilité frontend
         try:
             async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                await patch_client.patch(
+                res = await patch_client.patch(
                     f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
                     json={"status": status, "error_message": str(error_detail)},
                     headers=headers
                 )
+                if res.is_error:
+                    logger.error(f"[PubSub] Échec PATCH ERROR vers drive_api: HTTP {res.status_code} - {res.text}")
         except Exception as e:
             logger.warning(f"[PubSub] Impossible de notifier drive_api (ERROR): {e}")
         # Retourner 200 pour IGNORED_NOT_CV (ACK), 500 pour ERROR (retry Pub/Sub)
@@ -450,41 +457,10 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                 if tree_res.status_code == 200:
                     items = tree_res.json().get('items', [])
 
-                    def extract_mid_parents(nodes):
-                        parents = []
-                        for n in nodes:
-                            subs = n.get("sub_competencies", [])
-                            if subs:
-                                has_leaf_child = any(not s.get("sub_competencies") for s in subs)
-                                if has_leaf_child and n.get("parent_id") is not None and n.get("name"):
-                                    parents.append(n.get("name"))
-                                parents.extend(extract_mid_parents(subs))
-                        return parents
-
-                    def extract_leaf_names(nodes, _acc=None):
-                        """Retourne les noms des compétences feuilles (nœuds sans sous-compétences)."""
-                        if _acc is None:
-                            _acc = []
-                        for n in nodes:
-                            subs = n.get("sub_competencies", [])
-                            if not subs:
-                                name = n.get("name")
-                                if name:
-                                    _acc.append(name)
-                            else:
-                                extract_leaf_names(subs, _acc)
-                        return _acc
-
-                    parent_categories = extract_mid_parents(items)
-                    leaf_names = extract_leaf_names(items)[:300]  # cap à 300 pour rester dans le contexte
-                    tree_context = (
-                        f"\n\nHere is the official taxonomy for this company's competencies."
-                        f"\n\n1. PARENT DOMAINS — use these as the 'parent' field for each extracted competency:\n{json.dumps(parent_categories)}"
-                        f"\n\n2. EXISTING LEAF COMPETENCIES — if a skill matches one of these exactly (or is an alias/abbreviation), use this EXACT name instead of creating a variant (e.g. map 'K8s' → 'Kubernetes', 'GCP' → 'Google Cloud Platform'):\n{json.dumps(leaf_names)}"
-                    )
+                    tree_context, nb_parents, nb_leaves = build_taxonomy_context(items)
                     logger.info(
                         f"[CV_STEP] llm_parse — taxonomy context injected",
-                        extra={"step": "llm_parse", "categories_count": len(parent_categories), "leaf_count": len(leaf_names), "cv_url": url}
+                        extra={"step": "llm_parse", "categories_count": nb_parents, "leaf_count": nb_leaves, "cv_url": url}
                     )
                     _CV_CACHE["tree_context"]["value"] = tree_context
                     _CV_CACHE["tree_context"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
