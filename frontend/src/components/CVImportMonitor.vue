@@ -103,6 +103,26 @@ const stopPolling = () => {
 onMounted(fetchStatus)
 onUnmounted(stopPolling)
 
+const isFlushingZombies = ref(false)
+
+/**
+ * Forcer le déblocage immédiat des fichiers QUEUED zombies.
+ * Appelle retry-errors?force=true (bypass du seuil 30 min) puis /sync.
+ */
+const forceFlushZombies = async () => {
+  if (isFlushingZombies.value) return
+  isFlushingZombies.value = true
+  try {
+    await axios.post('/api/drive/retry-errors?force=true')
+    await axios.post('/api/drive/sync')
+    await fetchStatus()
+  } catch (e) {
+    console.error('[CVImportMonitor] Force flush failed', e)
+  } finally {
+    isFlushingZombies.value = false
+  }
+}
+
 const formatTime = (date: Date | null) => {
   if (!date) return '—'
   return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -212,10 +232,20 @@ const formatTime = (date: Date | null) => {
 
       <!-- Alert banners -->
       <div v-if="pipelineStatus.queued > 0" class="alert-banner alert-info">
-        <Radio size="14" />
+        <Radio size="14" style="flex-shrink:0;margin-top:2px" />
         <span>
           <strong>{{ pipelineStatus.queued }} CV(s)</strong> en file Pub/Sub — en attente de traitement par l'IA Gemini.
         </span>
+        <button
+          class="flush-btn"
+          @click="forceFlushZombies"
+          :disabled="isFlushingZombies"
+          :title="`Forcer le déblocage de ${pipelineStatus.queued} fichier(s) bloqués en QUEUED`"
+          aria-label="Forcer le déblocage des fichiers zombies bloqués en Pub/Sub"
+        >
+          <Zap size="12" :class="{ 'spin-icon': isFlushingZombies }" />
+          {{ isFlushingZombies ? 'Déblocage...' : 'Forcer' }}
+        </button>
       </div>
       <div v-if="pipelineStatus.errors > 0" class="alert-banner alert-error">
         <AlertTriangle size="14" />
@@ -406,4 +436,27 @@ const formatTime = (date: Date | null) => {
 .quick-link:hover { opacity: 0.75; }
 .quick-sep { color: #e2e8f0; }
 .last-refresh { margin-left: auto; }
+
+/* ── Force flush button (dans alert-banner) ── */
+.flush-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 8px;
+  background: rgba(139,92,246,0.15);
+  color: #7c3aed;
+  border: 1px solid rgba(139,92,246,0.35);
+  font-size: 0.75rem; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+  animation: pulse-flush 2s ease-in-out infinite;
+}
+.flush-btn:hover:not(:disabled) {
+  background: rgba(139,92,246,0.25);
+  border-color: rgba(139,92,246,0.6);
+}
+.flush-btn:disabled { opacity: 0.5; cursor: not-allowed; animation: none; }
+@keyframes pulse-flush {
+  0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(139,92,246,0.2); }
+}
 </style>
