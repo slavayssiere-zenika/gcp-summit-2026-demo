@@ -86,5 +86,5 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/analytics/similar-consultants/{user_id}` : Get Similar Consultants
 - **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp

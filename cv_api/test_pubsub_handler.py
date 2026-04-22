@@ -34,10 +34,11 @@ def _make_pubsub_payload(
     folder_name: str = "Marie Dupont",
     google_access_token: str = "test-google-token",
     jwt: str = "",
+    oidc_token: str = "",  # Vide en local (USE_IAM_AUTH != true), rempli en prod
 ) -> dict:
     """Construit un payload Pub/Sub encodé en base64 comme GCP le ferait."""
     from jose import jwt as jose_jwt
-    if not jwt:
+    if not jwt and not oidc_token:
         jwt = jose_jwt.encode({"sub": "test-worker"}, _TEST_JWT_SECRET, algorithm="HS256")
     
     message_data = {
@@ -46,6 +47,7 @@ def _make_pubsub_payload(
         "source_tag": source_tag,
         "folder_name": folder_name,
         "google_access_token": google_access_token,
+        "oidc_token": oidc_token,
         "jwt": jwt,
     }
     encoded = base64.b64encode(json.dumps(message_data).encode()).decode()
@@ -189,3 +191,47 @@ async def test_pubsub_handler_non_cv_returns_200_ack():
     # 200 ACK → pas de retry Pub/Sub pour un non-CV
     assert resp.status_code == 200
     assert resp.json().get("status") == "ignored"
+
+
+@pytest.mark.asyncio
+async def test_pubsub_handler_oidc_exchange_success():
+    """
+    UC10 — Quand le payload contient un oidc_token (production Cloud Run),
+    le handler doit l'échanger contre un JWT applicatif frais via users_api.
+    Vérifie que l'échange réussi permet l'exécution du pipeline.
+    """
+    from main import app
+    from jose import jwt as jose_jwt
+
+    mock_result = MagicMock()
+    mock_result.user_id = 99
+
+    # Simule un payload avec oidc_token et sans jwt (cas production)
+    fresh_jwt = jose_jwt.encode({"sub": "drive-api-sa"}, _TEST_JWT_SECRET, algorithm="HS256")
+    mock_oidc_response = AsyncMock()
+    mock_oidc_response.status_code = 200
+    mock_oidc_response.json = MagicMock(return_value={"access_token": fresh_jwt})
+
+    mock_patch_response = AsyncMock()
+    mock_patch_response.status_code = 200
+
+    with (
+        patch("src.cvs.router._process_cv_core", new=AsyncMock(return_value=mock_result)),
+        patch("httpx.AsyncClient") as mock_http,
+    ):
+        mock_http_instance = AsyncMock()
+        mock_http_instance.post = AsyncMock(return_value=mock_oidc_response)
+        mock_http_instance.patch = AsyncMock(return_value=mock_patch_response)
+        mock_http.return_value.__aenter__ = AsyncMock(return_value=mock_http_instance)
+        mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/pubsub/import-cv",
+                json=_make_pubsub_payload(oidc_token="google-oidc-id-token", jwt=""),
+                headers={"Authorization": "Bearer dummy-oidc-envelope-token"},
+            )
+
+    assert resp.status_code == 200, f"Attendu 200, reçu {resp.status_code}: {resp.text}"
+    assert resp.json().get("status") == "ok"
+    assert resp.json().get("user_id") == 99

@@ -35,3 +35,18 @@ variable "source_artifact_registry_name" {
   type        = string
   default     = ""
 }
+
+# =========================================================
+# Politique de rétention Artifact Registry
+# =========================================================
+variable "artifact_keep_count" {
+  description = "Nombre de versions d'images taguées à conserver par service (les plus récentes)."
+  type        = number
+  default     = 5
+}
+
+variable "artifact_untagged_ttl_days" {
+  description = "TTL en jours des images non-taguées avant purge automatique (couches intermédiaires, builds ratés)."
+  type        = number
+  default     = 7
+}
