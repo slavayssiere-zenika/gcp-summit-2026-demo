@@ -82,6 +82,31 @@ resource "google_compute_url_map" "default" {
       }
     }
 
+    # ── Push Pub/Sub endpoints (préfixe direct, sans /api/) ─────────────────
+    # Pub/Sub pousse vers /cv-api/pubsub/import-cv et /cv-api/pubsub/user-events
+    # Ces routes DOIVENT être déclarées avant la règle générique /api/ (prio 20)
+    route_rules {
+      priority = 8
+      match_rules { prefix_match = "/cv-api/" }
+      service = google_compute_backend_service.cv_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 9
+      match_rules { prefix_match = "/items-api/" }
+      service = google_compute_backend_service.items_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
     route_rules {
       priority = 10
       match_rules { prefix_match = "/api/users/" }
