@@ -55,7 +55,7 @@ else
     echo "[*] Packaging system prompts for container deployment..."
     rm -rf platform-engineering/bundled_prompts
     mkdir -p platform-engineering/bundled_prompts
-    for dir in agent_router_api agent_hr_api agent_ops_api agent_missions_api cv_api missions_api; do
+    for dir in agent_router_api agent_hr_api agent_ops_api agent_missions_api cv_api missions_api prompts_api; do
         if [ -d "$dir" ]; then
             mkdir -p platform-engineering/bundled_prompts/$dir
             cp $dir/*.txt platform-engineering/bundled_prompts/$dir/ 2>/dev/null || true

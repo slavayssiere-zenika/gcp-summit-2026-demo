@@ -68,6 +68,10 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
         value = var.monitoring_mcp_version
       }
       env {
+        name  = "DRIVE_API_URL"
+        value = "http://api.internal.zenika/api/drive"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {

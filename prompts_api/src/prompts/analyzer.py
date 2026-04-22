@@ -152,3 +152,29 @@ async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> s
             improved = "\n".join(lines[1:-1])
             
     return improved
+
+async def generate_error_correction_prompt(error_report, system_instruction: str) -> str:
+    """Uses Gemini to generate a system prompt directive to avoid a specific error."""
+    client = get_genai_client()
+    
+    context_text = f"\\nContext:\\n{error_report.context}" if error_report.context else ""
+    context_text = f"\nContext:\n{error_report.context}" if error_report.context else ""
+    prompt = f"Service: {error_report.service_name}\nError Message: {error_report.error_message}{context_text}\n\nPlease generate the defensive prompt rule."
+    
+    response = await generate_content_with_retry(
+        client,
+        model='gemini-3.1-pro-preview',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.2
+        )
+    )
+    
+    improved = response.text.strip()
+    if improved.startswith("```"):
+        lines = improved.split("\n")
+        if len(lines) > 2:
+            improved = "\n".join(lines[1:-1])
+            
+    return improved

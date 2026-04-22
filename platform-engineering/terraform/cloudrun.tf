@@ -31,22 +31,3 @@ resource "random_id" "sa_suffix" {
 # (The rest of SAs, IAM, Backend logic have been migrated to the respective cr_*.tf files)
 # ==============================================================
 
-# ==============================================================
-# Cloud Scheduler for Drive API background polling
-# ==============================================================
-resource "google_cloud_scheduler_job" "drive_sync_job" {
-  name             = "drive-sync-trigger-${terraform.workspace}"
-  description      = "Triggers Drive API /sync every hour"
-  schedule         = "0 * * * *"
-  time_zone        = "Europe/Paris"
-  attempt_deadline = "320s"
-
-  http_target {
-    http_method = "POST"
-    uri         = "${google_cloud_run_v2_service.drive_api.uri}/sync"
-
-    oidc_token {
-      service_account_email = data.google_service_account.drive_sa.email
-    }
-  }
-}

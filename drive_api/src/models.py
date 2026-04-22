@@ -5,7 +5,8 @@ from datetime import datetime
 
 class DriveSyncStatus(enum.Enum):
     PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
+    QUEUED = "QUEUED"        # Publié dans Pub/Sub, en attente de traitement par cv_api
+    PROCESSING = "PROCESSING"  # En traitement actif dans cv_api (reçu depuis Pub/Sub)
     IMPORTED_CV = "IMPORTED_CV"
     IGNORED_NOT_CV = "IGNORED_NOT_CV"
     ERROR = "ERROR"
@@ -33,3 +34,5 @@ class DriveSyncState(Base):
     last_processed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # Nom du dossier parent direct du fichier (nomenclature Zenika "Prénom Nom")
     parent_folder_name = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
+

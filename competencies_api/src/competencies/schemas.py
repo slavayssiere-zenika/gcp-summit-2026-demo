@@ -99,3 +99,50 @@ class AiScoreAllResponse(BaseModel):
     user_id: int
     triggered: int
     message: str
+
+
+# ── Analytics Schemas ─────────────────────────────────────────────────────────
+
+class AgencyCompetencyItem(BaseModel):
+    """Un (agence, compétence, count) dans la heatmap."""
+    agency: str
+    competency: str
+    count: int
+    avg_ai_score: Optional[float] = None
+
+
+class AgencyCompetencyCoverage(BaseModel):
+    """Réponse de /analytics/agency-coverage."""
+    items: List[AgencyCompetencyItem]
+    total_consultants: int
+    total_agencies: int
+
+
+class SkillGapItem(BaseModel):
+    """Une compétence manquante dans le pool ciblé."""
+    competency_id: int
+    competency_name: str
+    consultants_with_skill: int
+    consultants_in_pool: int
+    coverage_pct: float
+
+
+class SkillGapResult(BaseModel):
+    """Réponse de /analytics/skill-gaps."""
+    gaps: List[SkillGapItem]
+    pool_size: int
+
+
+class SimilarConsultant(BaseModel):
+    """Un consultant similaire avec son score de similarité Jaccard."""
+    user_id: int
+    common_competencies: int
+    jaccard_score: float
+    shared_competency_names: List[str]
+
+
+class SimilarConsultantsResult(BaseModel):
+    """Réponse de /analytics/similar-consultants/{user_id}."""
+    reference_user_id: int
+    reference_competency_count: int
+    similar_consultants: List[SimilarConsultant]

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 
@@ -36,6 +36,10 @@ class Item(Base):
     from sqlalchemy.dialects.postgresql import JSONB
     metadata_json = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_items_user_name"),
+    )
 
     # Relationships
     categories = relationship("Category", secondary=item_category, back_populates="items")

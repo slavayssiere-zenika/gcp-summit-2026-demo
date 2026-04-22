@@ -26,6 +26,8 @@ const isHealthData = (arr: any[]) => arr && arr.length > 0 && arr.every((o: any)
 const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_name);
 const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
 const isMissionObj = (obj: any) => obj && obj.title && (obj.proposed_team || obj.extracted_competencies || obj.description);
+// Détecte les objets compétences retournés par l'agent (ils ont un id et name mais pas d'email ni user_id)
+const isCompetencyObj = (obj: any) => obj && obj.name && obj.id && !obj.email && !obj.user_id && !obj.categories && !obj.owner && !obj.title;
 const techKeys = [
   'semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 
   'username', 'name', 'full_name', 'agent', 'response', 'source', 'session_id', 
@@ -239,7 +241,14 @@ onUnmounted(() => {
                   <ItemCard v-else-if="isItemObj(obj)" :item="obj" />
                   
                   <!-- Generic Fallback Card Render -->
-                  <div v-else-if="hasBusinessData(obj)" class="generic-dash-card" @click="obj.id || obj.user_id ? goToUser(obj.id || obj.user_id) : null">
+                  <!-- Compétences : affichage en badge non-cliquable (ne pas confondre leur id avec un user_id) -->
+                  <div v-else-if="isCompetencyObj(obj)" class="competency-result-badge">
+                    <span class="comp-result-name">{{ obj.name }}</span>
+                    <span v-if="obj.description" class="comp-result-desc">{{ obj.description }}</span>
+                    <span v-if="obj.aliases" class="comp-result-alias">{{ obj.aliases }}</span>
+                  </div>
+
+                  <div v-else-if="hasBusinessData(obj)" class="generic-dash-card" @click="(obj.user_id || (obj.id && obj.email)) ? goToUser(obj.user_id || obj.id) : null" :class="{ 'non-clickable': !obj.user_id && !(obj.id && obj.email) }">
                     <div class="card-header" v-if="obj.username || obj.name || obj.full_name">
                       <h3 class="name">{{ obj.full_name || obj.username || obj.name }}</h3>
                       <div v-if="obj.id || obj.user_id" class="id-tag"><Hash size="12" />{{ obj.id || obj.user_id }}</div>
@@ -775,10 +784,44 @@ input {
   cursor: pointer;
 }
 
-.generic-dash-card:hover {
+.generic-dash-card.non-clickable {
+  cursor: default;
+}
+
+.generic-dash-card:not(.non-clickable):hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(227, 25, 55, 0.08);
   border-color: rgba(227, 25, 55, 0.3);
+}
+
+/* Style pour les résultats de compétences retournés par l'agent */
+.competency-result-badge {
+  background: rgba(227, 25, 55, 0.04);
+  border: 1px solid rgba(227, 25, 55, 0.15);
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comp-result-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.comp-result-desc {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.comp-result-alias {
+  font-size: 0.68rem;
+  color: #E31937;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .data-row {

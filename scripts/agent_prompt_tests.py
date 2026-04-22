@@ -1821,6 +1821,112 @@ TEST_CASES: list[TestCase] = [
         tags=["persona", "consultant", "self-matching", "visibility"],
     ),
 
+    # ── ANALYTICS / KNOWLEDGE GRAPH ───────────────────────────────────────────
+    # Teste les 3 outils d'agrégation SQL ajoutés dans competencies_api v0.1.9 :
+    #   - get_agency_competency_coverage
+    #   - find_skill_gaps
+    #   - find_similar_consultants
+    # Persona cibles : Directeur Commercial, Manager Technique, Staffing Manager
+
+    TestCase(
+        id="KA-001",
+        category="knowledge-analytics",
+        description="[Analytics] Heatmap agences — comparaison des forces techniques inter-agences",
+        prompt=(
+            "En tant que directeur commercial, j'ai besoin d'une vue synthétique : "
+            "quelles sont les agences Zenika qui ont le plus de consultants "
+            "en compétences Cloud (GCP, AWS, Kubernetes) ? "
+            "Compare les agences entre elles."
+        ),
+        expected_agent="hr",
+        min_tool_calls=1,
+        expected_tools=["get_agency_competency_coverage"],
+        expect_no_hallucination_warning=True,
+        must_not_contain=["impossible", "je ne peux pas comparer"],
+        tags=["persona", "dir-commerciale", "knowledge-analytics", "agency-coverage"],
+    ),
+    TestCase(
+        id="KA-002",
+        category="knowledge-analytics",
+        description="[Analytics] Identifier quelle agence est la mieux positionnée sur une techno",
+        prompt=(
+            "Quelle agence Zenika a le plus de consultants GCP ? "
+            "Je veux savoir où concentrer mes efforts de staffing Cloud."
+        ),
+        expected_agent="hr",
+        min_tool_calls=1,
+        expected_tools=["get_agency_competency_coverage"],
+        expect_no_hallucination_warning=True,
+        must_contain=["GCP", "agence"],
+        tags=["persona", "dir-commerciale", "knowledge-analytics", "agency-coverage"],
+    ),
+    TestCase(
+        id="KA-003",
+        category="knowledge-analytics",
+        description="[Analytics] Skill gaps d'une agence avant réponse à un AO",
+        prompt=(
+            "On a un appel d'offres Data Engineering qui nécessite "
+            "Python, Spark, BigQuery et Airflow. "
+            "Est-ce que nos consultants de Niort couvrent ces compétences ? "
+            "Y a-t-il des lacunes ?"
+        ),
+        expected_agent="hr",
+        min_tool_calls=2,  # get_users_by_tag(Niort) + find_skill_gaps
+        expect_no_hallucination_warning=True,
+        must_contain=["lacune", "compétence"],
+        must_not_contain=["impossible", "je ne peux pas analyser"],
+        tags=["persona", "commercial", "knowledge-analytics", "skill-gap", "ao"],
+    ),
+    TestCase(
+        id="KA-004",
+        category="knowledge-analytics",
+        description="[Analytics] Skill gaps pool national — compétences à recruter en priorité",
+        prompt=(
+            "En tant que manager technique, quelles sont les compétences "
+            "les plus rares dans notre pool national ? "
+            "Je veux identifier les 5 compétences qu'on devrait recruter en priorité."
+        ),
+        expected_agent="hr",
+        min_tool_calls=1,
+        expected_tools=["find_skill_gaps"],
+        expect_no_hallucination_warning=True,
+        must_not_contain=["impossible", "je ne peux pas identifier"],
+        tags=["persona", "tech-manager", "knowledge-analytics", "skill-gap", "recrutement"],
+    ),
+    TestCase(
+        id="KA-005",
+        category="knowledge-analytics",
+        description="[Analytics] Trouver un remplaçant — consultant similaire à Ahmed KANOUN",
+        prompt=(
+            "Ahmed KANOUN doit quitter la mission urgente sur GCP dans 2 semaines. "
+            "Qui dans notre pool a le profil le plus similaire à Ahmed "
+            "pour assurer la continuité de service ?"
+        ),
+        expected_agent="hr",
+        min_tool_calls=2,  # search_users(Ahmed) + find_similar_consultants
+        expect_no_hallucination_warning=True,
+        must_contain=["Ahmed", "similaire"],
+        must_not_contain=["impossible", "je ne connais pas"],
+        tags=["persona", "staffing", "knowledge-analytics", "similar-consultant", "replacement"],
+    ),
+    TestCase(
+        id="KA-006",
+        category="knowledge-analytics",
+        description="[Analytics] Anti-hallucination — ne pas inventer de données analytiques",
+        prompt=(
+            "Donne-moi les statistiques exactes de compétences pour l'agence Bordeaux : "
+            "nombre exact de consultants par technologie, "
+            "scores IA moyens et classement."
+        ),
+        expected_agent="hr",
+        min_tool_calls=1,
+        expect_no_hallucination_warning=True,
+        # L'agent doit soit retourner des vraies données, soit signaler
+        # que Bordeaux ne correspond à aucune agence du référentiel
+        must_not_contain=["voici les statistiques exactes de Bordeaux :", "score moyen : 4.5"],
+        tags=["knowledge-analytics", "anti-hallucination", "agency-coverage"],
+    ),
+
     # ── SÉCURITÉ & ROBUSTESSE ─────────────────────────────────────────────────
 
     TestCase(

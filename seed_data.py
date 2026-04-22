@@ -363,7 +363,8 @@ def main():
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
         "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
-        "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
+        "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
+        "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"
     }
     for key, path in prompt_files.items():
         try:

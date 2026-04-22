@@ -53,11 +53,13 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
+- **POST** `/pubsub/import-cv` : Handle Pubsub Cv Import
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/import` : Import And Analyze Cv
 - **GET** `/search` : Search Candidates
 - **POST** `/search` : Search Candidates Post
 - **GET** `/user/{user_id}` : Get User Cv
+- **GET** `/users/tags/map` : Get All User Tags
 - **GET** `/users/tag/{tag}` : Get Users By Tag
 - **GET** `/user/{user_id}/missions` : Get User Missions
 - **GET** `/user/{user_id}/details` : Get User Cv Details
@@ -65,11 +67,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/recalculate_tree` : Recalculate Competencies Tree
 - **GET** `/recalculate_tree/status` : Get Recalculate Tree Status
 - **GET** `/reanalyze/status` : Get Reanalyze Status
-- **DELETE** `/reanalyze/reset` : Reset Reanalyze Task
 - **POST** `/reanalyze` : Reanalyze Cvs
 - **POST** `/internal/users/merge` : Merge Users
-- **DELETE** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec

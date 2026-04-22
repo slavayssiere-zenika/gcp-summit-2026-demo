@@ -37,7 +37,8 @@ ENV ROOT_PATH=/drive-api
 ENV APP_VERSION=dev
 ENV USE_IAM_AUTH=false
 ENV USERS_API_URL=http://users_api:8000
-ENV CV_API_URL=http://cv_api:8004
+ENV PUBSUB_CV_IMPORT_TOPIC=zenika-cv-import-events-dev
+ENV GCP_PROJECT_ID=your-gcp-project-id
 ENV MAX_DRIVE_CV_IMPORT=10
 ENV REDIS_URL=redis://redis:6379/6
 EXPOSE 8080

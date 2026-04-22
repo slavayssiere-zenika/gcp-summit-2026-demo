@@ -157,6 +157,22 @@ async def list_tools() -> list[Tool]:
             description="Vérifie que l'API Prompts est opérationnelle et accessible.",
             inputSchema={"type": "object", "properties": {}}
         ),
+        Tool(
+            name="report_service_error_for_prompt",
+            description=(
+                "Remonte une erreur d'exécution captée par un service ou un agent pour qu'elle soit "
+                "transformée par le LLM (prompts_api) en une règle directive de prompt."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "service_name": {"type": "string", "description": "Nom du service source de l'erreur"},
+                    "error_message": {"type": "string", "description": "Message brut de l'erreur"},
+                    "context": {"type": "string", "description": "Contexte optionnel ou trace technique"}
+                },
+                "required": ["service_name", "error_message"]
+            }
+        ),
     ]
 
 
@@ -218,6 +234,16 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "health_check_prompts":
                 response = await client.get(f"{API_BASE_URL}/health")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "report_service_error_for_prompt":
+                payload = {
+                    "service_name": arguments["service_name"],
+                    "error_message": arguments["error_message"],
+                    "context": arguments.get("context", "")
+                }
+                response = await client.post(f"{API_BASE_URL}/errors/report", json=payload)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

@@ -176,17 +176,20 @@ export const useChatStore = defineStore('chat', {
         const response = await agentApi.history()
         if (response.history && response.history.length > 0) {
           this.messages = response.history.map((msg: Message) => {
-            // Re-apply MCP unwrapping: history messages have raw `data` but no `parsedData`
-            // because parsedData is computed client-side and not persisted in Redis.
-            // Force re-derive when data is MCP envelope { result: [...] } to fix stale Redis cache.
-            // Only re-derive parsedData when it is genuinely absent/empty.
-            // Do NOT force re-unwrap when parsedData is already populated: it was
-            // either set by the backend or by a previous client-side pass, and
-            // double-processing causes spurious JSON.parse errors on plain-text MCP
-            // results like "Consumption logged successfully.".
             const hasMcpEnvelope = msg.data && typeof msg.data === 'object' && Array.isArray(msg.data.result)
             const missingParsedData = !msg.parsedData || msg.parsedData.length === 0
-            if (msg.data && missingParsedData && hasMcpEnvelope) {
+
+            // Detect when parsedData was persisted in Redis still wrapped in MCP envelope format:
+            // parsedData = [{ result: [{ type: "text", text: "<JSON string>" }] }]
+            // This happens when the Redis session stores msg.parsedData before client-side unwrapping.
+            const parsedDataIsStillMcpEnvelope = !missingParsedData &&
+              Array.isArray(msg.parsedData) &&
+              msg.parsedData.length > 0 &&
+              typeof msg.parsedData[0] === 'object' &&
+              Array.isArray((msg.parsedData[0] as any)?.result)
+
+            // Re-unwrap if: parsedData is absent OR still in raw MCP envelope format
+            if (msg.data && (missingParsedData || parsedDataIsStillMcpEnvelope) && hasMcpEnvelope) {
               const unwrapped = unwrapToolData(msg.data)
               if (unwrapped.length > 0) {
                 msg.parsedData = unwrapped

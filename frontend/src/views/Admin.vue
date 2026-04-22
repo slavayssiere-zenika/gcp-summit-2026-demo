@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Settings, ShieldCheck } from 'lucide-vue-next'
+import { Settings, ShieldCheck, BrainCircuit } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import DriveAdminPanel from '../components/DriveAdminPanel.vue'
 import CVImportMonitor from '../components/CVImportMonitor.vue'
@@ -25,6 +25,22 @@ const error = ref('')
       <!-- Moniteur d'analyses CV — temps réel -->
       <div class="full-width">
         <CVImportMonitor />
+      </div>
+
+      <!-- Administration des Prompts -->
+      <div class="full-width">
+        <div class="admin-panel" @click="$router.push('/admin/prompts')" style="cursor: pointer;">
+          <div class="panel-header">
+            <h3><BrainCircuit class="icon" /> Instructions IA & Auto-Correction</h3>
+            <span class="status-badge pulse">Actif</span>
+          </div>
+          <div class="panel-content">
+            <p>Pilotez les System Prompts dynamiques des agents et consultez le backlog d'Auto-Correction généré par détection d'erreurs.</p>
+            <button class="action-btn primary-btn" style="margin-top: 15px;">
+              Gérer les Instructions IA
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Panel Drive -->
@@ -132,5 +148,60 @@ const error = ref('')
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.admin-panel {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.admin-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  border-color: rgba(227, 25, 55, 0.3);
+}
+
+.panel-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.panel-header h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  color: var(--text-color);
+}
+
+.panel-content {
+  padding: 1.5rem;
+  color: var(--text-light);
+  line-height: 1.5;
+}
+
+.action-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: rgba(227, 25, 55, 0.1);
+  color: var(--zenika-red);
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: var(--zenika-red);
+  color: white;
 }
 </style>

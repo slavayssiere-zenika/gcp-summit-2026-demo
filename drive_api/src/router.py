@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.schemas import FolderCreate, FolderResponse, StatusResponse
+from sqlalchemy import update, func
+from src.schemas import FolderCreate, FolderResponse, StatusResponse, FileStateResponse, FileUpdate
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from database import get_db
 import re
+import asyncio
 import traceback
+from datetime import datetime, timedelta
 
 from src.drive_service import DriveService
 from src.redis_client import get_redis
@@ -71,7 +74,43 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
 
 @router.get("/folders", response_model=list[FolderResponse])
 async def list_folders(db: AsyncSession = Depends(get_db)):
-    return (await db.execute(select(DriveFolder))).scalars().all()
+    folders = (await db.execute(select(DriveFolder))).scalars().all()
+    
+    from sqlalchemy import func
+    from src.schemas import FolderStats
+    from src.models import DriveSyncStatus
+    
+    stats_query = select(
+        DriveSyncState.folder_id,
+        DriveSyncState.status,
+        func.count(DriveSyncState.google_file_id)
+    ).group_by(DriveSyncState.folder_id, DriveSyncState.status)
+    
+    stats_result = (await db.execute(stats_query)).all()
+    
+    stats_map = {}
+    for r in stats_result:
+        folder_id, status, count = r
+        if folder_id not in stats_map:
+            stats_map[folder_id] = {}
+        stats_map[folder_id][status.name] = count
+        
+    response_folders = []
+    for f in folders:
+        f_stats = stats_map.get(f.id, {})
+        f_response = FolderResponse.model_validate(f)
+        f_response.stats = FolderStats(
+            pending=f_stats.get(DriveSyncStatus.PENDING.name, 0),
+            queued=f_stats.get(DriveSyncStatus.QUEUED.name, 0),
+            processing=f_stats.get(DriveSyncStatus.PROCESSING.name, 0),
+            imported=f_stats.get(DriveSyncStatus.IMPORTED_CV.name, 0),
+            ignored=f_stats.get(DriveSyncStatus.IGNORED_NOT_CV.name, 0),
+            errors=f_stats.get(DriveSyncStatus.ERROR.name, 0)
+        )
+        f_response.stats.total_files = sum(f_stats.values())
+        response_folders.append(f_response)
+        
+    return response_folders
 
 
 @router.post("/folders/reset-sync")
@@ -115,6 +154,9 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     
     ign_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV).subquery())
     ign = (await db.execute(ign_q)).scalar()
+
+    queued_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.QUEUED).subquery())
+    queued = (await db.execute(queued_q)).scalar()
     
     err_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.ERROR).subquery())
     err = (await db.execute(err_q)).scalar()
@@ -124,6 +166,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     return StatusResponse(
         total_files_scanned=total,
         pending=pending,
+        queued=queued,
         processing=proc,
         imported=imp,
         ignored=ign,
@@ -131,13 +174,23 @@ async def get_status(db: AsyncSession = Depends(get_db)):
         last_processed_time=last_p
     )
 
-from src.schemas import FileStateResponse
-from sqlalchemy import update
 
 @router.get("/files", response_model=list[FileStateResponse])
-async def list_files(db: AsyncSession = Depends(get_db)):
-    # Returns all tracked files ordered by most recent first
-    return (await db.execute(select(DriveSyncState).order_by(DriveSyncState.last_processed_at.desc().nullslast()))).scalars().all()
+async def list_files(
+    status: str | None = None,
+    folder_id: int | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(DriveSyncState)
+    if status:
+        stmt = stmt.filter(DriveSyncState.status == status)
+    if folder_id:
+        stmt = stmt.filter(DriveSyncState.folder_id == folder_id)
+        
+    stmt = stmt.order_by(DriveSyncState.last_processed_at.desc().nullslast()).offset(skip).limit(limit)
+    return (await db.execute(stmt)).scalars().all()
 
 @router.get("/files/{google_file_id}", response_model=FileStateResponse)
 async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)):
@@ -156,22 +209,92 @@ async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)
 
 @router.post("/retry-errors")
 async def retry_errors(db: AsyncSession = Depends(get_db)):
-    # Flips all ERROR states back to PENDING so the next batch ingestion will retry them
-    from src.models import DriveSyncStatus
-    stmt = update(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.ERROR).values(status=DriveSyncStatus.PENDING)
-    res = await db.execute(stmt)
+    """
+    Remet en PENDING tous les fichiers en erreur ou bloqués (QUEUED/PROCESSING zombies).
+    Appelé manuellement depuis le Frontend ("Réessayer Tout") — requiert JWT.
+    Délègue à la logique métier partagée _reset_errors_to_pending.
+    """
+    result = await _reset_errors_to_pending(db)
+    return result
+
+
+
+async def _reset_errors_to_pending(db: AsyncSession) -> dict:
+    """
+    Logique métier partagée : remet en PENDING les fichiers bloqués.
+
+    Cas traités :
+    1. STATUS = ERROR : fichiers pour lesquels cv_api a retourné une erreur définitive
+       (ou Pub/Sub a épuisé ses 5 retries et envoyé en DLQ).
+    2. STATUS = QUEUED/PROCESSING depuis plus de 30 minutes : zombies Pub/Sub
+       (message perdu, instance cv_api redémarrée, timeout non géré).
+
+    Après reset → status = PENDING → le prochain tour de /sync les republiera
+    dans Pub/Sub automatiquement.
+    """
+    zombie_threshold = datetime.utcnow() - timedelta(minutes=30)
+
+    # Reset des ERROR
+    stmt_errors = (
+        update(DriveSyncState)
+        .where(DriveSyncState.status == DriveSyncStatus.ERROR)
+        .values(status=DriveSyncStatus.PENDING, error_message=None)
+        .returning(DriveSyncState.google_file_id)
+    )
+    result_errors = await db.execute(stmt_errors)
+    error_ids = [r[0] for r in result_errors.fetchall()]
+
+    # Reset des zombies QUEUED/PROCESSING bloqués depuis > 30 min
+    stmt_zombies = (
+        update(DriveSyncState)
+        .where(DriveSyncState.status.in_([DriveSyncStatus.QUEUED, DriveSyncStatus.PROCESSING]))
+        .where(DriveSyncState.last_processed_at < zombie_threshold)
+        .values(status=DriveSyncStatus.PENDING, error_message="Réinitialisé automatiquement (zombie > 30min)")
+        .returning(DriveSyncState.google_file_id)
+    )
+    result_zombies = await db.execute(stmt_zombies)
+    zombie_ids = [r[0] for r in result_zombies.fetchall()]
+
     await db.commit()
-    return {"status": "success", "rows_updated": res.rowcount}
 
-import asyncio
+    total = len(error_ids) + len(zombie_ids)
+    logger.info(
+        f"[retry-errors] Reset terminé — {len(error_ids)} erreurs + {len(zombie_ids)} zombies → PENDING. Total: {total}",
+        extra={"errors_reset": len(error_ids), "zombies_reset": len(zombie_ids)}
+    )
+    return {
+        "status": "success",
+        "errors_reset": len(error_ids),
+        "zombies_reset": len(zombie_ids),
+        "total_reset": total,
+    }
 
-from fastapi import BackgroundTasks
 
 # NOTE SÉCURITÉ: Cette route est intentionnellement exclue du routeur protégé par verify_jwt.
 # La sécurité est assurée par IAM Cloud Run : seul le Service Account `drive_sa`
 # (roles/run.invoker) peut appeler cet endpoint via le Cloud Scheduler (oidc_token).
 # Un JWT applicatif ne peut pas être utilisé ici car le Scheduler émet un token OIDC Google.
 public_router = APIRouter(prefix="", tags=["Drive Sync - IAM Protected"])
+
+@public_router.post("/scheduled/retry-errors")
+async def scheduled_retry_errors(db: AsyncSession = Depends(get_db)):
+    """
+    Drain automatique de la DLQ — appelé par Cloud Scheduler toutes les heures.
+
+    Processus DLQ :
+    1. Pub/Sub tente 5 fois de livrer un message à cv_api.
+    2. Après 5 échecs, le message tombe dans la DLQ (topic zenika-cv-import-events-dead-letter).
+    3. Le fichier reste en ERROR dans drive_api (via le PATCH d'erreur de cv_api).
+    4. Toutes les heures, ce scheduler remet les ERROR + zombies en PENDING.
+    5. Le prochain POST /sync republiera les fichiers dans le topic principal.
+    6. Pub/Sub retente → pipeline complète.
+
+    Authentification : OIDC token du SA drive_sa (pas de JWT applicatif).
+    """
+    result = await _reset_errors_to_pending(db)
+    logger.info(f"[Scheduler] DLQ drain automatique : {result['total_reset']} fichiers remis en queue.")
+    return result
+
 
 @public_router.post("/sync")
 async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
@@ -203,8 +326,15 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
             try:
                 service = DriveService(session)
                 await service.discover_files()
-                processed = await service.ingest_batch()
-                logger.info(f"Fin de la synchronisation avec Google Drive. (CV traités: {processed})")
+                
+                total_processed = 0
+                while True:
+                    processed = await service.ingest_batch()
+                    if processed == 0:
+                        break
+                    total_processed += processed
+                    
+                logger.info(f"Fin de la synchronisation avec Google Drive. (CV traités: {total_processed})")
             except Exception as e:
                 logger.error(f"Erreur durant la synchronisation Google Drive: {e}")
                 import traceback
@@ -242,6 +372,8 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
         file_state.user_id = update_data.user_id
     if update_data.status is not None:
         file_state.status = update_data.status
+    if update_data.error_message is not None:
+        file_state.error_message = update_data.error_message
         
     await db.commit()
     await db.refresh(file_state)

@@ -26,6 +26,7 @@ const savingKey = ref<string | null>(null)
 const analyzingKey = ref<string | null>(null)
 const selectedKey = ref<string | null>(null)
 const searchQuery = ref('')
+const uiTab = ref<'system' | 'errors'>('system')
 
 // Analysis modal
 const showModal = ref(false)
@@ -40,8 +41,16 @@ const selectedPrompt = computed(() =>
 
 const filteredPrompts = computed(() => {
   const q = searchQuery.value.toLowerCase().trim()
-  if (!q) return prompts.value
-  return prompts.value.filter(p => p.key.toLowerCase().includes(q))
+  let list = prompts.value
+  
+  if (uiTab.value === 'system') {
+    list = list.filter(p => !p.key.startsWith('error_correction:'))
+  } else {
+    list = list.filter(p => p.key.startsWith('error_correction:'))
+  }
+  
+  if (!q) return list
+  return list.filter(p => p.key.toLowerCase().includes(q))
 })
 
 const isDirty = (key: string) => {
@@ -85,7 +94,8 @@ const fetchPrompts = async () => {
       originalPrompts.value[p.key] = p.value
     })
     if (res.data.length > 0 && !selectedKey.value) {
-      selectedKey.value = res.data[0].key
+      const defaultItem = res.data.find((p: Prompt) => !p.key.startsWith('error_correction:'))
+      if (defaultItem) selectedKey.value = defaultItem.key
     }
   } catch (e: any) {
     uxStore.showToast('Erreur lors du chargement des prompts : ' + e.message, 'error')
@@ -214,6 +224,11 @@ onBeforeUnmount(() => {
 
       <!-- Sidebar -->
       <aside class="pa-sidebar">
+        <div class="pa-sidebar-tabs">
+          <button class="pa-sidebar-tab" :class="{active: uiTab === 'system'}" @click="uiTab = 'system'; selectedKey = null">Systèmes</button>
+          <button class="pa-sidebar-tab" :class="{active: uiTab === 'errors'}" @click="uiTab = 'errors'; selectedKey = null">Correctifs</button>
+        </div>
+
         <div class="pa-search-wrapper">
           <Search size="15" class="pa-search-icon" />
           <input
@@ -613,6 +628,30 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: 1rem;
+}
+.pa-sidebar-tabs {
+  display: flex;
+  background: var(--background-alt);
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 0.25rem;
+}
+.pa-sidebar-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.pa-sidebar-tab.active {
+  background: white;
+  color: var(--zenika-red);
+  box-shadow: var(--shadow-sm);
 }
 .pa-search-wrapper {
   position: relative;

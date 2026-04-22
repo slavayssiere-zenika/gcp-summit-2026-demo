@@ -133,6 +133,14 @@ resource "google_cloud_run_v2_service" "cv_api" {
         name  = "MARKET_MCP_URL"
         value = "http://api.internal.zenika/api/market/"
       }
+      env {
+        name  = "PUBSUB_INVOKER_SA_EMAIL"
+        value = google_service_account.pubsub_invoker.email
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
     }
 
     # Conteneur Sidecar (MCP)

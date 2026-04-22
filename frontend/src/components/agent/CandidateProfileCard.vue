@@ -57,7 +57,10 @@ const goToProfile = () => {
     <div v-if="profile.competencies_keywords && profile.competencies_keywords.length" class="skills-section">
       <div class="section-label"><Star size="12" /> Compétences clés</div>
       <div class="skills-chips">
-        <span v-for="skill in profile.competencies_keywords" :key="skill" class="skill-chip">{{ skill }}</span>
+        <span v-for="skill in profile.competencies_keywords.slice(0, 5)" :key="skill" class="skill-chip">{{ skill }}</span>
+        <span v-if="profile.competencies_keywords.length > 5" class="skill-chip more-chip">
+          +{{ profile.competencies_keywords.length - 5 }}
+        </span>
       </div>
     </div>
 
@@ -91,11 +94,11 @@ const goToProfile = () => {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(227, 25, 55, 0.1);
-  border-radius: 20px;
-  padding: 1.25rem;
+  border-radius: 16px;
+  padding: 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.55rem;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -116,17 +119,17 @@ const goToProfile = () => {
   gap: 0.85rem;
 }
 
-.avatar-wrapper { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
+.avatar-wrapper { position: relative; width: 36px; height: 36px; flex-shrink: 0; }
 .avatar-glow {
   position: absolute; inset: -3px;
   background: linear-gradient(135deg, var(--zenika-red), #ff6b6b);
-  border-radius: 14px; opacity: 0.12; filter: blur(6px);
+  border-radius: 10px; opacity: 0.12; filter: blur(6px);
 }
 .avatar {
   position: relative; width: 100%; height: 100%;
   background: var(--zenika-red); color: white;
-  border-radius: 14px; display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 1rem; z-index: 2;
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.75rem; z-index: 2;
   box-shadow: 0 3px 10px rgba(227, 25, 55, 0.2);
 }
 .anonymous .avatar { background: #94a3b8; box-shadow: none; }
@@ -149,23 +152,29 @@ const goToProfile = () => {
 
 /* ── Summary ── */
 .summary {
-  font-size: 0.8rem; color: #475569; line-height: 1.5;
+  font-size: 0.72rem; color: #475569; line-height: 1.4;
   margin: 0; display: -webkit-box;
-  -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
 /* ── Skills ── */
 .section-label {
   display: flex; align-items: center; gap: 4px;
-  font-size: 0.66rem; font-weight: 700; color: #94a3b8;
-  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+  font-size: 0.6rem; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
 }
-.skills-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.skills-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .skill-chip {
   background: rgba(227, 25, 55, 0.06); border: 1px solid rgba(227, 25, 55, 0.15);
-  color: #be123c; font-size: 0.7rem; font-weight: 600;
-  padding: 3px 8px; border-radius: 6px;
+  color: #be123c; font-size: 0.62rem; font-weight: 600;
+  padding: 2px 6px; border-radius: 5px;
   font-family: 'JetBrains Mono', monospace;
+}
+.more-chip {
+  background: #f1f5f9; border-color: #e2e8f0;
+  color: #64748b;
+  font-family: inherit;
+  font-weight: 700;
 }
 
 /* ── Missions ── */

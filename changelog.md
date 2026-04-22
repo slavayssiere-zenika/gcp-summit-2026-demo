@@ -1,3 +1,172 @@
+## Mise à jour automatique - 2026-04-22 07:03:15
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1667  | 620  |  63% |
+| cv_api           | 2613  | 755  |  71% |
+| drive_api        | 1434  | 524  |  63% |
+| items_api        | 1206  | 292  |  76% |
+| prompts_api      | 895   | 315  |  65% |
+| users_api        | 1440  | 448  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- perf(drive): parallelize batch ingestion
+- feat(ui): display raw JSON response in logs
+- feat(cv): trigger drive full resync on reanalyze
+- feat(ui): display fast JSON response in logs
+- fix(cv): case-insensitive tag search
+
+#### Fichiers (non commités)
+- `agents/workflows/analyse-code-api.md` (M)
+- `AGENTS.md` (M)
+- `agent_commons/agent_commons/mcp_client.py` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/Dockerfile` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `changelog.md` (M)
+- `competencies_api/.coverage` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/main.py` (M)
+- `competencies_api/mcp_server.py` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/router.py` (M)
+- `competencies_api/src/competencies/schemas.py` (M)
+- `cv_api/.coverage` (M)
+- `cv_api/Dockerfile` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/__pycache__/main.cpython-313.pyc` (M)
+- `cv_api/__pycache__/mcp_server.cpython-313.pyc` (M)
+- `cv_api/__pycache__/test_main.cpython-313-pytest-9.0.2.pyc` (M)
+- `cv_api/main.py` (M)
+- `cv_api/mcp_server.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/__pycache__/router.cpython-313.pyc` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `cv_api/test_main.py` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `db_migrations/changelogs/items/changelog.yaml` (M)
+- `docker-compose.yml` (M)
+- `drive_api/Dockerfile` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/main.py` (M)
+- `drive_api/requirements.txt` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/src/router.py` (M)
+- `drive_api/src/schemas.py` (M)
+- `drive_api/test.db` (M)
+- `drive_api/test_zero_trust.py` (M)
+- `drive_api/tests/test_drive_business.py` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/components/CompetencyEvaluationPanel.vue` (M)
+- `frontend/src/components/DriveAdminPanel.vue` (M)
+- `frontend/src/components/agent/CandidateProfileCard.vue` (M)
+- `frontend/src/stores/chatStore.ts` (M)
+- `frontend/src/views/Admin.vue` (M)
+- `frontend/src/views/AdminUsers.vue` (M)
+- `frontend/src/views/Home.vue` (M)
+- `frontend/src/views/PromptsAdmin.vue` (M)
+- `frontend/src/views/UserProfile.vue` (M)
+- `items_api/VERSION` (M)
+- `items_api/main.py` (M)
+- `items_api/spec.md` (M)
+- `items_api/src/items/models.py` (M)
+- `items_api/src/items/router.py` (M)
+- `items_api/test_integration.py` (M)
+- `market_mcp/VERSION` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/main.py` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/mcp_server.py` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/cloudrun.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/cr_drive.tf` (M)
+- `platform-engineering/terraform/cr_monitoring.tf` (M)
+- `platform-engineering/terraform/pubsub.tf` (M)
+- `platform-engineering/terraform/scheduler.tf` (M)
+- `prompts_api/.coverage` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/main.py` (M)
+- `prompts_api/mcp_server.py` (M)
+- `prompts_api/spec.md` (M)
+- `prompts_api/src/prompts/__pycache__/analyzer.cpython-313.pyc` (M)
+- `prompts_api/src/prompts/__pycache__/router.cpython-313.pyc` (M)
+- `prompts_api/src/prompts/__pycache__/schemas.cpython-313.pyc` (M)
+- `prompts_api/src/prompts/analyzer.py` (M)
+- `prompts_api/src/prompts/router.py` (M)
+- `prompts_api/src/prompts/schemas.py` (M)
+- `scripts/agent_prompt_tests.py` (M)
+- `scripts/async_manage_env.sh` (M)
+- `seed_data.py` (M)
+- `users_api/VERSION` (M)
+- `users_api/main.py` (M)
+- `users_api/spec.md` (M)
+- `.gcloud_config/logs/2026.04.21/` (??)
+- `cv_api/cv_database.db` (??)
+- `cv_api/test_pubsub_handler.py` (??)
+- `drive_api/drive_database.db` (??)
+- `platform-engineering/bundled_prompts/prompts_api/` (??)
+- `prompts_api/prompts_api.error_correction.txt` (??)
+- `vtmp/` (??)
+
+---
+
+## Mise à jour automatique - 2026-04-21 12:05:22
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1494  | 488  |  67% |
+| cv_api           | 2542  | 762  |  70% |
+| drive_api        | 1341  | 464  |  65% |
+| items_api        | 1153  | 265  |  77% |
+| prompts_api      | 832   | 266  |  68% |
+| users_api        | 1421  | 435  |  69% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- feat(ui): display raw JSON response in logs
+- feat(cv): trigger drive full resync on reanalyze
+- feat(ui): display fast JSON response in logs
+- fix(cv): case-insensitive tag search
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/VERSION` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/test.db` (M)
+- `frontend/src/views/AdminUsers.vue` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-21 11:55:48
 
 ### Couverture de Code

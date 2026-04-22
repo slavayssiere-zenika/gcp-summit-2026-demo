@@ -824,11 +824,13 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
                                     "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
                                     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
-                                    "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
+                                    "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
+                                    "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"
                                 }
                                 
                                 packaged_dir = os.path.join(os.path.dirname(__file__), "bundled_prompts")
-                                base_dir = packaged_dir if os.path.exists(packaged_dir) else os.path.dirname(os.path.dirname(__file__))
+                                is_container = os.path.exists("/.dockerenv") or "K_SERVICE" in os.environ
+                                base_dir = packaged_dir if (is_container and os.path.exists(packaged_dir)) else os.path.dirname(os.path.dirname(__file__))
                                 
                                 headers = {
                                     "Content-Type": "application/json",
@@ -1058,6 +1060,14 @@ if __name__ == "__main__":
 
         # Final flat config for Terraform
         final_config = {**base_config, **merged_versions, **images}
+
+        # Clean up any existing auto.tfvars.json files to prevent variable bleeding
+        for fname in os.listdir(TERRAFORM_DIR):
+            if fname.endswith(".auto.tfvars.json"):
+                try:
+                    os.remove(os.path.join(TERRAFORM_DIR, fname))
+                except OSError:
+                    pass
 
         # Dump it as auto.tfvars.json for Terraform to ingest automatically
         tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")

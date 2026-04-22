@@ -181,3 +181,41 @@ def test_list_user_items_filtering(client):
         for item in data["items"]:
             for cat in item["categories"]:
                 assert cat["id"] == 1
+
+
+def test_create_item_idempotency(client):
+    """
+    Contrainte d'unicité (user_id, name) : deux POST identiques doivent retourner
+    le même item (idempotence) sans erreur 500 ni doublon en base.
+    """
+    client.post("/categories", json={"name": "IdempotCat", "description": "Test idempotency"})
+
+    mock_user = MagicMock()
+    mock_user.status_code = 200
+    mock_user.json.return_value = {
+        "id": 42, "username": "dupuser", "email": "dup@test.com", "is_active": True
+    }
+    mock_user.raise_for_status = MagicMock()
+
+    with patch("httpx.AsyncClient.get", return_value=mock_user):
+        payload = {"name": "Mission Doublon", "user_id": 42, "category_ids": [1]}
+
+        r1 = client.post("/", json=payload, headers={"Authorization": "Bearer token"})
+        assert r1.status_code == 201, f"Premier POST doit retourner 201. Reçu: {r1.status_code}"
+        id1 = r1.json()["id"]
+
+        r2 = client.post("/", json=payload, headers={"Authorization": "Bearer token"})
+        # Le second POST doit retourner l'existant sans doublon (200 ou 201)
+        assert r2.status_code in (200, 201), \
+            f"Second POST identique ne doit pas retourner d'erreur. Reçu: {r2.status_code} — {r2.text}"
+        id2 = r2.json()["id"]
+
+        assert id1 == id2, \
+            f"Les deux requêtes doivent retourner le même item (id={id1}), pas un doublon (id={id2})"
+
+        # Vérifier qu'il n'y a qu'un seul item (user_id=42, name="Mission Doublon") en base
+        list_resp = client.get("/user/42", headers={"Authorization": "Bearer token"})
+        assert list_resp.status_code == 200
+        items = [i for i in list_resp.json()["items"] if i["name"] == "Mission Doublon"]
+        assert len(items) == 1, f"Un seul item attendu en base, trouvé: {len(items)}"
+

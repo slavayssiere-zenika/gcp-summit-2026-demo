@@ -81,6 +81,6 @@ Il est strictement interdit de citer un profil sans ID vérifié.
 - **GET** `/mcp/registry` : Mcp Registry
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

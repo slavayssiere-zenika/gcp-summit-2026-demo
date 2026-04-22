@@ -80,3 +80,25 @@ databaseChangeLog:
                   type: "jsonb"
                   constraints:
                     nullable: true
+  - changeSet:
+      id: "3"
+      author: "antigravity"
+      comment: "Contrainte d'unicité (user_id, name) pour prévenir les missions dupliquées lors des réanalyses CV via Pub/Sub"
+      changes:
+        - sql:
+            # Supprime les doublons (user_id, name) en conservant le plus ancien (id minimal)
+            sql: >-
+              DELETE FROM items
+              WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM items
+                GROUP BY user_id, name
+              );
+        - addUniqueConstraint:
+            tableName: "items"
+            columnNames: "user_id, name"
+            constraintName: "uq_items_user_name"
+      rollback:
+        - dropUniqueConstraint:
+            tableName: "items"
+            constraintName: "uq_items_user_name"

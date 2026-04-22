@@ -45,6 +45,7 @@
             <th>Compétence</th>
             <th>🤖 IA</th>
             <th>👤 Mon évaluation</th>
+            <th v-if="readonly" class="th-justif">Décision IA</th>
             <th v-if="!readonly" class="th-coach">Coach</th>
           </tr>
         </thead>
@@ -105,6 +106,14 @@
                   <span v-else class="score-pending">—</span>
                 </template>
               </div>
+            </td>
+
+            <!-- Justification IA (readonly uniquement) -->
+            <td v-if="readonly" class="justif-cell">
+              <span v-if="ev.ai_justification" class="justif-text">
+                {{ ev.ai_justification }}
+              </span>
+              <span v-else class="score-pending">—</span>
             </td>
 
             <!-- Coach uniquement -->
@@ -498,6 +507,24 @@ onMounted(fetchEvaluations)
   white-space: nowrap;
 }
 .th-coach { width: 48px; text-align: center; }
+.th-justif { min-width: 260px; max-width: 420px; }
+
+.justif-cell {
+  max-width: 420px;
+  padding: 0.5rem 0.75rem;
+}
+
+.justif-text {
+  display: block;
+  font-size: 0.78rem;
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  line-height: 1.45;
+  font-style: italic;
+}
 
 .eval-row td {
   padding: 0.5rem 0.75rem;

@@ -183,6 +183,9 @@ Le monitoring n'est pas une option, c'est l'épine dorsale du debugging asynchro
   - **Règle** : `Instrumentator().instrument(app).expose(app)` est obligatoire dans le `main.py` de **tout** service (API data et agent).
   - **Règle** : `FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")` est **également obligatoire** — sans lui, les routes HTTP ne génèrent pas de spans OTel automatiques.
   - **Raison** : Sans ces deux lignes, le service disparaît des dashboards Grafana et des traces Tempo.
+- **Gestion Globale des Erreurs (Golden Pattern)** :
+  - **Règle** : Toute API Data **DOIT** implémenter un `@app.exception_handler(Exception)` global pour intercepter les erreurs 500 inattendues. L'erreur doit être relayée silencieusement et de façon asynchrone (via `asyncio.create_task` et `httpx`) vers `prompts_api` (`POST /errors/report`), en propageant le `token` JWT d'origine extrait de la requête.
+  - **Raison** : Automatiser la boucle de feedback et l'amélioration continue des System Prompts en redirigeant les échecs vers le moteur d'inférence.
 - **Trace (Tempo/OTel)** :
   - **Règle** : *L'oubli de cette règle brise toute la chaîne.* Lors de toute exécution distribuée (ex: Ingestion RAG, import inter-APIs), `inject(headers)` est **STRICTEMENT obligatoire** avant chaque requête HTTP sortante `httpx` pour propager le Span.
   - **Raison** : Sans propagation, les traces sont fragmentées et le debugging distribué devient impossible.
