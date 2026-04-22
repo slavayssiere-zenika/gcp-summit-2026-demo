@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { Settings, ShieldCheck, AlertTriangle, Users, CheckCircle2, RotateCw } from 'lucide-vue-next'
+import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge } from 'lucide-vue-next'
 import { authService } from '../services/auth'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const isLoading = ref(false)
 const error = ref('')
@@ -68,16 +69,16 @@ onMounted(() => {
 
 <template>
   <div class="admin-wrapper fade-in">
-    <div class="header-banner">
-      <div class="banner-icon"><Users size="32" /></div>
-      <div class="banner-text">
-        <h2>Déduplication des Utilisateurs</h2>
-        <p>Administration centralisée des fusions de comptes pour assurer la cohérence des données RAG.</p>
-      </div>
-      <div class="status-badge" v-if="authService.state.user?.role === 'admin' || authService.state.user?.role === 'rh'">
-        <ShieldCheck size="16" /> {{ authService.state.user?.role === 'admin' ? 'Admin' : 'RH' }}
-      </div>
-    </div>
+
+    <PageHeader
+      title="Déduplication des Profils"
+      subtitle="Fusionnez les comptes dupliqués pour garantir la cohérence des données et des vecteurs RAG."
+      :icon="GitMerge"
+      :breadcrumb="[
+        { label: 'Hub RH', to: '/admin/availability' },
+        { label: 'Déduplication Profils' }
+      ]"
+    />
 
     <!-- Success Output -->
     <div class="success-panel fade-in-up" v-if="successResponse">

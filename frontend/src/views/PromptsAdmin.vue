@@ -7,6 +7,7 @@ import {
   ArrowLeftRight, FileText, BarChart3, Circle
 } from 'lucide-vue-next'
 import { useUxStore } from '@/stores/uxStore'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const uxStore = useUxStore()
 
@@ -176,27 +177,15 @@ onBeforeUnmount(() => {
 <template>
   <div class="pa-root">
 
-    <!-- ── Page Header ─────────────────────────────────────────────────────── -->
-    <header class="pa-header">
-      <div class="pa-header-left">
-        <div class="pa-header-icon">
-          <BrainCircuit size="22" />
-        </div>
-        <div>
-          <h1 class="pa-title">Administration des AI Prompts</h1>
-          <p class="pa-subtitle">Gestion dynamique des directives système Gemini</p>
-        </div>
-      </div>
-      <div class="pa-header-right">
-        <span v-if="dirtyCount > 0" class="pa-dirty-badge">
-          <Circle size="8" class="pulse-dot" />
-          {{ dirtyCount }} modification{{ dirtyCount > 1 ? 's' : '' }} non sauvegardée{{ dirtyCount > 1 ? 's' : '' }}
-        </span>
-        <button class="pa-btn-icon" @click="fetchPrompts" title="Rafraîchir" aria-label="Rafraîchir les prompts">
-          <RefreshCw size="16" />
-        </button>
-      </div>
-    </header>
+    <PageHeader
+      title="Instructions des Agents IA"
+      subtitle="Éditez les directives système Gemini et consultez les correctifs auto-générés par détection d'erreurs."
+      :icon="BrainCircuit"
+      :breadcrumb="[
+        { label: 'Administration', to: '/admin' },
+        { label: 'Instructions des Agents IA' }
+      ]"
+    />
 
     <!-- ── Loading State ──────────────────────────────────────────────────── -->
     <div v-if="loading" class="pa-loading">

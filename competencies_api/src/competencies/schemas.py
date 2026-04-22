@@ -146,3 +146,32 @@ class SimilarConsultantsResult(BaseModel):
     reference_user_id: int
     reference_competency_count: int
     similar_consultants: List[SimilarConsultant]
+
+
+# ── Competency Suggestions Schemas (Axe 4) ───────────────────────────────
+
+class CompetencySuggestionCreate(BaseModel):
+    """Payload pour soumettre une nouvelle suggestion de compétence."""
+    name: str
+    source: str = "mission"  # 'mission' | 'cv'
+    context: Optional[str] = None  # titre mission ou identifiant CV
+
+
+class CompetencySuggestionResponse(BaseModel):
+    """Réponse d'une suggestion de compétence."""
+    id: int
+    name: str
+    source: str
+    context: Optional[str] = None
+    status: str
+    occurrence_count: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuggestionReviewRequest(BaseModel):
+    """Payload pour la validation ou le rejet d'une suggestion."""
+    action: str  # 'ACCEPT' | 'REJECT'
+    parent_id: Optional[int] = None  # si ACCEPT : parent dans la taxonomie
+    description: Optional[str] = None  # si ACCEPT : description de la compétence

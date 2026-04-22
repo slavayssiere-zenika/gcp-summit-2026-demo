@@ -127,3 +127,5 @@ databaseChangeLog:
       file: "changelogs/competencies/003-add-competency-aliases.yaml"
   - include:
       file: "changelogs/competencies/004-add-competency-evaluations.yaml"
+  - include:
+      file: "changelogs/competencies/005-add-competency-suggestions.yaml"
