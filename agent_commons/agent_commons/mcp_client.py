@@ -63,6 +63,9 @@ LONG_RUNNING_TOOLS: set[str] = {
     "get_infrastructure_topology",
     "get_candidate_rag_context",
     "get_aiops_dashboard_data",
+    "get_agency_competency_coverage",
+    "find_skill_gaps",
+    "find_similar_consultants",
 }
 
 

@@ -268,6 +268,62 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["user_id"]
             }
+        ),
+        Tool(
+            name="get_agency_competency_coverage",
+            description=(
+                "Heatmap des compétences par agence. Retourne pour chaque paire (agence, compétence) le nombre "
+                "de consultants qui la possèdent et le score IA moyen. "
+                "Utilise cet outil pour : comparer les agences sur leurs forces techniques, identifier quelles "
+                "agences couvrent le mieux une technologie (ex: 'Quelle agence a le plus de GCP ?'), "
+                "ou produire un rapport de synthèse multi-agences pour un directeur commercial."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "min_count": {"type": "integer", "description": "Nombre minimum de consultants pour apparaitre dans les résultats (défaut: 1)", "default": 1},
+                    "limit": {"type": "integer", "description": "Nombre maximum de lignes retournées (défaut: 50)", "default": 50}
+                }
+            }
+        ),
+        Tool(
+            name="find_skill_gaps",
+            description=(
+                "Identifie les compétences manquantes dans un pool de consultants. "
+                "Pour chaque compétence cible, calcule le taux de couverture dans le pool (0-100%). "
+                "Utilise cet outil pour : détecter les lacunes d'une agence avant de répondre à un AO, "
+                "identifier les compétences à recruter en priorité, "
+                "ou analyser les manques d'une équipe projet. "
+                "Passer les user_ids d'une agence (via get_users_by_tag) et optionnellement les competency_ids cibles."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_ids": {"type": "array", "items": {"type": "integer"}, "description": "Liste des IDs du pool de consultants à analyser"},
+                    "competency_ids": {"type": "array", "items": {"type": "integer"}, "description": "IDs des compétences cibles (toutes les feuilles si omis)"},
+                    "min_coverage": {"type": "number", "description": "Seuil de couverture (0.0-1.0) en dessous duquel une compétence est un gap (défaut: 0.0 = toutes)", "default": 0.0}
+                },
+                "required": ["user_ids"]
+            }
+        ),
+        Tool(
+            name="find_similar_consultants",
+            description=(
+                "Trouve les N consultants les plus similaires à un consultant de référence, "
+                "basé sur la similarité de Jaccard de leurs compétences feuilles. "
+                "Utilise cet outil pour : trouver un remplaçant sur une mission ('qui peut remplacer Ahmed ?'), "
+                "identifier un mentor ou pair technique pour du coaching, "
+                "ou proposer un backup consultant en urgence. "
+                "Le score Jaccard va de 0 (aucune compétence commune) à 1 (profil identique)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID du consultant de référence"},
+                    "top_n": {"type": "integer", "description": "Nombre de consultants similaires à retourner (défaut: 5)", "default": 5}
+                },
+                "required": ["user_id"]
+            }
         )
     ]
 
@@ -389,6 +445,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 user_id = arguments["user_id"]
                 response = await client.post(
                     f"{API_BASE_URL}/evaluations/user/{user_id}/ai-score-all"
+                )
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "get_agency_competency_coverage":
+                params = {}
+                if "min_count" in arguments:
+                    params["min_count"] = arguments["min_count"]
+                if "limit" in arguments:
+                    params["limit"] = arguments["limit"]
+                response = await client.get(f"{API_BASE_URL}/analytics/agency-coverage", params=params)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "find_skill_gaps":
+                params = {"user_ids": arguments["user_ids"]}
+                if "competency_ids" in arguments and arguments["competency_ids"]:
+                    params["competency_ids"] = arguments["competency_ids"]
+                if "min_coverage" in arguments:
+                    params["min_coverage"] = arguments["min_coverage"]
+                response = await client.get(f"{API_BASE_URL}/analytics/skill-gaps", params=params)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "find_similar_consultants":
+                user_id = arguments["user_id"]
+                top_n = arguments.get("top_n", 5)
+                response = await client.get(
+                    f"{API_BASE_URL}/analytics/similar-consultants/{user_id}",
+                    params={"top_n": top_n}
                 )
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]

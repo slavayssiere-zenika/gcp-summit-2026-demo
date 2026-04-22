@@ -22,7 +22,10 @@ from src.competencies.schemas import (
     CompetencyCreate, CompetencyUpdate, CompetencyResponse,
     PaginationResponse, UserInfo, TreeImportRequest,
     StatsRequest, CompetencyCount, CompetencyStatsResponse,
-    CompetencyEvaluationResponse, UserScoreRequest, AiScoreAllResponse
+    CompetencyEvaluationResponse, UserScoreRequest, AiScoreAllResponse,
+    AgencyCompetencyItem, AgencyCompetencyCoverage,
+    SkillGapItem, SkillGapResult,
+    SimilarConsultant, SimilarConsultantsResult,
 )
 
 from src.auth import verify_jwt
@@ -1051,3 +1054,272 @@ async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], header
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
     logger.info(f"[AI Score BG] Scoring terminé pour user={user_id} — {len(comp_tuples)} compétences traitées.")
 
+
+# ============================================================
+# Analytics Endpoints (Knowledge Graph Pragmatique)
+# ============================================================
+
+@router.get("/analytics/agency-coverage", response_model=AgencyCompetencyCoverage)
+async def get_agency_competency_coverage(
+    min_count: int = Query(1, ge=1, description="Nombre minimum de consultants possédant la compétence pour apparaitre"),
+    limit: int = Query(50, ge=1, le=200),
+    request: Request = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Heatmap compétences x agences.
+
+    Pour chaque paire (agence, compétence feuille), retourne le nombre de consultants
+    et le score IA moyen. Permet de comparer les agences sur leurs pool de compétences.
+
+    Stratégie :
+    1. Récupère les utilisateurs et leur agence depuis users_api (tag category)
+    2. Fait un GROUP BY (agence, competency_id) sur user_competency + evaluations
+    """
+    cache_key = f"competencies:analytics:agency-coverage:{min_count}:{limit}"
+    cached = get_cache(cache_key)
+    if cached:
+        return AgencyCompetencyCoverage(**cached)
+
+    # 1. Récupérer les utilisateurs avec leur agence depuis users_api
+    auth_header = request.headers.get("Authorization") if request else None
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+
+    agency_map: dict[int, str] = {}  # user_id -> agency_name
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(
+                f"{USERS_API_URL.rstrip('/')}/users",
+                params={"limit": 500},
+                headers=headers
+            )
+            if res.status_code == 200:
+                data = res.json()
+                users = data.get("items", data) if isinstance(data, dict) else data
+                for u in users:
+                    uid = u.get("id")
+                    # Chercher le tag d'agence dans les catégories
+                    agency = None
+                    for tag in (u.get("tags") or []):
+                        if isinstance(tag, dict) and tag.get("category") in ("agence", "agency", "Agence"):
+                            agency = tag.get("name", tag.get("value"))
+                            break
+                    if uid and agency:
+                        agency_map[uid] = agency
+    except Exception as e:
+        logger.warning(f"[analytics/agency-coverage] users_api indisponible: {e}")
+
+    if not agency_map:
+        return AgencyCompetencyCoverage(items=[], total_consultants=0, total_agencies=0)
+
+    # 2. Jointure SQL : user_competency x competencies x evaluations
+    #    Filtre sur les feuilles (pas de sous-compétences) + utilisateurs connus
+    from sqlalchemy import case as sa_case
+
+    leaf_subq = (
+        select(Competency.id)
+        .where(~select(Competency.id).where(Competency.parent_id == Competency.id).correlate().exists())
+    ).scalar_subquery()
+
+    stmt = (
+        select(
+            user_competency.c.user_id,
+            user_competency.c.competency_id,
+            Competency.name.label("competency_name"),
+            CompetencyEvaluation.ai_score,
+        )
+        .join(Competency, user_competency.c.competency_id == Competency.id)
+        .outerjoin(
+            CompetencyEvaluation,
+            (CompetencyEvaluation.user_id == user_competency.c.user_id)
+            & (CompetencyEvaluation.competency_id == user_competency.c.competency_id)
+        )
+        .where(user_competency.c.user_id.in_(list(agency_map.keys())))
+        .where(~Competency.id.in_(
+            select(Competency.parent_id).where(Competency.parent_id.isnot(None)).distinct()
+        ))
+    )
+    rows = (await db.execute(stmt)).all()
+
+    # 3. Agrégation Python : (agency, competency) -> {count, scores}
+    from collections import defaultdict
+    agg: dict[tuple[str, str], dict] = defaultdict(lambda: {"count": 0, "scores": []})
+    for row in rows:
+        agency = agency_map.get(row.user_id)
+        if not agency:
+            continue
+        key = (agency, row.competency_name)
+        agg[key]["count"] += 1
+        if row.ai_score is not None:
+            agg[key]["scores"].append(row.ai_score)
+
+    items = []
+    for (agency, competency), vals in agg.items():
+        if vals["count"] < min_count:
+            continue
+        avg_score = round(sum(vals["scores"]) / len(vals["scores"]), 2) if vals["scores"] else None
+        items.append(AgencyCompetencyItem(
+            agency=agency,
+            competency=competency,
+            count=vals["count"],
+            avg_ai_score=avg_score
+        ))
+
+    items.sort(key=lambda x: (-x.count, x.agency, x.competency))
+    items = items[:limit]
+
+    result = AgencyCompetencyCoverage(
+        items=items,
+        total_consultants=len(agency_map),
+        total_agencies=len(set(agency_map.values()))
+    )
+    set_cache(cache_key, result.model_dump(), 300)  # Cache 5 min
+    return result
+
+
+@router.get("/analytics/skill-gaps", response_model=SkillGapResult)
+async def get_skill_gaps(
+    user_ids: List[int] = Query(..., description="Liste des user_ids du pool à analyser"),
+    competency_ids: Optional[List[int]] = Query(None, description="Liste de compétences cibles (toutes si omis)"),
+    min_coverage: float = Query(0.0, ge=0.0, le=1.0, description="Seuil: compétences en-dessous de ce taux de couverture"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gap de compétences dans un pool d'utilisateurs.
+
+    Pour chaque compétence cible, calcule le pourcentage de consultants du pool
+    qui la possèdent. Les compétences sous le seuil sont les 'gaps'.
+
+    Cas d'usage :
+    - Identifier les compétences manquantes dans une agence spécifique
+    - Détecter les lacunes avant un AO (pass user_ids d'une agence)
+    """
+    if not user_ids:
+        return SkillGapResult(gaps=[], pool_size=0)
+
+    pool_size = len(user_ids)
+
+    # Base : compétences cibles (toutes les feuilles, ou celles demandées)
+    if competency_ids:
+        comps_stmt = select(Competency).where(Competency.id.in_(competency_ids))
+    else:
+        # Toutes les feuilles
+        comps_stmt = select(Competency).where(
+            ~Competency.id.in_(
+                select(Competency.parent_id).where(Competency.parent_id.isnot(None)).distinct()
+            )
+        )
+    target_comps = (await db.execute(comps_stmt)).scalars().all()
+
+    if not target_comps:
+        return SkillGapResult(gaps=[], pool_size=pool_size)
+
+    # Compter les consultants du pool ayant chaque compétence
+    count_stmt = (
+        select(
+            user_competency.c.competency_id,
+            func.count(user_competency.c.user_id).label("n")
+        )
+        .where(user_competency.c.user_id.in_(user_ids))
+        .where(user_competency.c.competency_id.in_([c.id for c in target_comps]))
+        .group_by(user_competency.c.competency_id)
+    )
+    count_rows = {r.competency_id: r.n for r in (await db.execute(count_stmt)).all()}
+
+    gaps = []
+    for comp in target_comps:
+        n = count_rows.get(comp.id, 0)
+        coverage = n / pool_size
+        if coverage <= min_coverage:
+            gaps.append(SkillGapItem(
+                competency_id=comp.id,
+                competency_name=comp.name,
+                consultants_with_skill=n,
+                consultants_in_pool=pool_size,
+                coverage_pct=round(coverage * 100, 1)
+            ))
+
+    gaps.sort(key=lambda x: x.coverage_pct)
+    return SkillGapResult(gaps=gaps, pool_size=pool_size)
+
+
+@router.get("/analytics/similar-consultants/{user_id}", response_model=SimilarConsultantsResult)
+async def get_similar_consultants(
+    user_id: int,
+    top_n: int = Query(5, ge=1, le=20, description="Nombre de consultants similaires à retourner"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Trouve les consultants les plus similaires à un consultant de référence.
+
+    Utilise la similarité de Jaccard sur le set de compétences feuilles assignées.
+    Jaccard = |A ∩ B| / |A ∪ B|
+
+    Cas d'usage :
+    - Trouver un remplaçant sur une mission
+    - Identifier un mentor ou pair pour le coaching
+    - Staffing de secours (backup consultant)
+    """
+    # Compétences du consultant de référence (feuilles uniquement)
+    leaf_filter = ~Competency.id.in_(
+        select(Competency.parent_id).where(Competency.parent_id.isnot(None)).distinct()
+    )
+
+    ref_stmt = (
+        select(user_competency.c.competency_id, Competency.name)
+        .join(Competency, user_competency.c.competency_id == Competency.id)
+        .where(user_competency.c.user_id == user_id)
+        .where(leaf_filter)
+    )
+    ref_rows = (await db.execute(ref_stmt)).all()
+    ref_set: set[int] = {r.competency_id for r in ref_rows}
+    ref_names: dict[int, str] = {r.competency_id: r.name for r in ref_rows}
+
+    if not ref_set:
+        return SimilarConsultantsResult(
+            reference_user_id=user_id,
+            reference_competency_count=0,
+            similar_consultants=[]
+        )
+
+    # Tous les autres utilisateurs qui ont au moins une compétence commune
+    other_stmt = (
+        select(user_competency.c.user_id, user_competency.c.competency_id, Competency.name)
+        .join(Competency, user_competency.c.competency_id == Competency.id)
+        .where(user_competency.c.user_id != user_id)
+        .where(user_competency.c.competency_id.in_(ref_set))
+        .where(leaf_filter)
+    )
+    other_rows = (await db.execute(other_stmt)).all()
+
+    # Grouper par user_id
+    from collections import defaultdict
+    user_comp_sets: dict[int, set[int]] = defaultdict(set)
+    user_comp_names: dict[int, dict[int, str]] = defaultdict(dict)
+    for row in other_rows:
+        user_comp_sets[row.user_id].add(row.competency_id)
+        user_comp_names[row.user_id][row.competency_id] = row.name
+
+    # Calcul Jaccard pour chaque candidat
+    results: list[SimilarConsultant] = []
+    for other_uid, other_set in user_comp_sets.items():
+        intersection = ref_set & other_set
+        union = ref_set | other_set
+        jaccard = len(intersection) / len(union) if union else 0.0
+        shared_names = [ref_names.get(cid, user_comp_names[other_uid].get(cid, "")) for cid in intersection]
+        results.append(SimilarConsultant(
+            user_id=other_uid,
+            common_competencies=len(intersection),
+            jaccard_score=round(jaccard, 3),
+            shared_competency_names=sorted(shared_names)
+        ))
+
+    results.sort(key=lambda x: -x.jaccard_score)
+    results = results[:top_n]
+
+    return SimilarConsultantsResult(
+        reference_user_id=user_id,
+        reference_competency_count=len(ref_set),
+        similar_consultants=results
+    )

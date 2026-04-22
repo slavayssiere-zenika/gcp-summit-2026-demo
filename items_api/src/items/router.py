@@ -201,6 +201,20 @@ async def create_item(
                 detail=f"User does not have rights for categories: {forbidden_ids}"
             )
 
+    # ── Idempotence : vérification avant INSERT pour éviter les doublons de missions ──
+    # Contrainte d'unicité (user_id, name) — si l'item existe déjà, on le retourne.
+    from sqlalchemy.orm import selectinload as _sil
+    existing = (await db.execute(
+        select(Item).options(_sil(Item.categories))
+        .filter(Item.user_id == item.user_id, Item.name == item.name)
+    )).scalars().first()
+    if existing:
+        import logging as _log
+        _log.getLogger(__name__).info(
+            f"[create_item] Item '{item.name}' (user_id={item.user_id}) déjà existant — retour idempotent."
+        )
+        return await enrich_item(existing, request)
+
     db_item = Item(
         name=item.name,
         description=item.description,
@@ -209,8 +223,19 @@ async def create_item(
         categories=categories
     )
     db.add(db_item)
-    await db.commit()
-    await db.refresh(db_item)
+    try:
+        await db.commit()
+        await db.refresh(db_item)
+    except Exception:
+        # Gestion de la race condition : deux requêtes simultanées pour le même (user_id, name)
+        await db.rollback()
+        existing = (await db.execute(
+            select(Item).options(selectinload(Item.categories))
+            .filter(Item.user_id == item.user_id, Item.name == item.name)
+        )).scalars().first()
+        if existing:
+            return await enrich_item(existing, request)
+        raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création de l'item")
 
     delete_cache_pattern("items:list:*")
     delete_cache_pattern("items:search:*")
@@ -218,6 +243,8 @@ async def create_item(
     # Reload item with categories eager loaded
     db_item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == db_item.id))).scalars().first()
     return await enrich_item(db_item, request)
+
+
 
 
 @router.put("/{item_id}", response_model=ItemResponse)

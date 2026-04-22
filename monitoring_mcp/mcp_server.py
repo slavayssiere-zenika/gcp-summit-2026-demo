@@ -109,6 +109,14 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="get_ingestion_pipeline_status",
+            description="Récupère l'état complet de la pipeline d'ingéstion des CVs (Discovery Drive → Queue Pub/Sub → Traitement cv_api). Retourne les compteurs par statut (pending, queued, processing, imported, errors) et signale les blocages. Utiliser pour diagnostiquer : 'combien de CVs sont en attente ?', 'y a-t-il des erreurs d'import ?', 'la pipeline est-elle active ?'.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
         )
     ]
 
@@ -139,6 +147,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "check_all_components_health":
             data = await check_all_components_health_internal()
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "get_ingestion_pipeline_status":
+            data = await get_ingestion_pipeline_status_internal()
             return [TextContent(type="text", text=json.dumps(data))]
 
         else:
@@ -491,3 +503,66 @@ async def check_all_components_health_internal() -> list:
     except Exception as e:
         logger.exception("Error running global health check")
         return [{"status": "error", "error": str(e)}]
+
+
+async def get_ingestion_pipeline_status_internal() -> dict:
+    """
+    Interroge drive_api/status via l'ILB interne pour retourner l'état de la
+    pipeline d'ingestion CV (Discovery → Pub/Sub → cv_api).
+
+    Ajoute une recommandation d'action si des erreurs ou des blocages sont détectés.
+    """
+    try:
+        drive_api_url = os.getenv("DRIVE_API_URL", "http://api.internal.zenika/api/drive")
+        auth = mcp_auth_header_var.get(None)
+        headers = {}
+        inject(headers)
+        if auth:
+            headers["Authorization"] = auth
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(f"{drive_api_url.rstrip('/')}/status", headers=headers)
+            res.raise_for_status()
+            data = res.json()
+
+        # Analyse et recommandation automatique
+        errors = data.get("errors", 0)
+        queued = data.get("queued", 0)
+        processing = data.get("processing", 0)
+        pending = data.get("pending", 0)
+        imported = data.get("imported", 0)
+        total = data.get("total_files_scanned", 0)
+
+        recommendations = []
+        if errors > 0:
+            recommendations.append(f"⚠️ {errors} CV(s) en erreur d'import. Action recommandée : déclencher un retry via POST /drive/retry-errors.")
+        if queued > 0:
+            recommendations.append(f"ℹ️ {queued} CV(s) en file Pub/Sub (en attente de traitement par cv_api). Pipeline active.")
+        if processing > 0:
+            recommendations.append(f"🔄 {processing} CV(s) en cours de traitement par cv_api.")
+        if pending > 0 and queued == 0 and processing == 0:
+            recommendations.append(f"⏸️ {pending} CV(s) en attente mais aucun traitement en cours. Une synchronisation Drive (/sync) est peut-être nécessaire.")
+        if not recommendations:
+            recommendations.append(f"✅ Pipeline saine — {imported}/{total} CVs importés, aucune erreur ni blocage.")
+
+        return {
+            "status": "ok",
+            "pipeline": {
+                "total_files_scanned": total,
+                "pending": pending,
+                "queued": queued,
+                "processing": processing,
+                "imported": imported,
+                "ignored": data.get("ignored", 0),
+                "errors": errors,
+                "last_processed_time": data.get("last_processed_time"),
+            },
+            "recommendations": recommendations,
+        }
+    except Exception as e:
+        logger.exception(f"get_ingestion_pipeline_status failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "recommendations": ["❌ Impossible de joindre drive_api. Vérifier la santé du service via check_component_health('drive')."]
+        }

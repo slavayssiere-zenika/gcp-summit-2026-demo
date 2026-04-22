@@ -67,5 +67,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/retry-errors` : Retry Errors
 - **GET** `/tokens/google` : Get Google Token
 - **PATCH** `/files/{file_id}` : Update File
+- **POST** `/scheduled/retry-errors` : Scheduled Retry Errors
 - **POST** `/sync` : Trigger Sync
 - **GET** `/spec` : Get Spec

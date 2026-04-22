@@ -66,3 +66,19 @@ test_*.py.antigravity_env
 .tmp/
 scratch_*.py
 reports/
+
+# =========================
+# Dev SQLite databases (non-test)
+# =========================
+*.db
+!*_test.db
+
+# =========================
+# GCloud config logs
+# =========================
+.gcloud_config/
+
+# =========================
+# Temp Python envs
+# =========================
+vtmp/

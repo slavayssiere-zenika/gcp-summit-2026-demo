@@ -249,12 +249,14 @@ def test_list_files_empty(client):
 # ── Tests POST /retry-errors ──────────────────────────────────────────────────
 
 def test_retry_errors_no_errors_to_retry(client):
-    """POST /retry-errors quand il n'y a aucune erreur doit retourner rows_updated=0."""
+    """POST /retry-errors quand il n'y a aucune erreur doit retourner total_reset=0."""
     resp = client.post("/retry-errors", headers=AUTH_HEADER)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "success"
-    assert data["rows_updated"] == 0
+    assert data["total_reset"] == 0
+    assert data["errors_reset"] == 0
+    assert data["zombies_reset"] == 0
 
 
 # ── Tests GET /version ────────────────────────────────────────────────────────

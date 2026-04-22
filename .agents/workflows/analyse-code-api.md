@@ -27,6 +27,7 @@ Pour chaque API détectée, vérifie les points d'audit suivants (utilise `grep_
 - Le fichier `logger.py` implémente `pythonjsonlogger` pour JSON et attache `trace_id` / `span_id`.
 - Utilisation de `LoggingMiddleware` qui filtre le bruit (`/health`, etc.).
 - Les appels HTTP sortants (si visibles dans le code) utilisent `inject(headers)`.
+- Implémentation du pattern global `@app.exception_handler(Exception)` reportant sur `prompts_api` (Golden Pattern).
 
 #### 3.3. Sécurité
 - Utilisation de `verify_jwt` de `src.auth` pour protéger les routes.

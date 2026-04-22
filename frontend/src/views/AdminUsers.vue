@@ -184,12 +184,31 @@ const fetchUsers = async () => {
   isLoading.value = true
   error.value = ''
   try {
-    // Fetch a large limit to allow client-side filtering for the 500 users benchmark
-    const response = await axios.get('/auth/?skip=0&limit=1000')
-    if (response.data && response.data.items) {
-      users.value = response.data.items
-      totalUsersCount.value = response.data.total
+    // Fetch users in chunks since API limits to 100 max per request
+    let allUsers: any[] = []
+    let skip = 0
+    let limit = 100
+    let total = 0
+    let hasMore = true
+    
+    while (hasMore) {
+      const response = await axios.get(`/auth/?skip=${skip}&limit=${limit}`)
+      if (response.data && response.data.items) {
+        allUsers = [...allUsers, ...response.data.items]
+        total = response.data.total || allUsers.length
+        
+        if (allUsers.length >= total || response.data.items.length < limit) {
+          hasMore = false
+        } else {
+          skip += limit
+        }
+      } else {
+        hasMore = false
+      }
     }
+    
+    users.value = allUsers
+    totalUsersCount.value = total
   } catch (err: any) {
     error.value = err.response?.data?.detail || err.message || "Erreur de chargement"
   } finally {
@@ -197,10 +216,35 @@ const fetchUsers = async () => {
   }
 }
 
+const categories = ref<any[]>([])
+const userTagsMap = ref<Record<string, string>>({})
+
+const fetchUserTags = async () => {
+  try {
+    const response = await axios.get('/api/cv/users/tags/map')
+    userTagsMap.value = response.data || {}
+  } catch (err) {
+    console.error('Failed to fetch user tags mapping:', err)
+  }
+}
+
+const fetchCategories = async () => {
+  try {
+    const response = await axios.get('/api/items/categories')
+    categories.value = response.data.items || []
+  } catch (err) {
+    console.error('Failed to fetch categories:', err)
+  }
+}
+
+const getCategoryName = (id: number) => {
+  const cat = categories.value.find(c => c.id === id)
+  return cat ? cat.name : `Agence #${id}`
+}
+
 const getPrimaryAgency = (user: any) => {
-  if (!user.allowed_category_ids) return null
-  const parts = user.allowed_category_ids.split(',').filter(Boolean)
-  return parts.length > 0 ? parts[0].trim() : null
+  if (!user || !user.id) return null
+  return userTagsMap.value[user.id.toString()] || null
 }
 
 const availableAgencies = computed(() => {
@@ -300,6 +344,8 @@ computed(() => {
 })
 
 onMounted(() => {
+  fetchCategories()
+  fetchUserTags()
   fetchUsers()
 })
 </script>

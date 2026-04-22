@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
-import { User, Activity, Mail, Award, CheckCircle2, FileText, Briefcase } from 'lucide-vue-next'
+import { User, Activity, Mail, FileText, Briefcase } from 'lucide-vue-next'
 import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.vue'
 
 
@@ -89,23 +89,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Skills Matrix Card -->
-      <div class="glass-card skills-card">
-        <div class="skills-header">
-           <Award size="28" color="var(--zenika-red)" />
-           <h2>Cartographie des Compétences RAG</h2>
-        </div>
-        
-        <div v-if="competencies.length === 0" class="empty-skills">
-           <p>Aucune compétence n'est encore cartographiée pour ce profil sur la base de son CV.</p>
-        </div>
-        <div v-else class="skills-list">
-           <div v-for="skill in competencies" :key="skill.id" class="skill-tag">
-             <CheckCircle2 size="16" class="skill-check" />
-             <span>{{ skill.name }}</span>
-           </div>
-        </div>
-      </div>
+
 
       <!-- Missions Card -->
       <div class="glass-card missions-card">
@@ -178,6 +162,11 @@ onMounted(async () => {
   grid-template-columns: 320px 1fr;
   gap: 2rem;
   align-items: start;
+}
+
+/* La grille n'a plus que 2 cards (identity + missions) */
+.identity-card {
+  grid-row: 1;
 }
 
 .eval-section {

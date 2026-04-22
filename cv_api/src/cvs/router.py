@@ -15,6 +15,8 @@ from typing import Any, Optional, List
 from google import genai
 from google.genai import types
 from opentelemetry.propagate import inject
+from jose import jwt as jose_jwt
+from jose.exceptions import JWTError
 import base64
 import random
 import string
@@ -23,7 +25,7 @@ import logging
 
 from database import get_db
 import database
-from src.auth import verify_jwt, security
+from src.auth import verify_jwt, security, SECRET_KEY as _AUTH_SECRET_KEY
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportRequest, CVImportStep, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
 from .task_state import task_state_manager, tree_task_manager
@@ -55,6 +57,16 @@ else:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
 logger = logging.getLogger(__name__)
+
+import asyncio
+from datetime import datetime, timedelta
+
+_COMP_CREATION_LOCK = asyncio.Lock()
+_CV_CACHE = {
+    "prompt": {"value": None, "expires": datetime.min},
+    "tree_items": {"value": None, "expires": datetime.min},
+    "tree_context": {"value": None, "expires": datetime.min}
+}
 
 async def _log_finops(user_email: str, action: str, model: str, usage_metadata: Any, metadata: dict = None, auth_token: str = None):
     """Utility to log consumption to BigQuery via Market MCP sidecar."""
@@ -126,8 +138,9 @@ async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str
         resp.raise_for_status()
         return resp.text
 
+
 @router.post("/import", response_model=CVResponse)
-async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
+async def import_and_analyze_cv(req: CVImportRequest, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
     # 1. Capture Authorization Context (Crucial per RULES[AGENTS.md])
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -144,10 +157,163 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, db: Asyn
         headers=headers,
         token_payload=token_payload,
         db=db,
-        auth_token=auth_header.replace("Bearer ", "") if "Bearer " in auth_header else auth_header
+        auth_token=auth_header.replace("Bearer ", "") if "Bearer " in auth_header else auth_header,
+        background_tasks=background_tasks
     )
 
-async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None, folder_name: Optional[str] = None) -> CVResponse:
+
+@public_router.post("/pubsub/import-cv")
+async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Worker Pub/Sub push subscriber pour l'ingestion des CVs.
+
+    Workflow :
+    1. Validation OIDC du token Google (RS256) — vérifie que l'émetteur est bien le SA pubsub_invoker.
+    2. Décodage base64 du payload Pub/Sub.
+    3. Exécution SYNCHRONE du pipeline LLM + Compétences + Missions via _process_cv_core.
+    4. Notification PATCH drive_api : IMPORTED_CV (succès) ou ERROR (échec).
+
+    Sécurité : si le token OIDC est absent ou invalide → 401 (Pub/Sub va retenter).
+    Idempotence : si le CV existe déjà (même email), mise à jour au lieu de création.
+    """
+    import base64
+    from datetime import datetime
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+
+    # ── 1. Validation OIDC ───────────────────────────────────────────────────
+    invoker_sa_email = os.getenv("PUBSUB_INVOKER_SA_EMAIL", "")
+    auth_header_val = request.headers.get("Authorization", "")
+
+    if not auth_header_val.startswith("Bearer "):
+        logger.warning("[PubSub] Requête sans token OIDC — rejetée.")
+        raise HTTPException(status_code=401, detail="Missing OIDC token")
+
+    oidc_token = auth_header_val.replace("Bearer ", "")
+
+    # En dev local (pas de SA configuré), on tolère un bypass contrôlé
+    if invoker_sa_email and invoker_sa_email != "sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com":
+        try:
+            audience = f"https://{request.headers.get('host', '')}{request.url.path}"
+            decoded = google_id_token.verify_oauth2_token(
+                oidc_token,
+                google_requests.Request(),
+                audience=audience
+            )
+            token_email = decoded.get("email", "")
+            if token_email != invoker_sa_email:
+                logger.warning(f"[PubSub] SA non autorisé: {token_email} (attendu: {invoker_sa_email})")
+                raise HTTPException(status_code=401, detail="Unauthorized Pub/Sub invoker")
+            logger.info(f"[PubSub] OIDC validé pour {token_email}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[PubSub] Échec validation OIDC: {e}")
+            raise HTTPException(status_code=401, detail=f"Invalid OIDC token: {e}")
+
+    # ── 2. Décodage du payload Pub/Sub ───────────────────────────────────────
+    try:
+        body = await request.json()
+        message = body.get("message", {})
+        raw_data = base64.b64decode(message.get("data", "")).decode("utf-8")
+        payload = json.loads(raw_data)
+    except Exception as e:
+        logger.error(f"[PubSub] Payload invalide: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid Pub/Sub payload: {e}")
+
+    google_file_id = payload.get("google_file_id", "")
+    url = payload.get("url", "")
+    source_tag = payload.get("source_tag", "")
+    folder_name = payload.get("folder_name", "")
+    google_access_token = payload.get("google_access_token")
+    jwt = payload.get("jwt", "")
+
+    if not url or not google_file_id:
+        logger.error("[PubSub] Payload incomplet (url ou google_file_id manquant)")
+        raise HTTPException(status_code=400, detail="Payload incomplet")
+
+    headers = {"Authorization": f"Bearer {jwt}"}
+    inject(headers)
+    logger.info(f"[PubSub] Traitement de {google_file_id} ({url})")
+
+    # ── 3. Mise à jour statut PROCESSING dans drive_api ─────────────────────
+    drive_api_url = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as patch_client:
+            await patch_client.patch(
+                f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
+                json={"status": "PROCESSING"},
+                headers=headers
+            )
+    except Exception as e:
+        logger.warning(f"[PubSub] Impossible de notifier drive_api (PROCESSING): {e}")
+
+    # ── 4. Décoder le JWT interne pour obtenir token_payload compatible ───────
+    # Le JWT a été généré par drive_api (M2M token) et inclus dans le message Pub/Sub.
+    # Il est nécessaire pour que _process_cv_core puisse appeler les services internes
+    # (users_api, competencies_api, missions_api) avec une identité valide.
+    # _AUTH_SECRET_KEY est la constante chargée au démarrage par src.auth (avant purge env)
+    # On ne peut pas utiliser os.getenv("SECRET_KEY") ici car auth.py la purge de l'env
+    # pour empêcher son extraction par un LLM (AGENTS.md §4 Rotation des secrets).
+    if not _AUTH_SECRET_KEY:
+        # Configuration cassée → 500 (Pub/Sub retentera, la DLQ capturera si persistant)
+        logger.error("[PubSub] SECRET_KEY absente — impossible de valider le JWT interne.")
+        raise HTTPException(status_code=500, detail="Configuration error: SECRET_KEY manquante")
+    try:
+        token_payload = jose_jwt.decode(jwt, _AUTH_SECRET_KEY, algorithms=["HS256"])
+    except JWTError as e:
+        # JWT corrompu ou expiré → 500 pour forcer le retry Pub/Sub avec un nouveau message
+        logger.error(f"[PubSub] JWT interne invalide (corrompu ou expiré): {e}")
+        raise HTTPException(status_code=500, detail=f"JWT interne invalide: {e}")
+
+    # ── 5. Exécution du pipeline LLM synchrone ───────────────────────────────
+    try:
+        result = await _process_cv_core(
+            url=url,
+            google_access_token=google_access_token,
+            source_tag=source_tag,
+            folder_name=folder_name,
+            headers=headers,
+            token_payload=token_payload,
+            db=db,
+            auth_token=jwt,
+            background_tasks=None  # BackgroundTasks désactivées en mode Pub/Sub : tout doit être synchrone
+        )
+        # ── 6. Notification succès → drive_api ──────────────────────────────
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                await patch_client.patch(
+                    f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
+                    json={"status": "IMPORTED_CV", "user_id": result.user_id, "error_message": None},
+                    headers=headers
+                )
+                logger.info(f"[PubSub] Import réussi pour {google_file_id} → user_id={result.user_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Impossible de notifier drive_api (IMPORTED_CV): {e}")
+
+        return {"status": "ok", "user_id": result.user_id}
+
+    except HTTPException as he:
+        error_detail = he.detail
+        status = "IGNORED_NOT_CV" if ("Not a CV" in str(error_detail) or "LLM Parsing failed" in str(error_detail)) else "ERROR"
+        logger.error(f"[PubSub] Échec pipeline pour {google_file_id}: {error_detail} → statut={status}")
+        # Notification d'erreur → drive_api pour visibilité frontend
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                await patch_client.patch(
+                    f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
+                    json={"status": status, "error_message": str(error_detail)},
+                    headers=headers
+                )
+        except Exception as e:
+            logger.warning(f"[PubSub] Impossible de notifier drive_api (ERROR): {e}")
+        # Retourner 200 pour IGNORED_NOT_CV (ACK), 500 pour ERROR (retry Pub/Sub)
+        if status == "IGNORED_NOT_CV":
+            return {"status": "ignored", "detail": str(error_detail)}
+        raise HTTPException(status_code=500, detail=str(error_detail))
+
+
+async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None, folder_name: Optional[str] = None, background_tasks: BackgroundTasks = None) -> CVResponse:
     """
     Pipeline principal d'ingéstion d'un CV en 8 étapes séquentielles.
     Retourne un CVResponse enrichi avec les étapes (steps) et les warnings non-bloquants.
@@ -194,8 +360,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         raw_text = await _fetch_cv_content(url, google_access_token)
         dur = int((time.monotonic() - t0) * 1000)
         raw_len = len(raw_text)
-        if raw_len > 8000:
-            warn_msg = f"Document tronqué : {raw_len} caractères → limité à 8000 pour l'analyse IA"
+        if raw_len > 100000:
+            warn_msg = f"Document tronqué : {raw_len} caractères → limité à 100000 pour l'analyse IA"
             _step_warn("download", "Téléchargement du document", dur, warn_msg)
         else:
             _step_ok("download", "Téléchargement du document", dur, f"{raw_len} caractères")
@@ -217,23 +383,34 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
 
     # ── Étape 2 : Analyse IA — Extraction du profil ──────────────────────────
     t0 = time.monotonic()
-    try:
-        logger.info("[CV_STEP] llm_parse — fetching prompt", extra={"step": "llm_parse", "cv_url": url})
-        async with httpx.AsyncClient() as http_client:
-            res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
-            res_prompt.raise_for_status()
-            prompt = res_prompt.json()["value"]
-    except Exception as e:
-        logger.warning(f"Prompt cv_api.extract_cv_info indisponible (erreur: {e}). Fallback local.")
-        if os.path.exists("cv_api.extract_cv_info.txt"):
-            with open("cv_api.extract_cv_info.txt", "r", encoding="utf-8") as f:
-                prompt = f.read()
-        else:
-            logger.error("No fallback file cv_api.extract_cv_info.txt found.")
-            raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
+    
+    prompt = None
+    if _CV_CACHE["prompt"]["expires"] > datetime.utcnow() and _CV_CACHE["prompt"]["value"]:
+        logger.debug("[CV_STEP] llm_parse — fetching prompt from CACHE")
+        prompt = _CV_CACHE["prompt"]["value"]
+    else:
+        try:
+            logger.info("[CV_STEP] llm_parse — fetching prompt", extra={"step": "llm_parse", "cv_url": url})
+            async with httpx.AsyncClient() as http_client:
+                res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
+                res_prompt.raise_for_status()
+                prompt = res_prompt.json()["value"]
+                _CV_CACHE["prompt"]["value"] = prompt
+                _CV_CACHE["prompt"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+        except Exception as e:
+            logger.warning(f"Prompt cv_api.extract_cv_info indisponible (erreur: {e}). Fallback local.")
+            if os.path.exists("cv_api.extract_cv_info.txt"):
+                with open("cv_api.extract_cv_info.txt", "r", encoding="utf-8") as f:
+                    prompt = f.read()
+            else:
+                logger.error("No fallback file cv_api.extract_cv_info.txt found.")
+                raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
 
-    try:
-        tree_context = ""
+    tree_context = ""
+    if _CV_CACHE["tree_context"]["expires"] > datetime.utcnow() and _CV_CACHE["tree_context"]["value"]:
+        logger.debug("[CV_STEP] llm_parse — taxonomy context from CACHE")
+        tree_context = _CV_CACHE["tree_context"]["value"]
+    else:
         try:
             async with httpx.AsyncClient() as http_client:
                 tree_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
@@ -257,15 +434,20 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         f"[CV_STEP] llm_parse — taxonomy context injected",
                         extra={"step": "llm_parse", "categories_count": len(parent_categories), "cv_url": url}
                     )
+                    _CV_CACHE["tree_context"]["value"] = tree_context
+                    _CV_CACHE["tree_context"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+                    _CV_CACHE["tree_items"]["value"] = items
+                    _CV_CACHE["tree_items"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
         except Exception as e:
             logger.warning(f"Failed to fetch competencies tree for context: {e}")
 
-        final_prompt = prompt + tree_context
+    final_prompt = prompt + tree_context
 
+    try:
         response = await generate_content_with_retry(
             client,
             model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
-            contents=[final_prompt, f"RESUME:\n{raw_text[:8000]}"],
+            contents=[final_prompt, f"RESUME:\n{raw_text[:100000]}"],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema={
@@ -630,141 +812,179 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                 raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
 
             user_id = create_res.json()["id"]
-            logger.info(f"Utilisateur créé avec ID {user_id}")
-
+            logger.info(f"[user_resolve] Utilisateur créé avec ID {user_id}")
         dur = int((time.monotonic() - t0) * 1000)
-        identity_detail = f"User ID {user_id}"
-        if folder_name:
-            identity_detail += f" | dossier='{folder_name}'"
-        mode = "anonyme" if is_anonymous else f"email={email}"
-        _step_ok("user_resolve", "Résolution & création d'identité", dur, f"{identity_detail} ({mode})")
+        _step_ok("user_resolve", "Résolution & création d'identité", dur, f"User ID {user_id}")
+        # ── Étape 4 & 5 : Traitement asynchrone (Background Task) ─────────────────
+        # On délègue la création des compétences et des missions pour ne pas bloquer 
+        # le timeout de la réponse HTTP vers `drive_api`.
+        async def _bg_process_competencies_and_missions(bg_user_id, bg_structured_cv, bg_headers, bg_url):
+            logger.info(f"[BG_TASK] Démarrage traitement asynchrone pour CV {bg_url}")
+            bg_errors = []
+            async with httpx.AsyncClient(timeout=120.0) as bg_http_client:
+                # ── Étape 4 : Mapping des compétences ─────────────────────────────────
+                try:
+                    comp_res = await bg_http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=bg_headers)
+                    comp_data = comp_res.json()
+                    all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
 
-        # ── Étape 4 : Mapping des compétences ─────────────────────────────────
-        t0 = time.monotonic()
-        comp_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers)
-        comp_data = comp_res.json()
-        all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
+                    def normalize_comp(text):
+                        if not text: return ""
+                        text = text.strip().lower()
+                        return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
 
-        def normalize_comp(text):
-            if not text: return ""
-            text = text.strip().lower()
-            return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
+                    def find_comp_id(node_list, t_name):
+                        t_norm = normalize_comp(t_name)
+                        for n in node_list:
+                            if normalize_comp(n['name']) == t_norm: return n['id']
+                            found = find_comp_id(n.get('sub_competencies', []), t_name)
+                            if found: return found
+                        return None
 
-        def find_comp_id(node_list, t_name):
-            t_norm = normalize_comp(t_name)
-            for n in node_list:
-                if normalize_comp(n['name']) == t_norm: return n['id']
-                found = find_comp_id(n.get('sub_competencies', []), t_name)
-                if found: return found
-            return None
+                    async def process_competency(comp):
+                        name = comp["name"]
+                        parent = comp.get("parent")
+                        try:
+                            c_id = find_comp_id(all_comps, name)
+                            if not c_id:
+                                p_id = None
+                                if parent:
+                                    async with _COMP_CREATION_LOCK:
+                                        p_id = find_comp_id(all_comps, parent)
+                                        if not p_id:
+                                            p_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=bg_headers)
+                                            if p_res.status_code < 400:
+                                                p_id = p_res.json()["id"]
+                                                all_comps.append(p_res.json())
 
-        assigned_count = 0
-        comp_errors = 0
-        logger.info(f"[CV_STEP] competencies — start", extra={"step": "competencies", "count": nb_competencies, "cv_url": url})
-        for comp in structured_cv.get("competencies", []):
-            name = comp["name"]
-            parent = comp.get("parent")
+                                aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
+                                leaf_data = {"name": name, "description": "Candidate CV Skill", "aliases": aliases_str}
+                                if p_id: leaf_data["parent_id"] = p_id
 
-            try:
-                c_id = find_comp_id(all_comps, name)
-                if not c_id:
-                    p_id = None
-                    if parent:
-                        p_id = find_comp_id(all_comps, parent)
-                        if not p_id:
-                            p_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=headers)
-                            if p_res.status_code < 400:
-                                p_id = p_res.json()["id"]
-                                all_comps.append(p_res.json())
+                                async with _COMP_CREATION_LOCK:
+                                    c_id = find_comp_id(all_comps, name)
+                                    if not c_id:
+                                        c_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=bg_headers)
+                                        if c_res.status_code < 400:
+                                            c_id = c_res.json()["id"]
+                                            all_comps.append(c_res.json())
 
-                    aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
-                    leaf_data = {"name": name, "description": "Candidate CV Skill", "aliases": aliases_str}
-                    if p_id: leaf_data["parent_id"] = p_id
+                            if c_id:
+                                assign_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/{c_id}", headers=bg_headers)
+                                if assign_res.status_code < 400:
+                                    return True
+                                return f"Échec d'assignation de '{name}' (HTTP {assign_res.status_code}: {assign_res.text})"
+                        except Exception as e:
+                            logger.warning(f"[BG_TASK] failed to assign '{name}': {e}", extra={"cv_url": bg_url})
+                            return f"Erreur inattendue sur '{name}': {e}"
+                        return f"Impossible de résoudre ou de créer la compétence '{name}'"
 
-                    c_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=headers)
-                    if c_res.status_code < 400:
-                        c_id = c_res.json()["id"]
-                        all_comps.append(c_res.json())
+                    comp_tasks = [process_competency(c) for c in bg_structured_cv.get("competencies", [])]
+                    comp_results = await asyncio.gather(*comp_tasks, return_exceptions=True)
+                    for res in comp_results:
+                        if res is not True:
+                            if isinstance(res, str):
+                                bg_errors.append(res)
+                            elif isinstance(res, Exception):
+                                bg_errors.append(f"Exception asynchrone (compétence): {res}")
+                            else:
+                                bg_errors.append("Erreur inconnue lors d'une assignation de compétence.")
+                except Exception as e:
+                    logger.error(f"[BG_TASK] Erreur critique compétences: {e}")
+                    bg_errors.append(f"Crash module compétences: {e}")
 
-                if c_id:
-                    assign_res = await http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/{c_id}", headers=headers)
-                    if assign_res.status_code < 400:
-                        assigned_count += 1
-            except Exception as e:
-                comp_errors += 1
-                logger.warning(f"[CV_STEP] competencies — failed to assign '{name}': {e}", extra={"step": "competencies", "cv_url": url})
+                # ── Étape 5 : Extraction des missions ─────────────────────────────────
+                try:
+                    missions_list = bg_structured_cv.get("missions", [])
+                    cat_res = await bg_http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=bg_headers)
+                    categories = cat_res.json() if cat_res.status_code == 200 else []
 
-        dur = int((time.monotonic() - t0) * 1000)
-        comp_detail = f"{assigned_count}/{nb_competencies} compétences assignées"
-        if comp_errors > 0:
-            comp_detail += f", {comp_errors} erreurs d'assignation"
-            pipeline_warnings.append(f"{comp_errors} compétence(s) n'ont pas pu être assignées")
-            _step_warn("competencies", "Mapping des compétences RAG", dur, comp_detail)
+                    def find_cat_id(name):
+                        for c in categories:
+                            if c["name"].lower() == name.lower(): return c["id"]
+                        return None
+
+                    mission_cat_id = find_cat_id("Missions")
+                    if not mission_cat_id:
+                        m_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences extracted from CVs"}, headers=bg_headers)
+                        if m_res.status_code < 400: mission_cat_id = m_res.json()["id"]
+
+                    sensitive_cat_id = find_cat_id("Restricted")
+                    if not sensitive_cat_id:
+                        s_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive or confidential missions"}, headers=bg_headers)
+                        if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
+                    
+                    async def process_mission(m):
+                        try:
+                            cat_ids = [mission_cat_id] if mission_cat_id else []
+                            if m.get("is_sensitive") and sensitive_cat_id:
+                                cat_ids.append(sensitive_cat_id)
+
+                            item_data = {
+                                "name": m["title"],
+                                "description": m.get("description", ""),
+                                "user_id": bg_user_id,
+                                "category_ids": cat_ids,
+                                "metadata_json": {
+                                    "company": m.get("company"),
+                                    "competencies": m.get("competencies", []),
+                                    "is_sensitive": m.get("is_sensitive", False),
+                                    "source": "CV Analysis"
+                                }
+                            }
+                            m_post = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=bg_headers)
+                            if m_post.status_code >= 400:
+                                logger.warning(f"[BG_TASK] missions — failed to create item '{m['title']}': HTTP {m_post.status_code}")
+                                return f"Création de la mission '{m['title']}' échouée (HTTP {m_post.status_code}: {m_post.text})"
+                            return True
+                        except Exception as e:
+                            return f"Erreur sur la mission '{m.get('title', 'Inconnue')}': {e}"
+
+                    mission_tasks = [process_mission(m) for m in missions_list]
+                    mission_results = await asyncio.gather(*mission_tasks, return_exceptions=True)
+                    for res in mission_results:
+                        if res is not True:
+                            if isinstance(res, str):
+                                bg_errors.append(res)
+                            elif isinstance(res, Exception):
+                                bg_errors.append(f"Exception asynchrone (mission): {res}")
+                            else:
+                                bg_errors.append("Erreur inconnue lors d'une création de mission.")
+                except Exception as e:
+                    logger.error(f"[BG_TASK] Erreur critique missions: {e}")
+                    bg_errors.append(f"Crash module missions: {e}")
+            
+            if bg_errors:
+                try:
+                    import re, os
+                    drive_api_url = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
+                    doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", bg_url)
+                    if doc_id_match:
+                        doc_id = doc_id_match.group(1)
+                        # Remove duplicates in errors for concise message
+                        unique_errors = list(dict.fromkeys(bg_errors))
+                        err_str = " | ".join(unique_errors)
+                        logger.warning(f"[BG_TASK] Notification webhook d'erreur drive_api pour {doc_id}: {err_str}")
+                        async with httpx.AsyncClient(timeout=10.0) as webhook_client:
+                            await webhook_client.patch(
+                                f"{drive_api_url.rstrip('/')}/files/{doc_id}",
+                                json={"status": "ERROR", "error_message": err_str},
+                                headers=bg_headers
+                            )
+                except Exception as patch_e:
+                    logger.error(f"[BG_TASK] Impossible d'alerter drive_api: {patch_e}")
+
+            logger.info(f"[BG_TASK] Fin traitement asynchrone pour CV {bg_url}")
+
+        if background_tasks:
+            background_tasks.add_task(_bg_process_competencies_and_missions, user_id, structured_cv, headers, url)
+            _step_ok("competencies_missions", "Mapping RAG et Extraction", 0, "Délégué en Background Task (Asynchrone)")
+            assigned_count = 0  # Sera calculé en arrière-plan
         else:
-            _step_ok("competencies", "Mapping des compétences RAG", dur, comp_detail)
-
-        # ── Étape 5 : Extraction des missions ─────────────────────────────────
-        t0 = time.monotonic()
-        missions_list = structured_cv.get("missions", [])
-        logger.info(f"[CV_STEP] missions — start", extra={"step": "missions", "count": len(missions_list), "cv_url": url})
-
-        cat_res = await http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=headers)
-        categories = cat_res.json() if cat_res.status_code == 200 else []
-
-        def find_cat_id(name):
-            for c in categories:
-                if c["name"].lower() == name.lower(): return c["id"]
-            return None
-
-        mission_cat_id = find_cat_id("Missions")
-        if not mission_cat_id:
-            m_res = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences extracted from CVs"}, headers=headers)
-            if m_res.status_code < 400: mission_cat_id = m_res.json()["id"]
-
-        sensitive_cat_id = find_cat_id("Restricted")
-        if not sensitive_cat_id:
-            s_res = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive or confidential missions"}, headers=headers)
-            if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
-
-        mission_errors = 0
-        mission_ok = 0
-        for m in missions_list:
-            try:
-                cat_ids = [mission_cat_id] if mission_cat_id else []
-                if m.get("is_sensitive") and sensitive_cat_id:
-                    cat_ids.append(sensitive_cat_id)
-
-                item_data = {
-                    "name": m["title"],
-                    "description": m.get("description", ""),
-                    "user_id": user_id,
-                    "category_ids": cat_ids,
-                    "metadata_json": {
-                        "company": m.get("company"),
-                        "competencies": m.get("competencies", []),
-                        "is_sensitive": m.get("is_sensitive", False),
-                        "source": "CV Analysis"
-                    }
-                }
-                m_post = await http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=headers)
-                if m_post.status_code < 400:
-                    mission_ok += 1
-                else:
-                    mission_errors += 1
-                    logger.warning(f"[CV_STEP] missions — failed to create item '{m['title']}': HTTP {m_post.status_code}", extra={"step": "missions", "cv_url": url})
-            except Exception as e:
-                mission_errors += 1
-                logger.error(f"Failed to offload mission '{m['title']}': {e}")
-
-        dur = int((time.monotonic() - t0) * 1000)
-        mission_detail = f"{mission_ok}/{len(missions_list)} missions créées"
-        if mission_errors > 0:
-            mission_detail += f", {mission_errors} erreurs"
-            pipeline_warnings.append(f"{mission_errors} mission(s) n'ont pas pu être créées dans Items API")
-            _step_warn("missions", "Extraction & indexation des missions", dur, mission_detail)
-        else:
-            _step_ok("missions", "Extraction & indexation des missions", dur, mission_detail)
-
+            # Fallback synchrone classique si appelé sans BackgroundTasks
+            await _bg_process_competencies_and_missions(user_id, structured_cv, headers, url)
+            assigned_count = 0
+            
     # hors du bloc httpx
     # ── Étape 6 : Génération des embeddings vectoriels ────────────────────────
     t0 = time.monotonic()
@@ -774,7 +994,9 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
         f"Role: {structured_cv.get('current_role', 'Unknown')}\n"
         f"Experience: {structured_cv.get('years_of_experience', 0)} years\n"
         f"Summary: {structured_cv.get('summary', '')}\n"
-        f"Competencies: {', '.join(comp_keywords)}\n"
+        f"Competencies: {', '.join(comp_keywords)}\n\n"
+        f"--- RAW CV CONTENT ---\n"
+        f"{raw_text[:6000]}"
     )
 
     vector_data = None
@@ -1095,6 +1317,17 @@ async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = 
         ) for p in profiles
     ]
 
+@router.get("/users/tags/map", response_model=dict[str, str])
+async def get_all_user_tags(db: AsyncSession = Depends(get_db)):
+    """
+    Retourne un mapping global {str(user_id): source_tag} pour tous les CVs.
+    Pratique pour afficher l'agence dans la liste des utilisateurs du panel admin
+    sans problème de N+1 requêtes.
+    """
+    profiles = (await db.execute(select(CVProfile.user_id, CVProfile.source_tag).filter(CVProfile.source_tag.is_not(None)))).all()
+    # On renvoie le tag sous la forme du tag le plus récent si multiples (ici l'ordre n'est pas garanti mais en prod on a 1 CV/user)
+    return {str(p.user_id): p.source_tag for p in profiles}
+
 @router.get("/users/tag/{tag}", response_model=List[CVProfileResponse])
 async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
@@ -1371,26 +1604,28 @@ async def get_recalculate_tree_status():
         return {"status": "idle", "message": "Aucune tâche lancée récemment."}
     return status
 @router.get("/reanalyze/status")
-async def get_reanalyze_status():
-    """Récupère le statut de la dernière tâche de réanalyse."""
-    status = await task_state_manager.get_latest_status()
-    if not status:
-        return {"status": "idle", "message": "Aucune tâche lancée récemment."}
-    return status
+async def get_reanalyze_status(
+    tag: Optional[str] = None,
+    token_payload: dict = Depends(verify_jwt)
+):
+    """Proxy vers drive_api /status — retourne les compteurs PENDING/QUEUED/PROCESSING/IMPORTED_CV/ERROR.
 
-@router.delete("/reanalyze/reset")
-async def reset_reanalyze_task(token_payload: dict = Depends(verify_jwt)):
-    """(Admin Only) Force la réinitialisation du verrou de réanalyse.
-
-    À utiliser lorsque '/reanalyze' retourne 'Une tâche de réanalyse est déjà en cours'
-    alors qu'aucune tâche n'est réellement active (tâche zombie suite à un crash ou une
-    déconnexion client). Le watchdog automatique corrige après 30 min d'inactivité ;
-    cet endpoint permet un déblocage immédiat.
+    Remplace l'ancien statut Redis depuis la migration vers le pipeline Pub/Sub unifié.
+    La progression est désormais observable directement dans le scanner Drive.
     """
-    if token_payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
-    await task_state_manager.force_reset()
-    return {"status": "reset", "message": "Verrou de réanalyse réinitialisé. Vous pouvez relancer une réanalyse."}
+    drive_url = f"{DRIVE_API_URL.rstrip('/')}/status"
+    params = {}
+    if tag:
+        params["tag"] = tag
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            res = await http_client.get(drive_url, params=params)
+            if res.status_code == 200:
+                return res.json()
+            return {"status": "unavailable", "message": f"drive_api /status HTTP {res.status_code}"}
+    except Exception as e:
+        return {"status": "unavailable", "message": str(e)}
+
 
 @router.post("/reanalyze")
 async def reanalyze_cvs(
@@ -1400,36 +1635,36 @@ async def reanalyze_cvs(
     db: AsyncSession = Depends(get_db),
     token_payload: dict = Depends(verify_jwt)
 ):
-    """
-    (Admin Only) Relance le pipeline d'extraction Gemini sur un ensemble de CVs.
-    Identifie également les erreurs d'assignation d'identité.
+    """(Admin Only) Replanie le traitement des CVs via le pipeline Pub/Sub unifié.
+
+    Délègue intégralement au mécanisme nominal (drive_api → Pub/Sub → cv_api worker)
+    pour un seul chemin de traitement, de retry et de DLQ.
+
+    Étapes :
+    1. Efface les compétences existantes pour chaque user_id concerné
+    2. Remet les DriveSyncState correspondants en PENDING dans drive_api
+    3. Déclenche immédiatement drive_api /sync (sans attendre le scheduler horaire)
+    4. Retourne un JSON immédiat avec les compteurs
+
+    La progression est observable via GET /reanalyze/status ou le scanner Drive.
     """
     if token_payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
-    
-    # Vérifier si une tâche est déjà en cours
-    if await task_state_manager.is_task_running():
-        return {"message": "Une tâche de réanalyse est déjà en cours.", "status": "running"}
 
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
-    auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
     inject(headers)
 
-    # 1. Fetch CVs to re-process
+    # ── 1. Identifier les CVs concernés ──────────────────────────────────────
     stmt = select(CVProfile)
-    f_type = "all"
-    f_val = ""
     if tag:
         stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{tag}%"))
-        f_type = "tag"
-        f_val = tag
     if user_id:
         stmt = stmt.filter(CVProfile.user_id == user_id)
-        f_type = "user"
-        f_val = str(user_id)
-        
-    # Force Drive API to reset is_initial_sync_done for this tag
+
+    cvs = (await db.execute(stmt)).scalars().all()
+
+    # Forcer une re-découverte Drive pour ce tag (remet is_initial_sync_done à False)
     try:
         reset_url = f"{DRIVE_API_URL.rstrip('/')}/folders/reset-sync"
         if tag:
@@ -1437,269 +1672,116 @@ async def reanalyze_cvs(
         async with httpx.AsyncClient(timeout=5.0) as http_client:
             await http_client.post(reset_url, headers=headers)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to trigger drive_api reset-sync: {e}")
+        logger.warning(f"[reanalyze] Failed to trigger drive_api reset-sync: {e}")
 
-    cvs = (await db.execute(stmt)).scalars().all()
     if not cvs:
-        msg = "Aucun CV existant trouvé dans la base locale."
-        if tag or f_type == 'all':
-            msg += " Cependant, une re-découverte intégrale (Drive) a été ordonnée. Les CVs seront ingérés d'ici quelques minutes."
-        return {"message": msg, "count": 0}
+        return {
+            "message": "Aucun CV trouvé en base locale. Une re-découverte Drive a été ordonnée — les nouveaux CVs seront ingérés lors du prochain /sync.",
+            "count": 0,
+            "pending_reset": 0,
+            "skipped_manual": 0
+        }
 
-    # Initialiser l'état dans Redis
-    await task_state_manager.initialize_task(len(cvs), f_type, f_val)
+    # ── 2. Obtenir un token de service longue durée (conforme AGENTS.md §4) ──
+    effective_headers = dict(headers)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            svc_res = await http_client.post(
+                f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
+                headers=headers,
+                timeout=10.0
+            )
+            if svc_res.status_code == 200:
+                svc_token = svc_res.json().get("access_token")
+                effective_headers = {"Authorization": f"Bearer {svc_token}"}
+                inject(effective_headers)
+                logger.info("[reanalyze] Token de service longue durée obtenu.")
+    except Exception as e_svc:
+        logger.warning(f"[reanalyze] Service token indisponible: {e_svc} — token original conservé.")
 
-    # Dedoublonner les user_ids pour nettoyer les compétences une seule fois par utilisateur
-    user_ids_to_clear = {cv.user_id for cv in cvs}
-    
-    async def generate():
-        async with httpx.AsyncClient(timeout=60.0) as http_client:
+    user_ids_to_clear = {cv.user_id for cv in cvs if cv.user_id}
+
+    # ── 3. Effacer les compétences existantes (table rase avant réingestion) ──
+    clear_errors = []
+    async with httpx.AsyncClient(timeout=30.0) as http_client:
+        for uid in user_ids_to_clear:
             try:
-                # 0. Obtention d'un token de service longue durée (TTL=90min par défaut)
-                # pour éviter les expirations JWT en cours de réanalyse bulk (> 15 CVs).
-                # Conforme à AGENTS.md §4 : les tâches asynchrones longues DOIVENT utiliser
-                # un token de service plutôt qu'un token utilisateur susceptible d'expirer.
-                effective_headers = dict(headers)
-                effective_auth_token = auth_token
-                try:
-                    # Stratégie 1 : service token via caller token (admin requis)
-                    svc_res = await http_client.post(
-                        f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
-                        headers=headers,
-                        timeout=10.0
-                    )
-                    if svc_res.status_code == 200:
-                        svc_data = svc_res.json()
-                        effective_auth_token = svc_data.get("access_token", auth_token)
-                        effective_headers = {"Authorization": f"Bearer {effective_auth_token}"}
-                        inject(effective_headers)
-                        msg = "Token de service longue durée obtenu (TTL étendu pour batch)."
-                        await task_state_manager.update_progress(new_log=msg)
-                        yield json.dumps({"status": "info", "message": msg}) + "\n"
-                        logger.info("[reanalyze] Service token acquis via caller token.")
-                    else:
-                        # Stratégie 2 : fallback login admin depuis env vars (AGENTS.md §4)
-                        # Utilisé quand le token caller est expiré ou invalide.
-                        logger.warning(f"[reanalyze] Service token via caller échoué (HTTP {svc_res.status_code}) — tentative fallback admin credentials.")
-                        if ADMIN_SERVICE_USERNAME and ADMIN_SERVICE_PASSWORD:
-                            try:
-                                login_res = await http_client.post(
-                                    f"{USERS_API_URL.rstrip('/')}/auth/login",
-                                    json={"username": ADMIN_SERVICE_USERNAME, "password": ADMIN_SERVICE_PASSWORD},
-                                    timeout=10.0
-                                )
-                                if login_res.status_code == 200:
-                                    login_token = login_res.json().get("access_token", "")
-                                    if login_token:
-                                        admin_h = {"Authorization": f"Bearer {login_token}"}
-                                        svc_res2 = await http_client.post(
-                                            f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
-                                            headers=admin_h, timeout=10.0
-                                        )
-                                        effective_auth_token = svc_res2.json().get("access_token", login_token) if svc_res2.status_code == 200 else login_token
-                                        effective_headers = {"Authorization": f"Bearer {effective_auth_token}"}
-                                        inject(effective_headers)
-                                        msg = "Token de service obtenu via credentials admin (fallback — token caller expiré)."
-                                        await task_state_manager.update_progress(new_log=msg)
-                                        yield json.dumps({"status": "info", "message": msg}) + "\n"
-                                        logger.info("[reanalyze] Service token acquis via fallback admin credentials.")
-                                    else:
-                                        raise ValueError("Login admin : access_token vide")
-                                else:
-                                    raise ValueError(f"Login admin HTTP {login_res.status_code}: {login_res.text[:100]}")
-                            except Exception as e_admin:
-                                msg = f"WARN: Fallback admin credentials échoué: {e_admin} — token original conservé (risque d'expiration JWT)."
-                                await task_state_manager.update_progress(new_log=msg)
-                                yield json.dumps({"status": "warn", "message": msg}) + "\n"
-                                logger.warning(f"[reanalyze] Fallback admin credentials échoué: {e_admin}")
-                        else:
-                            msg = f"WARN: Service token indisponible (HTTP {svc_res.status_code}) et ADMIN_SERVICE_USERNAME/PASSWORD non configurés — token original conservé."
-                            await task_state_manager.update_progress(new_log=msg)
-                            yield json.dumps({"status": "warn", "message": msg}) + "\n"
-                            logger.warning(f"[reanalyze] Pas de fallback admin disponible. {svc_res.text[:200]}")
-                except Exception as e_svc:
-                    msg = f"WARN: Exception service token: {e_svc} — token original conservé."
-                    await task_state_manager.update_progress(new_log=msg)
-                    yield json.dumps({"status": "warn", "message": msg}) + "\n"
-                    logger.warning(f"[reanalyze] Exception service token: {e_svc}")
-
-
-                # 1.5 Get Google token
-                google_access_token = None
-                try:
-                    tok_res = await http_client.get(f"{DRIVE_API_URL.rstrip('/')}/tokens/google", headers=effective_headers, timeout=5.0)
-                    if tok_res.status_code == 200:
-                        google_access_token = tok_res.json().get("access_token")
-                        msg = "Successfully acquired Google Access Token."
-                        await task_state_manager.update_progress(new_log=msg)
-                        yield json.dumps({"status": "info", "message": msg}) + "\n"
-                    else:
-                        msg = f"Could not fetch Google Token (status {tok_res.status_code}). Proceeding as public."
-                        await task_state_manager.update_progress(new_log=msg)
-                        yield json.dumps({"status": "warn", "message": msg}) + "\n"
-                except Exception as e:
-                    msg = f"Error fetching Google Token: {str(e)}"
-                    await task_state_manager.update_progress(new_log=msg)
-                    yield json.dumps({"status": "error", "message": msg}) + "\n"
-
-                # 2. Clear user competencies
-                for uid in user_ids_to_clear:
-                    try:
-                        clear_res = await http_client.delete(
-                            f"{COMPETENCIES_API_URL.rstrip('/')}/user/{uid}/clear",
-                            headers=effective_headers
-                        )
-                        if clear_res.status_code == 401:
-                            # Le token est invalide pour competencies_api — diagnostic explicite
-                            err_detail = clear_res.text[:300]
-                            msg = f"401 Unauthorized sur /user/{uid}/clear — le token (service ou original) est rejeté par competencies_api. Detail: {err_detail}"
-                            await task_state_manager.update_progress(new_log=msg, error_msg=msg)
-                            yield json.dumps({"status": "error", "message": msg}) + "\n"
-                            logger.error(f"[reanalyze] 401 clear user={uid}: {err_detail}")
-                            continue
-                        clear_res.raise_for_status()
-                        msg = f"Cleared competencies for user {uid}"
-                        await task_state_manager.update_progress(new_log=msg)
-                        yield json.dumps({"status": "info", "message": msg}) + "\n"
-                    except Exception as e:
-                        msg = f"Failed to clear competencies for user {uid}: {str(e)}"
-                        await task_state_manager.update_progress(new_log=msg, error_msg=msg)
-                        yield json.dumps({"status": "error", "message": msg}) + "\n"
-
-                # 3. Process each CV
-                total_cvs = len(cvs)
-
-                for index, cv in enumerate(cvs):
-                    try:
-                        url = cv.source_url
-                        s_tag = cv.source_tag
-                        u_id = cv.user_id
-
-                        msg = f"Processing CV {index+1}/{total_cvs} (User ID: {u_id})..."
-                        await task_state_manager.update_progress(new_log=msg)
-                        yield json.dumps({"status": "processing", "message": msg, "url": url}) + "\n"
-
-                        # 3.1 Fetch current user name for identity check
-                        user_name = "Inconnu"
-                        try:
-                            u_info = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=effective_headers)
-                            if u_info.status_code == 200:
-                                u_data = u_info.json()
-                                user_name = u_data.get("full_name") or u_data.get("username")
-                        except Exception:
-                            pass
-
-                        # 3.15 Récupérer parent_folder_name depuis drive_api
-                        # (nomenclature Zenika "Prénom Nom" — fait foi pour la résolution d'identité)
-                        reanalysis_folder_name: Optional[str] = None
-                        doc_id_match_early = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
-                        if doc_id_match_early:
-                            g_file_id = doc_id_match_early.group(1)
-                            try:
-                                drive_state_res = await http_client.get(
-                                    f"{DRIVE_API_URL.rstrip('/')}/files/{g_file_id}",
-                                    headers=effective_headers,
-                                    timeout=5.0
-                                )
-                                if drive_state_res.status_code == 200:
-                                    drive_state = drive_state_res.json()
-                                    reanalysis_folder_name = drive_state.get("parent_folder_name")
-                                    if reanalysis_folder_name:
-                                        pfn_msg = (
-                                            f"[Nomenclature Zenika] Dossier parent récupéré : "
-                                            f"'{reanalysis_folder_name}' (CV {index+1}/{total_cvs})"
-                                        )
-                                        logger.info(pfn_msg)
-                                        await task_state_manager.update_progress(new_log=pfn_msg)
-                                        yield json.dumps({"status": "info", "message": pfn_msg}) + "\n"
-                                elif drive_state_res.status_code == 404:
-                                    logger.info(
-                                        f"[Reanalyze] Fichier {g_file_id} absent de drive_api (import manuel) — "
-                                        f"folder_name ignoré pour ce CV."
-                                    )
-                            except Exception as e_drive:
-                                logger.warning(
-                                    f"[Reanalyze] Impossible de récupérer le folder_name Drive "
-                                    f"pour {g_file_id}: {e_drive}"
-                                )
-
-                        # 3.2 Re-process (avec folder_name Zenika si disponible)
-                        process_res = await _process_cv_core(
-                            url=url,
-                            google_access_token=google_access_token,
-                            source_tag=s_tag,
-                            folder_name=reanalysis_folder_name,
-                            headers=effective_headers,
-                            token_payload=token_payload,
-                            db=db,
-                            auth_token=effective_auth_token
-                        )
-
-                        # 3.3 Identity Verification logic
-                        ext = process_res.extracted_info
-                        if ext and not ext.get("is_anonymous"):
-                            def normalize(s):
-                                if not s: return ""
-                                return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
-
-                            ext_full = f"{normalize(ext.get('first_name'))} {normalize(ext.get('last_name'))}"
-                            cur_full = normalize(user_name)
-
-                            # Simple inclusion/match check
-                            if ext_full not in cur_full and cur_full not in ext_full:
-                                new_u_id = process_res.user_id
-                                warn_msg = f"⚠️ ALERTE IDENTITÉ CV #{cv.id}: Extrait='{ext.get('first_name')} {ext.get('last_name')}' (ID:{new_u_id}) vs Actuel='{user_name}' (ID:{u_id})"
-
-                                # Update Drive API to fix the link in Scanner page
-                                doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
-                                if doc_id_match:
-                                    g_id = doc_id_match.group(1)
-                                    try:
-                                        await http_client.patch(
-                                            f"{DRIVE_API_URL.rstrip('/')}/files/{g_id}",
-                                            json={"user_id": new_u_id},
-                                            headers=effective_headers
-                                        )
-                                        warn_msg += " -> Synchronisation Drive effectuée."
-                                    except Exception as e:
-                                        logger.error(f"Failed to sync drive identity for {g_id}: {e}")
-                                        warn_msg += f" (Synchro Drive échouée)"
-
-                                await task_state_manager.update_progress(new_log=warn_msg, mismatch_inc=1)
-                                yield json.dumps({"status": "warn", "message": warn_msg}) + "\n"
-
-                        msg_fin = f"Finished re-processing CV {index+1}/{total_cvs}"
-                        await task_state_manager.update_progress(processed_inc=1, new_log=msg_fin)
-                        yield json.dumps({"status": "success", "message": msg_fin, "url": url}) + "\n"
-
-                    except Exception as e:
-                        err_msg = f"CV {cv.id}: {str(e)}"
-                        await task_state_manager.update_progress(error_inc=1, new_log=f"ERREUR: {err_msg}", error_msg=err_msg)
-                        yield json.dumps({"status": "error", "message": f"Failed CV {index+1}/{total_cvs}: {err_msg}"}) + "\n"
-
-                final_status = await task_state_manager.get_latest_status()
-                yield json.dumps({
-                    "status": "completed",
-                    "message": f"Réanalyse terminée. {final_status['processed_count']} succès, {final_status['error_count']} erreurs, {final_status['mismatch_count']} alertes.",
-                    "count": final_status["processed_count"],
-                    "errors": final_status["errors"]
-                }) + "\n"
-
-            except Exception as _global_err:
-                # Erreur globale non catchée (ex: perte connexion DB, crash OOM, déconnexion)
-                err_detail = f"Erreur fatale du pipeline de réanalyse: {_global_err}"
-                logger.error(err_detail, exc_info=True)
-                await task_state_manager.mark_failed(err_detail)
-                yield json.dumps({"status": "error", "message": err_detail}) + "\n"
-            finally:
-                # Garantit toujours la libération du verrou, même en cas de déconnexion client.
-                # mark_failed() est idempotent : ne modifie rien si le statut est déjà completed/error.
-                await task_state_manager.mark_failed(
-                    "Stream interrompu avant la fin (déconnexion client ou crash inattendu)."
+                clear_res = await http_client.delete(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{uid}/clear",
+                    headers=effective_headers
                 )
+                if clear_res.status_code not in (200, 204):
+                    clear_errors.append(f"user_id={uid}: HTTP {clear_res.status_code}")
+                    logger.warning(f"[reanalyze] clear competencies user={uid}: HTTP {clear_res.status_code}")
+            except Exception as e_clear:
+                clear_errors.append(f"user_id={uid}: {e_clear}")
+                logger.warning(f"[reanalyze] clear competencies user={uid}: {e_clear}")
 
-    return StreamingResponse(generate(), media_type="application/x-ndjson")
+    # ── 4. Remettre chaque DriveSyncState en PENDING ──────────────────────────
+    pending_reset = 0
+    skipped_manual = 0
+    google_file_id_pattern = re.compile(r"/d/([a-zA-Z0-9_-]+)")
+
+    async with httpx.AsyncClient(timeout=30.0) as http_client:
+        for cv in cvs:
+            url = cv.source_url or ""
+            match = google_file_id_pattern.search(url)
+            if not match:
+                skipped_manual += 1
+                logger.info(f"[reanalyze] CV id={cv.id} sans google_file_id (import manuel) — ignoré.")
+                continue
+
+            g_file_id = match.group(1)
+            try:
+                patch_res = await http_client.patch(
+                    f"{DRIVE_API_URL.rstrip('/')}/files/{g_file_id}",
+                    json={"status": "PENDING", "error_message": None},
+                    headers=effective_headers,
+                    timeout=5.0
+                )
+                if patch_res.status_code in (200, 204, 404):
+                    # 404 = fichier pas encore dans drive_api (sera créé au /sync)
+                    pending_reset += 1
+                else:
+                    logger.warning(f"[reanalyze] PATCH /files/{g_file_id} HTTP {patch_res.status_code}")
+            except Exception as e_patch:
+                logger.warning(f"[reanalyze] PATCH /files/{g_file_id}: {e_patch}")
+
+        # ── 5. Déclencher immédiatement drive_api /sync ───────────────────────
+        # Évite d'attendre le tick du Cloud Scheduler (max 1h d'attente).
+        # Le /sync lance ingest_batch() en BackgroundTask → réponse instantanée.
+        try:
+            sync_res = await http_client.post(
+                f"{DRIVE_API_URL.rstrip('/')}/sync",
+                headers=effective_headers,
+                timeout=10.0
+            )
+            sync_triggered = sync_res.status_code in (200, 202)
+            if not sync_triggered:
+                logger.warning(f"[reanalyze] /sync HTTP {sync_res.status_code}")
+        except Exception as e_sync:
+            sync_triggered = False
+            logger.warning(f"[reanalyze] /sync indisponible: {e_sync}")
+
+    logger.info(
+        f"[reanalyze] Terminé — pending_reset={pending_reset}, skipped_manual={skipped_manual}, "
+        f"users_cleared={len(user_ids_to_clear)}, sync_triggered={sync_triggered}"
+    )
+
+    return {
+        "message": (
+            f"{pending_reset} CV(s) remis en file Pub/Sub. "
+            f"Le traitement démarrera dans quelques instants via le worker cv_api."
+        ),
+        "count": len(cvs),
+        "pending_reset": pending_reset,
+        "skipped_manual": skipped_manual,
+        "users_cleared": len(user_ids_to_clear),
+        "sync_triggered": sync_triggered,
+        "clear_errors": clear_errors if clear_errors else None
+    }
+
+
 
 
 @router.post("/internal/users/merge")

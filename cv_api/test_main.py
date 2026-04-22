@@ -191,11 +191,11 @@ def test_import_and_analyze_cv(mocker):
 
 
 def test_import_cv_steps_on_truncated_document(mocker):
-    """Un CV de plus de 8000 chars doit déclencher un warning 'download' + statut warning."""
+    """Un CV de plus de 100000 chars doit déclencher un warning 'download' + statut warning."""
     mock_db = AsyncMock()
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    long_text = "A" * 9000
+    long_text = "A" * 101000  # dépasse le seuil réel de 100000 caractères du router
     mocker.patch("src.cvs.router._fetch_cv_content", return_value=long_text)
 
     mock_genai = mocker.patch("src.cvs.router.client")
@@ -216,7 +216,7 @@ def test_import_cv_steps_on_truncated_document(mocker):
     def get_se(*a, **kw):
         url = a[0] if a else kw.get("url", "")
         if "prompts_api" in url: return prompt_mock
-        if "/users/" in url: return users_mock
+        if "/users/" in url or "search" in url: return users_mock
         if "/competencies/" in url: return comps_mock
         return MagicMock(status_code=200)
     def post_se(*a, **kw): return create_mock
@@ -230,9 +230,12 @@ def test_import_cv_steps_on_truncated_document(mocker):
 
     download_step = next((s for s in data["steps"] if s["step"] == "download"), None)
     assert download_step is not None
-    assert download_step["status"] == "warning", "Un doc >8000 chars doit produire step 'download' en warning"
-    assert any("tronqué" in w.lower() or "8000" in w for w in data["warnings"]), \
-        "Le warning de troncature doit être dans CVResponse.warnings"
+    assert download_step["status"] == "warning", (
+        f"Un doc >100000 chars doit produire step 'download' en warning. "
+        f"Statut actuel: {download_step['status']} — seuil router: 100000 chars"
+    )
+    assert any("tronqué" in w.lower() or "100000" in w for w in data["warnings"]), \
+        f"Le warning de troncature doit être dans CVResponse.warnings. Warnings actuels: {data['warnings']}"
 
 
 def test_import_cv_steps_on_zero_competencies(mocker):
@@ -352,16 +355,33 @@ def test_import_cv_genai_not_configured(mocker):
     assert "GenAI Client not configured" in response.text
 
 def test_import_cv_prompt_fail(mocker):
-    mocker.patch("src.cvs.router.client", MagicMock())
+    """
+    Quand le prompt HTTP échoue ET qu'aucun fichier fallback n'existe,
+    l'API doit retourner HTTP 500 avec 'Cannot fetch generic prompt'.
+    """
+    # Client GenAI valide (AsyncMock) — l'erreur doit survenir avant l'appel LLM
+    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai.aio.models.generate_content = AsyncMock()
+    mock_genai.aio.models.embed_content = AsyncMock()
+
     mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
+    # Le GET vers prompts_api lève une exception réseau
     client_instance.get.side_effect = Exception("HTTP fetch failed")
+
     mocker.patch("src.cvs.router._fetch_cv_content", return_value="text")
+    # Pas de fichier fallback disponible
     mocker.patch("os.path.exists", return_value=False)
+    # Vider le cache prompt pour forcer le fetching HTTP
+    import src.cvs.router as cv_router
+    cv_router._CV_CACHE["prompt"]["value"] = None
+    cv_router._CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min
+
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
-    assert "Cannot fetch generic prompt" in response.text
+    assert "Cannot fetch generic prompt" in response.text, \
+        f"Le message d'erreur attendu est absent. Reçu: {response.text[:300]}"
 
 def test_search_candidates_no_client(mocker):
     mocker.patch("src.cvs.router.client", None)
@@ -653,107 +673,37 @@ def test_import_cv_schema_folder_name_optional():
     assert req2.folder_name == "Alice Martin"
 
 
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# Tests — /reanalyze : récupération folder_name depuis drive_api
+# Tests — /reanalyze : Pipeline Pub/Sub unifié (plus de SSE)
+# UC6 : reset PENDING + /sync déclenché
+# UC7 : URL sans google_file_id → skipped_manual
+# UC8 : drive_api inaccessible → mode dégradé, retour JSON 200
+# UC9 : aucun CV en base → message re-découverte Drive
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _make_reanalyze_mocks(mocker):
-    """Helper : mocks standards pour le flux /reanalyze."""
+def _make_reanalyze_mocks(mocker, source_url="https://docs.google.com/document/d/GFILE123/edit"):
+    """Helper : prépare un CVProfile en base et retourne le mock_db."""
     mock_db = AsyncMock()
     mock_cv = MagicMock()
     mock_cv.id = 1
     mock_cv.user_id = 10
-    mock_cv.source_url = "https://docs.google.com/document/d/GFILE123/edit"
+    mock_cv.source_url = source_url
     mock_cv.source_tag = "Nantes"
 
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [mock_cv]
     mock_db.execute.return_value = mock_result
     app.dependency_overrides[get_db] = lambda: mock_db
-
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Contenu CV")
-
-    mock_genai = mocker.patch("src.cvs.router.client")
-    mock_genai.aio.models.generate_content = AsyncMock()
-    mock_genai.aio.models.generate_content.return_value.text = (
-        '{"is_cv": true, "first_name": "Alice", "last_name": "Beaumont", '
-        '"email": "alice.beaumont@zenika.com", "summary": "Expert", "current_role": "Dev", '
-        '"years_of_experience": 3, "competencies": [{"name": "Go"}], "missions": [], "is_anonymous": false}'
-    )
-    mock_genai.aio.models.embed_content = AsyncMock()
-    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
-
     return mock_db
 
 
-def test_reanalyze_uses_folder_name_from_drive_api(mocker):
+def test_reanalyze_returns_json_immediately(mocker):
     """
-    UC6 — /reanalyze : quand drive_api retourne 200 avec parent_folder_name,
-    le nom est transmis à _process_cv_core (vérifié via les warnings CVResponse).
-    """
-    _make_reanalyze_mocks(mocker)
-
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
-    ci = AsyncMock()
-    mock_httpx.return_value.__aenter__.return_value = ci
-
-    # drive_api/files/GFILE123 → 200 avec parent_folder_name
-    drive_state_mock = MagicMock(status_code=200)
-    drive_state_mock.json.return_value = {
-        "google_file_id": "GFILE123",
-        "parent_folder_name": "Alice Beaumont",
-        "status": "IMPORTED_CV"
-    }
-
-    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
-    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": [], "full_name": "Alice Beaumont"}
-    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 10}
-    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
-    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
-
-    def get_se(*a, **kw):
-        url = a[0] if a else kw.get("url", "")
-        if "tokens/google" in url:
-            return google_tok_mock
-        if "/files/GFILE123" in url:
-            return drive_state_mock
-        if "prompts_api" in url:
-            return prompt_mock
-        if "search" in url or "/users/" in url:
-            return users_mock
-        if "/competencies/" in url:
-            return comps_mock
-        return MagicMock(status_code=200)
-
-    ci.get.side_effect = get_se
-    ci.post.side_effect = lambda *a, **kw: create_mock
-    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-
-    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
-    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
-        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
-    ))
-
-    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
-    # Consommer le streaming
-    lines = [l for l in response.text.strip().split("\n") if l]
-    assert response.status_code == 200
-
-    # Vérifier que drive_api a bien été appelé pour récupérer le folder
-    drive_calls = [
-        call for call in ci.get.call_args_list
-        if "files/GFILE123" in str(call)
-    ]
-    assert drive_calls, "drive_api GET /files/GFILE123 doit être appelé pendant /reanalyze"
-
-
-def test_reanalyze_drive_api_404_manual_import(mocker):
-    """
-    UC7 — /reanalyze : quand drive_api retourne 404 (import manuel),
-    folder_name reste None et on continue sans erreur (mode dégradé propre).
+    UC6 — /reanalyze retourne du JSON immédiat (pas de streaming SSE).
+    Vérifie : status 200, body JSON avec pending_reset et sync_triggered.
+    Vérifie également que PATCH /files/{id} est bien appelé avec status=PENDING
+    et que POST /sync est déclenché.
     """
     _make_reanalyze_mocks(mocker)
 
@@ -761,174 +711,204 @@ def test_reanalyze_drive_api_404_manual_import(mocker):
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
-    drive_404_mock = MagicMock(status_code=404)
-    drive_404_mock.json.return_value = {"detail": "Not found"}
+    # Service token
+    svc_mock = MagicMock(status_code=200)
+    svc_mock.json.return_value = {"access_token": "svc-token"}
 
-    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
-    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
-    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 10}
-    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
-    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
+    # Nettoyage compétences
+    clear_mock = MagicMock(status_code=204)
 
-    def get_se(*a, **kw):
+    # PATCH /files/GFILE123 → 200
+    patch_mock = MagicMock(status_code=200)
+
+    # POST /sync → 200
+    sync_mock = MagicMock(status_code=200)
+
+    # reset-sync
+    reset_mock = MagicMock(status_code=200)
+
+    def post_se(*a, **kw):
         url = a[0] if a else kw.get("url", "")
-        if "tokens/google" in url:
-            return google_tok_mock
-        if "/files/GFILE123" in url:
-            return drive_404_mock
-        if "prompts_api" in url:
-            return prompt_mock
-        if "search" in url or "/users/" in url:
-            return users_mock
-        if "/competencies/" in url:
-            return comps_mock
+        if "service-token" in url:
+            return svc_mock
+        if "/sync" in url:
+            return sync_mock
+        if "reset-sync" in url:
+            return reset_mock
         return MagicMock(status_code=200)
 
-    ci.get.side_effect = get_se
-    ci.post.side_effect = lambda *a, **kw: create_mock
-    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
+    def delete_se(*a, **kw):
+        return clear_mock
 
-    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
-    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
-        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
-    ))
+    def patch_se(*a, **kw):
+        return patch_mock
+
+    ci.post.side_effect = post_se
+    ci.delete.side_effect = delete_se
+    ci.patch.side_effect = patch_se
 
     response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+
     assert response.status_code == 200
+    data = response.json()
 
-    # Le streaming ne doit pas contenir d'erreur liée au 404 drive
-    content = response.text
-    drive_error_lines = [
-        l for l in content.split("\n") if l
-        and "error" in l.lower()
-        and "folder" in l.lower()
-    ]
-    assert not drive_error_lines, f"Pas d'erreur attendue sur 404 drive_api. Trouvé: {drive_error_lines}"
+    # Réponse JSON structurée
+    assert "pending_reset" in data, "pending_reset manquant dans la réponse"
+    assert "sync_triggered" in data, "sync_triggered manquant dans la réponse"
+    assert "count" in data, "count manquant dans la réponse"
+    assert "users_cleared" in data, "users_cleared manquant dans la réponse"
 
+    # 1 CV avec google_file_id → 1 PENDING reset
+    assert data["pending_reset"] == 1, f"1 CV attendu en PENDING. Reçu: {data['pending_reset']}"
+    assert data["skipped_manual"] == 0
 
-def test_reanalyze_drive_api_network_error_degraded(mocker):
-    """
-    UC8 — /reanalyze : quand drive_api est inaccessible (timeout/réseau),
-    folder_name = None et le pipeline continue normalement (mode dégradé).
-    Aucune exception ne doit remonter au client.
-    """
-    _make_reanalyze_mocks(mocker)
+    # /sync doit avoir été déclenché
+    assert data["sync_triggered"] is True, "sync_triggered doit être True"
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
-    ci = AsyncMock()
-    mock_httpx.return_value.__aenter__.return_value = ci
+    # Vérifier que PATCH /files/GFILE123 a été appelé avec status=PENDING
+    patch_calls = [c for c in ci.patch.call_args_list if "GFILE123" in str(c)]
+    assert patch_calls, "PATCH /files/GFILE123 doit être appelé pour reset PENDING"
+    patch_kwargs = patch_calls[0][1] if patch_calls[0][1] else {}
+    patch_body = patch_kwargs.get("json", {})
+    assert patch_body.get("status") == "PENDING", f"Le PATCH doit envoyer status=PENDING. Reçu: {patch_body}"
 
-    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
-    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
-    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 10}
-    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
-    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
-
-    def get_se(*a, **kw):
-        url = a[0] if a else kw.get("url", "")
-        if "tokens/google" in url:
-            return google_tok_mock
-        if "/files/GFILE123" in url:
-            raise ConnectionError("drive_api unreachable")   # Simule une erreur réseau
-        if "prompts_api" in url:
-            return prompt_mock
-        if "search" in url or "/users/" in url:
-            return users_mock
-        if "/competencies/" in url:
-            return comps_mock
-        return MagicMock(status_code=200)
-
-    ci.get.side_effect = get_se
-    ci.post.side_effect = lambda *a, **kw: create_mock
-    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-
-    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
-    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
-        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
-    ))
-
-    # Le pipeline doit retourner 200 malgré l'erreur drive_api
-    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
-    assert response.status_code == 200
-
-    # Le stream doit se terminer par "completed"
-    lines = [l for l in response.text.strip().split("\n") if l]
-    last_event = json.loads(lines[-1]) if lines else {}
-    assert last_event.get("status") == "completed", f"Dernier événement attendu 'completed'. Reçu: {last_event}"
+    # Vérifier que DELETE /clear a été appelé pour le user_id=10
+    delete_calls = [c for c in ci.delete.call_args_list if "/user/10/clear" in str(c)]
+    assert delete_calls, "DELETE /user/10/clear doit être appelé pour nettoyer les compétences"
 
 
 def test_reanalyze_url_without_google_doc_id(mocker):
     """
-    UC9 — /reanalyze : si la source_url n'est pas un Google Doc (pas de /d/{id}),
-    l'étape drive_api est ignorée silencieusement.
+    UC7 — /reanalyze : si la source_url n'est pas un Google Doc (pas de /d/{id}),
+    le CV est compté dans skipped_manual et aucun PATCH n'est émis.
     """
-    mock_db = AsyncMock()
-    mock_cv = MagicMock()
-    mock_cv.id = 2
-    mock_cv.user_id = 20
-    mock_cv.source_url = "https://external-cv-host.com/cv.pdf"  # pas de /d/{id}
-    mock_cv.source_tag = "Paris"
-
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [mock_cv]
-    mock_db.execute.return_value = mock_result
-    app.dependency_overrides[get_db] = lambda: mock_db
-
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="CV externe")
-
-    mock_genai = mocker.patch("src.cvs.router.client")
-    mock_genai.aio.models.generate_content = AsyncMock()
-    mock_genai.aio.models.generate_content.return_value.text = (
-        '{"is_cv": true, "first_name": "Bob", "last_name": "External", '
-        '"email": "bob@external.com", "summary": "", "current_role": "Dev", '
-        '"years_of_experience": 1, "competencies": [{"name": "Rust"}], "missions": [], "is_anonymous": false}'
-    )
-    mock_genai.aio.models.embed_content = AsyncMock()
-    mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
+    _make_reanalyze_mocks(mocker, source_url="https://externe.pdf")
 
     mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
-    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
-    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
-    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 20}
-    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
-    google_tok_mock = MagicMock(status_code=200); google_tok_mock.json.return_value = {"access_token": "tok"}
-
-    def get_se(*a, **kw):
-        url = a[0] if a else kw.get("url", "")
-        if "tokens/google" in url:
-            return google_tok_mock
-        if "prompts_api" in url:
-            return prompt_mock
-        if "search" in url or "/users/" in url:
-            return users_mock
-        if "/competencies/" in url:
-            return comps_mock
-        return MagicMock(status_code=200)
-
-    ci.get.side_effect = get_se
-    ci.post.side_effect = lambda *a, **kw: create_mock
-    ci.delete.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-    ci.patch.side_effect = lambda *a, **kw: MagicMock(status_code=200)
-
-    mocker.patch("src.cvs.router.task_state_manager.is_task_running", new=AsyncMock(return_value=False))
-    mocker.patch("src.cvs.router.task_state_manager.initialize_task", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.update_progress", new=AsyncMock())
-    mocker.patch("src.cvs.router.task_state_manager.get_latest_status", new=AsyncMock(
-        return_value={"processed_count": 1, "error_count": 0, "mismatch_count": 0, "errors": []}
-    ))
+    svc_mock = MagicMock(status_code=200)
+    svc_mock.json.return_value = {"access_token": "svc-token"}
+    ci.post.side_effect = lambda *a, **kw: svc_mock
+    ci.delete.return_value = MagicMock(status_code=204)
+    ci.patch.return_value = MagicMock(status_code=200)
 
     response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
-    assert response.status_code == 200
 
-    # drive_api /files ne doit PAS être appelé (pas d'ID Google Doc dans l'URL)
-    drive_calls = [c for c in ci.get.call_args_list if "/files/" in str(c)]
-    assert not drive_calls, f"drive_api /files ne doit pas être appelé pour une URL non-GDoc. Appels: {drive_calls}"
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["skipped_manual"] == 1, f"1 CV manuel attendu dans skipped_manual. Reçu: {data['skipped_manual']}"
+    assert data["pending_reset"] == 0, f"Aucun PENDING attendu pour URL non-GDoc. Reçu: {data['pending_reset']}"
+
+    # Aucun PATCH /files/ ne doit être émis
+    patch_calls = [c for c in ci.patch.call_args_list if "/files/" in str(c)]
+    assert not patch_calls, f"Aucun PATCH /files attendu pour URL externe. Appels: {patch_calls}"
+
+
+def test_reanalyze_drive_api_unavailable_degraded(mocker):
+    """
+    UC8 — /reanalyze : si drive_api est inaccessible pour le PATCH ou /sync,
+    le endpoint retourne quand même 200 avec sync_triggered=False (mode dégradé).
+    """
+    _make_reanalyze_mocks(mocker)
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    svc_mock = MagicMock(status_code=200)
+    svc_mock.json.return_value = {"access_token": "svc-token"}
+
+    def post_se(*a, **kw):
+        url = a[0] if a else kw.get("url", "")
+        if "service-token" in url:
+            return svc_mock
+        # /sync et /reset-sync lèvent une exception réseau
+        raise ConnectionError("drive_api unreachable")
+
+    def patch_se(*a, **kw):
+        raise ConnectionError("drive_api unreachable")
+
+    ci.post.side_effect = post_se
+    ci.delete.return_value = MagicMock(status_code=204)
+    ci.patch.side_effect = patch_se
+
+    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Mode dégradé : sync_triggered=False mais pas d'erreur 5xx
+    assert data["sync_triggered"] is False, "sync_triggered doit être False si /sync est injoignable"
+    assert "message" in data
+
+
+def test_reanalyze_no_cvs_in_db(mocker):
+    """
+    UC9 — /reanalyze : aucun CV en base → retour immédiat avec message indiquant
+    qu'une re-découverte Drive a été ordonnée.
+    """
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []  # Aucun CV
+    mock_db.execute.return_value = mock_result
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+    ci.post.return_value = MagicMock(status_code=200)
+
+    response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["count"] == 0
+    assert data["pending_reset"] == 0
+    assert "re-découverte" in data["message"].lower() or "drive" in data["message"].lower(), \
+        f"Le message doit mentionner la re-découverte Drive. Reçu: {data['message']}"
+
+
+def test_reanalyze_status_proxies_drive_api(mocker):
+    """
+    Vérifie que GET /reanalyze/status proxyfie vers drive_api /status
+    et retourne le résultat tel quel.
+    """
+    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    ci = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = ci
+
+    drive_status = {
+        "PENDING": 3, "QUEUED": 1, "PROCESSING": 0,
+        "IMPORTED_CV": 12, "ERROR": 0
+    }
+    status_mock = MagicMock(status_code=200)
+    status_mock.json.return_value = drive_status
+    ci.get.return_value = status_mock
+
+    response = client.get("/reanalyze/status", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == drive_status
+
+    # Vérifier que l'appel vers drive_api /status est bien effectué
+    get_calls = [c for c in ci.get.call_args_list if "/status" in str(c)]
+    assert get_calls, "GET /status doit être appelé sur drive_api"
+
+
+def test_reanalyze_not_admin(mocker):
+    """
+    /reanalyze doit retourner 403 si le rôle n'est pas admin.
+    """
+    app.dependency_overrides[verify_jwt] = lambda: {"role": "user", "sub": "alice"}
+    try:
+        response = client.post("/reanalyze", headers={"Authorization": "Bearer token"})
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides[verify_jwt] = override_verify_jwt
+
+

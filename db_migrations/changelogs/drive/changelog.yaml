@@ -145,3 +145,33 @@ databaseChangeLog:
             tableName: "drive_folders"
             columnName: "is_initial_sync_done"
 
+  - changeSet:
+      id: "8"
+      author: "antigravity"
+      comment: "Ajout du message d'erreur pour les imports echoues"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+               - column:
+                   name: "error_message"
+                   type: "text"
+                   constraints:
+                     nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "error_message"
+
+  - changeSet:
+      id: "9"
+      author: "antigravity"
+      comment: "Ajout du statut QUEUED dans le pipeline d'ingestion CV (Pub/Sub event-driven)"
+      changes:
+        - sql:
+            sql: "UPDATE drive_sync_state SET status = 'PENDING' WHERE status NOT IN ('PENDING', 'PROCESSING', 'IMPORTED_CV', 'IGNORED_NOT_CV', 'ERROR')"
+            comment: "Nettoyage préventif des statuts inconnus avant migration"
+      rollback:
+        - sql:
+            sql: "-- Pas de rollback nécessaire : le statut QUEUED sera simplement ignoré par les anciennes versions"
+            comment: "Rollback no-op : la suppression de QUEUED ne nécessite pas de migration DB (colonne varchar libre)"

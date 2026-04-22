@@ -78,10 +78,20 @@ resource "google_cloud_run_v2_service" "drive_api" {
       env {
         name  = "CV_API_URL"
         value = "http://api.internal.zenika/api/cv/"
+        # NOTE: gardée pour compatibilité ascendante.
+        # A supprimer après validation de la migration Pub/Sub en prod.
       }
       env {
         name  = "USERS_API_URL"
         value = "http://api.internal.zenika/api/users/"
+      }
+      env {
+        name  = "PUBSUB_CV_IMPORT_TOPIC"
+        value = "zenika-cv-import-events-${terraform.workspace}"
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
       }
       env {
         name  = "TRACE_EXPORTER"

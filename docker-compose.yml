@@ -182,6 +182,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
       - MARKET_MCP_URL=http://market_mcp:8008
+      - DRIVE_API_URL=http://drive_api:8006
       - ROOT_PATH=/cv-api
     depends_on:
       db_migrations:

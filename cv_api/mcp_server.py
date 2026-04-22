@@ -158,10 +158,12 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="global_reanalyze_cvs",
             description=(
-                "(Admin Only) ACTION LONGUE ET DESTRUCTIVE. Relance l'analyse des CVs pour un tag ou un utilisateur spécifique. "
-                "ATTENTION : efface les compétences existantes avant ré-import. "
-                "Ne JAMAIS appeler sans confirmation explicite de l'administrateur. "
-                "Durée estimée : plusieurs minutes pour un volume important."
+                "(Admin Only) Remet les CVs en file d'attente Pub/Sub pour réingestion complète. "
+                "Efface les compétences existantes des utilisateurs concernés, remet les fichiers "
+                "en PENDING dans le scanner Drive, et déclenche immédiatement un /sync. "
+                "Retour IMMÉDIAT (< 30s) — le traitement réel s'effectue en arrière-plan via le worker cv_api. "
+                "Surveiller la progression via GET /reanalyze/status ou le Scanner Drive. "
+                "Ne JAMAIS appeler sans confirmation explicite de l'administrateur."
             ),
             inputSchema={
                 "type": "object",
@@ -316,13 +318,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if arguments.get("tag"): params["tag"] = arguments["tag"]
                     if arguments.get("user_id"): params["user_id"] = arguments["user_id"]
                     
-                    response = await client.post(f"{API_BASE_URL}/reanalyze", params=params, headers=headers, timeout=300.0)
+                    response = await client.post(f"{API_BASE_URL}/reanalyze", params=params, headers=headers, timeout=30.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+
             elif name == "get_candidate_rag_context":
                 user_id = arguments.get("user_id")
                 if not user_id:

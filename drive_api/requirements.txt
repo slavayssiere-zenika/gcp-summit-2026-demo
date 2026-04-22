@@ -31,3 +31,5 @@ python-jose[cryptography]>=3.3.0
 opentelemetry-instrumentation-httpx
 
 opentelemetry-instrumentation-redis
+
+google-cloud-pubsub>=2.18.0

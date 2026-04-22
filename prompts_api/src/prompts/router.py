@@ -1,5 +1,6 @@
 import os
 import json
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -145,7 +146,7 @@ async def create_prompt(payload: schemas.PromptCreate, db: AsyncSession = Depend
     await delete_cache(f"prompts:{payload.key}")
     return prompt
 
-from .analyzer import generate_test_cases, run_promptfoo_analysis, improve_prompt_with_gemini
+from .analyzer import generate_test_cases, run_promptfoo_analysis, improve_prompt_with_gemini, generate_error_correction_prompt
 
 @router.post("/{key}/analyze", response_model=schemas.AnalysisResponse)
 async def analyze_prompt(key: str, db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
@@ -175,3 +176,36 @@ async def analyze_prompt(key: str, db: AsyncSession = Depends(get_db), admin: di
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/errors/report", response_model=schemas.Prompt)
+async def report_error_for_prompt(
+    payload: schemas.ErrorReport, 
+    db: AsyncSession = Depends(get_db), 
+    token_payload: dict = Depends(verify_jwt)
+):
+    try:
+        stmt = select(models.Prompt).where(models.Prompt.key == "prompts_api.error_correction")
+        result = await db.execute(stmt)
+        prompt_record = result.scalar_one_or_none()
+        
+        fallback_prompt = """You are an Expert Prompt Engineer. Your task is to analyze a runtime error caught in one of our microservices, and generate a concise, defensive, and strict System Prompt rule to prevent agents from triggering this error again.
+The rule must be actionable and clear. Do NOT output a full system prompt, just the focused directive/rule (e.g., "NEVER do X. If you need Y, ALWAYS use Z.").
+Output ONLY the raw prompt text. No markdown formatting, no generic introduction."""
+
+        system_instruction = prompt_record.value if prompt_record else fallback_prompt
+
+        # Generates the prompt
+        correction_text = await generate_error_correction_prompt(payload, system_instruction)
+        
+        # Store it
+        uid = str(uuid.uuid4())[:8]
+        prompt_key = f"error_correction:{payload.service_name}:{uid}"
+        
+        prompt = models.Prompt(key=prompt_key, value=correction_text)
+        db.add(prompt)
+        await db.commit()
+        await db.refresh(prompt)
+        await delete_cache(f"prompts:{prompt_key}")
+        
+        return prompt
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

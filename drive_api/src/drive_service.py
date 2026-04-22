@@ -1,12 +1,14 @@
 import json
 import os
+import asyncio
 import logging
 from datetime import datetime, timedelta
 
 import httpx
+from google.cloud import pubsub_v1
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, update
 from opentelemetry.propagate import inject
 
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
@@ -15,8 +17,38 @@ from src.google_auth import get_drive_service, get_m2m_jwt_token, get_google_acc
 
 logger = logging.getLogger(__name__)
 
-CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8004")
-MAX_DRIVE_CV_IMPORT = int(os.getenv("MAX_DRIVE_CV_IMPORT", "10"))
+MAX_DRIVE_CV_IMPORT = int(os.getenv("MAX_DRIVE_CV_IMPORT", "15"))
+PUBSUB_CV_IMPORT_TOPIC = os.getenv("PUBSUB_CV_IMPORT_TOPIC", "")
+_GCP_PROJECT_ID_ENV = os.getenv("GCP_PROJECT_ID", "")
+
+
+def _resolve_gcp_project_id() -> str:
+    """
+    Résout le GCP project ID dans l'ordre de priorité suivant :
+    1. Variable d'environnement GCP_PROJECT_ID (si présente et non-placeholder)
+    2. Project ID détecté via google.auth.default() (ADC — fonctionne sur Cloud Run nativement)
+    3. Chaîne vide (la publication Pub/Sub sera sautée avec un log d'erreur)
+
+    google.auth.default() retourne (credentials, project_id) où project_id
+    est lu depuis GOOGLE_CLOUD_PROJECT, gcloud config, ou les métadonnées Cloud Run.
+    """
+    # Rejeter les valeurs env manquantes ou placeholder non configurées
+    env_val = _GCP_PROJECT_ID_ENV.strip()
+    if env_val and env_val not in ("your-gcp-project-id", "YOUR_GCP_PROJECT_ID", ""):
+        return env_val
+
+    # Fallback : détection automatique via ADC (sans réseau supplémentaire)
+    try:
+        import google.auth
+        _, project_id = google.auth.default()
+        if project_id:
+            logger.info(f"[PubSub] GCP project ID résolu via ADC : '{project_id}'")
+            return project_id
+    except Exception as e:
+        logger.warning(f"[PubSub] Impossible de résoudre le project ID via google.auth.default(): {e}")
+
+    logger.error("[PubSub] GCP project ID introuvable — publication Pub/Sub impossible.")
+    return ""
 
 # Cache TTLs
 REDIS_TTL_ROOTS = 300        # 5 minutes pour la liste des folders racines
@@ -368,10 +400,24 @@ class DriveService:
 
     async def ingest_batch(self) -> int:
         """
-        Étape 2 : Traitement des fichiers PENDING par batch (MAX_DRIVE_CV_IMPORT).
-        Traitement optimisé : Phase DB -> Phase Parallèle HTTP (Sémaphore) -> Phase DB.
+        Étape 2 : Publication des fichiers PENDING dans Pub/Sub (zenika-cv-import-events).
+        
+        Architecture Event-Driven :
+        - drive_api = Publisher : publie un message JSON dans le topic GCP et bascule en QUEUED.
+        - cv_api   = Worker    : reçoit la push notification, exécute le pipeline LLM+Compétences+Missions,
+                                 puis notifie drive_api (PATCH /files/{id}) avec IMPORTED_CV ou ERROR.
+        - Pub/Sub gère le retry (backoff 30s→600s) et la DLQ après 5 échecs.
         """
-        import asyncio
+        # 0. Libération des zombies (fichiers bloqués en PROCESSING/QUEUED suite à un redémarrage)
+        zombie_threshold = datetime.utcnow() - timedelta(minutes=15)
+        zombie_stmt = (
+            update(DriveSyncState)
+            .where(DriveSyncState.status.in_([DriveSyncStatus.PROCESSING, DriveSyncStatus.QUEUED]))
+            .where(DriveSyncState.last_processed_at < zombie_threshold)
+            .values(status=DriveSyncStatus.PENDING, error_message="Réinitialisé automatiquement (Interruption processus)")
+        )
+        await self.db.execute(zombie_stmt)
+        await self.db.commit()
 
         base_query = (
             select(DriveSyncState)
@@ -385,12 +431,12 @@ class DriveService:
             return 0
 
         m2m_jwt = get_m2m_jwt_token()
-        headers = {"Authorization": f"Bearer {m2m_jwt}"}
-        inject(headers)  # OTel propagation (Golden Rule §5)
         google_access_token = get_google_access_token()
+        pubsub_topic = PUBSUB_CV_IMPORT_TOPIC
+        gcp_project_id = _resolve_gcp_project_id()
 
-        # 1. Préparation BD (Séquentiel)
-        payloads_to_process = []
+        # Résolution des folders (une seule requête DB)
+        payloads_to_publish = []
         for state in pending_files:
             folder = (
                 await self.db.execute(
@@ -399,72 +445,54 @@ class DriveService:
             ).scalars().first()
             if not folder:
                 state.status = DriveSyncStatus.ERROR
+                state.error_message = f"Dossier racine introuvable (folder_id={state.folder_id})"
                 continue
 
             doc_url = f"https://docs.google.com/document/d/{state.google_file_id}"
-            payloads_to_process.append({
+            payloads_to_publish.append({
                 "state": state,
-                "payload": {
+                "message": {
+                    "google_file_id": state.google_file_id,
                     "url": doc_url,
                     "source_tag": folder.tag,
+                    "folder_name": state.parent_folder_name or folder.folder_name or "",
                     "google_access_token": google_access_token,
-                    "folder_name": state.parent_folder_name,
+                    "jwt": m2m_jwt,
                 }
             })
-            state.status = DriveSyncStatus.PROCESSING
-            logger.info(f"Ingestion CV (Queue) — fichier='{state.file_name}', folder='{state.parent_folder_name}', tag={folder.tag}")
+            state.status = DriveSyncStatus.QUEUED
+            state.last_processed_at = datetime.utcnow()
+            logger.info(f"[PubSub] Enqueue CV — fichier='{state.file_name}', folder='{state.parent_folder_name}', tag={folder.tag}")
 
         await self.db.commit()
 
-        if not payloads_to_process:
+        if not payloads_to_publish:
             return 0
 
-        # 2. Exécution Parallèle Bounded (max 5 requêtes simultanées)
-        sem = asyncio.Semaphore(5)
-        
-        async def fetch_api(item, client):
-            async with sem:
-                try:
-                    res = await client.post(
-                        f"{CV_API_URL.rstrip('/')}/import",
-                        json=item["payload"],
-                        headers=headers,
-                    )
-                    return {"state": item["state"], "status": res.status_code, "data": res.json()}
-                except Exception as e:
-                    return {"state": item["state"], "status": 500, "data": {"detail": str(e)}}
+        # Publication dans Pub/Sub (blocking I/O dans thread pool pour compatibilité asyncio)
+        published_count = 0
+        publisher = pubsub_v1.PublisherClient()
+        topic_path = publisher.topic_path(gcp_project_id, pubsub_topic) if gcp_project_id and pubsub_topic else None
 
-        async with httpx.AsyncClient(timeout=60.0) as http_client:
-            tasks = [fetch_api(item, http_client) for item in payloads_to_process]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-        # 3. Résolution BDD (Séquentiel)
-        processed_count = 0
-        from datetime import datetime
-        for res in results:
-            if isinstance(res, Exception):
-                logger.error(f"Erreur d'exécution critique: {res}")
-                continue
-                
-            state = res["state"]
-            status_code = res["status"]
-            data = res["data"]
-            
-            if status_code < 400:
-                state.status = DriveSyncStatus.IMPORTED_CV
-                state.user_id = data.get("user_id")
-                processed_count += 1
-                self._mark_file_known(state.google_file_id)
-                logger.info(f"Import OK — {state.google_file_id} ('{state.file_name}') → user_id={state.user_id}")
-            else:
-                error_detail = data.get("detail", str(data))
-                if "LLM Parsing failed" in error_detail or "Not a CV" in error_detail:
-                    state.status = DriveSyncStatus.IGNORED_NOT_CV
-                    logger.info(f"Fichier ignoré (non-CV): {state.google_file_id}")
-                else:
-                    state.status = DriveSyncStatus.ERROR
-                    logger.error(f"Import échoué '{state.file_name}' ({state.google_file_id}): {error_detail}")
-            
-            state.last_processed_at = datetime.utcnow()
+        if not topic_path:
+            logger.error("[PubSub] PUBSUB_CV_IMPORT_TOPIC ou GCP_PROJECT_ID non résolu (env + ADC) — fallback PENDING.")
+            for item in payloads_to_publish:
+                item["state"].status = DriveSyncStatus.PENDING
+            await self.db.commit()
+            return 0
+
+        for item in payloads_to_publish:
+            try:
+                data = json.dumps(item["message"]).encode("utf-8")
+                future = await asyncio.to_thread(publisher.publish, topic_path, data)
+                message_id = await asyncio.to_thread(future.result, timeout=10)
+                logger.info(f"[PubSub] Message publié — file_id={item['state'].google_file_id}, msg_id={message_id}")
+                published_count += 1
+            except Exception as e:
+                logger.error(f"[PubSub] Échec publication pour {item['state'].google_file_id}: {e}")
+                item["state"].status = DriveSyncStatus.ERROR
+                item["state"].error_message = f"Échec publication Pub/Sub: {e}"
 
         await self.db.commit()
-        return processed_count
+        logger.info(f"[PubSub] Batch terminé — {published_count}/{len(payloads_to_publish)} messages publiés.")
+        return len(pending_files)

@@ -23,3 +23,7 @@ class AnalysisResponse(BaseModel):
     improved_prompt: str
     promptfoo_report: dict
 
+class ErrorReport(BaseModel):
+    service_name: str
+    error_message: str
+    context: Optional[str] = None

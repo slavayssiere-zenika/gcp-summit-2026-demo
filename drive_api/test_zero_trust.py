@@ -19,6 +19,7 @@ PUBLIC_WHITELIST = {
     "/google/callback",
     "/pubsub",
     "/sync",
+    "/scheduled",  # Protégé par IAM OIDC Cloud Scheduler (pas JWT applicatif) — cf. router.py NOTE SÉCURITÉ
     "/",
     "/me",
     "/health/agents"
