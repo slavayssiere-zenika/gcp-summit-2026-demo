@@ -41,11 +41,11 @@ resource "google_pubsub_subscription" "cv_import_events_sub" {
   ack_deadline_seconds = 600
 
   push_config {
-    push_endpoint = "https://api.${terraform.workspace}.${var.base_domain}/cv-api/pubsub/import-cv"
+    push_endpoint = "https://${terraform.workspace}.${var.base_domain}/cv-api/pubsub/import-cv"
 
     oidc_token {
       service_account_email = google_service_account.pubsub_invoker.email
-      audience              = "https://api.${terraform.workspace}.${var.base_domain}/cv-api/pubsub/import-cv"
+      audience              = "https://${terraform.workspace}.${var.base_domain}/cv-api/pubsub/import-cv"
     }
   }
 
@@ -148,12 +148,12 @@ resource "google_pubsub_subscription" "cv_api_sub" {
 
   push_config {
     # Pointing to the External HTTPS URL (required for public Pub/Sub push)
-    push_endpoint = "https://api.${terraform.workspace}.${var.base_domain}/cv-api/pubsub/user-events"
+    push_endpoint = "https://${terraform.workspace}.${var.base_domain}/cv-api/pubsub/user-events"
 
     # OIDC authentication (Zero-Trust)
     oidc_token {
       service_account_email = google_service_account.pubsub_invoker.email
-      audience              = "https://api.${terraform.workspace}.${var.base_domain}/cv-api/pubsub/user-events"
+      audience              = "https://${terraform.workspace}.${var.base_domain}/cv-api/pubsub/user-events"
     }
   }
 
@@ -168,11 +168,11 @@ resource "google_pubsub_subscription" "items_api_sub" {
   ack_deadline_seconds = 20
 
   push_config {
-    push_endpoint = "https://api.${terraform.workspace}.${var.base_domain}/items-api/pubsub/user-events"
+    push_endpoint = "https://${terraform.workspace}.${var.base_domain}/items-api/pubsub/user-events"
 
     oidc_token {
       service_account_email = google_service_account.pubsub_invoker.email
-      audience              = "https://api.${terraform.workspace}.${var.base_domain}/items-api/pubsub/user-events"
+      audience              = "https://${terraform.workspace}.${var.base_domain}/items-api/pubsub/user-events"
     }
   }
 
