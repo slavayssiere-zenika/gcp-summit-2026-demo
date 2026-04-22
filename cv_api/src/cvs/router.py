@@ -31,7 +31,19 @@ from src.cvs.schemas import CVImportRequest, CVImportStep, CVResponse, SearchCan
 from .task_state import task_state_manager, tree_task_manager
 from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
 from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
-from agent_commons.taxonomy_utils import build_taxonomy_context
+def build_taxonomy_context(items: list[dict]) -> tuple[str, int, int]:
+    parents = [item for item in items if not item.get("parent_id")]
+    lines = []
+    nb_leaves = 0
+    for p in parents:
+        lines.append(f"- {p['name']}")
+        leaves = [item for item in items if item.get("parent_id") == p.get('id')]
+        nb_leaves += len(leaves)
+        if leaves:
+            leaf_names = ", ".join(l['name'] for l in leaves)
+            lines.append(f"  └─ {leaf_names}")
+    return "\n".join(lines), len(parents), nb_leaves
+
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["CV_Public"])
@@ -68,6 +80,14 @@ _CV_CACHE = {
     "tree_items": {"value": None, "expires": datetime.min},
     "tree_context": {"value": None, "expires": datetime.min}
 }
+
+@router.post("/cache/invalidate-taxonomy")
+async def force_invalidate_taxonomy_cache(_: dict = Depends(verify_jwt)):
+    """Invalide spécifiquement le contexte sémantique de l'arbre des compétences (Taxonomy Event)."""
+    _CV_CACHE["tree_context"] = {"value": None, "expires": datetime.min}
+    _CV_CACHE["tree_items"] = {"value": None, "expires": datetime.min}
+    logger.info("Cache de taxonomie purgé avec succès (Event-driven).")
+    return {"message": "Cache de taxonomie invalidé"}
 
 async def _log_finops(user_email: str, action: str, model: str, usage_metadata: Any, metadata: dict = None, auth_token: str = None):
     """Utility to log consumption to BigQuery via Market MCP sidecar."""
