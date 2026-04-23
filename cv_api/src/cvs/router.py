@@ -40,8 +40,15 @@ def build_taxonomy_context(items: list[dict]) -> tuple[str, int, int]:
         leaves = [item for item in items if item.get("parent_id") == p.get('id')]
         nb_leaves += len(leaves)
         if leaves:
-            leaf_names = ", ".join(l['name'] for l in leaves)
-            lines.append(f"  └─ {leaf_names}")
+            leaf_parts = []
+            for l in leaves:
+                entry = l['name']
+                # Inclure les alias pour que le LLM reconnaisse les formes alternatives
+                # Ex: "Kubernetes (aka: K8s, kube)" → le LLM sait que K8s = Kubernetes
+                if l.get('aliases'):
+                    entry += f" (aka: {l['aliases']})"
+                leaf_parts.append(entry)
+            lines.append(f"  └─ {', '.join(leaf_parts)}")
     return "\n".join(lines), len(parents), nb_leaves
 
 
@@ -136,31 +143,73 @@ async def _log_finops(user_email: str, action: str, model: str, usage_metadata: 
         logger.error(f"FinOps logging analysis failed: {e}")
 
 async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str:
-    """Download the CV content. If Google Docs, map to raw export endpoint."""
+    """Download the CV content.
+
+    Pour les Google Docs, utilise l'API Drive v3 officielle (files.export) avec
+    le google_access_token OAuth2. L'ancien endpoint /export?format=txt est abandonné
+    par Google et retourne 410 Gone.
+    Ref: https://developers.google.com/drive/api/guides/manage-downloads#export_a_google_workspace_document
+    """
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.hostname or ""
-    
+
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
-        
+
     forbidden_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
     if hostname in forbidden_hosts or hostname.endswith(".local") or hostname.endswith("_api"):
         raise HTTPException(status_code=400, detail="Internal URLs are not allowed")
 
     if "docs.google.com/document/d/" in url:
-        # Map to export format if user pastes the browser URL
+        # L'endpoint /export?format=txt est non-officiel et retourne 410 Gone.
+        # Migration vers l'API Drive v3 files.export (authentifiée).
         doc_id = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
         if doc_id:
-            url = f"https://docs.google.com/document/d/{doc_id.group(1)}/export?format=txt"
-    
+            file_id = doc_id.group(1)
+            if not google_token:
+                logger.error(
+                    f"[_fetch_cv_content] Aucun google_access_token pour le fichier Drive '{file_id}'. "
+                    "L'API Drive v3 requiert un token OAuth2 valide (scope drive.readonly minimum)."
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Document Google Docs privé : un google_access_token OAuth2 est requis. "
+                        "Vérifiez que drive_api transmet bien le token dans le payload Pub/Sub."
+                    ),
+                )
+            export_url = f"https://www.googleapis.com/drive/v3/files/{file_id}/export"
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                resp = await http_client.get(
+                    export_url,
+                    params={"mimeType": "text/plain"},
+                    headers={"Authorization": f"Bearer {google_token}"},
+                    follow_redirects=True,
+                )
+                if resp.status_code in (401, 403):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Accès refusé par l'API Drive (HTTP {resp.status_code}). "
+                            "Vérifiez les scopes OAuth2 du Service Account "
+                            "(drive.readonly ou drive.file minimum requis)."
+                        ),
+                    )
+                resp.raise_for_status()
+                return resp.text
+
+    # URL non-Google Docs : téléchargement direct
     req_headers = {}
     if google_token:
         req_headers["Authorization"] = f"Bearer {google_token}"
 
-    async with httpx.AsyncClient() as http_client:
+    async with httpx.AsyncClient(timeout=30.0) as http_client:
         resp = await http_client.get(url, headers=req_headers, follow_redirects=True)
-        if resp.status_code == 401 or resp.status_code == 403:
-            raise HTTPException(status_code=400, detail="Accès refusé par Google Docs. Veuillez vérifier que le document est public ou autoriser l'accès.")
+        if resp.status_code in (401, 403):
+            raise HTTPException(
+                status_code=400,
+                detail="Accès refusé. Vérifiez que le document est accessible.",
+            )
         resp.raise_for_status()
         return resp.text
 
@@ -634,13 +683,17 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                                     "title": {"type": "string"},
                                     "company": {"type": "string"},
                                     "description": {"type": "string"},
+                                    "start_date": {"type": "string", "description": "Start date YYYY-MM or YYYY, null if unknown"},
+                                    "end_date": {"type": "string", "description": "End date YYYY-MM, YYYY, or 'present', null if unknown"},
+                                    "duration": {"type": "string", "description": "Explicit duration from CV text (e.g. '2 ans', '18 mois'), null if not stated"},
+                                    "mission_type": {"type": "string", "description": "One of: audit, conseil, accompagnement, formation, expertise, build"},
                                     "is_sensitive": {"type": "boolean", "description": "True if the project involves sensitive sectors like Defense, High Finance or confidential clients"},
                                     "competencies": {
                                         "type": "array",
                                         "items": {"type": "string"}
                                     }
                                 },
-                                "required": ["title", "competencies", "is_sensitive"]
+                                "required": ["title", "competencies", "is_sensitive", "mission_type"]
                             }
                         },
                         "is_anonymous": {"type": "boolean"},
@@ -984,7 +1037,12 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
 
                     async def resolve_comp_id(name: str) -> int | None:
-                        """Recherche une compétence par nom exact via /search (scalable, sans bulk fetch)."""
+                        """Recherche une compétence par nom exact OU par alias via /search.
+
+                        La route /search cherche déjà dans name ET aliases (OR ilike).
+                        On teste donc d'abord le nom canonique, puis les alias retournés
+                        pour éviter de créer des doublons (ex: GCP → Google Cloud Platform).
+                        """
                         try:
                             res = await bg_http_client.get(
                                 f"{COMPETENCIES_API_URL.rstrip('/')}/search",
@@ -994,8 +1052,19 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                             if res.status_code == 200:
                                 n_norm = normalize_comp(name)
                                 for item in res.json().get("items", []):
+                                    # 1. Match sur le nom canonique
                                     if normalize_comp(item.get("name", "")) == n_norm:
                                         return item["id"]
+                                    # 2. Match sur les alias (ex: "GCP" matche "Google Cloud Platform")
+                                    aliases_raw = item.get("aliases") or ""
+                                    for alias in aliases_raw.split(","):
+                                        if normalize_comp(alias.strip()) == n_norm:
+                                            logger.debug(
+                                                f"[BG_TASK] '{name}' résolu via alias "
+                                                f"→ '{item['name']}' (id={item['id']})",
+                                                extra={"cv_url": bg_url}
+                                            )
+                                            return item["id"]
                         except Exception as e:
                             logger.warning(f"[BG_TASK] resolve_comp_id('{name}') search failed: {e}")
                         return None
@@ -1092,42 +1161,39 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         s_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive or confidential missions"}, headers=bg_headers)
                         if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
                     
-                    async def process_mission(m):
-                        try:
-                            cat_ids = [mission_cat_id] if mission_cat_id else []
-                            if m.get("is_sensitive") and sensitive_cat_id:
-                                cat_ids.append(sensitive_cat_id)
+                    item_data_list = []
+                    for m in missions_list:
+                        cat_ids = [mission_cat_id] if mission_cat_id else []
+                        if m.get("is_sensitive") and sensitive_cat_id:
+                            cat_ids.append(sensitive_cat_id)
 
-                            item_data = {
-                                "name": m["title"],
-                                "description": m.get("description", ""),
-                                "user_id": bg_user_id,
-                                "category_ids": cat_ids,
-                                "metadata_json": {
-                                    "company": m.get("company"),
-                                    "competencies": m.get("competencies", []),
-                                    "is_sensitive": m.get("is_sensitive", False),
-                                    "source": "CV Analysis"
-                                }
+                        item_data_list.append({
+                            "name": m["title"],
+                            "description": m.get("description", ""),
+                            "user_id": bg_user_id,
+                            "category_ids": cat_ids,
+                            "metadata_json": {
+                                "company": m.get("company"),
+                                "competencies": m.get("competencies", []),
+                                "is_sensitive": m.get("is_sensitive", False),
+                                "start_date": m.get("start_date"),
+                                "end_date": m.get("end_date"),
+                                "duration": m.get("duration"),
+                                "mission_type": m.get("mission_type", "build"),
+                                "source": "CV Analysis"
                             }
-                            m_post = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=bg_headers)
-                            if m_post.status_code >= 400:
-                                logger.warning(f"[BG_TASK] missions — failed to create item '{m['title']}': HTTP {m_post.status_code} — {m_post.text[:300]}")
-                                return f"Création de la mission '{m['title']}' échouée (HTTP {m_post.status_code}: {m_post.text})"
-                            return True
-                        except Exception as e:
-                            return f"Erreur sur la mission '{m.get('title', 'Inconnue')}': {e}"
-
-                    mission_tasks = [process_mission(m) for m in missions_list]
-                    mission_results = await asyncio.gather(*mission_tasks, return_exceptions=True)
-                    for res in mission_results:
-                        if res is not True:
-                            if isinstance(res, str):
-                                bg_errors.append(res)
-                            elif isinstance(res, Exception):
-                                bg_errors.append(f"Exception asynchrone (mission): {res}")
-                            else:
-                                bg_errors.append("Erreur inconnue lors d'une création de mission.")
+                        })
+                        
+                    if item_data_list:
+                        bulk_payload = {"items": item_data_list}
+                        m_post = await bg_http_client.post(
+                            f"{ITEMS_API_URL.rstrip('/')}/bulk",
+                            json=bulk_payload,
+                            headers=bg_headers
+                        )
+                        if m_post.status_code >= 400:
+                            logger.warning(f"[BG_TASK] missions — failed to bulk create items: HTTP {m_post.status_code} — {m_post.text[:300]}")
+                            bg_errors.append(f"Création en masse des missions échouée (HTTP {m_post.status_code}: {m_post.text})")
                 except Exception as e:
                     logger.error(f"[BG_TASK] Erreur critique missions: {e}")
                     bg_errors.append(f"Crash module missions: {e}")
@@ -1686,6 +1752,7 @@ async def _recalculate_bg(auth_header: str, user_caller: str):
         try:
             async with httpx.AsyncClient() as http_client:
                 headers = {"Authorization": auth_header}
+                inject(headers)  # OTel trace propagation (AGENTS.md §4) + JWT requis pour competencies-api
                 all_comps = []
                 skip = 0
                 limit = 100
@@ -1722,7 +1789,7 @@ async def _recalculate_bg(auth_header: str, user_caller: str):
                 instruction = instruction.replace("{{EXISTING_COMPETENCIES}}", skills_str)
         except Exception as e:
             msg = f"Failed to inject existing competencies: {e}"
-            print(msg)
+            logger.warning(msg, exc_info=True)  # WARNING visible dans Cloud Logging (remplace print)
             await tree_task_manager.update_progress(new_log=msg)
 
         await tree_task_manager.update_progress(new_log="Lancement du modèle Gemini...")
@@ -1752,10 +1819,63 @@ async def _recalculate_bg(auth_header: str, user_caller: str):
             estimated_cost_usd = (input_tokens * 1.25 + output_tokens * 5.0) / 1000000
 
         res_tree = json.loads(response.text)
+
+        # Extraire les instructions de fusion depuis les feuilles du JSON généré par Gemini
+        def extract_merge_instructions(node: Any, merges: list | None = None) -> list:
+            """Parcours récursif du JSON pour collecter les champs merge_from."""
+            if merges is None:
+                merges = []
+            if isinstance(node, dict):
+                merge_from = node.get("merge_from", [])
+                name = node.get("name")
+                if name and merge_from:
+                    merges.append({"canonical": name, "merge_from": merge_from})
+                for v in node.values():
+                    if isinstance(v, (dict, list)):
+                        extract_merge_instructions(v, merges)
+            elif isinstance(node, list):
+                for item in node:
+                    extract_merge_instructions(item, merges)
+            return merges
+
+        merge_instructions = extract_merge_instructions(res_tree)
+        nb_merges = len(merge_instructions)
+
+        if nb_merges > 0:
+            await tree_task_manager.update_progress(
+                new_log=f"Calcul terminé. {nb_merges} fusion(s) sémantique(s) identifiée(s) — application en cours..."
+            )
+
+        # POST vers competencies_api/bulk_tree avec les instructions de fusion
+        bulk_merge_result = []
+        try:
+            async with httpx.AsyncClient() as http_client:
+                bulk_headers = {"Authorization": auth_header}
+                inject(bulk_headers)
+                bulk_res = await http_client.post(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/bulk_tree",
+                    json={"tree": res_tree, "merges": merge_instructions},
+                    headers=bulk_headers,
+                    timeout=120.0
+                )
+                if bulk_res.status_code == 200:
+                    bulk_data = bulk_res.json()
+                    bulk_merge_result = bulk_data.get("merges", [])
+                    logger.info(
+                        f"[recalculate_tree] bulk_tree appliqué avec succès. "
+                        f"Fusions: {bulk_merge_result}"
+                    )
+                else:
+                    logger.warning(
+                        f"[recalculate_tree] bulk_tree HTTP {bulk_res.status_code}: {bulk_res.text[:200]}"
+                    )
+        except Exception as e:
+            logger.warning(f"[recalculate_tree] Erreur lors de l'appel bulk_tree: {e}", exc_info=True)
+
         await tree_task_manager.update_progress(
-            new_log="Calcul terminé avec succès.",
+            new_log=f"Terminé. {len(bulk_merge_result)} doublon(s) fusionné(s).",
             tree=res_tree,
-            usage={"estimated_cost_usd": estimated_cost_usd},
+            usage={"estimated_cost_usd": estimated_cost_usd, "merges_applied": len(bulk_merge_result)},
             status="completed"
         )
     except Exception as e:

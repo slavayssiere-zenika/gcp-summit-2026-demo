@@ -45,6 +45,13 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Folder ID already registered.")
 
+    existing_tag = (await db.execute(select(DriveFolder).filter(DriveFolder.tag == folder.tag.strip()))).scalars().first()
+    if existing_tag:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Tag '{folder.tag.strip()}' already used by folder '{existing_tag.folder_name or existing_tag.google_folder_id}'. Tags must be unique."
+        )
+
     # Récupération automatique du nom du dossier Drive (nomenclature Zenika "Prénom Nom")
     resolved_folder_name = folder.folder_name  # Fallback sur la valeur manuelle si fournie
     try:

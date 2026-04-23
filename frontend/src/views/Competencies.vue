@@ -103,17 +103,23 @@ const onSelectLeaf = async (node: any) => {
     isLoadingUsers.value = false
   }
 
-  // 3. Récupérer les évaluations de chaque utilisateur pour cette compétence (parallèle)
+  // 3. Récupérer les évaluations de chaque utilisateur pour cette compétence
   if (associatedUsers.value.length > 0) {
     try {
-      const evalPromises = associatedUsers.value.map(u =>
-        axios.get(`/api/competencies/evaluations/user/${u.id}/competency/${node.id}`)
-          .then(r => ({ user_id: u.id, ...r.data }))
-          .catch(() => ({ user_id: u.id, ai_score: null, user_score: null, ai_justification: null }))
-      )
-      evaluations.value = await Promise.all(evalPromises)
+      const userIds = associatedUsers.value.map(u => u.id)
+      const res = await axios.post('/api/competencies/evaluations/batch/users', {
+        competency_id: node.id,
+        user_ids: userIds
+      })
+      const evalsDict = res.data.evaluations || {}
+      evaluations.value = Object.values(evalsDict)
     } catch (err) {
-      console.error('Failed to fetch evaluations', err)
+      console.error('Failed to fetch evaluations batch', err)
+      // Fallback in case of error
+      evaluations.value = associatedUsers.value.map(u => ({
+        user_id: u.id, competency_id: node.id, competency_name: node.name,
+        ai_score: null, user_score: null, ai_justification: null
+      }))
     } finally {
       isLoadingEvals.value = false
     }

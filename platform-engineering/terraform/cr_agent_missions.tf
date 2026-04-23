@@ -105,6 +105,10 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }
+      env {
+        name  = "TRACE_SAMPLING_RATE"
+        value = var.trace_sampling_rate
+      }
 
       # ── Infrastructure ─────────────────────────────────────────────────────
       # Redis DB 12 — distinct de HR (10), Ops (11), Router (9), missions_api REST (8)

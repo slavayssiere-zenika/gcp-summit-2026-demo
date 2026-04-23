@@ -192,3 +192,9 @@ variable "extra_domains" {
   }))
   default = []
 }
+
+variable "trace_sampling_rate" {
+  description = "Sampling rate for OpenTelemetry traces (0.0 to 1.0)"
+  type        = string
+  default     = "1.0"
+}

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.exc import IntegrityError
 from typing import List
 import httpx
 from opentelemetry import trace
@@ -12,7 +13,7 @@ from cache import get_cache, set_cache, delete_cache, delete_cache_pattern
 from src.items.models import Item, Category
 from src.items.schemas import (
     ItemCreate, ItemUpdate, ItemResponse, UserInfo, PaginationResponse, ItemStatsResponse,
-    CategoryCreate, CategoryResponse
+    CategoryCreate, CategoryResponse, BulkItemCreate
 )
 from src.auth import verify_jwt
 
@@ -246,6 +247,94 @@ async def create_item(
 
 
 
+
+@router.post("/bulk", response_model=List[ItemResponse], status_code=201)
+async def create_items_bulk(
+    request: Request,
+    payload: BulkItemCreate,
+    db: AsyncSession = Depends(get_db),
+    auth_payload: dict = Depends(verify_jwt)
+):
+    user_role = auth_payload.get("role", "")
+    allowed_ids = auth_payload.get("allowed_category_ids", [])
+    
+    # Pre-fetch all needed categories
+    all_category_ids = set()
+    for item in payload.items:
+        all_category_ids.update(item.category_ids)
+        
+    if not all_category_ids:
+        return []
+        
+    categories = (await db.execute(select(Category).filter(Category.id.in_(all_category_ids)))).scalars().all()
+    cat_map = {c.id: c for c in categories}
+    
+    if len(categories) != len(all_category_ids):
+        raise HTTPException(status_code=400, detail="One or more category IDs are invalid")
+        
+    if user_role not in ("admin", "rh", "service_account"):
+        forbidden_ids = [cid for cid in all_category_ids if cid not in allowed_ids]
+        if forbidden_ids:
+            raise HTTPException(
+                status_code=403,
+                detail=f"User does not have rights for categories: {forbidden_ids}"
+            )
+            
+    # Fetch existing items to handle idempotency
+    from sqlalchemy.orm import selectinload as _sil
+    user_ids = {item.user_id for item in payload.items}
+    names = {item.name for item in payload.items}
+    
+    existing_items = (await db.execute(
+        select(Item).options(_sil(Item.categories))
+        .filter(Item.user_id.in_(user_ids), Item.name.in_(names))
+    )).scalars().all()
+    
+    existing_map = {(i.user_id, i.name): i for i in existing_items}
+    
+    new_items = []
+    result_items = []
+    
+    for item in payload.items:
+        key = (item.user_id, item.name)
+        if key in existing_map:
+            result_items.append(existing_map[key])
+        else:
+            db_item = Item(
+                name=item.name,
+                description=item.description,
+                metadata_json=item.metadata_json,
+                user_id=item.user_id,
+                categories=[cat_map[cid] for cid in item.category_ids]
+            )
+            db.add(db_item)
+            new_items.append(db_item)
+            
+    if new_items:
+        try:
+            await db.commit()
+            for db_item in new_items:
+                await db.refresh(db_item)
+            result_items.extend(new_items)
+            
+            delete_cache_pattern("items:list:*")
+            delete_cache_pattern("items:search:*")
+        except IntegrityError as e:
+            # Conflict de clé unique (race condition inter-workers) — retourner 409 plutôt que 500
+            await db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=f"Conflit d'intégrité lors de l'insertion en masse (doublon détecté) : {e.orig}"
+            )
+        except Exception:
+            await db.rollback()
+            raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création en masse")
+
+    # Reload all items with eager loaded categories
+    item_ids = [i.id for i in result_items]
+    final_items = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id.in_(item_ids)))).scalars().all()
+    
+    return [await enrich_item(db_item, request) for db_item in final_items]
 
 @router.put("/{item_id}", response_model=ItemResponse)
 async def update_item(

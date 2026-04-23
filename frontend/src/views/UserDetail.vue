@@ -11,7 +11,6 @@ import {
   Fingerprint,
   ArrowLeft,
   Award,
-  CheckCircle2,
   History
 } from 'lucide-vue-next'
 import axios from 'axios'
@@ -75,27 +74,7 @@ const getCategoryName = (id: number) => {
   return cat ? cat.name : `Catégorie #${id}`
 }
 
-interface Competency {
-  id: number
-  name: string
-  description: string
-}
 
-const competencies = ref<Competency[]>([])
-const isLoadingCompetencies = ref(true)
-const errorCompetencies = ref<string | null>(null)
-
-const fetchCompetencies = async () => {
-  try {
-    const response = await axios.get(`/api/competencies/user/${userId}`)
-    competencies.value = response.data || []
-  } catch (err) {
-    console.error('Failed to fetch user competencies:', err)
-    errorCompetencies.value = "Impossible de récupérer les compétences RAG."
-  } finally {
-    isLoadingCompetencies.value = false
-  }
-}
 
 const cvProfiles = ref<any[]>([])
 const importerUser = ref<User | null>(null)
@@ -171,7 +150,6 @@ const confirmMerge = async () => {
 onMounted(() => {
   fetchUser()
   fetchCategories()
-  fetchCompetencies()
   fetchCVProfile()
   fetchMissions()
 })
@@ -355,44 +333,7 @@ onMounted(() => {
           </div>
         </section>
 
-        <!-- Competencies RAG Card -->
-        <section class="profile-card competencies-card">
-          <div class="card-header">
-            <Award class="icon" />
-            <h2>Cartographie des Compétences RAG</h2>
-          </div>
-          
-          <div class="categories-section">
-            <p class="section-desc">Expertise technique et concepts reconnus pour ce profil via le pipeline d'IA sur ses CVs :</p>
-            
-            <div v-if="isLoadingCompetencies" class="loading-state">
-              <div class="spinner"></div>
-              <span>Connexion avec l'espace latent...</span>
-            </div>
-            
-            <div v-else-if="competencies && competencies.length > 0" class="category-tags">
-              <div 
-                v-for="skill in competencies" 
-                :key="skill ? skill.id : Math.random()" 
-                class="category-tag skill-tag"
-              >
-                <template v-if="skill">
-                  <CheckCircle2 size="14" class="skill-check" />
-                  {{ skill.name }}
-                </template>
-              </div>
-            </div>
-            
-            <div v-else class="empty-state">
-              <Award size="24" />
-              <p>Ce profil n'a pas encore de CV parsé ni de compétences extraites.</p>
-            </div>
-            
-            <div v-if="errorCompetencies" class="error-toast">
-              {{ errorCompetencies }}
-            </div>
-          </div>
-        </section>
+
 
          <!-- Missions Card -->
         <section class="profile-card missions-card">

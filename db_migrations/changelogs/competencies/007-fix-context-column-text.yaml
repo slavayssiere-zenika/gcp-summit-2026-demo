@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: "007-fix-context-column-text"
+      author: "antigravity"
+      comment: |
+        Fix log-review P1 — Élargissement du champ 'context' de VARCHAR(500) à TEXT
+        dans la table competency_suggestions. Le LLM génère des contextes d'extraction
+        pouvant dépasser 500 caractères (extraits de CV ou de missions), ce qui provoquait
+        des StringDataRightTruncationError en production (logs du 2026-04-23).
+      changes:
+        - modifyDataType:
+            tableName: "competency_suggestions"
+            columnName: "context"
+            newDataType: "text"
+      rollback:
+        - modifyDataType:
+            tableName: "competency_suggestions"
+            columnName: "context"
+            newDataType: "varchar(500)"

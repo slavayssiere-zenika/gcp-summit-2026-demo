@@ -58,6 +58,10 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
         value = "gcp"
       }
       env {
+        name  = "TRACE_SAMPLING_RATE"
+        value = var.trace_sampling_rate
+      }
+      env {
         name  = "REDIS_URL"
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
       }

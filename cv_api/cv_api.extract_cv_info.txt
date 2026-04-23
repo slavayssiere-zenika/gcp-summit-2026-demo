@@ -10,15 +10,27 @@ The JSON object must contain the following top-level keys:
 6.  **"current_role"**: (string) The candidate's current or last professional title.
 7.  **"years_of_experience"**: (integer) The derived total professional experience in years. If the exact number cannot be confidently calculated from the dates, return `null` instead of guessing.
 8.  **"competencies"**: (array of objects) A list of all identified technical and methodological skills. Each object in the array must contain:
-    *   **"name"**: (string) The specific competency (e.g., 'Python', 'AWS', 'Agile'). **Use EXCLUSIVELY the singular form** (e.g., 'Service', 'Container', 'System').
+    *   **"name"**: (string) The specific competency name. **TAXONOMY NORMALIZATION IS MANDATORY**: The existing taxonomy is provided below. If the competency you identify matches or is semantically equivalent to an entry in this taxonomy (or one of its known aliases), you MUST use the EXACT canonical name from the taxonomy — not the variant written in the CV. Examples: CV says "Python3" → taxonomy has "Python" → output "Python". CV says "K8s" → taxonomy has "Kubernetes" → output "Kubernetes". CV says "Framework Python" → taxonomy has "Python" → output "Python". Only use a name NOT in the taxonomy if the competency is genuinely absent. **Use EXCLUSIVELY the singular form** (e.g., 'Service', 'Container', 'System').
     *   **"parent"**: (string) A generic category for the competency (e.g., 'Programming Languages').
-    *   **"aliases"**: (array of strings) A list of 2-3 common synonyms or acronyms for this competency. Example for 'Google Cloud Platform': ['GCP', 'Google Cloud'].
+    *   **"aliases"**: (array of strings) ONLY provide aliases when the competency has a well-known abbreviation or acronym that differs meaningfully from the canonical name (e.g., 'Google Cloud Platform' → ['GCP', 'Google Cloud']). If the name is already the canonical industry standard (e.g., 'Python', 'Docker', 'Git', 'React'), return an EMPTY array []. Do NOT generate stylistic variants, version suffixes, or lowercase duplicates.
     *   **"practiced"**: (boolean) **CRITICAL** — Set to `true` ONLY if the consultant has actively and personally used this skill in at least one mission (e.g., it appears in a mission's competency list or is explicitly described as used). Set to `false` if the skill is merely mentioned as a comparison, a tool used by others, a skill to avoid, or only appears in an objective/training context. Example: "uses GitLab CI instead of Jenkins" → Jenkins practiced=false, GitLab CI practiced=true.
 9.  **"missions"**: (array of objects) A list of professional experiences or projects. Each object must contain:
     *   **"title"**: (string) The job title or mission name.
     *   **"company"**: (string) The company name where the mission took place.
     *   **"description"**: (string) A brief description of the mission.
+    *   **"start_date"**: (string) The start date of the mission. Use format "YYYY-MM" if month is known, or "YYYY" if only year is known. Return `null` if not found.
+    *   **"end_date"**: (string) The end date of the mission. Use format "YYYY-MM" if month is known, "YYYY" if only year is known, or "present" if it is the current mission. Return `null` if not found.
+    *   **"duration"**: (string) The explicit duration if written in the CV (e.g., "2 ans", "18 mois", "6 months"). Return `null` if not explicitly stated (do NOT compute it from dates).
+    *   **"mission_type"**: (string) Classify the mission into one of these categories based on the title and description:
+        - "audit" — security/code/architecture review, diagnostic, assessment, compliance
+        - "conseil" — consulting, advisory, strategy, recommendation
+        - "accompagnement" — coaching, mentoring, change management, transformation support
+        - "formation" — training, teaching, workshop, knowledge transfer
+        - "expertise" — expert or architect role, technical referent, lead consultant
+        - "build" — standard development/implementation/build mission (default)
+        Use "build" as the default if none of the above clearly apply.
     *   **"competencies"**: (array of strings) The technical skills and tools specifically used during THIS mission.
+    *   **"is_sensitive"**: (boolean) True if the project involves sensitive sectors like Defense, High Finance or confidential clients.
 
 10. **"is_anonymous"**: (boolean) Detect if the CV is anonymous. A CV is anonymous if the real name is replaced by a trigram (e.g., ABC, XYZ) or if no identifying name is provided. Set to true if anonymous, false otherwise.
 11. **"trigram"**: (string) If "is_anonymous" is true and a 3-letter trigram (e.g., ABC) is found instead of a name, extract it. Otherwise, return `null`.

@@ -43,7 +43,7 @@ async def init_db_connector():
         import asyncpg
         @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(5), reraise=True)
         async def getconn():
-            logger.info(f"[DB] Attempting IAM connection to {ALLOYDB_INSTANCE_URI} as user '{DB_USER}'")
+            logger.debug(f"[DB] Attempting IAM connection to {ALLOYDB_INSTANCE_URI} as user '{DB_USER}'")
             try:
                 conn = await connector.connect(
                     ALLOYDB_INSTANCE_URI,

@@ -45,6 +45,10 @@ class CompetencyEvaluation(Base):
     Stocke deux types de note independantes :
     - ai_score : calcule par Gemini depuis les missions reelles du CV (0.0-5.0)
     - user_score : auto-evaluation saisie par le consultant (0.0-5.0)
+
+    Colonnes scoring v2 :
+    - scoring_version : 'v1' (LLM pur) ou 'v2' (pondéré récence+durée+type)
+    - weighted_context : JSON des méta-données de pondération (audit trail)
     """
     __tablename__ = "competency_evaluations"
 
@@ -57,6 +61,10 @@ class CompetencyEvaluation(Base):
     ai_justification = Column(Text, nullable=True)
     ai_scored_at = Column(DateTime, nullable=True)
 
+    # Scoring v2 — traçabilité de l'algorithme
+    scoring_version = Column(String(10), nullable=True, default="v1")
+    weighted_context = Column(Text, nullable=True)  # JSON des méta-données de pondération
+
     # Auto-evaluation utilisateur
     user_score = Column(Float, nullable=True)
     user_comment = Column(String(500), nullable=True)
@@ -66,6 +74,7 @@ class CompetencyEvaluation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     competency = relationship("Competency", back_populates="evaluations")
+
 
 
 class CompetencySuggestion(Base):
@@ -80,7 +89,7 @@ class CompetencySuggestion(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     source = Column(String(50), nullable=False)  # 'mission' | 'cv'
-    context = Column(String(500), nullable=True)  # titre mission ou nom CV
+    context = Column(Text, nullable=True)  # contexte d'extraction LLM (mission ou CV) — TEXT illimité
     status = Column(String(20), nullable=False, default="PENDING_REVIEW", index=True)
     occurrence_count = Column(Integer, nullable=False, default=1)  # fréquence = signal marché
     created_at = Column(DateTime, default=datetime.utcnow)

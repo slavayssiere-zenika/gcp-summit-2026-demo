@@ -47,7 +47,10 @@ if not _raw_secret:
 # ── OTel Tracing — 3 modes : http (Tempo), gcp (Cloud Trace), none ────────────
 def setup_tracing(app: FastAPI) -> TracerProvider:
     resource = Resource(attributes={"service.name": OTEL_SERVICE_NAME})
-    provider = TracerProvider(resource=resource)
+    from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+    sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+    sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
+    provider = TracerProvider(resource=resource, sampler=sampler)
 
     if TRACE_EXPORTER == "http":
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -69,7 +72,7 @@ def setup_tracing(app: FastAPI) -> TracerProvider:
 
 
 # ── Auth (JWT) — validation unique, payload retourné ──────────────────────────
-def verify_jwt(request: Request) -> dict:
+async def verify_jwt(request: Request) -> dict:
     """Validate Bearer JWT. Sets auth_header_var for MCP propagation. Raises 401 if invalid."""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):

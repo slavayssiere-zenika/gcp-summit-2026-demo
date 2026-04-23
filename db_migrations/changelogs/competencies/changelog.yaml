@@ -129,3 +129,7 @@ databaseChangeLog:
       file: "changelogs/competencies/004-add-competency-evaluations.yaml"
   - include:
       file: "changelogs/competencies/005-add-competency-suggestions.yaml"
+  - include:
+      file: "changelogs/competencies/006-add-scoring-metadata.yaml"
+  - include:
+      file: "changelogs/competencies/007-fix-context-column-text.yaml"

@@ -75,6 +75,12 @@ async def test_list_tools_returns_all_expected_tools():
         "list_gcp_services",
         "check_component_health",
         "check_all_components_health",
+        "get_ingestion_pipeline_status",
+        "search_cloud_logs_by_trace",
+        "get_recent_500_errors",
+        "inspect_pubsub_dlq",
+        "get_redis_invalidation_state",
+        "execute_read_only_query",
     ]
     for tool in expected_tools:
         assert tool in tool_names, f"Tool '{tool}' manquant dans list_tools()"

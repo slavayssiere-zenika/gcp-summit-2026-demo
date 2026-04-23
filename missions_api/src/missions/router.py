@@ -48,6 +48,33 @@ def extract_leaf_names(nodes: list[dict], max_leaves: int = 300) -> list[str]:
     _collect_leaves(nodes, acc)
     return acc[:max_leaves]
 
+def _collect_all_known_names(nodes: list[dict]) -> set[str]:
+    """Retourne les noms canoniques ET tous les aliases des compétences feuilles.
+
+    Utilisé pour le filtre pré-suggestion (Axe 4) : évite de soumettre
+    'GCP' comme suggestion alors que 'Google Cloud Platform' existe déjà
+    avec l'alias 'GCP' dans la taxonomie.
+    """
+    known: set[str] = set()
+
+    def _traverse(n_list: list[dict]) -> None:
+        for n in n_list:
+            subs: list = n.get("sub_competencies") or []
+            if not subs:
+                name: str | None = n.get("name")
+                if name:
+                    known.add(name.lower())
+                aliases_str: str = n.get("aliases") or ""
+                for alias in aliases_str.split(","):
+                    a = alias.strip()
+                    if a:
+                        known.add(a.lower())
+            else:
+                _traverse(subs)
+
+    _traverse(nodes)
+    return known
+
 def build_taxonomy_context(nodes: list[dict], max_leaves: int = 300) -> tuple[str, int, int]:
     import json
     parent_categories = extract_mid_parents(nodes)
@@ -175,8 +202,9 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
 
                 if items:
                     taxonomy_context, _, _ = build_taxonomy_context(items)
-                    # Mémoriser les feuilles pour la boucle de rétroaction (Axe 4)
-                    _taxonomy_leaf_names = set(extract_leaf_names(items))
+                    # Mémoriser noms canoniques ET aliases pour le filtre Axe 4
+                    # (évite de soumettre 'GCP' si 'Google Cloud Platform' a déjà l'alias 'GCP')
+                    _taxonomy_leaf_names = _collect_all_known_names(items)
                     gemini_contents.append(taxonomy_context)
             except Exception as e:
                 logger.warning(f"Failed to fetch competencies tree for mission context: {e}")
@@ -196,9 +224,13 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                                 "items": {"type": "string"},
                                 "description": "Liste de domaines ou compétences parentes larges (ex: Frontend, DevOps, Cloud) au lieu de technologies de niche."
                             },
-                            "summary": {"type": "string", "description": "Résume explicitement le contexte de la mission pour les archives, très utile s'il s'agit d'un PDF."}
+                            "summary": {"type": "string", "description": "Résume explicitement le contexte de la mission pour les archives, très utile s'il s'agit d'un PDF."},
+                            "mission_duration_days": {
+                                "type": "integer",
+                                "description": "Durée totale estimée de la mission en jours ouvrés. Extraire depuis des mentions comme '3 mois', '6 semaines', '1 an', '2 sprints'. Convertir : 1 mois = 20 jours, 1 semaine = 5 jours. Retourner 0 si aucune durée n'est mentionnée."
+                            }
                         }, 
-                        "required": ["competencies", "summary"]
+                        "required": ["competencies", "summary", "mission_duration_days"]
                     }
                 )
             )
@@ -233,10 +265,11 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             # pour révision admin via POST /suggestions dans competencies_api.
             COMPETENCIES_API_URL_LOCAL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
             try:
+                # _taxonomy_leaf_names contient déjà les noms en lowercase (via _collect_all_known_names)
                 known_leaves = _taxonomy_leaf_names if '_taxonomy_leaf_names' in dir() else set()
                 new_skills = [
                     c for c in extracted_competencies
-                    if c and c.lower() not in {k.lower() for k in known_leaves}
+                    if c and c.lower() not in known_leaves
                 ]
                 if new_skills:
                     logger.info(f"[Mission→Taxonomy] {len(new_skills)} compétences candidates à suggestion : {new_skills}")
@@ -355,11 +388,14 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             else:
                 # 4. LLM Staffing
                 model_staffing = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+                mission_duration_days = extracted_data.get("mission_duration_days", 0) or 0
+                logger.info(f"[Staffing] Durée de mission extraite : {mission_duration_days} jours")
                 # Expliciter que candidates_data inclut les skill_domains pour aider le LLM
                 staffing_prompt = (
                     f"{base_staffing_prompt}\n"
                     f"Mission: '{title}'. Description: '{final_description}'.\n"
                     f"Required Skills: {extracted_competencies}.\n"
+                    f"mission_duration_days: {mission_duration_days} (0 means not explicitly specified in the document — apply role-based heuristics).\n"
                     f"Candidates (each mapped with their specific 'skills' and broad 'skill_domains'): {json.dumps(candidates_data)}."
                 )
                 res_staffing = await generate_content_with_retry(
@@ -723,5 +759,18 @@ async def get_mission(mission_id: int, db: AsyncSession = Depends(database.get_d
         "extracted_competencies": m.extracted_competencies or [],
         "prefiltered_candidates": m.prefiltered_candidates or [],
         "proposed_team": m.proposed_team or [],
-        "fallback_full_scan": m.fallback_full_scan,
     }
+
+from sqlalchemy import delete
+
+@router.delete("/missions")
+async def delete_all_missions(db: AsyncSession = Depends(database.get_db), token_payload: dict = Depends(verify_jwt)):
+    """Supprime toutes les missions et leur historique (réservé aux admins)."""
+    user_role = token_payload.get("role", "user")
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Accès refusé : rôle admin requis.")
+    
+    await db.execute(delete(MissionStatusHistory))
+    await db.execute(delete(Mission))
+    await db.commit()
+    return {"status": "cleared"}

@@ -14,6 +14,8 @@ from mcp.server import InitializationOptions, NotificationOptions
 from mcp.types import Tool, TextContent
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -34,11 +36,15 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', 
 
 API_BASE_URL = os.getenv("USERS_API_URL", "http://localhost:8000")
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "users-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
@@ -229,6 +235,24 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["user_id"]
             }
+        ),
+        Tool(
+            name="get_users_availability_bulk",
+            description=(
+                "Retourne la disponibilité consolidée d'une liste de consultants (bulk). "
+                "Très utile pour filtrer rapidement une liste de candidats sans faire 50 appels séparés."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Liste d'IDs utilisateurs"
+                    }
+                },
+                "required": ["user_ids"]
+            }
         )
     ]
 
@@ -395,6 +419,40 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     )
                 }
                 return [TextContent(type="text", text=json.dumps(result))]
+
+            elif name == "get_users_availability_bulk":
+                user_ids = arguments.get("user_ids", [])
+                if not user_ids:
+                    return [TextContent(type="text", text="[]")]
+                
+                async def fetch_user_avail(uid):
+                    try:
+                        res = await client.get(f"{API_BASE_URL}/{uid}", timeout=5.0)
+                        if res.status_code != 200: return None
+                        udata = res.json()
+                        unavail = udata.get("unavailability_periods", [])
+                        
+                        active_m = []
+                        missions_api_url = os.getenv("MISSIONS_API_URL", "http://missions_api:8009")
+                        try:
+                            m_res = await client.get(f"{missions_api_url}/missions/user/{uid}/active", timeout=5.0)
+                            if m_res.status_code == 200:
+                                active_m = m_res.json().get("active_missions", [])
+                        except Exception: pass
+                        
+                        return {
+                            "user_id": uid,
+                            "unavailability_periods": unavail,
+                            "active_missions": active_m,
+                            "is_available": len(active_m) == 0 and len(unavail) == 0,
+                            "conflict_detected": len(active_m) > 0
+                        }
+                    except Exception:
+                        return None
+                        
+                results = await asyncio.gather(*(fetch_user_avail(uid) for uid in user_ids))
+                results = [r for r in results if r is not None]
+                return [TextContent(type="text", text=json.dumps(results))]
 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

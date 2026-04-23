@@ -7,6 +7,8 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -25,11 +27,15 @@ propagate.set_global_textmap(TraceContextTextMapPropagator())
 
 API_BASE_URL = os.getenv("CV_API_URL", "http://localhost:8004")
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "cv-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
@@ -205,6 +211,51 @@ async def list_tools() -> list[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="get_cv_status_bulk",
+            description=(
+                "Vérifie la présence d'un CV pour une liste d'utilisateurs. "
+                "Retourne un tableau indiquant pour chaque user_id si le CV existe (has_cv: true/false). "
+                "Idéal pour filtrer les consultants n'ayant pas encore importé leur CV."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Liste d'IDs utilisateurs à vérifier"
+                    }
+                },
+                "required": ["user_ids"]
+            }
+        ),
+        Tool(
+            name="get_reanalyze_status",
+            description=(
+                "Retourne l'état d'avancement de la réanalyse globale des CVs déclenchée par global_reanalyze_cvs. "
+                "Inclut le nombre de CVs traités, en attente et en erreur. "
+                "Appeler périodiquement pour suivre la progression sans bloquer l'agent."
+            ),
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="get_recalculate_tree_status",
+            description=(
+                "Retourne l'état d'avancement du recalcul de l'arbre des compétences déclenché par recalculate_competencies_tree. "
+                "Appeler pour savoir si le recalcul est terminé avant d'interroger la taxonomie mise à jour."
+            ),
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="get_tags_map",
+            description=(
+                "Retourne le mapping complet tag → nombre de consultants pour toutes les agences/tags enregistrés. "
+                "Utiliser pour lister toutes les agences disponibles, ou pour vérifier quel tag correspond "
+                "à quelle entité Zenika avant d'appeler get_users_by_tag."
+            ),
+            inputSchema={"type": "object", "properties": {}}
         )
     ]
 
@@ -241,6 +292,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            
+            elif name == "get_cv_status_bulk":
+                user_ids = arguments.get("user_ids", [])
+                if not user_ids:
+                    return [TextContent(type="text", text="[]")]
+                
+                async def check_cv(uid):
+                    try:
+                        res = await client.get(f"{API_BASE_URL}/{uid}", headers=headers, timeout=5.0)
+                        return {"user_id": uid, "has_cv": res.status_code == 200}
+                    except Exception:
+                        return {"user_id": uid, "has_cv": False}
+                        
+                import asyncio
+                results = await asyncio.gather(*(check_cv(uid) for uid in user_ids))
+                return [TextContent(type="text", text=json.dumps(results))]
+
             elif name == "search_best_candidates":
                 query = arguments.get("query")
                 limit = arguments.get("limit", 5)
@@ -348,5 +416,32 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+            elif name == "get_reanalyze_status":
+                try:
+                    response = await client.get(f"{API_BASE_URL}/reanalyze/status", headers=headers, timeout=10.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))] 
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "get_recalculate_tree_status":
+                try:
+                    response = await client.get(f"{API_BASE_URL}/recalculate_tree/status", headers=headers, timeout=10.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))] 
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "get_tags_map":
+                try:
+                    response = await client.get(f"{API_BASE_URL}/users/tags/map", headers=headers, timeout=10.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except httpx.HTTPStatusError as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))] 
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

@@ -124,6 +124,62 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="search_cloud_logs_by_trace",
+            description="Récupère le flux de logs (Cloud Logging) complet associé à un trace ID spécifique (Tempo / OTel). Idéal pour comprendre le contexte complet d'une erreur distribuée.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "trace_id": {"type": "string", "description": "L'ID de la trace (sans le préfixe project)."},
+                    "limit": {"type": "integer", "description": "Nombre de logs max.", "default": 50}
+                },
+                "required": ["trace_id"]
+            }
+        ),
+        Tool(
+            name="get_recent_500_errors",
+            description="Recherche les erreurs HTTP 5xx récentes sur l'ensemble des services Cloud Run GCP.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Nombre de logs max.", "default": 10},
+                    "hours_lookback": {"type": "integer", "description": "Nombre d'heures d'historique.", "default": 1}
+                }
+            }
+        ),
+        Tool(
+            name="inspect_pubsub_dlq",
+            description="Examine les messages dans la file d'attente (Dead Letter Queue) Pub/Sub sans les acquitter (lecture seule). Permet d'investiguer les échecs d'ingestion asynchrones.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "subscription_id": {"type": "string", "description": "L'ID de la souscription DLQ.", "default": "cv-ingestion-dlq-sub"},
+                    "limit": {"type": "integer", "description": "Nombre max de messages à lire.", "default": 10}
+                }
+            }
+        ),
+        Tool(
+            name="get_redis_invalidation_state",
+            description="Vérifie l'état des clés dans Redis (cache sémantique, sessions). Utile pour déboguer des problèmes d'invalidation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Pattern de recherche de clés (ex: 'items:list:*', 'session:*').", "default": "*"}
+                }
+            }
+        ),
+        Tool(
+            name="execute_read_only_query",
+            description="Exécute une requête SQL SELECT (lecture seule) sur la base de données PostgreSQL/AlloyDB pour vérifier la consistance des données.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "La requête SQL SELECT."},
+                    "db_name": {"type": "string", "description": "Nom de la base.", "default": "zenika"}
+                },
+                "required": ["query"]
+            }
         )
     ]
 
@@ -158,6 +214,35 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "get_ingestion_pipeline_status":
             data = await get_ingestion_pipeline_status_internal()
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "search_cloud_logs_by_trace":
+            trace_id = arguments.get("trace_id")
+            limit = arguments.get("limit", 50)
+            data = await search_cloud_logs_by_trace_internal(trace_id, limit)
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "get_recent_500_errors":
+            limit = arguments.get("limit", 10)
+            hours = arguments.get("hours_lookback", 1)
+            data = await get_recent_500_errors_internal(limit, hours)
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "inspect_pubsub_dlq":
+            sub_id = arguments.get("subscription_id", "cv-ingestion-dlq-sub")
+            limit = arguments.get("limit", 10)
+            data = await inspect_pubsub_dlq_internal(sub_id, limit)
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "get_redis_invalidation_state":
+            pattern = arguments.get("pattern", "*")
+            data = await get_redis_invalidation_state_internal(pattern)
+            return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "execute_read_only_query":
+            query = arguments.get("query")
+            db_name = arguments.get("db_name", "zenika")
+            data = await execute_read_only_query_internal(query, db_name)
             return [TextContent(type="text", text=json.dumps(data))]
 
         else:
@@ -249,30 +334,51 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
                     service_name = labels["g.co/r/cloud_run_revision/service_name"]
                 elif "service.name" in labels:
                     service_name = labels["service.name"]
-                elif "/http/host" in labels:
-                    h = labels["/http/host"]
-                    import re
-                    if re.match(r'^\d{1,3}(\.\d{1,3}){3}(:\d+)?$', h):
-                        service_name = h
-                    else:
-                        service_name = h.split('.')[0]
-                elif "/http/url" in labels:
-                    from urllib.parse import urlparse
-                    nl = urlparse(labels["/http/url"]).netloc
-                    import re
-                    if re.match(r'^\d{1,3}(\.\d{1,3}){3}(:\d+)?$', nl):
-                        service_name = nl
-                    else:
-                        service_name = nl.split('.')[0]
+                elif "/http/host" in labels or "/http/url" in labels or "http.url" in labels:
+                    h = labels.get("/http/host", "")
+                    url = labels.get("/http/url") or labels.get("http.url", "")
+                    path = labels.get("http.target", "")
+                    
+                    if not path and url:
+                        from urllib.parse import urlparse
+                        path = urlparse(url).path
+
+                    if not h and url:
+                        from urllib.parse import urlparse
+                        h = urlparse(url).netloc
                         
+                    import re
+                    if "api.internal.zenika" in h or h == "api":
+                        if path.startswith("/api/users/"): service_name = "users-api-dev"
+                        elif path.startswith("/api/items/"): service_name = "items-api-dev"
+                        elif path.startswith("/api/prompts/"): service_name = "prompts-api-dev"
+                        elif path.startswith("/api/market/"): service_name = "market-mcp-dev"
+                        elif path.startswith("/monitoring-mcp/") or path.startswith("/api/monitoring/"): service_name = "monitoring-mcp-dev"
+                        elif path.startswith("/api/cv/"): service_name = "cv-api-dev"
+                        elif path.startswith("/api/missions/"): service_name = "missions-api-dev"
+                        elif path.startswith("/api/competencies/"): service_name = "competencies-api-dev"
+                        elif path.startswith("/api/drive/"): service_name = "drive-api-dev"
+                        elif path.startswith("/api/agent-hr/"): service_name = "agent-hr-api-dev"
+                        elif path.startswith("/api/agent-ops/"): service_name = "agent-ops-api-dev"
+                        elif path.startswith("/api/agent-missions/"): service_name = "agent-missions-api-dev"
+                        elif path.startswith("/auth/"): service_name = "users-api-dev"
+                        elif path.startswith("/api/"): service_name = "agent-router-api-dev"
+                        else: service_name = "lb_private"
+                    elif h:
+                        if re.match(r'^\d{1,3}(\.\d{1,3}){3}(:\d+)?$', h):
+                            service_name = h
+                        else:
+                            service_name = h.split('.')[0]
+
                 if node_type == "unknown" and service_name != "unknown":
                     if "169." in service_name or service_name == "169":
                         service_name = "unknown" # Ignorer metadata
                     elif "127." in service_name or service_name == "127" or "localhost" in service_name:
                         service_name = "unknown" # Ignorer localhost
-                    elif service_name == "api" or "internal" in service_name:
+                    elif service_name == "api" or "internal" in service_name or service_name == "lb_private":
                         node_type = "lb_private"
                         node_label = "LB Privé (api.internal.zenika)"
+                        service_name = "lb_private"
                     elif service_name == "dev" or ".fr" in service_name:
                         node_type = "lb_public"
                         node_label = "LB Public"
@@ -400,6 +506,186 @@ async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lo
     except Exception as e:
         logger.exception(f"Error fetching logs for {service_name}: {e}")
         return {"error": str(e), "service": service_name}
+
+async def search_cloud_logs_by_trace_internal(trace_id: str, limit: int = 50) -> list:
+    """Fetch logs associated with a specific Cloud Trace ID."""
+    try:
+        client_logging = logging_cloud.Client(project=PROJECT_ID)
+        trace_path = f"projects/{PROJECT_ID}/traces/{trace_id}" if "projects/" not in trace_id else trace_id
+        
+        filter_str = f'trace="{trace_path}"'
+        entries = client_logging.list_entries(filter_=filter_str, order_by=logging_cloud.ASCENDING, page_size=limit)
+        
+        logs = []
+        for entry in entries:
+            log_content = entry.text_payload
+            if hasattr(entry, 'json_payload') and entry.json_payload:
+                if isinstance(entry.json_payload, dict):
+                    log_content = entry.json_payload.get("message", entry.json_payload)
+                else:
+                    log_content = entry.json_payload
+
+            logs.append({
+                "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+                "severity": entry.severity,
+                "resource_type": entry.resource.type if hasattr(entry, 'resource') else None,
+                "message": log_content
+            })
+            if len(logs) >= limit:
+                break
+        return logs
+    except Exception as e:
+        logger.exception(f"Error fetching logs for trace {trace_id}: {e}")
+        return {"error": str(e), "trace_id": trace_id}
+
+async def get_recent_500_errors_internal(limit: int = 10, hours_lookback: int = 1) -> list:
+    """Fetch recent 500 errors across all Cloud Run services."""
+    try:
+        client_logging = logging_cloud.Client(project=PROJECT_ID)
+        from datetime import datetime, timedelta, timezone
+        start_time = (datetime.now(timezone.utc) - timedelta(hours=hours_lookback)).isoformat()
+        
+        filter_str = (
+            f'resource.type="cloud_run_revision" '
+            f'AND httpRequest.status >= 500 '
+            f'AND timestamp >= "{start_time}"'
+        )
+        entries = client_logging.list_entries(filter_=filter_str, order_by=logging_cloud.DESCENDING, page_size=limit)
+        
+        logs = []
+        for entry in entries:
+            log_content = entry.text_payload
+            if hasattr(entry, 'json_payload') and entry.json_payload:
+                if isinstance(entry.json_payload, dict):
+                    log_content = entry.json_payload.get("message", entry.json_payload)
+                else:
+                    log_content = entry.json_payload
+            
+            service_name = "unknown"
+            if hasattr(entry, 'resource') and hasattr(entry.resource, 'labels'):
+                service_name = entry.resource.labels.get("service_name", "unknown")
+
+            trace_id = entry.trace.split('/')[-1] if entry.trace else None
+            
+            req_info = {}
+            if hasattr(entry, 'http_request') and entry.http_request:
+                hr = entry.http_request
+                if isinstance(hr, dict):
+                    req_info = {
+                        "method": hr.get('requestMethod', ''),
+                        "url": hr.get('requestUrl', ''),
+                        "status": hr.get('status', 0),
+                    }
+                else:
+                    req_info = {
+                        "method": getattr(hr, 'requestMethod', ''),
+                        "url": getattr(hr, 'requestUrl', ''),
+                        "status": getattr(hr, 'status', 0),
+                    }
+
+            logs.append({
+                "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+                "service": service_name,
+                "trace_id": trace_id,
+                "request": req_info,
+                "message": log_content
+            })
+            if len(logs) >= limit:
+                break
+        return logs
+    except Exception as e:
+        logger.exception(f"Error fetching 500 errors: {e}")
+        return {"error": str(e)}
+
+async def inspect_pubsub_dlq_internal(subscription_id: str = "cv-ingestion-dlq-sub", limit: int = 10) -> list:
+    """Pull messages from a Pub/Sub Dead Letter Queue."""
+    try:
+        from google.cloud import pubsub_v1
+        subscriber = pubsub_v1.SubscriberClient()
+        subscription_path = subscriber.subscription_path(PROJECT_ID, subscription_id)
+        
+        response = subscriber.pull(
+            request={"subscription": subscription_path, "max_messages": limit},
+            timeout=10.0
+        )
+        
+        messages = []
+        for received_message in response.received_messages:
+            msg = received_message.message
+            messages.append({
+                "message_id": msg.message_id,
+                "publish_time": msg.publish_time.isoformat() if msg.publish_time else None,
+                "attributes": dict(msg.attributes),
+                "data": msg.data.decode("utf-8") if msg.data else None
+            })
+            
+        return {"status": "ok", "messages": messages, "count": len(messages)}
+    except Exception as e:
+        logger.exception(f"Error inspecting DLQ {subscription_id}: {e}")
+        return {"error": str(e), "subscription": subscription_id}
+
+async def get_redis_invalidation_state_internal(pattern: str = "*") -> dict:
+    """Scan Redis keys to check caching/invalidation state."""
+    try:
+        import redis
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        r = redis.from_url(redis_url, socket_timeout=2.0)
+        
+        keys = []
+        cursor = '0'
+        while cursor != 0:
+            cursor, data = r.scan(cursor=cursor, match=pattern, count=100)
+            keys.extend([k.decode('utf-8') for k in data])
+            if len(keys) >= 100:
+                break
+                
+        sample = {}
+        for k in keys[:20]:
+            sample[k] = r.ttl(k)
+            
+        return {
+            "status": "ok", 
+            "matched_keys_count": len(keys),
+            "keys_sample": sample,
+            "redis_url": redis_url
+        }
+    except Exception as e:
+        logger.exception(f"Error checking Redis state: {e}")
+        return {"error": str(e)}
+
+async def execute_read_only_query_internal(query: str, db_name: str = "zenika") -> dict:
+    """Execute a read-only query on AlloyDB / PostgreSQL."""
+    query_lower = query.lower().strip()
+    forbidden_keywords = ["insert", "update", "delete", "drop", "alter", "create", "truncate", "grant", "revoke"]
+    if any(keyword in query_lower for keyword in forbidden_keywords):
+        return {"error": "Only read-only SELECT queries are allowed."}
+        
+    try:
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+        
+        db_url = os.getenv("DATABASE_URL", f"postgresql+asyncpg://postgres:postgres@alloydb:5432/{db_name}")
+        
+        engine = create_async_engine(db_url)
+        async with engine.connect() as conn:
+            result = await conn.execute(text(query))
+            rows = result.mappings().all()
+            
+            formatted_rows = []
+            for row in rows:
+                formatted_row = {}
+                for k, v in row.items():
+                    if isinstance(v, datetime):
+                        formatted_row[k] = str(v)
+                    else:
+                        formatted_row[k] = str(v) if v is not None else None
+                formatted_rows.append(formatted_row)
+                
+        await engine.dispose()
+        return {"status": "ok", "rows": formatted_rows, "count": len(formatted_rows)}
+    except Exception as e:
+        logger.exception(f"Error executing DB query: {e}")
+        return {"error": str(e)}
 
 async def list_gcp_services_internal() -> list:
     try:

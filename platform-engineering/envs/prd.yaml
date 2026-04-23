@@ -65,3 +65,4 @@ extra_domains:
     dns_name:                "gen-skillz.znk.io."
     parent_zone_name:        "znk-io"
     parent_zone_project_id:  "slavayssiere-sandbox-462015"
+trace_sampling_rate: 0.1

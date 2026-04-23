@@ -17,7 +17,12 @@ class ExtractedMission(BaseModel):
     title: str
     company: Optional[str] = None
     description: Optional[str] = None
+    start_date: Optional[str] = None   # Format: "YYYY-MM" or "YYYY"
+    end_date: Optional[str] = None     # Format: "YYYY-MM", "YYYY", or "present"
+    duration: Optional[str] = None     # Explicit duration string from CV (e.g. "2 ans", "18 mois")
+    mission_type: Optional[str] = "build"  # audit | conseil | accompagnement | formation | expertise | build
     competencies: List[str]
+    is_sensitive: Optional[bool] = False
 
 class ExtractedProfile(BaseModel):
     is_cv: bool

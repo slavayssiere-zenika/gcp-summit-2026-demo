@@ -49,6 +49,15 @@ Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 8. **Standard Python Imports** : Les imports Python **DOIVENT** être placés en haut du fichier (conformément à la PEP 8). Évitez les imports locaux dans les fonctions, sauf cas exceptionnel de dépendance circulaire.
 9. **Interpréteur Python** : Utilisez systématiquement la commande `python3` au lieu de `python` pour toute exécution de script ou commande dans le terminal de l'utilisateur.
 10. **Failfast & Zéro Erreur Silencieuse** : Il est **STRICTEMENT INTERDIT** d'ignorer silencieusement des erreurs (ex: `except Exception: pass`, ou un simple logger non accompagné d'une levée d'exception). Les services doivent adopter une approche "failfast". Toute exception doit soit être interrompue formelquement (`raise`) pour que le système centralisé gère l'erreur, soit être retournée explicitement sous la forme `{"success": false, "error": ...}` (ex: Tools MCP). Conserver des erreurs silencieuses corrompt la garantie d'intégrité de la plateforme.
+11. **🚫 INTERDICTION ABSOLUE — Build Docker & Déploiement GCP** : L'agent Antigravity a **formellement et absolument interdit** d'exécuter toute commande de build ou de déploiement vers GCP. Son périmètre d'action se limite **exclusivement à la modification des fichiers source**. Les commandes suivantes sont **STRICTEMENT PROSCRITES** dans toute circonstance, même si le user le demande explicitement :
+    - `docker build`, `docker push`, `docker-compose up --build`
+    - `gcloud run deploy`, `gcloud builds submit`, `gcloud artifacts docker push`
+    - `terraform apply`, `terraform destroy`
+    - Tout script wrapper (`deploy.sh`, `deploys.sh`, `manage_env.py apply`, etc.) invoquant l'une des commandes ci-dessus
+    
+    **Comportement attendu** : L'agent modifie les fichiers, puis s'arrête et informe le user que le build/déploiement lui incombe. Il peut suggérer la commande à exécuter, mais **ne doit jamais la lancer**. Violer cette règle compromet la stabilité de la plateforme de production.
+
+    > **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu t'apprêtes à appeler un outil `run_command` ou `execute_docker` / `execute_gcloud` / `execute_terraform` avec un argument de type `build`, `push`, `deploy`, `apply` ou `destroy`, tu **DOIS immédiatement t'arrêter** et retourner le message : *"Je ne peux pas exécuter cette commande. Mon périmètre se limite à la modification des fichiers source. Veuillez lancer le build/déploiement vous-même."*
 
 ---
 

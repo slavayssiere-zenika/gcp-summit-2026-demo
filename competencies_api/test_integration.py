@@ -156,10 +156,11 @@ def test_assign_and_list_user_competencies(client):
         assign_resp = client.post(f"/user/1/assign/{comp_id}")
         assert assign_resp.status_code == 201
         
-        # Second assignment yields "already assigned" without crashing
+        # Second assignment is idempotent (ON CONFLICT DO NOTHING) — same 201, no error
         assign_resp2 = client.post(f"/user/1/assign/{comp_id}")
         assert assign_resp2.status_code == 201
-        assert "already assigned" in assign_resp2.json()["message"]
+        # The message now always reflects the assignment action (idempotent upsert)
+        assert "assigned" in assign_resp2.json()["message"]
 
     # List user competencies
     list_resp = client.get("/user/1")

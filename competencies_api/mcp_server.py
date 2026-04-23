@@ -13,6 +13,8 @@ from mcp.server import InitializationOptions
 from mcp.types import Tool, TextContent
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -33,11 +35,15 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', 
 
 API_BASE_URL = os.getenv("COMPETENCIES_API_URL", "http://localhost:8003")
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "competencies-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
@@ -383,6 +389,39 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["suggestion_id", "action"]
             }
+        ),
+        Tool(
+            name="batch_evaluate_competencies_search",
+            description=(
+                "Récupère les évaluations de compétences pour un ensemble de consultants correspondant "
+                "à une requête de recherche (completé par competency_ids optionnels). "
+                "Retourne un tableau croisé [consultant x compétence] avec scores IA et auto-évalués. "
+                "Utiliser pour comparer les niveaux de plusieurs candidats simultanément lors d'un staffing."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_ids": {"type": "array", "items": {"type": "integer"}, "description": "IDs des consultants à évaluer"},
+                    "competency_ids": {"type": "array", "items": {"type": "integer"}, "description": "Optionnel — IDs des compétences à inclure (toutes si absent)"}
+                },
+                "required": ["user_ids"]
+            }
+        ),
+        Tool(
+            name="batch_evaluate_competencies_users",
+            description=(
+                "Récupère les évaluations de compétences pour tous les utilisateurs associés "
+                "aux compétences données. Retourne les scores IA et auto-évalués par paire (user, compétence). "
+                "Utiliser pour établir un rapport compétence-centric (ex: 'qui maîtrise AWS ?')."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "competency_ids": {"type": "array", "items": {"type": "integer"}, "description": "IDs des compétences cibles"},
+                    "user_ids": {"type": "array", "items": {"type": "integer"}, "description": "Optionnel — Filtre sur un pool de consultants"}
+                },
+                "required": ["competency_ids"]
+            }
         )
     ]
 
@@ -559,6 +598,16 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     f"{API_BASE_URL}/suggestions/{suggestion_id}/review",
                     json=arguments
                 )
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "batch_evaluate_competencies_search":
+                response = await client.post(f"{API_BASE_URL}/evaluations/batch/search", json=arguments, timeout=30.0)
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "batch_evaluate_competencies_users":
+                response = await client.post(f"{API_BASE_URL}/evaluations/batch/users", json=arguments, timeout=30.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

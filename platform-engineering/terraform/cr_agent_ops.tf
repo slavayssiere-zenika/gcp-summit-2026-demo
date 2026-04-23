@@ -133,6 +133,10 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = "gcp"
       }
       env {
+        name  = "TRACE_SAMPLING_RATE"
+        value = var.trace_sampling_rate
+      }
+      env {
         name  = "APP_VERSION"
         value = var.agent_ops_api_version
       }

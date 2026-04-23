@@ -20,7 +20,10 @@ from agent_commons.session import RedisSessionService
 from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.runner import run_agent_and_collect
-from agent_commons.guardrails import check_hallucination_guardrail
+from agent_commons.guardrails import (
+    check_hallucination_guardrail,
+    check_id_invention_guardrail,
+)
 from agent_commons.finops import log_tokens_to_bq, estimate_cost_usd
 
 app_logger = logging.getLogger(__name__)
@@ -172,8 +175,11 @@ async def run_agent_query(
         auth_header=auth_header_var.get(),
     )
 
-    # --- Guardrail anti-hallucination ---
+    # --- Guardrail anti-hallucination (G1) ---
     response_text, steps = check_hallucination_guardrail(response_text, steps, "[MISSIONS]")
+
+    # --- Guardrail 3 : invention d'ID ---
+    steps = check_id_invention_guardrail(steps, "[MISSIONS]")
 
     return {
         "response": response_text,

@@ -1,86 +1,166 @@
-<template>
-  <div class="toast-container">
-    <transition-group name="toast">
-      <div v-for="toast in uxStore.toasts" :key="toast.id" :class="['toast', toast.type]">
-        <CheckCircle v-if="toast.type === 'success'" size="18" />
-        <AlertCircle v-else-if="toast.type === 'error'" size="18" />
-        <AlertTriangle v-else-if="toast.type === 'warning'" size="18" />
-        <Info v-else size="18" />
-        <span>{{ toast.message }}</span>
-        <button @click="uxStore.removeToast(toast.id)" class="close-btn"><X size="14" /></button>
-      </div>
-    </transition-group>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-vue-next'
+import { computed } from 'vue'
 import { useUxStore } from '@/stores/uxStore'
+import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-vue-next'
 
 const uxStore = useUxStore()
+
+const toasts = computed(() => uxStore.toasts)
+
+const iconMap = {
+  success: CheckCircle,
+  error: XCircle,
+  info: Info,
+  warning: AlertTriangle,
+}
 </script>
+
+<template>
+  <Teleport to="body">
+    <div class="toast-container" aria-live="polite" aria-atomic="false">
+      <TransitionGroup name="toast" tag="div" class="toast-wrapper">
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          :class="['toast', `toast--${toast.type}`]"
+          role="alert"
+          :aria-label="`Notification ${toast.type}: ${toast.message}`"
+        >
+          <component :is="iconMap[toast.type]" class="toast-icon" :size="18" />
+          <span class="toast-message">{{ toast.message }}</span>
+          <button
+            class="toast-close"
+            :aria-label="'Fermer la notification'"
+            @click="uxStore.removeToast(toast.id)"
+          >
+            <X :size="14" />
+          </button>
+        </div>
+      </TransitionGroup>
+    </div>
+  </Teleport>
+</template>
 
 <style scoped>
 .toast-container {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
+  bottom: 1.5rem;
+  right: 1.5rem;
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
   pointer-events: none;
+}
+
+.toast-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .toast {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-glass);
-  background: white;
-  color: var(--color-text-primary);
-  font-size: 0.85rem;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 0.85rem 1.1rem;
+  border-radius: 12px;
+  min-width: 280px;
+  max-width: 420px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  pointer-events: all;
+  font-size: 0.875rem;
   font-weight: 500;
-  pointer-events: auto;
-  min-width: 250px;
+  line-height: 1.4;
+  border: 1px solid transparent;
 }
 
-.toast.success { border-left: 4px solid #10b981; }
-.toast.success svg { color: #10b981; }
+.toast--success {
+  background: rgba(236, 253, 245, 0.95);
+  color: #065f46;
+  border-color: rgba(16, 185, 129, 0.25);
+}
 
-.toast.error { border-left: 4px solid #ef4444; }
-.toast.error svg { color: #ef4444; }
+.toast--error {
+  background: rgba(255, 241, 242, 0.97);
+  color: #9b1c1c;
+  border-color: rgba(227, 25, 55, 0.25);
+}
 
-.toast.info { border-left: 4px solid #3b82f6; }
-.toast.info svg { color: #3b82f6; }
+.toast--info {
+  background: rgba(239, 246, 255, 0.95);
+  color: #1e40af;
+  border-color: rgba(59, 130, 246, 0.25);
+}
 
-.toast.warning { border-left: 4px solid #f59e0b; background: #fffbeb; }
-.toast.warning svg { color: #d97706; }
+.toast--warning {
+  background: rgba(255, 251, 235, 0.97);
+  color: #92400e;
+  border-color: rgba(245, 158, 11, 0.25);
+}
 
-.close-btn {
+.toast-icon {
+  flex-shrink: 0;
+}
+
+.toast--success .toast-icon { color: #10b981; }
+.toast--error   .toast-icon { color: #E31937; }
+.toast--info    .toast-icon { color: #3b82f6; }
+.toast--warning .toast-icon { color: #f59e0b; }
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-close {
+  flex-shrink: 0;
   background: transparent;
   border: none;
   cursor: pointer;
-  margin-left: auto;
-  color: var(--color-text-secondary);
+  padding: 2px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s;
+  color: inherit;
 }
 
-.close-btn:hover {
-  color: var(--color-text-primary);
+.toast-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.07);
 }
 
-.toast-enter-active,
+/* TransitionGroup animations */
+.toast-enter-active {
+  animation: toast-slide-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 .toast-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: toast-slide-out 0.22s ease-in forwards;
 }
-.toast-enter-from {
-  opacity: 0;
-  transform: translateX(30px);
+
+.toast-move {
+  transition: transform 0.25s ease;
 }
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(60px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toast-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(60px) scale(0.9);
+  }
 }
 </style>

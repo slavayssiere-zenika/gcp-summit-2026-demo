@@ -34,8 +34,9 @@ CACHE_INVALIDATION_MAP = {
 
 async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
     base_url = api_url.rstrip("/")
-    # Auth is handled at the gateway level (e.g. /api/login)
-    auth_url = f"{base_url.replace('/prompts', '')}/login"
+    # Auth is handled at the API gateway level — route is /api/login (not /auth/login directly)
+    base_domain = base_url.replace('/api/prompts', '')
+    auth_url = f"{base_domain}/api/login"
     
     logger.info(f"{YELLOW}[*] Authenticating as {admin_email}...{RESET}")
     

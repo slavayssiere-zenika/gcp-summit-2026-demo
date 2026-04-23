@@ -52,6 +52,7 @@ Ce micro-service se base sur :
 - **GET** `/spec` : Get Spec
 - **POST** `/missions` : Create And Analyze Mission
 - **GET** `/missions` : List Missions
+- **DELETE** `/missions` : Delete All Missions
 - **POST** `/missions/{mission_id}/reanalyze` : Reanalyze Mission
 - **GET** `/missions/task/{task_id}` : Get Mission Task Status
 - **POST** `/cache/invalidate` : Force Invalidate
@@ -59,7 +60,7 @@ Ce micro-service se base sur :
 - **GET** `/missions/{mission_id}/status/history` : Get Mission Status History
 - **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **GET** `/missions/{mission_id}` : Get Mission
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
