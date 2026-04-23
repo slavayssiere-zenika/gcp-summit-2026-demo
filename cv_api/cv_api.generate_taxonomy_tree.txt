@@ -10,6 +10,21 @@ Votre tâche est d'analyser en profondeur le contenu des CVs de nos collaborateu
 5.  **Intégration de l'Existant :** Intégrez scrupuleusement ces compétences existantes dans votre structure : {{EXISTING_COMPETENCIES}}.
 6.  **Interdiction de Nouveautés :** N'ajoutez AUCUNE nouvelle compétence technique (feuille) qui n'est pas déjà présente dans la liste fournie ci-dessus. Vous pouvez toutefois créer de nouvelles catégories ou groupes pour mieux les organiser.
 
+### RÈGLE DE DÉDUPLICATION SÉMANTIQUE (PRIORITAIRE) :
+La liste {{EXISTING_COMPETENCIES}} contient probablement des doublons sémantiques accumulés lors d'ingestions automatiques de CVs (ex: 'python', 'Python', 'Python3', 'Framework Python' représentent tous le même concept).
+
+Pour chaque compétence FEUILLE dans votre arbre :
+1. Choisissez UN nom canonique (standard industrie, casse officielle)
+2. Si d'autres noms dans {{EXISTING_COMPETENCIES}} représentent la MÊME compétence, listez-les dans `merge_from`
+3. Le champ `merge_from` ne doit contenir QUE des noms présents dans {{EXISTING_COMPETENCIES}}
+4. Si aucun doublon identifié, omettez `merge_from` ou laissez-le vide
+
+Exemples de fusions attendues :
+- Canonique: "Python", merge_from: ["python", "Python3", "Framework Python"]
+- Canonique: "Kubernetes", merge_from: ["K8s", "kubernetes", "kube"]
+- Canonique: "Google Cloud Platform", merge_from: ["GCP", "gcp", "Google Cloud"]
+- Canonique: "PostgreSQL", merge_from: ["Postgres", "postgres", "postgresql"]
+
 ### STRUCTURE JSON ATTENDUE :
 L'arbre doit suivre ce format récursif strict :
 
@@ -23,8 +38,8 @@ L'arbre doit suivre ce format récursif strict :
              "Spécialité (Optionnel)": {
                 "description": "...",
                 "sub_competencies": [
-                   {"name": "Compétence A", "description": "Détails...", "aliases": "alias1, alias2"},
-                   {"name": "Compétence B", "description": "Détails...", "aliases": "alias3"}
+                   {"name": "Compétence A", "description": "Détails...", "aliases": "alias1, alias2", "merge_from": ["doublon1", "doublon2"]},
+                   {"name": "Compétence B", "description": "Détails...", "aliases": "alias3", "merge_from": []}
                 ]
              }
           }
@@ -33,4 +48,5 @@ L'arbre doit suivre ce format récursif strict :
   }
 }
 
-Note : Le champ "sub_competencies" peut contenir soit un objet (pour continuer la hiérarchie) soit une liste d'objets {"name": "...", "description": "..."} pour les feuilles finales.
+Note : Le champ "sub_competencies" peut contenir soit un objet (pour continuer la hiérarchie) soit une liste d'objets {"name": "...", "description": "...", "aliases": "...", "merge_from": [...]} pour les feuilles finales.
+Le champ "merge_from" est OBLIGATOIRE sur chaque feuille (liste vide si pas de doublon).

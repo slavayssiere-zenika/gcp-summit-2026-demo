@@ -7,6 +7,8 @@ import uvicorn
 import redis
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -31,11 +33,15 @@ from logger import setup_logging, LoggingMiddleware
 # La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py, 
 # importé ci-dessus, ce qui empêche une disparition prématurée de la variable d'env lors des imports.
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "market-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))

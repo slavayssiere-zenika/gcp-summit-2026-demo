@@ -6,7 +6,7 @@
         <Award :size="22" class="eval-icon" />
         <h3>Évaluation des compétences</h3>
       </div>
-      <div class="eval-actions">
+      <div class="eval-actions" v-if="!readonly">
         <button
           class="btn-primary"
           :disabled="isTriggering"

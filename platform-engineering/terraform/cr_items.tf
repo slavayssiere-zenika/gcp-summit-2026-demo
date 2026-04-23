@@ -85,6 +85,10 @@ resource "google_cloud_run_v2_service" "items_api" {
         value = "gcp"
       }
       env {
+        name  = "TRACE_SAMPLING_RATE"
+        value = var.trace_sampling_rate
+      }
+      env {
         name  = "APP_VERSION"
         value = var.items_api_version
       }
@@ -149,6 +153,10 @@ resource "google_cloud_run_v2_service" "items_api" {
       env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
+      }
+      env {
+        name  = "TRACE_SAMPLING_RATE"
+        value = var.trace_sampling_rate
       }
       env {
         name  = "PORT"

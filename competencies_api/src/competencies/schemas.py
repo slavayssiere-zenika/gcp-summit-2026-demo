@@ -53,8 +53,24 @@ class PaginationResponse(BaseModel):
     skip: int
     limit: int
 
+class MergeInstruction(BaseModel):
+    """Instruction de fusion d'un doublon sémantique vers un canonique.
+
+    Générée par Gemini Pro lors du recalcul de l'arbre de compétences.
+    Le `canonical` doit exister dans la taxonomie après l'upsert du bulk_tree.
+    """
+    canonical: str          # Nom canonique (ex: "Python")
+    merge_from: List[str]   # Noms des doublons à absorber (ex: ["python", "Python3"])
+
+
 class TreeImportRequest(BaseModel):
     tree: Union[Dict[str, Any], List[Any]]
+    merges: Optional[List[MergeInstruction]] = []
+    """Liste des fusions sémantiques à exécuter après l'upsert de l'arbre.
+    Chaque fusion re-assigne user_competency + evaluations vers le canonique
+    puis supprime les doublons, de façon atomique dans la même transaction.
+    """
+
 
 class StatsRequest(BaseModel):
     user_ids: Optional[List[int]] = None
@@ -92,6 +108,17 @@ class UserScoreRequest(BaseModel):
     """Saisie manuelle de la note auto-évaluée par le consultant."""
     score: float = Field(..., ge=0.0, le=5.0, description="Note de 0 à 5 (multiples de 0.5 recommandés)")
     comment: Optional[str] = Field(None, max_length=500)
+
+class BatchEvaluationRequest(BaseModel):
+    user_id: int
+    competency_ids: List[int]
+
+class BatchEvaluationResponse(BaseModel):
+    evaluations: Dict[int, CompetencyEvaluationResponse]
+
+class BatchUsersEvaluationRequest(BaseModel):
+    competency_id: int
+    user_ids: List[int]
 
 
 class AiScoreAllResponse(BaseModel):

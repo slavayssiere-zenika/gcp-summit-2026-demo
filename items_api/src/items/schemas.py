@@ -69,3 +69,6 @@ class ItemResponse(ItemBase):
 class ItemStatsResponse(BaseModel):
     total: int
     by_user: dict[int, int]
+
+class BulkItemCreate(BaseModel):
+    items: List[ItemCreate]

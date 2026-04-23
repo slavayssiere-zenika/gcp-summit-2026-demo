@@ -7,7 +7,8 @@ Public modules:
   - metadata        : extract_metadata_from_session
   - mcp_proxy       : create_mcp_tool_proxy, get_cached_tools
   - runner          : run_agent_and_collect
-  - guardrails      : check_hallucination_guardrail, check_empty_candidate_guardrail
+  - guardrails      : check_hallucination_guardrail, check_empty_candidate_guardrail,
+                      check_id_invention_guardrail, check_name_grounding_guardrail
   - finops          : log_tokens_to_bq
   - schemas         : A2ARequest, A2AResponse, AgentStep, TokenUsage  [ADR12-4]
   - taxonomy_utils  : extract_mid_parents, extract_leaf_names, build_taxonomy_context

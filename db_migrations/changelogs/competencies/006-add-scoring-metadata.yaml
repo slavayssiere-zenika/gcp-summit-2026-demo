@@ -1,0 +1,25 @@
+databaseChangeLog:
+  - changeSet:
+      id: "006-add-scoring-metadata"
+      author: "antigravity"
+      comment: "Scoring v2 — Ajout des colonnes scoring_version et weighted_context pour tracer l'algorithme de pondération utilisé (récence, durée, type de mission)"
+      changes:
+        - addColumn:
+            tableName: "competency_evaluations"
+            columns:
+              - column:
+                  name: "scoring_version"
+                  type: "varchar(10)"
+                  defaultValue: "v1"
+                  remarks: "Version de l'algorithme de scoring : v1=simple (LLM pur), v2=pondéré (récence+durée+type)"
+              - column:
+                  name: "weighted_context"
+                  type: "text"
+                  remarks: "JSON des méta-données de pondération utilisées lors du dernier scoring (audit trail)"
+      rollback:
+        - dropColumn:
+            tableName: "competency_evaluations"
+            columnName: "scoring_version"
+        - dropColumn:
+            tableName: "competency_evaluations"
+            columnName: "weighted_context"

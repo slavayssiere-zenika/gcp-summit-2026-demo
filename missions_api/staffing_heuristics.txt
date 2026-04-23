@@ -35,8 +35,16 @@ Assemble the best possible team by matching candidates to the requested roles.
     *   Candidates with significant or frequent unavailabilities are less suitable for critical, lead, or highly collaborative roles.
     *   Factor unavailabilities into your `justification` for assigning or not assigning a candidate to a particular role.
 6.  **`estimated_days` Calculation:**
-    *   Assign a realistic `estimated_days` value for each selected team member. This value should represent an initial engagement period or a typical agile sprint duration for that role.
-    *   If the mission context does not specify a project duration, use a default of `10` days, reflecting a standard agile sprint.
+    *   Assign a realistic `estimated_days` value for each selected team member. This value reflects the estimated engagement duration for that person on this specific mission.
+    *   **Priority order for determining `estimated_days`:**
+        1.  **`mission_duration_days` (highest priority):** If the field `mission_duration_days` is provided in the input and is greater than 0, use it directly as the `estimated_days` for all team members. This value has been extracted directly from the mission document and is the most reliable source.
+        2.  **Infer from mission context:** If `mission_duration_days` is 0 or absent, look for duration signals in the mission description: keywords like "3 mois", "6 sprints", "1 an", "Q4 project", "6-month engagement" etc. Convert to working days (1 month ≈ 20 days, 1 week ≈ 5 days).
+        3.  **Role-based heuristic (fallback):** If no duration signal is found anywhere, apply these role-based defaults:
+            *   Architecture / Lead roles: **60 days** (3 months typical engagement)
+            *   Senior Consultant / Tech Lead: **45 days**
+            *   Mid-level Consultant / Developer: **30 days**
+            *   Junior / QA / Support roles: **20 days**
+        4.  **Absolute last resort:** Only use `10` days if the role cannot be categorized AND there is truly zero duration signal anywhere in the input. This value must NOT be the default — it is the exception.
 7.  **Justification:** Provide a brief, concise `justification` for each candidate selection, explaining why they are the best fit for their assigned role, considering their skills, seniority, and unavailabilities. The `justification` should be in French if the `mission_context` is in French.
 8.  **"Best Possible" Principle:** You MUST propose the best possible team or consultant(s) from the provided candidates, even if they do not perfectly match 100% of the requirements. Only make a No-Go decision under the specific condition below.
 
@@ -64,7 +72,7 @@ Your output MUST be a purely valid JSON array of the proposed team, matching thi
   "full_name": "Full Name",
   "role": "Role dynamically determined from context",
   "justification": "Why this person was chosen for this specific role",
-  "estimated_days": 10
+  "estimated_days": 45
 }]
 ```
 

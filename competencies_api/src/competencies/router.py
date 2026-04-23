@@ -2,17 +2,19 @@ import json
 import os
 import httpx
 import logging
+import math
+import re
+from datetime import datetime, date
 
-logger = logging.getLogger(__name__)
 from opentelemetry.propagate import inject
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, Request
-from sqlalchemy import update, func, desc, asc
+from sqlalchemy import update, delete, func, desc, asc
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from datetime import datetime
 from google import genai
 from google.genai import types
 
@@ -29,6 +31,8 @@ from src.competencies.schemas import (
     SkillGapItem, SkillGapResult,
     SimilarConsultant, SimilarConsultantsResult,
     CompetencySuggestionCreate, CompetencySuggestionResponse, SuggestionReviewRequest,
+    BatchEvaluationRequest, BatchEvaluationResponse, BatchUsersEvaluationRequest,
+    MergeInstruction
 )
 
 from src.auth import verify_jwt
@@ -40,6 +44,93 @@ CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
 CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 CACHE_TTL = 60
+
+logger = logging.getLogger(__name__)
+
+# ── Scoring v2 — Pondération des missions ────────────────────────────────────────
+# λ du decay temporel : e^(-λ·N) où N = années depuis la fin de mission
+# λ=0.1 → poids 0.90 à 1 an, 0.61 à 5 ans, 0.37 à 10 ans, 0.22 à 15 ans (jamais 0)
+COMPETENCY_DECAY_LAMBDA = float(os.getenv("COMPETENCY_DECAY_LAMBDA", "0.1"))
+
+# Bonus de valeur ajoutée par type de mission
+MISSION_TYPE_BONUS: dict = {
+    "audit": 0.5,
+    "conseil": 0.5,
+    "accompagnement": 0.3,
+    "formation": 0.4,
+    "expertise": 0.3,
+    "build": 0.0,
+}
+
+MISSION_TYPE_LABELS: dict = {
+    "audit": "Audit / Diagnostic (valeur ajoutée élevée)",
+    "conseil": "Conseil / Advisory (valeur ajoutée élevée)",
+    "accompagnement": "Accompagnement / Coaching (valeur ajoutée)",
+    "formation": "Formation / Workshop (valeur ajoutée)",
+    "expertise": "Expert / Architecte (valeur ajoutée)",
+    "build": "Build / Développement (standard)",
+}
+
+
+def _compute_recency_weight(end_date_str: Optional[str]) -> float:
+    """Calcule un poids de récence via decay exponentielle e^(-λ·N).
+
+    - end_date_str None ou 'present' → poids 1.0 (mission en cours)
+    - end_date_str 'YYYY' ou 'YYYY-MM' → poids selon l'ancienneté
+    - Date non parseable → poids neutre 0.7
+
+    Le poids ne descend jamais à 0 — les vieilles missions ont toujours de la valeur.
+    """
+    if not end_date_str or str(end_date_str).lower() in ("present", "aujourd'hui", "current", "en cours"):
+        return 1.0
+    try:
+        end_year = int(str(end_date_str).strip()[:4])
+        years_ago = max(0, date.today().year - end_year)
+        return round(math.exp(-COMPETENCY_DECAY_LAMBDA * years_ago), 2)
+    except (ValueError, TypeError):
+        return 0.7  # Poids neutre si date non parseable
+
+
+def _parse_duration_months(duration_str: Optional[str]) -> Optional[int]:
+    """Parse une durée texte libre en nombre de mois (FR + EN).
+
+    Exemples : '2 ans', '18 mois', '6 months', '1 year 3 months' → retourne un int.
+    Retourne None si non parseable.
+    """
+    if not duration_str:
+        return None
+    s = str(duration_str).lower()
+    total_months = 0
+    years_match = re.search(r'(\d+)\s*(?:an|year|yr)', s)
+    months_match = re.search(r'(\d+)\s*(?:mois|month|mo)', s)
+    weeks_match = re.search(r'(\d+)\s*(?:semaine|week)', s)
+    if years_match:
+        total_months += int(years_match.group(1)) * 12
+    if months_match:
+        total_months += int(months_match.group(1))
+    if weeks_match:
+        total_months += int(weeks_match.group(1)) // 4
+    return total_months if total_months > 0 else None
+
+
+def _duration_multiplier(duration_months: Optional[int]) -> float:
+    """Calcule un multiplicateur de durée normalisé entre 0.5 et 1.5.
+
+    6 mois → 0.75 | 12 mois → 1.00 | 24 mois+ → 1.50 (cap).
+    Retourne 1.0 (neutre) si la durée est inconnue.
+    """
+    if duration_months is None:
+        return 1.0
+    return round(min(1.5, max(0.5, 0.5 + duration_months / 24.0)), 2)
+
+
+def _get_mission_bonus(mission_type: Optional[str]) -> tuple:
+    """Retourne (label_lisible, bonus_score) pour un type de mission."""
+    mtype = (mission_type or "build").lower().strip()
+    bonus = MISSION_TYPE_BONUS.get(mtype, 0.0)
+    label = MISSION_TYPE_LABELS.get(mtype, f"Type: {mtype}")
+    return label, bonus
+
 
 async def _generate_aliases_for_competency(name: str) -> str | None:
     """Génère 3-5 alias pour une compétence via Gemini Flash."""
@@ -63,12 +154,16 @@ async def _generate_aliases_for_competency(name: str) -> str | None:
         logger.warning(f"Échec de génération d'alias pour '{name}': {e}")
     return None
 
-def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks):
+def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks, auth_header: str = None):
     """Déclenche de manière asynchrone l'invalidation du cache de la taxonomie dans cv_api."""
     async def invalidate():
         try:
             async with httpx.AsyncClient() as http_client:
-                await http_client.post(f"{CV_API_URL.rstrip('/')}/cache/invalidate-taxonomy", timeout=3.0)
+                headers = {}
+                if auth_header:
+                    headers["Authorization"] = auth_header
+                inject(headers)
+                await http_client.post(f"{CV_API_URL.rstrip('/')}/cache/invalidate-taxonomy", headers=headers, timeout=3.0)
                 logger.info("[Cache Sync] Ordre d'invalidation de la taxonomie envoyé à cv_api.")
         except Exception as e:
             logger.warning(f"[Cache Sync] Échec d'invalidation de cv_api: {e}")
@@ -157,6 +252,7 @@ async def list_competencies(
             "id": c.id,
             "name": c.name,
             "description": c.description,
+            "aliases": c.aliases,
             "parent_id": c.parent_id,
             "created_at": c.created_at,
             "sub_competencies": []
@@ -260,7 +356,7 @@ async def create_competency_suggestion(
     new_suggestion = CompetencySuggestion(
         name=name_clean,
         source=payload.source,
-        context=payload.context,
+        context=payload.context[:2000] if payload.context else None,  # Guard: LLM peut générer >500 chars
         status="PENDING_REVIEW",
         occurrence_count=1,
     )
@@ -298,6 +394,7 @@ async def review_competency_suggestion(
     suggestion_id: int,
     payload: SuggestionReviewRequest,
     bg_tasks: BackgroundTasks,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     jwt_payload: dict = Depends(verify_jwt),
 ) -> CompetencySuggestionResponse:
@@ -350,7 +447,7 @@ async def review_competency_suggestion(
                 f"[Suggestions] Compétence acceptée et créée : '{suggestion.name}' (id={new_comp.id})"
             )
             delete_cache_pattern("competencies:*")
-            trigger_taxonomy_cache_invalidation(bg_tasks)
+            trigger_taxonomy_cache_invalidation(bg_tasks, request.headers.get("Authorization"))
         else:
             logger.info(
                 f"[Suggestions] '{suggestion.name}' déjà présente dans la taxonomie (id={existing_comp.id}), suggestion acceptée sans création."
@@ -417,6 +514,7 @@ async def list_competency_users(competency_id: int, db: AsyncSession = Depends(g
 async def bulk_import_tree(
     payload: TreeImportRequest,
     bg_tasks: BackgroundTasks,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     jwt_payload: dict = Depends(verify_jwt)
 ):
@@ -519,7 +617,118 @@ async def bulk_import_tree(
 
     try:
         await upsert_level(payload.tree, None)
-        
+
+        # ── FUSION DES DOUBLONS SÉMANTIQUES ─────────────────────────────────────
+        # Exécutée dans la MÊME transaction que l'upsert → atomique.
+        # Si la fusion échoue, l'upsert entier est rollbacké.
+        merge_log = []
+        if payload.merges:
+            for merge_instr in payload.merges:
+                if not merge_instr.merge_from:
+                    continue
+
+                # Trouver le canonique (doit exister après upsert)
+                canonical = (
+                    await db.execute(
+                        select(Competency).filter(Competency.name.ilike(merge_instr.canonical))
+                    )
+                ).scalars().first()
+                if not canonical:
+                    logger.warning(
+                        f"[BulkTree/Merge] Canonique '{merge_instr.canonical}' introuvable après upsert — ignoré."
+                    )
+                    continue
+
+                for dup_name in merge_instr.merge_from:
+                    if dup_name.lower() == merge_instr.canonical.lower():
+                        continue  # sécurité : ne pas fusionner le canonique avec lui-même
+
+                    dup = (
+                        await db.execute(
+                            select(Competency).filter(Competency.name.ilike(dup_name))
+                        )
+                    ).scalars().first()
+                    if not dup or dup.id == canonical.id:
+                        continue
+
+                    # 1. Re-assigner user_competency du doublon → canonique
+                    user_ids_with_dup = (
+                        await db.execute(
+                            select(user_competency.c.user_id)
+                            .where(user_competency.c.competency_id == dup.id)
+                        )
+                    ).scalars().all()
+
+                    for uid in user_ids_with_dup:
+                        await db.execute(
+                            pg_insert(user_competency)
+                            .values(
+                                user_id=uid,
+                                competency_id=canonical.id,
+                                created_at=datetime.utcnow()
+                            )
+                            .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
+                        )
+                    await db.execute(
+                        user_competency.delete()
+                        .where(user_competency.c.competency_id == dup.id)
+                    )
+
+                    # 2. Re-assigner les évaluations sans conflit
+                    existing_eval_users = (
+                        await db.execute(
+                            select(CompetencyEvaluation.user_id)
+                            .where(CompetencyEvaluation.competency_id == canonical.id)
+                        )
+                    ).scalars().all()
+                    if existing_eval_users:
+                        await db.execute(
+                            update(CompetencyEvaluation)
+                            .where(CompetencyEvaluation.competency_id == dup.id)
+                            .where(CompetencyEvaluation.user_id.not_in(existing_eval_users))
+                            .values(competency_id=canonical.id)
+                        )
+                    else:
+                        await db.execute(
+                            update(CompetencyEvaluation)
+                            .where(CompetencyEvaluation.competency_id == dup.id)
+                            .values(competency_id=canonical.id)
+                        )
+                    # Supprimer les évaluations résiduelles non migrables
+                    await db.execute(
+                        delete(CompetencyEvaluation)
+                        .where(CompetencyEvaluation.competency_id == dup.id)
+                    )
+
+                    # 3. Re-parenter les sous-compétences du doublon
+                    await db.execute(
+                        update(Competency)
+                        .where(Competency.parent_id == dup.id)
+                        .values(parent_id=canonical.id)
+                    )
+
+                    # 4. Enrichir les aliases du canonique avec le nom fusionné
+                    existing_aliases = canonical.aliases or ""
+                    alias_set = set(a.strip() for a in existing_aliases.split(",") if a.strip())
+                    alias_set.add(dup.name)
+                    canonical.aliases = ", ".join(sorted(alias_set))
+
+                    # 5. Supprimer le doublon
+                    await db.delete(dup)
+                    touched_ids.discard(dup.id)  # ne plus référencer l'ID supprimé
+                    touched_ids.add(canonical.id)
+
+                    merge_log.append(f"'{dup_name}' → '{canonical.name}'")
+                    logger.info(
+                        f"[BulkTree/Merge] '{dup_name}' (fusionné) → '{canonical.name}' (id={canonical.id})"
+                    )
+
+                await db.flush()  # flush après chaque canonique pour libérer les locks
+
+            if merge_log:
+                logger.info(f"[BulkTree/Merge] {len(merge_log)} fusion(s) exécutée(s) : {merge_log}")
+        # ── FIN FUSION ──────────────────────────────────────────────────────────
+
         # --- ORPHAN HANDLING ---
         # Any root competency that was not touched is moved to Archives
         archive_name = "Compétences Archives / Non classées"
@@ -546,8 +755,10 @@ async def bulk_import_tree(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'import: {str(e)}")
         
     delete_cache_pattern("competencies:*")
-    trigger_taxonomy_cache_invalidation(bg_tasks)
-    return {"message": "Taxonomie fusionnée avec succès et orphelins archivés !"}
+    trigger_taxonomy_cache_invalidation(bg_tasks, request.headers.get("Authorization"))
+    fusions_summary = f" {len(merge_log)} doublon(s) fusionné(s)." if merge_log else ""
+    return {"message": f"Taxonomie fusionnée avec succès et orphelins archivés !{fusions_summary}", "merges": merge_log}
+
 
 
 @router.post("/", response_model=CompetencyResponse, status_code=201)
@@ -711,25 +922,14 @@ async def assign_competency_to_user(
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
         
-    # Check if already assigned
-    existing = (await db.execute(
-        select(user_competency).where(
-            user_competency.c.user_id == user_id,
-            user_competency.c.competency_id == competency_id
-        )
-    )).first()
-    
-    if existing:
-        return {"message": "Competency already assigned to user"}
-        
-    # Assign
-    await db.execute(
-        user_competency.insert().values(
-            user_id=user_id,
-            competency_id=competency_id,
-            created_at=datetime.utcnow()
-        )
-    )
+    # Assign — atomique via ON CONFLICT DO NOTHING (Golden Rules §1.3 — idempotence)
+    # Évite la race condition SELECT+INSERT lors des réingestions batch parallèles.
+    stmt = pg_insert(user_competency).values(
+        user_id=user_id,
+        competency_id=competency_id,
+        created_at=datetime.utcnow()
+    ).on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
+    await db.execute(stmt)
     await db.commit()
     
     delete_cache_pattern(f"competencies:user:{user_id}:*")
@@ -797,14 +997,14 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
     new_comps = set(source_comps) - set(target_comps)
     
     if new_comps:
-        from datetime import datetime
         for cid in new_comps:
+            # ON CONFLICT DO NOTHING pour éviter la race condition inter-workers
             await db.execute(
-                user_competency.insert().values(
+                pg_insert(user_competency).values(
                     user_id=req.target_id,
                     competency_id=cid,
                     created_at=datetime.utcnow()
-                )
+                ).on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
             )
             
     # delete source comps
@@ -846,7 +1046,6 @@ async def _get_or_create_evaluation(
     db: AsyncSession, user_id: int, competency_id: int
 ) -> CompetencyEvaluation:
     """Retourne l'evaluation existante ou en cree une vide."""
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
     stmt = select(CompetencyEvaluation).where(
         CompetencyEvaluation.user_id == user_id,
         CompetencyEvaluation.competency_id == competency_id
@@ -879,6 +1078,108 @@ def _serialize_evaluation(ev: CompetencyEvaluation, competency_name: str = "") -
         "user_comment": ev.user_comment,
         "user_scored_at": ev.user_scored_at,
     }
+
+
+@router.post("/evaluations/batch/search", response_model=BatchEvaluationResponse)
+async def search_batch_evaluations(
+    request: BatchEvaluationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Récupère en masse les évaluations pour un utilisateur et une liste de compétences."""
+    if not request.competency_ids:
+        return BatchEvaluationResponse(evaluations={})
+
+    stmt = (
+        select(CompetencyEvaluation, Competency.name.label("comp_name"))
+        .join(Competency, CompetencyEvaluation.competency_id == Competency.id)
+        .where(
+            CompetencyEvaluation.user_id == request.user_id,
+            CompetencyEvaluation.competency_id.in_(request.competency_ids)
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+    
+    eval_dict = {}
+    evaluated_ids = set()
+    
+    for ev, comp_name in rows:
+        serialized = _serialize_evaluation(ev, comp_name)
+        eval_dict[ev.competency_id] = serialized
+        evaluated_ids.add(ev.competency_id)
+        
+    missing_ids = [cid for cid in request.competency_ids if cid not in evaluated_ids]
+    
+    if missing_ids:
+        comps = (await db.execute(
+            select(Competency).where(Competency.id.in_(missing_ids))
+        )).scalars().all()
+        for c in comps:
+            eval_dict[c.id] = {
+                "id": 0,
+                "user_id": request.user_id,
+                "competency_id": c.id,
+                "competency_name": c.name,
+                "ai_score": None,
+                "ai_justification": None,
+                "ai_scored_at": None,
+                "user_score": None,
+                "user_comment": None,
+                "user_scored_at": None,
+            }
+
+    return BatchEvaluationResponse(evaluations=eval_dict)
+
+
+@router.post("/evaluations/batch/users", response_model=BatchEvaluationResponse)
+async def search_batch_users_evaluations(
+    request: BatchUsersEvaluationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Récupère en masse les évaluations pour une compétence et une liste d'utilisateurs."""
+    if not request.user_ids:
+        return BatchEvaluationResponse(evaluations={})
+
+    stmt = (
+        select(CompetencyEvaluation, Competency.name.label("comp_name"))
+        .join(Competency, CompetencyEvaluation.competency_id == Competency.id)
+        .where(
+            CompetencyEvaluation.competency_id == request.competency_id,
+            CompetencyEvaluation.user_id.in_(request.user_ids)
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+    
+    eval_dict = {}
+    evaluated_users = set()
+    
+    # We need the competency name to fill missing users
+    comp_name = rows[0][1] if rows else ""
+    if not comp_name:
+        comp = (await db.execute(select(Competency).where(Competency.id == request.competency_id))).scalars().first()
+        comp_name = comp.name if comp else ""
+    
+    for ev, c_name in rows:
+        serialized = _serialize_evaluation(ev, c_name)
+        eval_dict[ev.user_id] = serialized
+        evaluated_users.add(ev.user_id)
+        
+    missing_users = [uid for uid in request.user_ids if uid not in evaluated_users]
+    
+    for uid in missing_users:
+        eval_dict[uid] = {
+            "id": 0,
+            "user_id": uid,
+            "competency_id": request.competency_id,
+            "competency_name": comp_name,
+            "ai_score": None,
+            "ai_justification": None,
+            "ai_scored_at": None,
+            "user_score": None,
+            "user_comment": None,
+            "user_scored_at": None,
+        }
+
+    return BatchEvaluationResponse(evaluations=eval_dict)
 
 
 @router.get("/evaluations/user/{user_id}", response_model=List[CompetencyEvaluationResponse])
@@ -1027,12 +1328,14 @@ async def trigger_ai_score_single(
     ev.ai_score = score
     ev.ai_justification = justification
     ev.ai_scored_at = datetime.utcnow()
+    ev.scoring_version = "v2"
     ev.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(ev)
 
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
     return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
+
 
 
 @router.post(
@@ -1162,16 +1465,62 @@ async def _compute_ai_score(
     # Si aucune mission n'est directement liée, utiliser les 5 premières comme contexte général
     context_missions = relevant_missions if relevant_missions else missions[:5]
 
-    # 3. Construction du contexte enrichi : titre + entreprise + durée + description + compétences
-    def _format_mission(m: dict) -> str:
-        parts = []
+    # 3. Construction du contexte enrichi v2 : titre + méta-données de pondération
+    def _estimate_duration_from_dates(start: Optional[str], end: Optional[str]) -> Optional[str]:
+        """Estime la durée en mois depuis start/end_date si disponibles."""
+        if not start or not end:
+            return None
+        try:
+            sy = int(str(start)[:4])
+            sm = int(str(start)[5:7]) if len(str(start)) >= 7 else 1
+            if str(end).lower() in ("present", "en cours", "current"):
+                from datetime import date as _date
+                ey, em = _date.today().year, _date.today().month
+            else:
+                ey = int(str(end)[:4])
+                em = int(str(end)[5:7]) if len(str(end)) >= 7 else 12
+            months = max(1, (ey - sy) * 12 + (em - sm))
+            return f"{months} mois"
+        except (ValueError, TypeError):
+            return None
+
+    def _format_mission_v2(m: dict) -> str:
+        """Formate une mission avec ses méta-données de pondération explicites pour le LLM."""
         title = m.get('title', 'Mission sans titre')
         company = m.get('company', '?')
-        parts.append(f"Mission : {title} chez {company}")
-        if m.get('duration'):
-            parts.append(f"  Durée : {m['duration']}")
+
+        # --- Récence (decay exponentiel) ---
+        recency_weight = _compute_recency_weight(m.get("end_date"))
+        end_date_label = m.get("end_date") or "date inconnue"
+        if recency_weight >= 0.9:
+            recency_label = f"récente (poids={recency_weight})"
+        elif recency_weight >= 0.6:
+            recency_label = f"semi-récente (poids={recency_weight})"
+        else:
+            recency_label = f"ancienne, valeur diminuée (poids={recency_weight})"
+
+        # --- Durée (multiplicateur) ---
+        raw_duration = m.get("duration") or _estimate_duration_from_dates(
+            m.get("start_date"), m.get("end_date")
+        )
+        duration_months = _parse_duration_months(raw_duration)
+        dur_mult = _duration_multiplier(duration_months)
+        dur_label = (
+            f"{duration_months} mois (multiplicateur={dur_mult})"
+            if duration_months
+            else f"durée non précisée (multiplicateur neutre={dur_mult})"
+        )
+
+        # --- Type de mission (bonus valeur ajoutée) ---
+        mtype_label, mtype_bonus = _get_mission_bonus(m.get("mission_type"))
+        bonus_str = f"+{mtype_bonus} bonus" if mtype_bonus > 0 else "pas de bonus"
+
+        parts = [
+            f"▶ Mission [{recency_label} | {dur_label} | {mtype_label}, {bonus_str}]",
+            f"  Titre : {title} chez {company}",
+            f"  Période : {m.get('start_date', '?')} → {end_date_label}",
+        ]
         if m.get('description'):
-            # Limiter à 300 chars pour ne pas dépasser la fenêtre de contexte
             desc_text = str(m['description'])[:300]
             parts.append(f"  Description : {desc_text}")
         comps = m.get("competencies", [])
@@ -1179,29 +1528,43 @@ async def _compute_ai_score(
             parts.append(f"  Compétences utilisées : {', '.join(comps)}")
         return "\n".join(parts)
 
-    missions_text = "\n\n".join([_format_mission(m) for m in context_missions])
+    missions_text = "\n\n".join([_format_mission_v2(m) for m in context_missions])
     context_label = "directement liées à cette compétence" if relevant_missions else "générales du consultant"
 
-    # 4. Prompt enrichi — exige score + justification factuelle basée sur les missions réelles
+    # 4. Prompt v2 — le LLM reçoit les poids et les applique lui-même
     prompt = (
-        f"Tu es un évaluateur expert de consultants IT et tech."
-        f" Tu dois noter objectivement la maîtrise de la compétence '{competency_name}' "
-        f"pour ce consultant, de 0.0 à 5.0 (par pas de 0.5)."
-        f" Niveaux de référence :\n"
+        f"Tu es un évaluateur expert de consultants IT et tech (scoring v2 avec pondération)."
+        f" Tu dois noter la maîtrise de la compétence '{competency_name}' "
+        f"pour ce consultant, de 0.0 à 5.0 (par pas de 0.5).\n\n"
+        f"=== RÈGLES DE PONDÉRATION OBLIGATOIRES ===\n"
+        f"Tu DOIS appliquer ces poids dans ton évaluation :\n"
+        f"1. RÉCENCE : chaque mission affiche un 'poids' entre 0.0 et 1.0.\n"
+        f"   - poids proche de 1.0 = mission récente → compte PLEINEMENT\n"
+        f"   - poids 0.2-0.4 = mission ancienne → compte mais de façon RÉDUITE\n"
+        f"   - une mission ancienne poids=0.3 vaut ~30% d'une mission récente équivalente\n"
+        f"2. DURÉE : chaque mission affiche un 'multiplicateur' entre 0.5 et 1.5.\n"
+        f"   - multiplicateur > 1.0 = mission longue → profondeur de maîtrise accrue\n"
+        f"   - multiplicateur < 1.0 = mission courte → maîtrise plus superficielle\n"
+        f"3. TYPE DE MISSION : audit/conseil/accompagnement/formation/expertise affichent\n"
+        f"   un bonus (+0.3 à +0.5). Ces missions = maîtrise plus profonde car le consultant\n"
+        f"   est en position d'expert exposé à des clients variés. Valorise-les davantage.\n\n"
+        f"=== NIVEAUX DE RÉFÉRENCE ===\n"
         f"  - 0.0 : Aucune trace dans le CV\n"
-        f"  - 1.0 : Notions de base, mentionné une fois\n"
-        f"  - 2.0 : Utilisation ponctuelle, 1 mission\n"
-        f"  - 3.0 : Maîtrise confirmée, plusieurs missions\n"
-        f"  - 4.0 : Expert, utilisation intense et répétée\n"
-        f"  - 5.0 : Référence / Lead reconnu\n\n"
-        f"Missions {context_label} (extrait du CV) :\n"
+        f"  - 1.0 : Notions de base, mentionné dans des missions anciennes ou courtes\n"
+        f"  - 2.0 : Utilisation ponctuelle (1 mission récente ou 2-3 missions anciennes)\n"
+        f"  - 3.0 : Maîtrise confirmée, plusieurs missions avec bons poids\n"
+        f"  - 4.0 : Expert, missions longues/récentes ou audit/conseil intense\n"
+        f"  - 5.0 : Référence reconnue / Lead sur plusieurs missions à forte valeur ajoutée\n\n"
+        f"=== MISSIONS {context_label.upper()} AVEC MÉTA-DONNÉES DE PONDÉRATION ===\n"
         f"{missions_text}\n\n"
+        f"=== CONSIGNE ===\n"
         f"Réponds UNIQUEMENT en JSON valide avec exactement deux champs :\n"
         f"- score : float entre 0.0 et 5.0, arrondi au pas de 0.5\n"
-        f"- justification : string factuelle de 50 à 200 caractères en français,"
-        f" citant les missions concrètes qui justifient le score\n\n"
-        f'Exemple : {{"score": 3.5, "justification": "Utilisé intensivement sur 2 missions chez Airbus et Thales, rôle de lead technique."}}'  # noqa
+        f"- justification : string factuelle de 50 à 250 caractères en français, citant\n"
+        f"  les missions concrètes et expliquant comment les poids ont influencé le score\n\n"
+        f'Exemple : {{"score": 3.5, "justification": "2 missions récentes (poids>0.9) dont 1 audit chez Airbus (bonus +0.5). Mission 2018 comptée à poids réduit 0.4."}}'  # noqa
     )
+
 
     # 5. Appel Gemini avec JSON forcé
     try:
@@ -1214,7 +1577,6 @@ async def _compute_ai_score(
         raw = response.text.strip()
         # Nettoyage robuste : extraire le bloc JSON si le modèle ajoute du texte autour
         if not raw.startswith("{"):
-            import re
             json_match = re.search(r'\{.*\}', raw, re.DOTALL)
             raw = json_match.group(0) if json_match else raw
         data = json.loads(raw)
@@ -1249,6 +1611,7 @@ async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], header
                 ev.ai_score = score
                 ev.ai_justification = justification
                 ev.ai_scored_at = datetime.utcnow()
+                ev.scoring_version = "v2"
                 ev.updated_at = datetime.utcnow()
                 # Pas d'assignation ev.competency = <objet ORM externe> — charger
                 # via db.refresh() uniquement si necessaire pour la serialisation.

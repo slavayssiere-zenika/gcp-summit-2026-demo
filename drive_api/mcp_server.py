@@ -6,6 +6,8 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -25,11 +27,15 @@ propagate.set_global_textmap(TraceContextTextMapPropagator())
 
 API_BASE_URL = os.getenv("DRIVE_API_URL", "http://localhost:8006")
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "drive-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
@@ -128,6 +134,102 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["google_file_id"]
             }
+        ),
+        Tool(
+            name="reset_drive_folder_sync",
+            description=(
+                "Remet tous les fichiers d'un dossier Drive (ou de tous les dossiers si tag absent) "
+                "en statut PENDING pour forcer une re-synchronisation complète. "
+                "Utiliser quand des fichiers sont bloqués dans un état incohérent ou après un changement de configuration."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tag": {
+                        "type": "string",
+                        "description": "Optionnel — tag du dossier à réinitialiser. Si absent, réinitialise tous les dossiers."
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="get_dlq_status",
+            description=(
+                "Retourne l'état de la Dead Letter Queue (DLQ) du scanner Drive : "
+                "nombre de messages en erreur, aperçu des fichiers bloqués et raisons d'échec. "
+                "Utiliser pour diagnostiquer les CVs qui n'ont pas pu être ingérés automatiquement."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Nombre maximum de messages DLQ à retourner (défaut: 10)",
+                        "default": 10
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="delete_dlq_message",
+            description=(
+                "Supprime un message spécifique de la Dead Letter Queue Drive (par son ack_id ou file_id). "
+                "Utiliser pour acquitter définitivement un message erroné non récupérable "
+                "(fichier supprimé, accès révoqué, format non supporté)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ack_id": {
+                        "type": "string",
+                        "description": "L'identifiant Pub/Sub ack_id du message à supprimer (retourné par get_dlq_status)"
+                    },
+                    "google_file_id": {
+                        "type": "string",
+                        "description": "Alternative : l'ID Google Drive du fichier à supprimer de la DLQ"
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="replay_dlq",
+            description=(
+                "Rejoue tous les messages de la Dead Letter Queue Drive : remet les fichiers en erreur "
+                "en statut PENDING et déclenche une nouvelle tentative d'ingestion. "
+                "Utiliser après avoir résolu la cause racine des erreurs (ex: permission Drive accordée, "
+                "format de fichier corrigé). Retour immédiat — le traitement s'effectue en arrière-plan."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="update_drive_file",
+            description=(
+                "Met à jour l'état ou les métadonnées d'un fichier Drive suivi par le scanner. "
+                "Permet de forcer un statut (ex: 'PENDING' pour re-tenter l'ingestion) "
+                "ou de corriger des métadonnées incorrectes."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "L'ID Google Drive du fichier à mettre à jour"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["PENDING", "PROCESSING", "DONE", "ERROR", "IGNORED"],
+                        "description": "Nouveau statut à appliquer au fichier"
+                    },
+                    "error_message": {
+                        "type": "string",
+                        "description": "Optionnel — message d'erreur à associer"
+                    }
+                },
+                "required": ["file_id"]
+            }
         )
     ]
 
@@ -183,14 +285,54 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 elif name == "get_drive_file_state":
                     gfid = arguments.get("google_file_id")
                     if not gfid:
-                        return [TextContent(type="text", text="Erreur : paramètre 'google_file_id' manquant.")]
+                        return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'google_file_id' manquant."}))]
                     res = await client.get(f"{API_BASE_URL}/files/{gfid}", headers=headers, timeout=10.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "reset_drive_folder_sync":
+                    params = {}
+                    if arguments.get("tag"):
+                        params["tag"] = arguments["tag"]
+                    res = await client.post(f"{API_BASE_URL}/folders/reset-sync", params=params, headers=headers, timeout=30.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "get_dlq_status":
+                    limit = arguments.get("limit", 10)
+                    res = await client.get(f"{API_BASE_URL}/dlq/status", params={"limit": limit}, headers=headers, timeout=30.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "delete_dlq_message":
+                    params = {}
+                    if arguments.get("ack_id"):
+                        params["ack_id"] = arguments["ack_id"]
+                    if arguments.get("google_file_id"):
+                        params["google_file_id"] = arguments["google_file_id"]
+                    if not params:
+                        return [TextContent(type="text", text=json.dumps({"success": False, "error": "Fournir 'ack_id' ou 'google_file_id'."}))]
+                    res = await client.delete(f"{API_BASE_URL}/dlq/message", params=params, headers=headers, timeout=20.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps({"success": True, "message": "Message DLQ supprimé."}))]
+
+                elif name == "replay_dlq":
+                    res = await client.post(f"{API_BASE_URL}/dlq/replay", headers=headers, timeout=60.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "update_drive_file":
+                    file_id = arguments.get("file_id")
+                    if not file_id:
+                        return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'file_id' manquant."}))]
+                    body = {k: v for k, v in arguments.items() if k != "file_id" and v is not None}
+                    res = await client.patch(f"{API_BASE_URL}/files/{file_id}", json=body, headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 
                 else:
                     return [TextContent(type="text", text=f"Unknown tool: {name}")]
             except httpx.HTTPStatusError as e:
-                return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
             except Exception as e:
-                return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]

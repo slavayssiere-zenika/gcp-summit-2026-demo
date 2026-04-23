@@ -24,6 +24,8 @@ from agent_commons.guardrails import (
     check_hallucination_guardrail,
     check_empty_candidate_guardrail,
     is_empty_candidate_result,
+    check_id_invention_guardrail,
+    check_name_grounding_guardrail,
 )
 from agent_commons.finops import log_tokens_to_bq, estimate_cost_usd
 
@@ -209,6 +211,12 @@ async def run_agent_query(
         last_tool_data = None
     elif last_tool_data_override is not None:
         last_tool_data = last_tool_data_override
+
+    # --- Guardrail 3 : invention d'ID ---
+    steps = check_id_invention_guardrail(steps, "[HR]")
+
+    # --- Guardrail 4 : grounding des noms (warning only) ---
+    _, steps = check_name_grounding_guardrail(response_text, steps, "[HR]")
 
     return {
         "response": response_text,

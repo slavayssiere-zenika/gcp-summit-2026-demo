@@ -13,6 +13,8 @@ from mcp.server import InitializationOptions, NotificationOptions
 from mcp.types import Tool, TextContent
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -34,11 +36,15 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', 
 API_BASE_URL = os.getenv("ITEMS_API_URL", "http://localhost:8001")
 USERS_API_URL = os.getenv("USERS_API_URL", "http://localhost:8000")
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "items-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
@@ -177,6 +183,36 @@ async def list_tools() -> list[Tool]:
             name="get_item_stats",
             description="Get statistics about items",
             inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="bulk_create_items",
+            description=(
+                "Crée plusieurs items en une seule requête (bulk). "
+                "Très performant pour l'ingestion de CVs (création de profils consultants en masse). "
+                "Chaque item doit avoir un nom, un user_id et au moins une catégorie. "
+                "Idémpotent : les items existants sont mis à jour plutôt que dupliqués."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "description": "Liste des items à créer",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "Nom de l'item"},
+                                "description": {"type": "string", "description": "Description (optionnel)"},
+                                "user_id": {"type": "integer", "description": "ID de l'utilisateur propriétaire"},
+                                "category_ids": {"type": "array", "items": {"type": "integer"}, "description": "IDs des catégories"},
+                                "metadata_json": {"type": "object", "description": "Métadonnées riches (JSONB)"}
+                            },
+                            "required": ["name", "user_id", "category_ids"]
+                        }
+                    }
+                },
+                "required": ["items"]
+            }
         )
     ]
 
@@ -293,6 +329,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "get_item_stats":
                 response = await client.get(f"{API_BASE_URL}/stats")
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "bulk_create_items":
+                items_payload = arguments.get("items", [])
+                if not items_payload:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'items' manquant ou vide."}))]
+                response = await client.post(f"{API_BASE_URL}/bulk", json=items_payload, timeout=60.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

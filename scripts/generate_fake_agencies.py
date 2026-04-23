@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # Configurations
-AGENCIES = ["Sèvres", "Saumur", "Bizanos"]
+AGENCIES = ["Sèvres", "Saumur", "Bizanos", "Paris"]
 ROLES = [
     "Développeur Fullstack React/Node",
     "Ingénieur Data GCP",
@@ -250,6 +250,31 @@ def main():
         os.makedirs(agency_local_dir, exist_ok=True)
 
         done_names = {f"{c['first_name']} {c['last_name']}" for c in done_consultants}
+        
+        # Copie du CV réel pour l'agence de Paris
+        if agency == "Paris":
+            user_cv_name = "Sébastien Lavayssière"
+            if user_cv_name not in done_names:
+                print(f"  -> Copie du CV réel de Sébastien dans l'agence Paris...")
+                try:
+                    user_folder_id = get_or_create_folder(service, user_cv_name, agency_folder_id)
+                    service.files().copy(
+                        fileId="1SxWW-HN-cxGXBFerPRtvQpzfFKhKkKov",
+                        body={"name": f"CV_{user_cv_name.replace(' ', '_')}", "parents": [user_folder_id]}
+                    ).execute()
+                    done_names.add(user_cv_name)
+                    done_consultants.append({
+                        "first_name": "Sébastien",
+                        "last_name": "Lavayssière",
+                        "role": "Expert GCP",
+                        "experience_years": 15
+                    })
+                    agency_progress["done"] = done_consultants
+                    progress[agency] = agency_progress
+                    save_progress(progress)
+                except Exception as e:
+                    print(f"  -> Erreur lors de la copie du CV réel: {e}")
+        
         remaining = [c for c in planned if f"{c['first_name']} {c['last_name']}" not in done_names]
 
         if not remaining:
@@ -314,10 +339,6 @@ def main():
             time.sleep(1)  # rate limit precaution
 
     print("\n✅ Génération terminée !")
-    # Optionally remove the progress file on successful completion
-    if os.path.exists(PROGRESS_FILE):
-        os.remove(PROGRESS_FILE)
-        print("   (Fichier de progression supprimé — tout est terminé.)")
 
 
 if __name__ == "__main__":

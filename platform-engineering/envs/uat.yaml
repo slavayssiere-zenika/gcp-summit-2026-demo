@@ -47,3 +47,4 @@ finops_anomaly_threshold: 500000
 # ── IA / Modèles ──────────────────────────────────────────
 gemini_model:           "gemini-3.1-flash-lite-preview"
 gemini_embedding_model: "gemini-embedding-001"   # SEC-F06 Semantic Cache
+trace_sampling_rate: 0.5

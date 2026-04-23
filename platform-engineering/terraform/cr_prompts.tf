@@ -82,6 +82,10 @@ resource "google_cloud_run_v2_service" "prompts_api" {
         value = "gcp"
       }
       env {
+        name  = "TRACE_SAMPLING_RATE"
+        value = var.trace_sampling_rate
+      }
+      env {
         name  = "APP_VERSION"
         value = var.prompts_api_version
       }

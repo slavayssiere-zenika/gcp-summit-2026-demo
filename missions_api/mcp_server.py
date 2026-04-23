@@ -7,6 +7,8 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -24,11 +26,15 @@ propagate.set_global_textmap(TraceContextTextMapPropagator())
 
 API_BASE_URL = os.getenv("MISSIONS_API_URL", "http://localhost:8009")
 
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "missions-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
+,
+    sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
@@ -127,6 +133,50 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["mission_id"]
             }
+        ),
+        Tool(
+            name="get_user_active_missions",
+            description=(
+                "Retourne les missions actives (en cours ou en attente de validation) pour un consultant donné. "
+                "Utiliser pour savoir si un consultant est déjà staffé sur une mission, "
+                "ou pour afficher son planning courant. "
+                "Complémentaire à get_user_missions (cv_api) qui retourne les missions historiques du CV."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": { "type": "integer", "description": "L'ID du consultant" }
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="get_mission_task_status",
+            description=(
+                "Vérifie l'état d'une tâche asynchrone (création ou réanalyse de mission). "
+                "Retourne le statut : 'pending', 'running', 'done' ou 'error', avec un message détaillé. "
+                "Utiliser après create_mission ou reanalyze_mission pour suivre la progression en temps réel "
+                "sans bloquer l'agent."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": { "type": "string", "description": "L'ID de la tâche retourné par create_mission ou reanalyze_mission" }
+                },
+                "required": ["task_id"]
+            }
+        ),
+        Tool(
+            name="delete_all_missions",
+            description=(
+                "(Admin uniquement) Supprime TOUTES les missions de la base de données. "
+                "Action IRRÉVERSIBLE — ne jamais appeler sans confirmation explicite de l'administrateur. "
+                "Usage réservé aux resets d'environnement de démo ou de test."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
         )
     ]
 
@@ -203,6 +253,33 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/status/history", headers=headers, timeout=20.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "get_user_active_missions":
+                user_id = arguments.get("user_id")
+                if not user_id:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'user_id' manquant."}))]
+                try:
+                    response = await client.get(f"{API_BASE_URL}/missions/user/{user_id}/active", headers=headers, timeout=20.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "get_mission_task_status":
+                task_id = arguments.get("task_id")
+                if not task_id:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'task_id' manquant."}))]
+                try:
+                    response = await client.get(f"{API_BASE_URL}/missions/task/{task_id}", headers=headers, timeout=20.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                except Exception as e:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+            elif name == "delete_all_missions":
+                try:
+                    response = await client.delete(f"{API_BASE_URL}/missions", headers=headers, timeout=30.0)
+                    response.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps({"success": True, "message": "Toutes les missions ont été supprimées."}))]
                 except Exception as e:
                     return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
             else:

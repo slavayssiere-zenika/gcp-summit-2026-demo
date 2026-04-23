@@ -79,6 +79,8 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/user/{user_id}` : List User Competencies
 - **POST** `/internal/users/merge` : Merge Users
 - **DELETE** `/user/{user_id}/clear` : Clear User Competencies
+- **POST** `/evaluations/batch/search` : Search Batch Evaluations
+- **POST** `/evaluations/batch/users` : Search Batch Users Evaluations
 - **GET** `/evaluations/user/{user_id}` : List User Evaluations
 - **GET** `/evaluations/user/{user_id}/competency/{competency_id}` : Get User Competency Evaluation
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/user-score` : Set User Competency Score
@@ -87,7 +89,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/analytics/agency-coverage` : Get Agency Competency Coverage
 - **GET** `/analytics/skill-gaps` : Get Skill Gaps
 - **GET** `/analytics/similar-consultants/{user_id}` : Get Similar Consultants
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
