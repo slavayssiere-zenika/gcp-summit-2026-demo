@@ -129,12 +129,6 @@ variable "image_db_init" {
   type        = string
 }
 
-variable "gemini_api_key" {
-  description = "Google Gemini API Key envoyée via manage_env"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
 
 variable "gemini_model" {
   description = "Modèle Gemini par défaut à utiliser"
