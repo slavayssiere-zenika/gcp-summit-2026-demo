@@ -412,13 +412,26 @@ async def get_dlq_status(db: AsyncSession = Depends(get_db)):
                 },
                 timeout=10.0
             )
+            messages = response.received_messages
+        except Exception as e:
+            from google.api_core.exceptions import DeadlineExceeded
+            if isinstance(e, DeadlineExceeded) or "504" in str(e) or "Deadline" in str(e):
+                return {
+                    "subscription": sub_path.split("/")[-1],
+                    "message_count": 0,
+                    "files": [],
+                    "unknown_files": [],
+                    "unknown_payloads": 0,
+                }
+            raise e
 
+        try:
             # Étendre le deadline à 600s (max Pub/Sub) pour garder les ack_ids valides
             # assez longtemps pour que l'utilisateur peut cliquer "Supprimer" sans re-pull.
             # NE PAS appeler modify_ack_deadline(0) ici — cela cause des oscillations du compteur
             # car les messages clignottent entre "in flight" et "disponibles" à chaque poll.
-            if response.received_messages:
-                all_ack_ids = [m.ack_id for m in response.received_messages]
+            if messages:
+                all_ack_ids = [m.ack_id for m in messages]
                 await asyncio.to_thread(
                     subscriber.modify_ack_deadline,
                     request={
@@ -435,7 +448,7 @@ async def get_dlq_status(db: AsyncSession = Depends(get_db)):
         file_ids = []
         unknown_files = []
         file_ack_map = {}  # google_file_id|msg_id -> ack_id
-        for msg in response.received_messages:
+        for msg in messages:
             msg_id = msg.message.message_id
             ack_id = msg.ack_id
             try:
@@ -552,16 +565,24 @@ async def delete_dlq_message(
                     # ack_id expiré → fallback pull
 
             # ── Stratégie 2 : Re-pull et match ──
-            response = await asyncio.to_thread(
-                subscriber.pull,
-                request={"subscription": sub_path, "max_messages": 1000},
-                timeout=15.0
-            )
+            try:
+                response = await asyncio.to_thread(
+                    subscriber.pull,
+                    request={"subscription": sub_path, "max_messages": 1000},
+                    timeout=15.0
+                )
+                messages = response.received_messages
+            except Exception as e:
+                from google.api_core.exceptions import DeadlineExceeded
+                if isinstance(e, DeadlineExceeded) or "504" in str(e) or "Deadline" in str(e):
+                    messages = []
+                else:
+                    raise e
 
             target_ack_id = None
             other_ack_ids = []
 
-            for msg in response.received_messages:
+            for msg in messages:
                 try:
                     raw = _b64.b64decode(msg.message.data).decode("utf-8")
                     payload = _json.loads(raw)
@@ -637,18 +658,27 @@ async def replay_dlq(db: AsyncSession = Depends(get_db)):
         # Pull par batch de 1000 jusqu'à épuisement
         try:
             while True:
-                response = await asyncio.to_thread(
-                    subscriber.pull,
-                    request={
-                        "subscription": sub_path,
-                        "max_messages": 1000,
-                    },
-                    timeout=15.0
-                )
-                if not response.received_messages:
+                try:
+                    response = await asyncio.to_thread(
+                        subscriber.pull,
+                        request={
+                            "subscription": sub_path,
+                            "max_messages": 1000,
+                        },
+                        timeout=15.0
+                    )
+                    messages = response.received_messages
+                except Exception as e:
+                    from google.api_core.exceptions import DeadlineExceeded
+                    if isinstance(e, DeadlineExceeded) or "504" in str(e) or "Deadline" in str(e):
+                        messages = []
+                    else:
+                        raise e
+
+                if not messages:
                     break
 
-                for msg in response.received_messages:
+                for msg in messages:
                     all_ack_ids.append(msg.ack_id)
                     try:
                         raw = _b64.b64decode(msg.message.data).decode("utf-8")
@@ -678,7 +708,7 @@ async def replay_dlq(db: AsyncSession = Depends(get_db)):
                         unknown_file_ids.append(msg.message.message_id)
 
 
-                if len(response.received_messages) < 1000:
+                if len(messages) < 1000:
                     break
         except Exception as pull_err:
             logger.error(f"Error pulling from DLQ: {pull_err}")
