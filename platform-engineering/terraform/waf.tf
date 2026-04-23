@@ -9,9 +9,43 @@ resource "google_compute_security_policy" "waf" {
     }
   }
 
+  # ── Couche 1 : Threat Intelligence ────────────────────────────────────────────
+  # DÉSACTIVÉE : evaluateThreatIntelligence() nécessite Cloud Armor Enterprise (tier payant).
+  # Réactiver en PRD si le tier Enterprise est souscrit :
+  #   rule { action = "deny(403)" priority = 100
+  #     match { expr { expression = "evaluateThreatIntelligence('iplist-known-malicious-ips')" } }
+  #   }
+  #   rule { action = "deny(403)" priority = 101
+  #     match { expr { expression = "evaluateThreatIntelligence('iplist-tor-exit-nodes')" } }
+  #   }
+
+  # ── Couche 0 : Exceptions — routes légitimes exemptées des règles OWASP ────────
+  # Ces routes reçoivent des payloads JSON légitimes (login, création de ressources)
+  # qui déclenchent faussement les signatures SQLi / XSS / scannerdetection.
+  # La règle allow ici est UNIQUEMENT sur des paths préfixés stricts — pas un allow-all.
+  # Le rate-limit (priorité 2000) s'applique toujours sur ces routes.
+  rule {
+    action   = "allow"
+    priority = 100
+    match {
+      expr {
+        # RE2 regex (syntaxe Cloud Armor CEL) — groupe NON-capturant (?:...) obligatoire.
+        # Les groupes capturants (...) sont rejetés avec "Capture Groups are not allowed".
+        # Couvre : /auth/, /api/, /monitoring-mcp/, /cv-api/, /items-api/, /drive-api/
+        # CRITIQUE pour Pub/Sub : les push vers /cv-api/pubsub/import-cv arrivent avec
+        # des payloads base64 qui déclenchent faussement les règles OWASP → 403 silencieux.
+        expression = "request.path.matches('^/(?:auth|api|monitoring-mcp|cv-api|items-api|drive-api)/.*')"
+      }
+    }
+    description = "Allow legitimate API & Pub/Sub push paths — exempted from OWASP signatures (rate-limit still applies)"
+  }
+
+  # ── Couche 2 : Règles OWASP signature-based ──────────────────────────────────
+  # Ces règles DOIVENT être évaluées AVANT le rate-limit pour bloquer
+  # les payloads malveillants qui restent sous le seuil de rate-limit.
   rule {
     action   = "deny(403)"
-    priority = 1001
+    priority = 500
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
@@ -22,7 +56,7 @@ resource "google_compute_security_policy" "waf" {
 
   rule {
     action   = "deny(403)"
-    priority = 1002
+    priority = 501
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('xss-v33-stable')"
@@ -33,7 +67,7 @@ resource "google_compute_security_policy" "waf" {
 
   rule {
     action   = "deny(403)"
-    priority = 1003
+    priority = 502
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('lfi-v33-stable')"
@@ -44,7 +78,7 @@ resource "google_compute_security_policy" "waf" {
 
   rule {
     action   = "deny(403)"
-    priority = 1004
+    priority = 503
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('rce-v33-stable')"
@@ -55,7 +89,7 @@ resource "google_compute_security_policy" "waf" {
 
   rule {
     action   = "deny(403)"
-    priority = 1005
+    priority = 504
     match {
       expr {
         expression = "evaluatePreconfiguredExpr('scannerdetection-v33-stable')"
@@ -64,24 +98,12 @@ resource "google_compute_security_policy" "waf" {
     description = "OWASP Scanner Detection"
   }
 
-  # Règle par défaut : autoriser (ou on peut refuser et whitelist, selon les besoins)
-  # Pour un LB public, on laisse passer et on log, ou on applique des règles pré-packagées.
-  rule {
-    action   = "allow"
-    priority = "2147483647" # Règle numéro de base (catch-all)
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-    description = "Default allow"
-  }
-
-  # Exemple de mitigation DDoS de base avec rate limiting (ajuster selon les besoins exacts de dev/prd)
+  # ── Couche 3 : Rate Limiting DDoS ─────────────────────────────────────────────
+  # APRÈS les règles OWASP : un payload légitime mais abusif est rate-limité,
+  # mais un payload malveillant est déjà bloqué par les règles OWASP ci-dessus.
   rule {
     action   = "rate_based_ban"
-    priority = 1000
+    priority = 2000
     match {
       versioned_expr = "SRC_IPS_V1"
       config {
@@ -98,6 +120,19 @@ resource "google_compute_security_policy" "waf" {
       }
       ban_duration_sec = 300
     }
-    description = "Rate Limiting to protect backend services"
+    description = "Rate Limiting to protect backend services (après OWASP)"
+  }
+
+  # ── Couche 4 : Default Allow (catch-all) ──────────────────────────────────────
+  rule {
+    action   = "allow"
+    priority = 2147483647 # Règle de base numéro maximum (catch-all)
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    description = "Default allow — trafic légitime non capturé par les règles précédentes"
   }
 }

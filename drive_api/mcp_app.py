@@ -41,6 +41,49 @@ async def execute_tool(request: ToolCallRequest, http_request: Request):
 async def health():
     return {"status": "healthy", "service": "drive-mcp", "transport": "http"}
 
+
+import traceback
+from fastapi.responses import JSONResponse
+import httpx
+import logging
+import asyncio
+
+async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        from opentelemetry.propagate import inject
+        inject(headers)
+    except Exception: raise
+
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{prompts_api_url}/errors/report",
+                json={
+                    "service_name": service_name,
+                    "error_message": error_msg,
+                    "context": trace_context[:2000]
+                },
+                headers=headers
+            )
+        except Exception as e:
+            logging.error(f"Failed to report error to prompts_api: {e}")
+            raise e
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    
+    if token:
+        asyncio.create_task(report_exception_to_prompts_api("drive_api", error_msg, trace_context, token))
+    
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

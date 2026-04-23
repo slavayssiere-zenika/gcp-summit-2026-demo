@@ -40,6 +40,11 @@ Pour chaque API détectée, vérifie les points d'audit suivants (utilise `grep_
 - Dossier de tests ou fichiers `test_main.py` et `conftest.py`.
 - Traces de couverture (présence de fichiers configurant le coverage, ou d'artefacts comme `.coverage` ou `coverage.json`).
 
+#### 3.6. Gestion des Erreurs (Failfast Zéro Erreur Silencieuse)
+- Absence totale de blocs `except Exception: pass` ou de logs isolés capturant une erreur sans instruction `raise`.
+- Vérifier que les actions asynchrones (`asyncio.create_task`) finissent par lever l'exception (`raise e`) ou utiliser un outil explicite centralisé si elles échouent.
+- S'assurer que les outils MCP (`mcp_server.py`) retournent contractuellement la forme structurée `{"success": false, "error": "..."}` en cas d'erreur.
+
 ### Étape 4 : Génération du Rapport
 Une fois toutes les APIs analysées, génère un artefact détaillé (ex: `rapport_audit_apis.md`). 
 Le rapport doit contenir, pour chaque API, une matrice ou des encarts visuels (avec emojis ✅ ❌) montrant si chaque Golden Rule est respectée ou non, ainsi que des recommandations de fix pour les APIs non-conformes.

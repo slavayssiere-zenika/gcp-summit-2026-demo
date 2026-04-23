@@ -198,6 +198,7 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
         nodes_data = {} # name -> id for dedup
         links = []
         seen_links = set()
+        root_services = set()
         
         for i, trace_obj in enumerate(traces_pager):
             if i >= 500: # Limit the number of traces processed to avoid timeout
@@ -265,18 +266,17 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
                         service_name = nl.split('.')[0]
                         
                 if node_type == "unknown" and service_name != "unknown":
-                    if "169.254" in service_name or service_name == "169":
-                        node_type = "metadata"
-                        node_label = "GCP Metadata Server"
-                    elif "127." in service_name or service_name == "127":
-                        node_type = "service"
-                        node_label = f"Local Proxy ({service_name})"
+                    if "169." in service_name or service_name == "169":
+                        service_name = "unknown" # Ignorer metadata
+                    elif "127." in service_name or service_name == "127" or "localhost" in service_name:
+                        service_name = "unknown" # Ignorer localhost
                     elif service_name == "api" or "internal" in service_name:
                         node_type = "lb_private"
                         node_label = "LB Privé (api.internal.zenika)"
                     elif service_name == "dev" or ".fr" in service_name:
                         node_type = "lb_public"
                         node_label = "LB Public"
+                        service_name = "lb_public"
                     elif "pubsub" in service_name:
                         node_type = "pubsub"
                         node_label = "Google Pub/Sub"
@@ -290,6 +290,10 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
                 span_to_service[s_id] = service_name
                 if service_name != "unknown":
                     nodes_data[service_name] = {"id": service_name, "type": node_type, "label": node_label}
+                    
+                    # Détection d'un span racine
+                    if not span.parent_span_id:
+                        root_services.add(service_name)
             
             # 2. Second pass: find links using normalized IDs
             for span in trace_obj.spans:
@@ -305,9 +309,28 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
                         if link_key not in seen_links:
                             links.append({"source": parent_service, "target": child_service})
                             seen_links.add(link_key)
+                            
+        # 2.5 Inject User node and connect to root services
+        nodes_data["utilisateur"] = {"id": "utilisateur", "type": "user", "label": "Utilisateur (Externe)"}
+        nodes_data["lb_public"] = {"id": "lb_public", "type": "lb_public", "label": "LB Public"}
+        
+        for root_svr in root_services:
+            if root_svr not in ("utilisateur", "lb_public", "lb_private") and "pubsub" not in root_svr:
+                # Add forced link: User -> LB Public -> Root Service
+                user_lb_link = "utilisateur->lb_public"
+                lb_svc_link = f"lb_public->{root_svr}"
+                
+                if user_lb_link not in seen_links:
+                    links.append({"source": "utilisateur", "target": "lb_public"})
+                    seen_links.add(user_lb_link)
+                
+                if lb_svc_link not in seen_links:
+                    links.append({"source": "lb_public", "target": root_svr})
+                    seen_links.add(lb_svc_link)
+
         
         # 3. Filter nodes: Keep Zenika services OR nodes involved in links
-        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "monitoring", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive"]
+        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "monitoring", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive", "utilisateur", "lb_public"]
         final_nodes = []
         linked_service_names = set()
         for l in links:

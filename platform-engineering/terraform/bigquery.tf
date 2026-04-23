@@ -1,9 +1,14 @@
 resource "google_bigquery_dataset" "finops" {
-  dataset_id                 = "finops"
-  friendly_name              = "FinOps Observability"
-  description                = "Dataset for AI consumption and costs tracking"
+  dataset_id                 = "finops_${terraform.workspace}"
+  friendly_name              = "FinOps Observability (${terraform.workspace})"
+  description                = "Dataset for AI consumption and costs tracking — env: ${terraform.workspace}"
   location                   = "europe-west1"
   delete_contents_on_destroy = false
+
+  labels = {
+    environment = terraform.workspace
+    managed_by  = "terraform"
+  }
 }
 
 resource "google_bigquery_table" "ai_usage" {

@@ -64,7 +64,7 @@ def setup_tracing(app: FastAPI) -> TracerProvider:
         logger.info("[MISSIONS] No trace exporter configured (TRACE_EXPORTER=%s).", TRACE_EXPORTER)
 
     trace.set_tracer_provider(provider)
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider, excluded_urls="health,metrics")
     return provider
 
 
@@ -351,7 +351,7 @@ async def delete_history(payload: dict = Depends(verify_jwt)):
     return {"message": "Pas d'historique"}
 
 
-@protected_router.get("/spec")
+@app.get("/spec")
 async def get_spec():
     """Retourne la spécification métier de l'agent Missions."""
     try:
@@ -379,6 +379,49 @@ async def mcp_registry(_payload: dict = Depends(verify_jwt)):
 
 app.include_router(protected_router)
 
+
+
+import traceback
+from fastapi.responses import JSONResponse
+import httpx
+import logging
+import asyncio
+
+async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        from opentelemetry.propagate import inject
+        inject(headers)
+    except Exception: raise
+
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{prompts_api_url}/errors/report",
+                json={
+                    "service_name": service_name,
+                    "error_message": error_msg,
+                    "context": trace_context[:2000]
+                },
+                headers=headers
+            )
+        except Exception as e:
+            logging.error(f"Failed to report error to prompts_api: {e}")
+            raise e
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    
+    if token:
+        asyncio.create_task(report_exception_to_prompts_api("agent_missions_api", error_msg, trace_context, token))
+    
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

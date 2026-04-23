@@ -175,3 +175,30 @@ databaseChangeLog:
         - sql:
             sql: "-- Pas de rollback nécessaire : le statut QUEUED sera simplement ignoré par les anciennes versions"
             comment: "Rollback no-op : la suppression de QUEUED ne nécessite pas de migration DB (colonne varchar libre)"
+
+  - changeSet:
+      id: "10"
+      author: "antigravity"
+      comment: "Ajout ON DELETE CASCADE sur la FK fk_drive_sync_folder — permet la suppression atomique d'un dossier avec ses fichiers trackés sans ForeignKeyViolationError"
+      changes:
+        - dropForeignKeyConstraint:
+            baseTableName: "drive_sync_state"
+            constraintName: "fk_drive_sync_folder"
+        - addForeignKeyConstraint:
+            baseTableName: "drive_sync_state"
+            baseColumnNames: "folder_id"
+            constraintName: "fk_drive_sync_folder"
+            referencedTableName: "drive_folders"
+            referencedColumnNames: "id"
+            onDelete: "CASCADE"
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: "drive_sync_state"
+            constraintName: "fk_drive_sync_folder"
+        - addForeignKeyConstraint:
+            baseTableName: "drive_sync_state"
+            baseColumnNames: "folder_id"
+            constraintName: "fk_drive_sync_folder"
+            referencedTableName: "drive_folders"
+            referencedColumnNames: "id"
+

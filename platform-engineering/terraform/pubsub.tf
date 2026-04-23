@@ -97,6 +97,15 @@ resource "google_pubsub_subscription_iam_member" "pubsub_dlq_subscriber" {
   member       = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
+# Allow drive_api SA to pull from and ACK messages in the DLQ subscription
+# Required for the /dlq/replay endpoint in drive_api
+resource "google_pubsub_subscription_iam_member" "drive_dlq_subscriber" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.cv_import_events_dlq_sub.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${data.google_service_account.drive_sa.email}"
+}
+
 # DLQ Subscription — conserve les messages dead-lettered pour analyse/monitoring
 # TTL : 14 jours (aligné sur le topic DLQ)
 resource "google_pubsub_subscription" "cv_import_events_dlq_sub" {
@@ -123,6 +132,10 @@ resource "google_pubsub_subscription" "cv_import_events_dlq_sub" {
 
 resource "google_pubsub_topic" "user_events" {
   name = "zenika-user-events-${terraform.workspace}"
+
+  # TTL : 7 jours — si cv_api ou items_api est en panne, les événements survivent
+  # Aligné sur cv_import_events (7 jours) pour cohérence opérationnelle
+  message_retention_duration = "604800s" # 7 jours (7 * 24 * 3600)
 
   labels = {
     environment = terraform.workspace

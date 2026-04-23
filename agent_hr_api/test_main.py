@@ -89,7 +89,7 @@ def test_get_me_fail(mock_httpx):
 def test_mcp_registry():
     token = get_auth_token()
     response = client.get("/mcp/registry", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 200
+    assert response.status_code == 200, response.json()
     payload = response.json()
     assert "services" in payload
     assert len(payload["services"]) > 0

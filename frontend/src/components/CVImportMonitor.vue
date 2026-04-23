@@ -4,8 +4,9 @@ import axios from 'axios'
 import {
   Activity, CheckCircle2, AlertTriangle, XCircle,
   Clock, FileText, Radio, Loader2, RefreshCw, Zap,
-  ArrowRight, FolderOpen
+  ArrowRight, FolderOpen, User
 } from 'lucide-vue-next'
+import { authService } from '../services/auth'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PipelineStatus {
@@ -17,11 +18,25 @@ interface PipelineStatus {
   errors: number
 }
 
+interface FileState {
+  google_file_id: string
+  file_name: string | null
+  parent_folder_name: string | null
+  status: string
+  last_processed_at: string | null
+  error_message: string | null
+  user_id: number | null
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 const pipelineStatus = ref<PipelineStatus | null>(null)
+const activeFiles = ref<FileState[]>([])      // PROCESSING
+const queuedFiles = ref<FileState[]>([])      // QUEUED (capped to 5 for UX)
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const lastRefresh = ref<Date | null>(null)
 const isLoading = ref(false)
+const now = ref(Date.now())  // ticker pour timers temps-réel
+let tickInterval: ReturnType<typeof setInterval> | null = null
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
 const totalFiles = computed(() => {
@@ -66,20 +81,31 @@ const pipelineStatusClass = computed(() => {
 })
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
+const authHeader = () => ({ Authorization: `Bearer ${authService.state.token}` })
+
 const fetchStatus = async () => {
   if (isLoading.value) return
   isLoading.value = true
   try {
-    const resp = await axios.get('/api/drive/status')
+    // Fetch global stats
+    const resp = await axios.get('/api/drive/status', { headers: authHeader() })
     pipelineStatus.value = resp.data
     lastRefresh.value = new Date()
+
+    // Fetch active (PROCESSING) files for live list
+    const [procResp, queuedResp] = await Promise.all([
+      axios.get('/api/drive/files', { params: { status: 'PROCESSING', limit: 20 }, headers: authHeader() }),
+      axios.get('/api/drive/files', { params: { status: 'QUEUED', limit: 5 }, headers: authHeader() }),
+    ])
+    activeFiles.value = procResp.data
+    queuedFiles.value = queuedResp.data
 
     // Poll faster if active
     if (isActive.value) {
       if (!pollingInterval.value) startPolling(4000)
     } else {
       stopPolling()
-      startPolling(15000) // Slower refresh when idle
+      startPolling(15000)
     }
   } catch (e) {
     console.error('[CVImportMonitor] Failed to fetch pipeline status', e)
@@ -100,21 +126,23 @@ const stopPolling = () => {
   }
 }
 
-onMounted(fetchStatus)
-onUnmounted(stopPolling)
+onMounted(() => {
+  fetchStatus()
+  tickInterval = setInterval(() => { now.value = Date.now() }, 1000)
+})
+onUnmounted(() => {
+  stopPolling()
+  if (tickInterval) clearInterval(tickInterval)
+})
 
 const isFlushingZombies = ref(false)
 
-/**
- * Forcer le déblocage immédiat des fichiers QUEUED zombies.
- * Appelle retry-errors?force=true (bypass du seuil 30 min) puis /sync.
- */
 const forceFlushZombies = async () => {
   if (isFlushingZombies.value) return
   isFlushingZombies.value = true
   try {
-    await axios.post('/api/drive/retry-errors?force=true')
-    await axios.post('/api/drive/sync')
+    await axios.post('/api/drive/retry-errors?force=true', {}, { headers: authHeader() })
+    await axios.post('/api/drive/sync', {}, { headers: authHeader() })
     await fetchStatus()
   } catch (e) {
     console.error('[CVImportMonitor] Force flush failed', e)
@@ -127,6 +155,18 @@ const formatTime = (date: Date | null) => {
   if (!date) return '—'
   return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
+
+const formatElapsed = (isoDate: string | null): string => {
+  if (!isoDate) return ''
+  const diff = Math.floor((now.value - new Date(isoDate).getTime()) / 1000)
+  if (diff < 5) return 'à l\'instant'
+  if (diff < 60) return `${diff}s`
+  if (diff < 3600) return `${Math.floor(diff / 60)}min ${diff % 60}s`
+  return `${Math.floor(diff / 3600)}h${Math.floor((diff % 3600) / 60)}min`
+}
+
+const displayName = (f: FileState): string =>
+  f.file_name ? f.file_name.replace(/\.pdf$/i, '') : f.google_file_id.slice(0, 12) + '…'
 </script>
 
 <template>
@@ -166,91 +206,123 @@ const formatTime = (date: Date | null) => {
     </div>
 
     <div v-else class="monitor-body">
-      <!-- KPI Row -->
-      <div class="kpi-row">
-        <div class="kpi-card kpi-pending" :class="{ 'kpi-active': pipelineStatus.pending > 0 }">
-          <div class="kpi-icon"><Clock size="16" /></div>
-          <div class="kpi-value">{{ pipelineStatus.pending }}</div>
-          <div class="kpi-label">En attente</div>
-        </div>
-        <div class="kpi-card kpi-queued" :class="{ 'kpi-active': pipelineStatus.queued > 0 }">
-          <div class="kpi-icon"><Radio size="16" /></div>
-          <div class="kpi-value">{{ pipelineStatus.queued }}</div>
-          <div class="kpi-label">File Pub/Sub</div>
-        </div>
-        <div class="kpi-card kpi-processing" :class="{ 'kpi-active': pipelineStatus.processing > 0 }">
-          <div class="kpi-icon"><Loader2 size="16" :class="{ 'spin-icon': pipelineStatus.processing > 0 }" /></div>
-          <div class="kpi-value">{{ pipelineStatus.processing }}</div>
-          <div class="kpi-label">Analyse IA</div>
-        </div>
-        <div class="kpi-card kpi-success">
-          <div class="kpi-icon"><CheckCircle2 size="16" /></div>
-          <div class="kpi-value">{{ pipelineStatus.imported }}</div>
-          <div class="kpi-label">Importés</div>
-        </div>
-        <div class="kpi-card kpi-ignored">
-          <div class="kpi-icon"><FileText size="16" /></div>
-          <div class="kpi-value">{{ pipelineStatus.ignored }}</div>
-          <div class="kpi-label">Ignorés</div>
-        </div>
-        <div class="kpi-card" :class="pipelineStatus.errors > 0 ? 'kpi-error' : 'kpi-ignored'">
-          <div class="kpi-icon"><XCircle size="16" /></div>
-          <div class="kpi-value">{{ pipelineStatus.errors }}</div>
-          <div class="kpi-label">Erreurs</div>
-        </div>
-      </div>
 
-      <!-- Progress bar (only if there are files) -->
+      <!-- ── Progress bar ── -->
       <div v-if="totalFiles > 0" class="progress-section">
         <div class="progress-meta">
           <span>{{ processedFiles }} / {{ totalFiles }} fichiers traités</span>
+          <div class="progress-badges">
+            <span class="mini-badge badge-pending" v-if="pipelineStatus.pending > 0">
+              <Clock size="10" /> {{ pipelineStatus.pending }} en attente
+            </span>
+            <span class="mini-badge badge-queued" v-if="pipelineStatus.queued > 0">
+              <Radio size="10" /> {{ pipelineStatus.queued }} en file
+            </span>
+            <span class="mini-badge badge-processing" v-if="pipelineStatus.processing > 0">
+              <Loader2 size="10" class="spin-icon" /> {{ pipelineStatus.processing }} en analyse
+            </span>
+          </div>
           <span class="progress-pct">{{ progressPct }}%</span>
         </div>
         <div class="progress-track">
-          <!-- Imported (green) -->
           <div
             class="progress-fill fill-imported"
             :style="{ width: `${Math.round(pipelineStatus.imported / totalFiles * 100)}%` }"
           ></div>
-          <!-- Ignored (gray) -->
           <div
             class="progress-fill fill-ignored"
             :style="{ width: `${Math.round(pipelineStatus.ignored / totalFiles * 100)}%` }"
           ></div>
-          <!-- Errors (red) -->
           <div
             class="progress-fill fill-error"
             :style="{ width: `${Math.round(pipelineStatus.errors / totalFiles * 100)}%` }"
           ></div>
         </div>
         <div class="progress-legend">
-          <span class="legend-item"><span class="dot dot-green"></span>Importés</span>
-          <span class="legend-item"><span class="dot dot-gray"></span>Ignorés (non-CV)</span>
-          <span class="legend-item"><span class="dot dot-red"></span>Erreurs</span>
+          <span class="legend-item"><span class="dot dot-green"></span>Importés ({{ pipelineStatus.imported }})</span>
+          <span class="legend-item"><span class="dot dot-gray"></span>Ignorés ({{ pipelineStatus.ignored }})</span>
+          <span class="legend-item"><span class="dot dot-red"></span>Erreurs ({{ pipelineStatus.errors }})</span>
         </div>
       </div>
 
-      <!-- Alert banners -->
-      <div v-if="pipelineStatus.queued > 0" class="alert-banner alert-info">
-        <Radio size="14" style="flex-shrink:0;margin-top:2px" />
-        <span>
-          <strong>{{ pipelineStatus.queued }} CV(s)</strong> en file Pub/Sub — en attente de traitement par l'IA Gemini.
-        </span>
-        <button
-          class="flush-btn"
-          @click="forceFlushZombies"
-          :disabled="isFlushingZombies"
-          :title="`Forcer le déblocage de ${pipelineStatus.queued} fichier(s) bloqués en QUEUED`"
-          aria-label="Forcer le déblocage des fichiers zombies bloqués en Pub/Sub"
-        >
-          <Zap size="12" :class="{ 'spin-icon': isFlushingZombies }" />
-          {{ isFlushingZombies ? 'Déblocage...' : 'Forcer' }}
-        </button>
+      <!-- ── Live PROCESSING list ── -->
+      <div v-if="activeFiles.length > 0" class="live-section">
+        <div class="live-header">
+          <div class="live-title">
+            <span class="live-dot"></span>
+            <span>Analyse IA en cours</span>
+            <span class="live-badge">{{ pipelineStatus.processing }}</span>
+          </div>
+        </div>
+        <div class="file-list">
+          <div
+            v-for="file in activeFiles"
+            :key="file.google_file_id"
+            class="file-row file-processing"
+          >
+            <div class="file-icon">
+              <Loader2 size="14" class="spin-icon" />
+            </div>
+            <div class="file-info">
+              <span class="file-name">{{ displayName(file) }}</span>
+              <span class="file-meta" v-if="file.parent_folder_name">
+                <User size="10" /> {{ file.parent_folder_name }}
+              </span>
+            </div>
+            <div class="file-elapsed" v-if="file.last_processed_at" :title="`Démarré il y a ${formatElapsed(file.last_processed_at)}`">
+              {{ formatElapsed(file.last_processed_at) }}
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- ── QUEUED files preview ── -->
+      <div v-if="queuedFiles.length > 0" class="live-section live-section--queued">
+        <div class="live-header">
+          <div class="live-title">
+            <Radio size="12" style="flex-shrink:0" />
+            <span>Prochains en file Pub/Sub</span>
+            <span class="live-badge badge-queued-cnt">{{ pipelineStatus.queued }}</span>
+          </div>
+          <button
+            class="flush-btn"
+            @click="forceFlushZombies"
+            :disabled="isFlushingZombies"
+            :title="`Forcer le déblocage de ${pipelineStatus.queued} fichier(s) bloqués`"
+            aria-label="Forcer le déblocage des fichiers zombies bloqués en Pub/Sub"
+          >
+            <Zap size="11" :class="{ 'spin-icon': isFlushingZombies }" />
+            {{ isFlushingZombies ? 'Déblocage...' : 'Forcer' }}
+          </button>
+        </div>
+        <div class="file-list">
+          <div
+            v-for="file in queuedFiles"
+            :key="file.google_file_id"
+            class="file-row file-queued"
+          >
+            <div class="file-icon"><Radio size="12" /></div>
+            <div class="file-info">
+              <span class="file-name">{{ displayName(file) }}</span>
+              <span class="file-meta" v-if="file.parent_folder_name">
+                <User size="10" /> {{ file.parent_folder_name }}
+              </span>
+            </div>
+            <div class="file-elapsed" v-if="file.last_processed_at" :title="`En queue depuis ${formatElapsed(file.last_processed_at)}`">
+              {{ formatElapsed(file.last_processed_at) }}
+            </div>
+          </div>
+          <div v-if="pipelineStatus.queued > 5" class="file-row file-more">
+            <span>+ {{ pipelineStatus.queued - 5 }} autres en attente</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Alert banners ── -->
       <div v-if="pipelineStatus.errors > 0" class="alert-banner alert-error">
         <AlertTriangle size="14" />
         <span>
-          <strong>{{ pipelineStatus.errors }} fichier(s)</strong> en erreur — consultez la section Drive ci-dessous pour les détails et relancer.
+          <strong>{{ pipelineStatus.errors }} fichier(s)</strong> en erreur — consultez la section Drive ci-dessous.
         </span>
       </div>
       <div v-if="!isActive && pipelineStatus.errors === 0 && totalFiles > 0" class="alert-banner alert-success">
@@ -346,55 +418,22 @@ const formatTime = (date: Date | null) => {
 /* ── Body ── */
 .monitor-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
 
-/* ── KPI Row ── */
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-}
-
-@media (max-width: 768px) {
-  .kpi-row { grid-template-columns: repeat(3, 1fr); }
-}
-
-.kpi-card {
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
-  padding: 12px 8px; text-align: center; transition: all 0.3s;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-}
-.kpi-active { transform: scale(1.03); }
-
-.kpi-pending  { border-top: 3px solid #f59e0b; }
-.kpi-queued   { border-top: 3px solid #8b5cf6; }
-.kpi-processing { border-top: 3px solid #3b82f6; }
-.kpi-success  { border-top: 3px solid #16a34a; background: #f0fdf4; border-color: #bbf7d0; }
-.kpi-ignored  { border-top: 3px solid #94a3b8; }
-.kpi-error    { border-top: 3px solid #dc2626; background: #fff1f2; border-color: #fecdd3; }
-
-.kpi-pending.kpi-active  { background: #fffbeb; border-color: #fde68a; box-shadow: 0 4px 12px rgba(245,158,11,0.15); }
-.kpi-queued.kpi-active   { background: rgba(139,92,246,0.06); border-color: rgba(139,92,246,0.3); box-shadow: 0 4px 12px rgba(139,92,246,0.15); }
-.kpi-processing.kpi-active { background: rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.3); box-shadow: 0 4px 12px rgba(59,130,246,0.15); }
-
-.kpi-icon { opacity: 0.5; display: flex; }
-.kpi-pending .kpi-icon   { color: #f59e0b; }
-.kpi-queued .kpi-icon    { color: #8b5cf6; }
-.kpi-processing .kpi-icon { color: #3b82f6; }
-.kpi-success .kpi-icon   { color: #16a34a; opacity: 0.8; }
-.kpi-ignored .kpi-icon   { color: #64748b; }
-.kpi-error .kpi-icon     { color: #dc2626; opacity: 0.8; }
-
-.kpi-value { font-size: 1.5rem; font-weight: 800; color: #1e293b; line-height: 1; }
-.kpi-success .kpi-value  { color: #16a34a; }
-.kpi-error .kpi-value    { color: #dc2626; }
-
-.kpi-label { font-size: 0.65rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-
-.spin-icon { animation: spin 1.5s linear infinite; }
-
 /* ── Progress ── */
 .progress-section { background: #f8fafc; border-radius: 12px; padding: 14px 16px; border: 1px solid #e2e8f0; }
-.progress-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; margin-bottom: 8px; }
-.progress-pct { font-weight: 700; color: #1e293b; }
+.progress-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.75rem; color: #64748b; margin-bottom: 8px; gap: 8px; flex-wrap: wrap;
+}
+.progress-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.mini-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; font-weight: 700;
+}
+.badge-pending   { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.badge-queued    { background: rgba(139,92,246,0.08); color: #7c3aed; border: 1px solid rgba(139,92,246,0.25); }
+.badge-processing { background: rgba(227,25,55,0.08); color: #E31937; border: 1px solid rgba(227,25,55,0.25); }
+
+.progress-pct { font-weight: 700; color: #1e293b; flex-shrink: 0; }
 .progress-track {
   height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden;
   display: flex;
@@ -404,12 +443,90 @@ const formatTime = (date: Date | null) => {
 .fill-ignored  { background: #94a3b8; }
 .fill-error    { background: #dc2626; }
 
-.progress-legend { display: flex; gap: 12px; margin-top: 8px; }
+.progress-legend { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 .legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: #64748b; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .dot-green { background: #16a34a; }
 .dot-gray  { background: #94a3b8; }
 .dot-red   { background: #dc2626; }
+
+/* ── Live sections ── */
+.live-section {
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(227,25,55,0.2);
+  background: rgba(227,25,55,0.03);
+}
+.live-section--queued {
+  border-color: rgba(139,92,246,0.2);
+  background: rgba(139,92,246,0.03);
+}
+
+.live-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  background: rgba(255,255,255,0.6);
+}
+.live-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; font-weight: 700; color: #E31937;
+}
+.live-section--queued .live-title { color: #7c3aed; }
+
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #E31937;
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+.live-badge {
+  padding: 1px 7px; border-radius: 20px;
+  background: rgba(227,25,55,0.12); color: #E31937;
+  font-size: 0.68rem; font-weight: 800;
+}
+.badge-queued-cnt {
+  background: rgba(139,92,246,0.12); color: #7c3aed;
+}
+
+.file-list { display: flex; flex-direction: column; }
+
+.file-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  transition: background 0.15s;
+}
+.file-row:last-child { border-bottom: none; }
+.file-row:hover { background: rgba(255,255,255,0.7); }
+
+.file-icon {
+  width: 22px; height: 22px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.file-processing .file-icon { background: rgba(227,25,55,0.1); color: #E31937; }
+.file-queued .file-icon     { background: rgba(139,92,246,0.1); color: #7c3aed; }
+
+.file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.file-name {
+  font-size: 0.82rem; font-weight: 600; color: #1e293b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-meta {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.68rem; color: #94a3b8;
+}
+
+.file-elapsed {
+  font-size: 0.68rem; font-weight: 700; color: #94a3b8;
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
+  background: #f1f5f9; padding: 2px 6px; border-radius: 6px;
+}
+
+.file-more {
+  font-size: 0.75rem; color: #94a3b8; font-style: italic;
+  justify-content: center; padding: 8px 14px;
+}
 
 /* ── Alert banners ── */
 .alert-banner {
@@ -417,7 +534,6 @@ const formatTime = (date: Date | null) => {
   padding: 10px 14px; border-radius: 10px;
   font-size: 0.82rem; line-height: 1.5;
 }
-.alert-info    { background: rgba(139,92,246,0.08); color: #7c3aed; border: 1px solid rgba(139,92,246,0.2); }
 .alert-error   { background: rgba(220,38,38,0.07); color: #b91c1c; border: 1px solid rgba(220,38,38,0.2); }
 .alert-success { background: rgba(16,163,74,0.07); color: #166534; border: 1px solid rgba(16,163,74,0.2); }
 .alert-neutral { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
@@ -437,16 +553,14 @@ const formatTime = (date: Date | null) => {
 .quick-sep { color: #e2e8f0; }
 .last-refresh { margin-left: auto; }
 
-/* ── Force flush button (dans alert-banner) ── */
+/* ── Force flush button ── */
 .flush-btn {
-  margin-left: auto;
-  flex-shrink: 0;
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px; border-radius: 8px;
   background: rgba(139,92,246,0.15);
   color: #7c3aed;
   border: 1px solid rgba(139,92,246,0.35);
-  font-size: 0.75rem; font-weight: 700;
+  font-size: 0.72rem; font-weight: 700;
   cursor: pointer; transition: all 0.2s;
   animation: pulse-flush 2s ease-in-out infinite;
 }
@@ -459,4 +573,6 @@ const formatTime = (date: Date | null) => {
   0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); }
   50%      { box-shadow: 0 0 0 4px rgba(139,92,246,0.2); }
 }
+
+.spin-icon { animation: spin 1.5s linear infinite; }
 </style>

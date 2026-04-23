@@ -8,7 +8,8 @@ import httpx
 from google.cloud import pubsub_v1
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, update
+from sqlalchemy import func, update, case, literal
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from opentelemetry.propagate import inject
 
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
@@ -54,6 +55,7 @@ def _resolve_gcp_project_id() -> str:
 REDIS_TTL_ROOTS = 300        # 5 minutes pour la liste des folders racines
 REDIS_TTL_GRAPH = 2592000    # 30 jours pour le mapping ascendant (inchangé)
 REDIS_TTL_KNOWN_FILE = 86400 # 24 heures pour les fichiers déjà importés
+REDIS_TTL_OUT_OF_SCOPE = 86400  # 24 heures pour les racines Drive hors périmètre
 
 REDIS_KEY_ROOTS = "drive:roots"
 
@@ -173,6 +175,13 @@ class DriveService:
                 self._cache_path(path_traversed, root["id"])
                 return root, start_parent_id, parent_folder_name
 
+            # 1b. Ce nœud est-il en blacklist (racine hors périmètre connue) ?
+            if self.redis.get(f"drive:oos:{current_id}"):
+                logger.debug(
+                    f"[_resolve_root_and_parent] Nœud {current_id} blacklisté (hors périmètre) — skip."
+                )
+                return None, None, None
+
             # 2. Cache graphe pour le chemin intermédiaire
             cached_root_id = self.redis.get(f"drive:graph:{current_id}")
             if cached_root_id:
@@ -220,7 +229,19 @@ class DriveService:
 
                 if not parents:
                     logger.info(
-                        f"[_resolve_root_and_parent] Racine absolue Drive atteinte pour {current_id}."
+                        f"[_resolve_root_and_parent] Racine absolue Drive atteinte pour {current_id} "
+                        f"('{folder_name_raw}') — hors périmètre, mise en blacklist (24h)."
+                    )
+                    # Blacklister la racine absolue et tout le chemin parcouru
+                    # pour éviter les appels Drive API redondants au prochain cycle.
+                    oos_ids = path_traversed + [current_id]
+                    pipe = self.redis.pipeline()
+                    for oos_id in oos_ids:
+                        pipe.set(f"drive:oos:{oos_id}", "1", ex=REDIS_TTL_OUT_OF_SCOPE)
+                    pipe.execute()
+                    logger.info(
+                        f"[_resolve_root_and_parent] {len(oos_ids)} nœuds blacklistés "
+                        f"(racine='{folder_name_raw}')."
                     )
                     break
 
@@ -347,36 +368,49 @@ class DriveService:
                             f"Fichier '{name}' → root tag={root['tag']}, "
                             f"parent_folder='{parent_name}'"
                         )
-                        state = (
-                            await self.db.execute(
-                                select(DriveSyncState).filter(
-                                    DriveSyncState.google_file_id == file_id
-                                )
-                            )
-                        ).scalars().first()
 
-                        if not state:
-                            state = DriveSyncState(
+                        # Upsert atomique (INSERT … ON CONFLICT DO UPDATE) :
+                        # - NOUVEAU : évite d'écraser le status courant (QUEUED/PROCESSING/IMPORTED_CV)
+                        #   quand le fichier n'a pas changé de révision.
+                        # - Ne repasse à PENDING que si revision_id a réellement changé.
+                        upsert_stmt = (
+                            pg_insert(DriveSyncState)
+                            .values(
                                 google_file_id=file_id,
                                 folder_id=root["id"],
                                 file_name=name,
                                 revision_id=version,
                                 modified_time=mod_time.replace(tzinfo=None),
-                                status=DriveSyncStatus.PENDING,
+                                status=DriveSyncStatus.PENDING.value,
                                 parent_folder_name=parent_name,
+                                last_processed_at=datetime.utcnow(),
                             )
-                            self.db.add(state)
-                            new_discoveries += 1
-                        else:
-                            if state.file_name != name:
-                                state.file_name = name
-                            if parent_name and state.parent_folder_name != parent_name:
-                                state.parent_folder_name = parent_name
-                            if state.revision_id != version:
-                                state.revision_id = version
-                                state.modified_time = mod_time.replace(tzinfo=None)
-                                state.status = DriveSyncStatus.PENDING
-                                new_discoveries += 1
+                            .on_conflict_do_update(
+                                index_elements=["google_file_id"],
+                                set_=dict(
+                                    file_name=name,
+                                    parent_folder_name=parent_name,
+                                    folder_id=root["id"],
+                                    revision_id=version,
+                                    modified_time=mod_time.replace(tzinfo=None),
+                                    # ⚠️ Préserver le statut courant si la révision n'a pas changé.
+                                    # Seul un changement de révision justifie un retour à PENDING.
+                                    status=case(
+                                        (
+                                            DriveSyncState.__table__.c.revision_id != version,
+                                            literal(DriveSyncStatus.PENDING.value),
+                                        ),
+                                        else_=DriveSyncState.__table__.c.status,
+                                    ),
+                                    last_processed_at=datetime.utcnow(),
+                                ),
+                            )
+                        )
+                        await self.db.execute(upsert_stmt)
+                        new_discoveries += 1
+                        logger.info(
+                            f"[Upsert] '{name}' ({file_id}) — version={version} enregistré."
+                        )
                     else:
                         logger.info(
                             f"Fichier '{name}' hors périmètre "

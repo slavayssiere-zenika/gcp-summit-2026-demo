@@ -140,7 +140,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
 @router.get("/", response_model=PaginationResponse)
 async def list_competencies(
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=2000),
     db: AsyncSession = Depends(get_db)
 ):
     cache_key = f"competencies:tree:list:{skip}:{limit}"
@@ -217,6 +217,156 @@ async def search_competencies(
     return response
 
 
+# ============================================================
+# Axe 4 : Suggestions de compétences issu du signal marché
+# NOTE: Ces routes DOIVENT être définies AVANT /{competency_id}
+# pour éviter que FastAPI ne capture "suggestions" comme un int.
+# ============================================================
+
+@router.post("/suggestions", response_model=CompetencySuggestionResponse, status_code=201)
+async def create_competency_suggestion(
+    payload: CompetencySuggestionCreate,
+    db: AsyncSession = Depends(get_db),
+) -> CompetencySuggestionResponse:
+    """Soumet une suggestion de compétence pour révision admin.
+
+    Idempotent : si une suggestion avec le même nom (insensible à la casse)
+    existe déjà en statut PENDING_REVIEW, on incrémente son compteur
+    d'occurrence plutôt que de créer un doublon.
+
+    Une compétence déjà présente dans la taxonomie officielle ne doit pas
+    être soumise (vérification upstream dans missions_api / cv_api).
+    """
+    name_clean = payload.name.strip()
+    if not name_clean:
+        raise HTTPException(status_code=422, detail="Le nom de la suggestion ne peut pas être vide.")
+
+    # Idempotence : chercher une suggestion PENDING existante pour ce nom
+    existing = (
+        await db.execute(
+            select(CompetencySuggestion)
+            .where(func.lower(CompetencySuggestion.name) == name_clean.lower())
+            .where(CompetencySuggestion.status == "PENDING_REVIEW")
+        )
+    ).scalars().first()
+
+    if existing:
+        existing.occurrence_count += 1
+        existing.updated_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(existing)
+        return CompetencySuggestionResponse.model_validate(existing)
+
+    new_suggestion = CompetencySuggestion(
+        name=name_clean,
+        source=payload.source,
+        context=payload.context,
+        status="PENDING_REVIEW",
+        occurrence_count=1,
+    )
+    db.add(new_suggestion)
+    await db.commit()
+    await db.refresh(new_suggestion)
+    logger.info(f"[Suggestions] Nouvelle suggestion créée : '{name_clean}' (source={payload.source})")
+    return CompetencySuggestionResponse.model_validate(new_suggestion)
+
+
+@router.get("/suggestions", response_model=list[CompetencySuggestionResponse])
+async def list_competency_suggestions(
+    status: str = Query("PENDING_REVIEW", description="Filtre par statut : PENDING_REVIEW | ACCEPTED | REJECTED"),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+) -> list[CompetencySuggestionResponse]:
+    """Liste les suggestions de compétences, triées par occurrence décroissante.
+
+    Le classement par `occurrence_count` permet d'identifier en premier les
+    compétences les plus fréquemment demandées par les missions client (signal marché).
+    """
+    rows = (
+        await db.execute(
+            select(CompetencySuggestion)
+            .where(CompetencySuggestion.status == status)
+            .order_by(CompetencySuggestion.occurrence_count.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    return [CompetencySuggestionResponse.model_validate(r) for r in rows]
+
+
+@router.patch("/suggestions/{suggestion_id}/review", response_model=CompetencySuggestionResponse)
+async def review_competency_suggestion(
+    suggestion_id: int,
+    payload: SuggestionReviewRequest,
+    bg_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
+) -> CompetencySuggestionResponse:
+    """(Admin) Accepte ou rejette une suggestion de compétence.
+
+    Si action='ACCEPT' : crée la compétence dans la taxonomie officielle
+    (via create_competency) et marque la suggestion comme ACCEPTED.
+    Si action='REJECT' : marque simplement la suggestion comme REJECTED.
+    """
+    if jwt_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+
+    if payload.action not in ("ACCEPT", "REJECT"):
+        raise HTTPException(status_code=422, detail="action doit être 'ACCEPT' ou 'REJECT'.")
+
+    suggestion = (
+        await db.execute(select(CompetencySuggestion).where(CompetencySuggestion.id == suggestion_id))
+    ).scalars().first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion introuvable.")
+
+    if suggestion.status != "PENDING_REVIEW":
+        raise HTTPException(
+            status_code=409,
+            detail=f"La suggestion est déjà en statut '{suggestion.status}' et ne peut plus être traitée.",
+        )
+
+    if payload.action == "ACCEPT":
+        # Vérifier qu'elle n'existe pas déjà dans la taxonomie
+        existing_comp = (
+            await db.execute(
+                select(Competency).where(func.lower(Competency.name) == suggestion.name.lower())
+            )
+        ).scalars().first()
+
+        if not existing_comp:
+            new_comp = Competency(
+                name=suggestion.name,
+                description=payload.description or f"Importé depuis les suggestions (source: {suggestion.source})",
+                parent_id=payload.parent_id,
+            )
+            # Auto-génération d'alias
+            gen_aliases = await _generate_aliases_for_competency(suggestion.name)
+            if gen_aliases:
+                new_comp.aliases = gen_aliases
+
+            db.add(new_comp)
+            await db.flush()
+            logger.info(
+                f"[Suggestions] Compétence acceptée et créée : '{suggestion.name}' (id={new_comp.id})"
+            )
+            delete_cache_pattern("competencies:*")
+            trigger_taxonomy_cache_invalidation(bg_tasks)
+        else:
+            logger.info(
+                f"[Suggestions] '{suggestion.name}' déjà présente dans la taxonomie (id={existing_comp.id}), suggestion acceptée sans création."
+            )
+
+        suggestion.status = "ACCEPTED"
+    else:
+        suggestion.status = "REJECTED"
+        logger.info(f"[Suggestions] Suggestion rejetée : '{suggestion.name}'")
+
+    suggestion.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(suggestion)
+    return CompetencySuggestionResponse.model_validate(suggestion)
+
+
 @router.get("/{competency_id}", response_model=CompetencyResponse)
 async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db)):
     cache_key = f"competencies:{competency_id}"
@@ -266,6 +416,7 @@ async def list_competency_users(competency_id: int, db: AsyncSession = Depends(g
 @router.post("/bulk_tree", status_code=200)
 async def bulk_import_tree(
     payload: TreeImportRequest,
+    bg_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     jwt_payload: dict = Depends(verify_jwt)
 ):
@@ -318,7 +469,6 @@ async def bulk_import_tree(
                     node_id = new_comp.id
                     touched_ids.add(node_id)
                 else:
-                    # Check for grammatical variant in bulk import - if found, use it instead of skipping
                     conflict = await check_grammatical_conflict(db, name)
                     if conflict:
                         conflict.parent_id = parent_id
@@ -326,8 +476,12 @@ async def bulk_import_tree(
                         touched_ids.add(node_id)
                         logger.info(f"Bulk Import: Matched '{name}' with existing variant '{conflict.name}'")
                     else:
-                        logger.warning(f"Skipping creation of unknown leaf competency from tree: {name}")
-                        continue
+                        logger.info(f"Creating missing leaf competency: {name}")
+                        new_leaf = Competency(name=name, description=desc, aliases=aliases, parent_id=parent_id)
+                        db.add(new_leaf)
+                        await db.flush()
+                        node_id = new_leaf.id
+                        touched_ids.add(node_id)
             
             if isinstance(data, dict):
                 sub = data.get("sub") or data.get("sub_competencies")
@@ -353,7 +507,15 @@ async def bulk_import_tree(
                             leaf.parent_id = node_id
                             touched_ids.add(leaf.id)
                         else:
-                            logger.warning(f"Skipping creation of unknown leaf competency from list: {sub_name}")
+                            logger.info(f"Creating missing leaf competency from list: {sub_name}")
+                            new_leaf = Competency(
+                                name=sub_name, 
+                                description="Compétence feuille ajoutée via taxonomie", 
+                                parent_id=node_id
+                            )
+                            db.add(new_leaf)
+                            await db.flush()
+                            touched_ids.add(new_leaf.id)
 
     try:
         await upsert_level(payload.tree, None)
@@ -384,6 +546,7 @@ async def bulk_import_tree(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'import: {str(e)}")
         
     delete_cache_pattern("competencies:*")
+    trigger_taxonomy_cache_invalidation(bg_tasks)
     return {"message": "Taxonomie fusionnée avec succès et orphelins archivés !"}
 
 
@@ -885,7 +1048,7 @@ async def trigger_ai_score_all(
     """Declenche le calcul IA pour toutes les competences feuilles d'un utilisateur (BackgroundTask).
 
     Conformément à la règle absolue AGENTS.md §4 : on obtient un service token à longue
-    durée de vie via /auth/internal/service-token AVANT de lancer la tâche. Cela garantit
+    durée de vie via /internal/service-token AVANT de lancer la tâche. Cela garantit
     que le token ne expire pas en cours de traitement et que l'identité du service
     (et non du compte admin) est tracée dans les logs FinOps.
     """
@@ -903,6 +1066,10 @@ async def trigger_ai_score_all(
         )
     )
     leaf_ids = (await db.execute(leaf_ids_stmt)).scalars().all()
+    logger.info(f"[ai-score-all] start process for user_id={user_id}. Found {len(leaf_ids)} leaf competencies.")
+
+    if not leaf_ids:
+        logger.warning(f"[ai-score-all] No leaf competencies found for user={user_id}. Aborting background scoring task.")
 
     comps_raw = (await db.execute(
         select(Competency.id, Competency.name).where(Competency.id.in_(leaf_ids))
@@ -913,10 +1080,11 @@ async def trigger_ai_score_all(
     # RÈGLE ABSOLUE AGENTS.md §4 : obtenir un service token avant la background task.
     # Ne jamais passer le bearer utilisateur directement — il peut expirer en mid-flight.
     bg_auth_header = auth_header
+    logger.info(f"[ai-score-all] Fetching service token for user={user_id}...")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             svc_res = await client.post(
-                f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
+                f"{USERS_API_URL.rstrip('/')}/internal/service-token",
                 headers={"Authorization": auth_header},
             )
             if svc_res.status_code == 200:
@@ -928,7 +1096,7 @@ async def trigger_ai_score_all(
                     logger.warning("[ai-score-all] Service token vide — fallback sur JWT utilisateur")
             else:
                 logger.warning(
-                    f"[ai-score-all] /auth/internal/service-token status={svc_res.status_code} "
+                    f"[ai-score-all] /internal/service-token status={svc_res.status_code} "
                     f"— fallback sur JWT utilisateur (tâche risque d'expirer en mid-flight)"
                 )
     except Exception as e:
@@ -937,6 +1105,7 @@ async def trigger_ai_score_all(
     headers = {"Authorization": bg_auth_header}
     inject(headers)
 
+    logger.info(f"[ai-score-all] Adding background task for user={user_id} with {len(comp_tuples)} competencies")
     background_tasks.add_task(_score_all_bg, user_id, comp_tuples, dict(headers))
 
     return AiScoreAllResponse(
@@ -954,19 +1123,17 @@ async def _compute_ai_score(
     Retourne (score: float 0.0-5.0, justification: str) ou (None, message_erreur).
     Le score est arrondi au pas de 0.5 le plus proche.
     """
-    try:
-        import google.generativeai as genai
-        api_key = os.environ.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            return None, "GOOGLE_API_KEY non configurée — scoring IA désactivé."
-        genai.configure(api_key=api_key)
-    except Exception as e:
-        logger.error(f"[AI Score] google-generativeai non disponible: {e}")
-        return None, "Librairie Gemini non disponible."
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        logger.warning(f"[_compute_ai_score] GOOGLE_API_KEY non configurée — scoring IA désactivé pour user_id={user_id}, competency='{competency_name}'")
+        return None, "GOOGLE_API_KEY non configurée — scoring IA désactivé."
+
+    logger.info(f"[_compute_ai_score] Starting evaluation for user_id={user_id}, competency='{competency_name}'")
 
     # 1. Récupération des missions depuis cv_api
     missions = []
     try:
+        logger.info(f"[_compute_ai_score] Fetching missions from cv_api for user_id={user_id}...")
         async with httpx.AsyncClient(timeout=15.0) as client:
             res = await client.get(
                 f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions",
@@ -974,11 +1141,15 @@ async def _compute_ai_score(
             )
             if res.status_code == 200:
                 missions = res.json().get("missions", [])
+                logger.info(f"[_compute_ai_score] Found {len(missions)} missions for user_id={user_id}")
+            else:
+                logger.error(f"[_compute_ai_score] Error fetching missions for user {user_id}: HTTP {res.status_code} - {res.text}")
     except Exception as e:
         logger.warning(f"[AI Score] Failed to fetch missions for user {user_id}: {e}")
         return None, "Missions non disponibles (erreur réseau)."
 
     if not missions:
+        logger.warning(f"[_compute_ai_score] No missions found in CV for user_id={user_id}. Assigning minimal score 1.0")
         return 1.0, "Aucune mission trouvée dans le CV — score minimal attribué."
 
     # 2. Filtrage des missions pertinentes (contenant la compétence)
@@ -1034,10 +1205,11 @@ async def _compute_ai_score(
 
     # 5. Appel Gemini avec JSON forcé
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json", "temperature": 0.1}
+        client = genai.Client(api_key=api_key)
+        response = await client.aio.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.1)
         )
         raw = response.text.strip()
         # Nettoyage robuste : extraire le bloc JSON si le modèle ajoute du texte autour
@@ -1068,6 +1240,7 @@ async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], header
     contamination cross-session SQLAlchemy (les objets ORM de la requete HTTP
     ne peuvent pas etre utilises dans une nouvelle session AsyncSession).
     """
+    logger.info(f"[AI Score BG] Background task started for user={user_id} - processing {len(comp_tuples)} competencies")
     async with database.SessionLocal() as db:
         for comp_id, comp_name in comp_tuples:
             try:
@@ -1368,150 +1541,3 @@ async def get_similar_consultants(
         similar_consultants=results
     )
 
-
-# ============================================================
-# Axe 4 : Suggestions de compétences issu du signal marché
-# ============================================================
-
-@router.post("/suggestions", response_model=CompetencySuggestionResponse, status_code=201)
-async def create_competency_suggestion(
-    payload: CompetencySuggestionCreate,
-    db: AsyncSession = Depends(get_db),
-) -> CompetencySuggestionResponse:
-    """Soumet une suggestion de compétence pour révision admin.
-
-    Idempotent : si une suggestion avec le même nom (insensible à la casse)
-    existe déjà en statut PENDING_REVIEW, on incrémente son compteur
-    d'occurrence plutôt que de créer un doublon.
-
-    Une compétence déjà présente dans la taxonomie officielle ne doit pas
-    être soumise (vérification upstream dans missions_api / cv_api).
-    """
-    name_clean = payload.name.strip()
-    if not name_clean:
-        raise HTTPException(status_code=422, detail="Le nom de la suggestion ne peut pas être vide.")
-
-    # Idempotence : chercher une suggestion PENDING existante pour ce nom
-    existing = (
-        await db.execute(
-            select(CompetencySuggestion)
-            .where(func.lower(CompetencySuggestion.name) == name_clean.lower())
-            .where(CompetencySuggestion.status == "PENDING_REVIEW")
-        )
-    ).scalars().first()
-
-    if existing:
-        existing.occurrence_count += 1
-        existing.updated_at = datetime.utcnow()
-        await db.commit()
-        await db.refresh(existing)
-        return CompetencySuggestionResponse.model_validate(existing)
-
-    new_suggestion = CompetencySuggestion(
-        name=name_clean,
-        source=payload.source,
-        context=payload.context,
-        status="PENDING_REVIEW",
-        occurrence_count=1,
-    )
-    db.add(new_suggestion)
-    await db.commit()
-    await db.refresh(new_suggestion)
-    logger.info(f"[Suggestions] Nouvelle suggestion créée : '{name_clean}' (source={payload.source})")
-    return CompetencySuggestionResponse.model_validate(new_suggestion)
-
-
-@router.get("/suggestions", response_model=list[CompetencySuggestionResponse])
-async def list_competency_suggestions(
-    status: str = Query("PENDING_REVIEW", description="Filtre par statut : PENDING_REVIEW | ACCEPTED | REJECTED"),
-    limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-) -> list[CompetencySuggestionResponse]:
-    """Liste les suggestions de compétences, triées par occurrence décroissante.
-
-    Le classement par `occurrence_count` permet d'identifier en premier les
-    compétences les plus fréquemment demandées par les missions client (signal marché).
-    """
-    rows = (
-        await db.execute(
-            select(CompetencySuggestion)
-            .where(CompetencySuggestion.status == status)
-            .order_by(CompetencySuggestion.occurrence_count.desc())
-            .limit(limit)
-        )
-    ).scalars().all()
-    return [CompetencySuggestionResponse.model_validate(r) for r in rows]
-
-
-@router.patch("/suggestions/{suggestion_id}/review", response_model=CompetencySuggestionResponse)
-async def review_competency_suggestion(
-    suggestion_id: int,
-    payload: SuggestionReviewRequest,
-    bg_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-    jwt_payload: dict = Depends(verify_jwt),
-) -> CompetencySuggestionResponse:
-    """(Admin) Accepte ou rejette une suggestion de compétence.
-
-    Si action='ACCEPT' : crée la compétence dans la taxonomie officielle
-    (via create_competency) et marque la suggestion comme ACCEPTED.
-    Si action='REJECT' : marque simplement la suggestion comme REJECTED.
-    """
-    if jwt_payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
-
-    if payload.action not in ("ACCEPT", "REJECT"):
-        raise HTTPException(status_code=422, detail="action doit être 'ACCEPT' ou 'REJECT'.")
-
-    suggestion = (
-        await db.execute(select(CompetencySuggestion).where(CompetencySuggestion.id == suggestion_id))
-    ).scalars().first()
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Suggestion introuvable.")
-
-    if suggestion.status != "PENDING_REVIEW":
-        raise HTTPException(
-            status_code=409,
-            detail=f"La suggestion est déjà en statut '{suggestion.status}' et ne peut plus être traitée.",
-        )
-
-    if payload.action == "ACCEPT":
-        # Vérifier qu'elle n'existe pas déjà dans la taxonomie
-        existing_comp = (
-            await db.execute(
-                select(Competency).where(func.lower(Competency.name) == suggestion.name.lower())
-            )
-        ).scalars().first()
-
-        if not existing_comp:
-            new_comp = Competency(
-                name=suggestion.name,
-                description=payload.description or f"Importé depuis les suggestions (source: {suggestion.source})",
-                parent_id=payload.parent_id,
-            )
-            # Auto-génération d'alias
-            gen_aliases = await _generate_aliases_for_competency(suggestion.name)
-            if gen_aliases:
-                new_comp.aliases = gen_aliases
-                
-            db.add(new_comp)
-            await db.flush()
-            logger.info(
-                f"[Suggestions] Compétence acceptée et créée : '{suggestion.name}' (id={new_comp.id})"
-            )
-            delete_cache_pattern("competencies:*")
-            trigger_taxonomy_cache_invalidation(bg_tasks)
-        else:
-            logger.info(
-                f"[Suggestions] '{suggestion.name}' déjà présente dans la taxonomie (id={existing_comp.id}), suggestion acceptée sans création."
-            )
-
-        suggestion.status = "ACCEPTED"
-    else:
-        suggestion.status = "REJECTED"
-        logger.info(f"[Suggestions] Suggestion rejetée : '{suggestion.name}'")
-
-    suggestion.updated_at = datetime.utcnow()
-    await db.commit()
-    await db.refresh(suggestion)
-    return CompetencySuggestionResponse.model_validate(suggestion)

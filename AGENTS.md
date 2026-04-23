@@ -48,6 +48,7 @@ Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 7. **Privilège des Appels API (Environnement Dev)** : Lors de tests ou de vérifications métiers, privilégiez les appels API réels sur l'URL de l'environnement dev (définie par la variable `$DEV_BASE_URL` ou l'output Terraform `dev_url`) plutôt que d'exécuter des scripts locaux. Récupérez le token d'authentification via un appel à `auth/login` avec le compte admin (le mot de passe doit être récupéré dynamiquement via les outputs ou variables de Terraform — ne jamais l'écrire en clair).
 8. **Standard Python Imports** : Les imports Python **DOIVENT** être placés en haut du fichier (conformément à la PEP 8). Évitez les imports locaux dans les fonctions, sauf cas exceptionnel de dépendance circulaire.
 9. **Interpréteur Python** : Utilisez systématiquement la commande `python3` au lieu de `python` pour toute exécution de script ou commande dans le terminal de l'utilisateur.
+10. **Failfast & Zéro Erreur Silencieuse** : Il est **STRICTEMENT INTERDIT** d'ignorer silencieusement des erreurs (ex: `except Exception: pass`, ou un simple logger non accompagné d'une levée d'exception). Les services doivent adopter une approche "failfast". Toute exception doit soit être interrompue formelquement (`raise`) pour que le système centralisé gère l'erreur, soit être retournée explicitement sous la forme `{"success": false, "error": ...}` (ex: Tools MCP). Conserver des erreurs silencieuses corrompt la garantie d'intégrité de la plateforme.
 
 ---
 

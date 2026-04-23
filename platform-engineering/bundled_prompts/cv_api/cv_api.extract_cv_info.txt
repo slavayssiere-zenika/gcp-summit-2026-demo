@@ -13,6 +13,7 @@ The JSON object must contain the following top-level keys:
     *   **"name"**: (string) The specific competency (e.g., 'Python', 'AWS', 'Agile'). **Use EXCLUSIVELY the singular form** (e.g., 'Service', 'Container', 'System').
     *   **"parent"**: (string) A generic category for the competency (e.g., 'Programming Languages').
     *   **"aliases"**: (array of strings) A list of 2-3 common synonyms or acronyms for this competency. Example for 'Google Cloud Platform': ['GCP', 'Google Cloud'].
+    *   **"practiced"**: (boolean) **CRITICAL** — Set to `true` ONLY if the consultant has actively and personally used this skill in at least one mission (e.g., it appears in a mission's competency list or is explicitly described as used). Set to `false` if the skill is merely mentioned as a comparison, a tool used by others, a skill to avoid, or only appears in an objective/training context. Example: "uses GitLab CI instead of Jenkins" → Jenkins practiced=false, GitLab CI practiced=true.
 9.  **"missions"**: (array of objects) A list of professional experiences or projects. Each object must contain:
     *   **"title"**: (string) The job title or mission name.
     *   **"company"**: (string) The company name where the mission took place.

@@ -86,7 +86,9 @@ async def test_mcp_tools_unknown(mock_httpx_mcp):
 async def test_mcp_tools_generic_error(mock_httpx_mcp):
     mock_httpx_mcp.get.side_effect = ValueError("Boom")
     result = await call_tool("get_competency", {"competency_id": 1})
-    assert "Error: Boom" in result[0].text
+    data = json.loads(result[0].text)
+    assert data["success"] is False
+    assert "Boom" in data["error"]
 
 
 # ── Evaluation MCP Tools Tests ────────────────────────────────────────────────

@@ -113,8 +113,10 @@ async def test_mcp_tools_http_error(mock_httpx_mcp):
 @pytest.mark.asyncio
 async def test_mcp_tools_generic_error(mock_httpx_mcp):
     mock_httpx_mcp.get.side_effect = ValueError("Boom")
-    result = await call_tool("get_user", {"user_id": 1})
-    assert "Error: Boom" in result[0].text
+    result = await call_tool("get_user", {"user_id": 42})
+    data = json.loads(result[0].text)
+    assert data["success"] is False
+    assert "Boom" in data["error"]
 
 @pytest.mark.asyncio
 async def test_mcp_server_main(mocker):

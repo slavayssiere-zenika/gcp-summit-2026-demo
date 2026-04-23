@@ -53,6 +53,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
+- **GET** `/spec` : Get Spec
 - **POST** `/pubsub/import-cv` : Handle Pubsub Cv Import
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/cache/invalidate-taxonomy` : Force Invalidate Taxonomy Cache
@@ -70,8 +71,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/reanalyze/status` : Get Reanalyze Status
 - **POST** `/reanalyze` : Reanalyze Cvs
 - **POST** `/internal/users/merge` : Merge Users
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
-- **GET** `/spec` : Get Spec
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp

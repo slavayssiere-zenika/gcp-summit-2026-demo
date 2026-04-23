@@ -84,6 +84,27 @@ const diffLines = computed(() => {
   }))
 })
 
+// Error prompts JSON parser
+const isErrorPrompt = computed(() => selectedKey.value?.startsWith('error_correction:'))
+
+const parsedErrorData = computed(() => {
+  if (!isErrorPrompt.value || !selectedPrompt.value) return null
+  try {
+    return JSON.parse(selectedPrompt.value.value)
+  } catch (e) {
+    return { rule: selectedPrompt.value.value, original_error: 'Impossible de parser le JSON.' }
+  }
+})
+
+const updateErrorRule = (event: Event) => {
+  if (!selectedPrompt.value || !parsedErrorData.value) return
+  const data = { 
+    ...parsedErrorData.value, 
+    rule: (event.target as HTMLTextAreaElement).value 
+  }
+  selectedPrompt.value.value = JSON.stringify(data)
+}
+
 // ─── Methods ──────────────────────────────────────────────────────────────────
 
 const fetchPrompts = async () => {
@@ -283,13 +304,43 @@ onBeforeUnmount(() => {
 
         <!-- Textarea -->
         <div class="pa-textarea-wrapper">
-          <textarea
-            v-model="selectedPrompt.value"
-            class="pa-textarea"
-            placeholder="Instructions système pour le modèle IA..."
-            aria-label="Contenu du prompt"
-            spellcheck="false"
-          ></textarea>
+          <template v-if="isErrorPrompt && parsedErrorData">
+            <textarea
+              :value="parsedErrorData.rule"
+              @input="updateErrorRule"
+              class="pa-textarea prompt-rule"
+              placeholder="Règle extraite..."
+              aria-label="Règle du prompt"
+              spellcheck="false"
+            ></textarea>
+            
+            <div class="pa-error-context mt-4 p-4 bg-background-light rounded-md">
+              <h4 class="text-sm font-semibold mb-2 flex items-center gap-2">
+                <AlertTriangle size="14" class="text-warning" />
+                Erreur originale ({{ parsedErrorData.service }})
+              </h4>
+              <pre class="text-xs pa-json-viewer" style="max-height: 200px; overflow-y: auto;">{{ parsedErrorData.original_error }}</pre>
+            </div>
+            
+            <div v-if="parsedErrorData.context" class="pa-error-context mt-4 p-4 bg-background-light rounded-md">
+              <h4 class="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Hash size="14" />
+                Traceback partiel
+              </h4>
+              <pre class="text-xs pa-json-viewer" style="max-height: 200px; overflow-y: auto;">{{ parsedErrorData.context }}</pre>
+            </div>
+          </template>
+          
+          <template v-else>
+            <textarea
+              v-model="selectedPrompt.value"
+              class="pa-textarea"
+              placeholder="Instructions système pour le modèle IA..."
+              aria-label="Contenu du prompt"
+              spellcheck="false"
+            ></textarea>
+          </template>
+          
           <div class="pa-textarea-footer">
             <span class="pa-line-count">
               {{ selectedPrompt.value?.split('\n').length ?? 0 }} lignes

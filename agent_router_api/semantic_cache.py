@@ -139,8 +139,7 @@ class SemanticCache:
             try:
                 from metrics import SEMANTIC_CACHE_SIMILARITY_HISTOGRAM
                 SEMANTIC_CACHE_SIMILARITY_HISTOGRAM.observe(best_score)
-            except Exception:
-                pass
+            except Exception: raise
 
             if best_score >= self._threshold and best_entry is not None:
                 logger.info(
@@ -150,8 +149,7 @@ class SemanticCache:
                 try:
                     from metrics import SEMANTIC_CACHE_HITS_TOTAL
                     SEMANTIC_CACHE_HITS_TOTAL.inc()
-                except Exception:
-                    pass
+                except Exception: raise
                 return self._make_cache_hit_response(best_entry, best_score)
             else:
                 logger.debug(
@@ -161,8 +159,7 @@ class SemanticCache:
                 try:
                     from metrics import SEMANTIC_CACHE_MISSES_TOTAL
                     SEMANTIC_CACHE_MISSES_TOTAL.inc()
-                except Exception:
-                    pass
+                except Exception: raise
                 return None
 
         except Exception as e:

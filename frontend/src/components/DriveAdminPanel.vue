@@ -14,6 +14,12 @@
       </div>
     </div>
 
+    <!-- Sync errors -->
+    <div class="error-panel fade-in-up auth-alert" v-if="actionError" style="margin-bottom:0.5rem;">
+      <strong>⚠️ Erreur action :</strong> {{ actionError }}
+      <button @click="actionError = ''" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:1rem;">✕</button>
+    </div>
+
     <!-- Alert for OAuth loss -->
     <div class="error-panel fade-in-up auth-alert" v-if="syncAuthError">
       <strong>🚨 Alerte Critique :</strong> {{ syncAuthError }}
@@ -151,22 +157,126 @@
         </div>
       </div>
 
+      <!-- ── Dead Letter Queue Section ── -->
+      <div class="errors-section dlq-section" v-if="dlqStatus && (dlqStatus.message_count > 0 || dlqStatus.error)">
+        <div class="section-header-flex">
+          <h3 class="danger-title">
+            <AlertCircle class="icon-sm inline-icon" style="color: #f59e0b" />
+            Dead Letter Queue (DLQ)
+            <span class="dlq-badge" v-if="dlqStatus.message_count > 0">{{ dlqStatus.message_count }}</span>
+            <span class="dlq-freshness" v-if="dlqLastFetchedAt">
+              snapshot {{ dlqLastFetchedAt.toLocaleTimeString() }}
+            </span>
+          </h3>
+          <div style="display:flex; gap:0.5rem; align-items:center">
+            <button
+              class="btn-icon-neutral"
+              @click="fetchDlqStatus"
+              :disabled="isFetchingDlq"
+              title="Actualiser la liste DLQ"
+              aria-label="Actualiser la Dead Letter Queue"
+            >
+              <RefreshCcw class="icon-sm" :class="{ 'spinning': isFetchingDlq }" />
+            </button>
+            <button
+              v-if="dlqStatus.message_count > 0"
+              class="btn-warning btn-sm"
+              @click="replayDlq"
+              :disabled="isReplayingDlq"
+              title="Pull tous les messages DLQ, remet les CVs en PENDING et relance le pipeline"
+              aria-label="Rejouer les messages de la Dead Letter Queue"
+            >
+              <RefreshCcw class="icon-sm" :class="{ 'spinning': isReplayingDlq }" />
+              {{ isReplayingDlq ? 'Replay en cours...' : `Rejouer DLQ (${dlqStatus.message_count})` }}
+            </button>
+          </div>
+        </div>
+        <div class="dlq-info">
+          <p v-if="dlqStatus.error" class="dlq-error">⚠️ Erreur lecture DLQ : {{ dlqStatus.error }}</p>
+          <template v-else-if="dlqStatus.message_count > 0">
+            <p class="dlq-desc">
+              <strong>{{ dlqStatus.message_count }}</strong> CV(s) ont échoué 5 fois sur le pipeline Pub/Sub et sont en attente dans
+              <code>{{ dlqStatus.subscription }}</code>.
+            </p>
+            <!-- Liste des fichiers en DLQ -->
+            <div class="dlq-file-list">
+              <div
+                v-for="file in dlqStatus.files"
+                :key="file.google_file_id"
+                class="dlq-file-row"
+              >
+                <FileText class="icon-sm dlq-file-icon" />
+                <div class="dlq-file-info">
+                  <span class="dlq-file-name">{{ file.file_name || file.google_file_id }}</span>
+                  <span class="dlq-file-meta" v-if="file.parent_folder_name">
+                    <User class="icon-xs" /> {{ file.parent_folder_name }}
+                  </span>
+                </div>
+                <span class="dlq-file-status" :class="`status-${file.status?.toLowerCase()}`">
+                  {{ file.status }}
+                </span>
+                <button
+                  class="btn-icon-danger"
+                  @click="deleteDlqMessage(file.google_file_id, '', file.ack_id)"
+                  :title="`Supprimer de la DLQ (le CV sera ignoré définitivement)`"
+                  aria-label="Supprimer ce message de la DLQ"
+                >
+                  <Trash2 class="icon-xs" />
+                </button>
+              </div>
+              <div v-if="dlqStatus.unknown_files?.length" class="dlq-file-list">
+                <div
+                  v-for="unk in dlqStatus.unknown_files"
+                  :key="unk.message_id"
+                  class="dlq-file-row dlq-unknown-row"
+                >
+                  <div class="dlq-file-info dlq-unknown-info">
+                    <div class="dlq-unknown-header">
+                      <AlertCircle class="icon-sm" style="color:#f59e0b; flex-shrink:0" />
+                      <span class="dlq-file-name" style="color:#f59e0b">Payload illisible</span>
+                      <code class="dlq-msg-id">{{ unk.message_id }}</code>
+                      <span v-if="unk.parse_error" class="dlq-parse-error">{{ unk.parse_error }}</span>
+                    </div>
+                    <pre class="dlq-json">{{ typeof unk.raw_data === 'string' ? unk.raw_data : JSON.stringify(unk.raw_data, null, 2) }}</pre>
+                  </div>
+                  <button
+                    class="btn-icon-danger"
+                    @click="deleteDlqMessage('', unk.message_id, unk.ack_id)"
+                    title="Supprimer ce message de la DLQ"
+                    aria-label="Supprimer ce payload illisible de la DLQ"
+                  >
+                    <Trash2 class="icon-xs" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-if="dlqReplayResult" class="dlq-result">
+            ✅ <strong>{{ dlqReplayResult.files_reset_to_pending }}</strong> CV(s) remis en PENDING ·
+            {{ dlqReplayResult.dlq_messages_pulled }} messages purgés de la DLQ
+            <span v-if="dlqReplayResult.unknown_payloads > 0" style="color:#f59e0b">
+              · {{ dlqReplayResult.unknown_payloads }} payload(s) illisibles ignorés
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- Action Requise / Errors List -->
       <div class="errors-section">
         <div class="section-header-flex">
           <h3 class="danger-title"><AlertCircle class="icon-sm inline-icon" /> Actions Requises (Erreurs)</h3>
           <div class="btn-group">
-            <!-- Bouton Force Flush : visible uniquement quand des fichiers sont bloqués en QUEUED -->
+            <!-- Bouton Force Flush : visible quand des fichiers sont bloqués en QUEUED ou PROCESSING -->
             <button
-              v-if="syncStatus?.queued > 0"
+              v-if="(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0) > 0"
               class="btn-warning btn-sm"
               @click="forceFlushZombies"
               :disabled="isFlushingZombies"
-              title="Débloque immédiatement les fichiers bloqués en QUEUED sans attendre 30 min"
-              aria-label="Forcer le déblocage des fichiers zombies bloqués en Pub/Sub"
+              :title="`Reset immédiat des ${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)} fichier(s) bloqués (QUEUED + PROCESSING) → PENDING`"
+              aria-label="Forcer le déblocage des fichiers zombies bloqués en QUEUED ou PROCESSING"
             >
               <Zap class="icon-sm" :class="{ 'spinning': isFlushingZombies }" />
-              {{ isFlushingZombies ? 'Déblocage...' : `Forcer Déblocage (${syncStatus.queued})` }}
+              {{ isFlushingZombies ? 'Déblocage...' : `Forcer Déblocage (${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)})` }}
             </button>
             <button v-if="errorFiles.length > 0" class="btn-secondary btn-sm" @click="retryErrors" :disabled="isRetrying">
               <RefreshCcw class="icon-sm" :class="{ 'spinning': isRetrying }" />
@@ -202,8 +312,11 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio, Zap
+  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio, Zap, FileText
 } from 'lucide-vue-next'
+import { authService } from '../services/auth'
+
+const authHeader = () => ({ Authorization: `Bearer ${authService.state.token}` })
 
 const folders = ref<any[]>([])
 const errorFiles = ref<any[]>([])
@@ -215,6 +328,33 @@ const isFlushingZombies = ref(false)
 const newFolder = ref({ google_folder_id: '', tag: '' })
 const showAddFolder = ref(false)
 const flushResult = ref<{zombies_reset: number, errors_reset: number} | null>(null)
+const actionError = ref('')  // Message d'erreur visible dans l'UI
+
+// ── DLQ State ────────────────────────────────────────────────────────────────
+interface DlqFile {
+  google_file_id: string
+  ack_id: string
+  file_name: string | null
+  parent_folder_name: string | null
+  status: string
+  last_processed_at: string | null
+}
+interface UnknownDlqFile {
+  message_id: string
+  ack_id: string
+  raw_data: any
+  parse_error: string | null
+}
+const dlqStatus = ref<{
+  message_count: number
+  subscription: string
+  files: DlqFile[]
+  unknown_files: UnknownDlqFile[]
+  unknown_payloads?: number
+  error?: string
+} | null>(null)
+const isReplayingDlq = ref(false)
+const dlqReplayResult = ref<any>(null)
 
 const isProcessingOrPending = computed(() => {
   if (!syncStatus.value) return false;
@@ -253,11 +393,27 @@ const fetchStatus = async () => {
 
 const fetchErrors = async () => {
   try {
-    // Only fetch files with ERROR status, using the new parameter
     const res = await axios.get('/api/drive/files?status=ERROR&limit=200')
     errorFiles.value = res.data
   } catch (error) {
     console.error("Failed to load error files", error)
+  }
+}
+
+const isFetchingDlq = ref(false)
+const dlqLastFetchedAt = ref<Date | null>(null)
+
+const fetchDlqStatus = async () => {
+  if (isFetchingDlq.value) return  // eviter les appels concurrents
+  isFetchingDlq.value = true
+  try {
+    const res = await axios.get('/api/drive/dlq/status', { headers: authHeader() })
+    dlqStatus.value = res.data
+    dlqLastFetchedAt.value = new Date()
+  } catch (e) {
+    console.debug('[DLQ] status fetch failed', e)
+  } finally {
+    isFetchingDlq.value = false
   }
 }
 
@@ -275,7 +431,7 @@ const retryErrors = async () => {
   if (isRetrying.value) return
   isRetrying.value = true
   try {
-    await axios.post('/api/drive/retry-errors')
+    await axios.post('/api/drive/retry-errors', {}, { headers: authHeader() })
     await fetchStatus()
     await fetchFolders()
     await fetchErrors()
@@ -284,6 +440,25 @@ const retryErrors = async () => {
     console.error('Failed to retry errors', err)
   } finally {
     isRetrying.value = false
+  }
+}
+
+const deleteDlqMessage = async (googleFileId: string, pubsubMessageId = '', ackId = '') => {
+  const msg = googleFileId 
+    ? 'Supprimer ce message de la DLQ ?\nLe fichier sera marqué comme IGNORÉ en base de données pour stopper les re-tentatives du système.' 
+    : 'Supprimer ce payload illisible de la DLQ définitivement ?'
+  if (!confirm(msg)) return
+  try {
+    const params = new URLSearchParams()
+    if (ackId)           params.set('ack_id', ackId)
+    if (googleFileId)    params.set('google_file_id', googleFileId)
+    if (pubsubMessageId) params.set('pubsub_message_id', pubsubMessageId)
+    await axios.delete(`/api/drive/dlq/message?${params}`, { headers: authHeader() })
+    await fetchDlqStatus()
+  } catch (err: any) {
+    const detail = err.response?.data?.detail || err.message || 'Erreur inconnue'
+    actionError.value = `Suppression DLQ échouée : ${detail}`
+    console.error('DLQ delete failed', err)
   }
 }
 
@@ -296,18 +471,49 @@ const forceFlushZombies = async () => {
   if (isFlushingZombies.value) return
   isFlushingZombies.value = true
   flushResult.value = null
+  actionError.value = ''
   try {
-    const res = await axios.post('/api/drive/retry-errors?force=true')
+    const res = await axios.post('/api/drive/retry-errors?force=true', {}, { headers: authHeader() })
     flushResult.value = res.data
     await fetchStatus()
     await fetchFolders()
     await fetchErrors()
     // Relancer le sync pour republier les PENDING dans Pub/Sub
     await triggerSync()
-  } catch (err) {
+  } catch (err: any) {
+    const detail = err.response?.data?.detail || err.response?.data?.message || err.message || 'Erreur inconnue'
+    actionError.value = `Déblocage échoué (HTTP ${err.response?.status ?? '?'}) : ${detail}`
     console.error('Force flush failed', err)
   } finally {
     isFlushingZombies.value = false
+  }
+}
+
+/**
+ * Rejoue les messages de la Dead Letter Queue :
+ * Pull tous les messages DLQ → reset google_file_id en PENDING → ACK DLQ → /sync
+ */
+const replayDlq = async () => {
+  if (isReplayingDlq.value) return
+  isReplayingDlq.value = true
+  dlqReplayResult.value = null
+  actionError.value = ''
+  try {
+    const res = await axios.post('/api/drive/dlq/replay', {}, { headers: authHeader() })
+    dlqReplayResult.value = res.data
+    // Refresh DLQ count
+    await fetchDlqStatus()
+    await fetchStatus()
+    // Republier les PENDING dans Pub/Sub
+    if (res.data.files_reset_to_pending > 0) {
+      await triggerSync()
+    }
+  } catch (err: any) {
+    const detail = err.response?.data?.detail || err.message || 'Erreur inconnue'
+    actionError.value = `Replay DLQ échoué (HTTP ${err.response?.status ?? '?'}) : ${detail}`
+    console.error('DLQ replay failed', err)
+  } finally {
+    isReplayingDlq.value = false
   }
 }
 
@@ -315,7 +521,7 @@ const addFolder = async () => {
   if (!newFolder.value.google_folder_id || !newFolder.value.tag) return
   isAdding.value = true
   try {
-    await axios.post('/api/drive/folders', newFolder.value)
+    await axios.post('/api/drive/folders', newFolder.value, { headers: authHeader() })
     newFolder.value = { google_folder_id: '', tag: '' }
     showAddFolder.value = false
     await fetchFolders()
@@ -330,7 +536,7 @@ const addFolder = async () => {
 const deleteFolder = async (id: number) => {
   if (!confirm('Voulez-vous retirer cette source ? La file d\'attente existante ne sera pas détruite.')) return
   try {
-    await axios.delete(`/api/drive/folders/${id}`)
+    await axios.delete(`/api/drive/folders/${id}`, { headers: authHeader() })
     await fetchFolders()
   } catch (err) {
     console.error(err)
@@ -342,15 +548,19 @@ const syncAuthError = ref('')
 const triggerSync = async () => {
   isSyncing.value = true
   syncAuthError.value = ''
+  actionError.value = ''
   try {
     await axios.post('/api/drive/sync')
     await fetchStatus()
     await fetchFolders()
   } catch (error: any) {
-    console.error("Sync failed", error)
+    const detail = error.response?.data?.detail || error.response?.data?.message || error.message || 'Erreur inconnue'
     if (error.response?.data?.message === 'SERVICE_ACCOUNT_ACCESS_LOSS') {
       syncAuthError.value = "Le Service Account a perdu ses droits sur le Google Drive (Permissions/OAuth annulées)."
+    } else {
+      actionError.value = `Sync échoué (HTTP ${error.response?.status ?? '?'}) : ${detail}`
     }
+    console.error("Sync failed", error)
   } finally {
     isSyncing.value = false
   }
@@ -360,11 +570,19 @@ onMounted(() => {
   fetchFolders()
   fetchStatus()
   fetchErrors()
+  fetchDlqStatus()  // chargement unique au mount
   pollInterval = setInterval(() => {
     fetchStatus()
     fetchFolders()
     if (syncStatus.value?.errors > 0 || errorFiles.value.length > 0) {
       fetchErrors()
+    }
+    // DLQ : refresh silencieux toutes les 60s pour renouveler les ack_ids (expire à 600s)
+    // NE PAS mettre dans le polling 5s — cela provoque des oscillations du compteur Pub/Sub
+    const now = Date.now()
+    const lastFetch = dlqLastFetchedAt.value?.getTime() ?? 0
+    if (now - lastFetch > 60_000) {
+      fetchDlqStatus()
     }
   }, 5000)
 })
@@ -525,6 +743,245 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* ── DLQ Styles ── */
+.dlq-section {
+  border-left: 3px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.04);
+}
+
+.dlq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f59e0b;
+  color: #000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  min-width: 1.5rem;
+}
+
+.dlq-info {
+  padding: 0.5rem 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #aaa);
+}
+
+.dlq-desc {
+  line-height: 1.6;
+  margin: 0.25rem 0;
+}
+
+.dlq-desc code {
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.dlq-result {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(34, 197, 94, 0.08);
+  border-radius: 6px;
+  border-left: 3px solid #22c55e;
+  font-size: 0.85rem;
+  color: #22c55e;
+}
+
+.dlq-error {
+  color: #f59e0b;
+}
+
+.dlq-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.dlq-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  font-size: 0.83rem;
+}
+
+.dlq-file-icon {
+  flex-shrink: 0;
+  color: #f59e0b;
+  opacity: 0.8;
+}
+
+.dlq-file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow: hidden;
+}
+
+.dlq-file-name {
+  color: var(--text-primary, #e5e7eb);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dlq-file-meta {
+  color: var(--text-secondary, #6b7280);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.icon-xs {
+  width: 10px;
+  height: 10px;
+}
+
+.dlq-file-status {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(255,255,255,0.08);
+  color: #9ca3af;
+}
+
+.status-processing { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+.status-error      { background: rgba(239, 68, 68, 0.15);  color: #ef4444; }
+.status-pending    { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+.status-queued     { background: rgba(99, 102, 241, 0.15);  color: #818cf8; }
+.status-imported_cv{ background: rgba(34, 197, 94, 0.15);  color: #22c55e; }
+
+.dlq-unknown {
+  color: #f59e0b;
+  font-style: italic;
+  gap: 0.5rem;
+}
+
+.dlq-unknown-row {
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0.5rem 0.6rem;
+}
+
+.dlq-unknown-info {
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dlq-unknown-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dlq-msg-id {
+  font-size: 0.7rem;
+  background: rgba(255,255,255,0.06);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  color: #6b7280;
+  font-family: monospace;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dlq-parse-error {
+  font-size: 0.72rem;
+  color: #ef4444;
+  font-style: italic;
+}
+
+.dlq-json {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: #d1d5db;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow-y: auto;
+  border-left: 2px solid #f59e0b;
+}
+
+
+.btn-icon-danger {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.btn-icon-danger:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-icon-neutral {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  color: #9ca3af;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.btn-icon-neutral:hover:not(:disabled) {
+  color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-icon-neutral:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dlq-freshness {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: #6b7280;
+  margin-left: 0.4rem;
+  font-style: italic;
+}
+
+
+
+
+
 
 .add-folder-card {
   margin-bottom: 1rem;

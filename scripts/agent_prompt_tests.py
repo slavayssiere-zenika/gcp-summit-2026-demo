@@ -2118,8 +2118,7 @@ async def get_auth_token(base_url: str, client: httpx.AsyncClient) -> str:
                             admin_password = line.split("=", 1)[1].strip().strip('"').strip("'")
                             print("   ✅ Mot de passe admin récupéré depuis .antigravity_env")
                             break
-            except Exception:
-                pass
+            except Exception: raise
 
     if not admin_password:
         # Tentative 1 : terraform output (si terraform est dans le PATH)
@@ -2149,8 +2148,7 @@ async def get_auth_token(base_url: str, client: httpx.AsyncClient) -> str:
                 if result.returncode == 0 and result.stdout.strip():
                     admin_password = result.stdout.strip()
                     print(f"   ✅ Mot de passe admin récupéré depuis Terraform output")
-        except Exception:
-            pass
+        except Exception: raise
 
     if not admin_password:
         # Tentative 2 : gcloud secrets — le secret est nommé admin-password-<workspace>
@@ -2173,8 +2171,7 @@ async def get_auth_token(base_url: str, client: httpx.AsyncClient) -> str:
                         admin_password = raw
                     print(f"   ✅ Mot de passe admin récupéré depuis Secret Manager ({secret_name})")
                     break
-            except Exception:
-                pass
+            except Exception: raise
 
     if not admin_password:
         print("⚠️  ADMIN_PASSWORD introuvable automatiquement.")
@@ -2231,8 +2228,7 @@ async def _clear_session(base_url: str, token: str, session_id: str | None = Non
                 )
             # 2. Purge aussi la session JWT sub (fallback / session admin partagée)
             await client.delete(f"{base_url}/api/history", headers=headers)
-    except Exception:
-        pass  # Non bloquant : si le flush échoue, on continue quand même
+    except Exception: raise  # Non bloquant : si le flush échoue, on continue quand même
 
 
 async def run_test(
@@ -2283,10 +2279,10 @@ async def run_test(
             raw = resp.json()
 
     except httpx.TimeoutException:
-        duration_ms = TIMEOUT_SECONDS * 1000
+        duration_ms = 90 * 1000
         return TestResult(
             test_case=test, passed=False, duration_ms=duration_ms,
-            errors=[f"Timeout après {TIMEOUT_SECONDS}s"],
+            errors=[f"Timeout après {90}s"],
         )
     except Exception:
         duration_ms = int((time.time() - start_ts) * 1000)

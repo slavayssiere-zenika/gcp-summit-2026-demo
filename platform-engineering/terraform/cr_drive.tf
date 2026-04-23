@@ -1,7 +1,10 @@
 resource "google_cloud_run_v2_service" "drive_api" {
-  name     = "drive-api-${terraform.workspace}"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  name                = "drive-api-${terraform.workspace}"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
+  # Audience OIDC fixe pour les Pub/Sub pushes et Schedulers (cf. AGENTS.md §4)
+  custom_audiences = ["https://${var.base_domain}"]
 
   template {
     service_account = data.google_service_account.drive_sa.email
@@ -15,6 +18,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
         subnetwork = google_compute_subnetwork.main.id
         tags       = ["cr-egress"]
       }
+      egress = "PRIVATE_RANGES_ONLY"
     }
     containers {
       name    = "api"
@@ -88,6 +92,14 @@ resource "google_cloud_run_v2_service" "drive_api" {
       env {
         name  = "PUBSUB_CV_IMPORT_TOPIC"
         value = "zenika-cv-import-events-${terraform.workspace}"
+      }
+      env {
+        name  = "PUBSUB_DLQ_SUBSCRIPTION"
+        value = "cv-import-events-dlq-sub-${terraform.workspace}"
+      }
+      env {
+        name  = "PUBSUB_PROJECT_ID"
+        value = var.project_id
       }
       env {
         name  = "GCP_PROJECT_ID"

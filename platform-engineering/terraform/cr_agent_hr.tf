@@ -1,7 +1,8 @@
 resource "google_cloud_run_v2_service" "agent_hr_api" {
-  name     = "agent-hr-api-${terraform.workspace}"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  name                = "agent-hr-api-${terraform.workspace}"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
 
   template {
     service_account = google_service_account.agent_hr_sa.email # We reuse the agent service account
@@ -15,6 +16,7 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
         subnetwork = google_compute_subnetwork.main.id
         tags       = ["cr-egress"]
       }
+      egress = "PRIVATE_RANGES_ONLY"
     }
     containers {
       name    = "api"

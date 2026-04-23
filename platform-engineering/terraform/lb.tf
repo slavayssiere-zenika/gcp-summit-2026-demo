@@ -1,11 +1,16 @@
 # Certificat SSL Managé
+# Couvre le domaine principal de l'environnement + les domaines additionnels (ex: gen-skillz.znk.io)
 resource "google_compute_managed_ssl_certificate" "default" {
   name = "ssl-${terraform.workspace}"
   managed {
-    domains = [
-      "${terraform.workspace}.${var.base_domain}",
-      "api.${terraform.workspace}.${var.base_domain}"
-    ]
+    domains = concat(
+      [
+        "${terraform.workspace}.${var.base_domain}",
+        "api.${terraform.workspace}.${var.base_domain}"
+      ],
+      # Domaines additionnels (ex: gen-skillz.znk.io en prd)
+      [for d in var.extra_domains : trim(d.dns_name, ".")]
+    )
   }
 
   lifecycle {
@@ -46,13 +51,23 @@ resource "google_compute_url_map" "default" {
   description     = "URL Map split between frontend and API"
   default_service = google_compute_backend_bucket.frontend.id
 
-  # Host Rule unifiée pour l'API et le Frontend
+  # Host Rule unifiée pour l'API et le Frontend (domaine principal)
   host_rule {
     hosts = [
       "api.${terraform.workspace}.${var.base_domain}",
       "${terraform.workspace}.${var.base_domain}"
     ]
     path_matcher = "unified-routes"
+  }
+
+  # Host Rules pour les domaines additionnels (ex: gen-skillz.znk.io)
+  # Chaque domaine extra pointe vers le même path_matcher que le domaine principal
+  dynamic "host_rule" {
+    for_each = var.extra_domains
+    content {
+      hosts        = [trim(host_rule.value.dns_name, ".")]
+      path_matcher = "unified-routes"
+    }
   }
 
   path_matcher {

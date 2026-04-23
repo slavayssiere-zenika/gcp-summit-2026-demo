@@ -111,18 +111,20 @@ def verify_jwt(auth: HTTPAuthorizationCredentials = Depends(security)) -> dict:
         if not payload.get("sub"):
             raise HTTPException(status_code=401, detail="Token invalide : claim 'sub' manquant")
         return payload
-    except JWTError:
+    except JWTError as e:
+        print(f"JWTError: {e}, type={type(SECRET_KEY)}, repr={repr(SECRET_KEY)}")
         raise HTTPException(status_code=401, detail="Token invalide ou expiré")
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        print(f"Exception: {e}, token={auth.credentials[:10]}, key={SECRET_KEY}")
         raise HTTPException(status_code=401, detail="Token invalide")
 
 
 from fastapi import APIRouter
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
-@protected_router.get("/spec")
+@app.get("/spec")
 async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
@@ -479,6 +481,49 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
 
 
 app.include_router(protected_router)
+
+
+import traceback
+from fastapi.responses import JSONResponse
+import httpx
+import logging
+import asyncio
+
+async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        from opentelemetry.propagate import inject
+        inject(headers)
+    except Exception: raise
+
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{prompts_api_url}/errors/report",
+                json={
+                    "service_name": service_name,
+                    "error_message": error_msg,
+                    "context": trace_context[:2000]
+                },
+                headers=headers
+            )
+        except Exception as e:
+            logging.error(f"Failed to report error to prompts_api: {e}")
+            raise e
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    
+    if token:
+        asyncio.create_task(report_exception_to_prompts_api("agent_hr_api", error_msg, trace_context, token))
+    
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))

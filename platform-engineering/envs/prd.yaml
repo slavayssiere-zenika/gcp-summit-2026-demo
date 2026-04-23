@@ -3,9 +3,13 @@
 # ══════════════════════════════════════════════════════════
 
 # ── GCP ───────────────────────────────────────────────────
-project_id:       "prod-ia-staffing"
-base_domain:      "zenika.slavayssiere.fr"
-parent_zone_name: "slavayssiere-zenika"
+project_id:                "prod-ia-staffing"
+# Domaine principal de la prod : la zone DNS "prd.zenika.slavayssiere.fr" est persistante
+# et déléguée automatiquement depuis "slavayssiere-zenika" (sandbox).
+# La racine "zenika.slavayssiere.fr" n'est JAMAIS touchée.
+base_domain:               "zenika.slavayssiere.fr"
+parent_zone_name:          "slavayssiere-zenika"
+parent_zone_project_id:    "slavayssiere-sandbox-462015"  # Obligatoire depuis P2-2 (plus de défault dans variables.tf)
 
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}
@@ -47,3 +51,17 @@ finops_anomaly_threshold: 500000
 # ── IA / Modèles ──────────────────────────────────────────
 gemini_model:           "gemini-3.1-flash-lite-preview"
 gemini_embedding_model: "gemini-embedding-001"   # SEC-F06 Semantic Cache
+
+# ── DNS additionnels (prd uniquement) ─────────────────────
+# La zone gen-skillz.znk.io est persistante et déléguée depuis
+# la zone parente gérée dans le projet sandbox (slavayssiere-sandbox-462015).
+# Elle est couverte par le même SSL cert managé et le même Load Balancer.
+#
+# IMPORTANT : avant le premier déploiement, créez la zone parente
+# "znk-io" dans le projet sandbox et configurez les NS chez le registrar znk.io.
+#
+extra_domains:
+  - zone_name:               "zone-gen-skillz"
+    dns_name:                "gen-skillz.znk.io."
+    parent_zone_name:        "znk-io"
+    parent_zone_project_id:  "slavayssiere-sandbox-462015"

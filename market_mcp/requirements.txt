@@ -4,8 +4,8 @@ uvicorn>=0.23.0
 google-cloud-bigquery>=3.11.0
 httpx>=0.25.0
 pydantic>=2.0.0
-opentelemetry-api
-opentelemetry-sdk
+opentelemetry-api>=1.36.0,<1.39.0
+opentelemetry-sdk>=1.36.0,<1.39.0
 opentelemetry-instrumentation-fastapi
 
 opentelemetry-exporter-gcp-trace>=1.6.0
