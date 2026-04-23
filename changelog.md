@@ -1,3 +1,44 @@
+## Mise à jour automatique - 2026-04-23 10:27:50
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 1866  | 749  |  60% |
+| cv_api           | 2761  | 847  |  69% |
+| drive_api        | 1878  | 688  |  63% |
+| items_api        | 1264  | 334  |  74% |
+| prompts_api      | 956   | 368  |  62% |
+| users_api        | 1517  | 501  |  67% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Fix PubSub DLQ DeadlineExceeded timeout exception
+- Nettoyage fichiers inutiles et logs
+
+#### Fichiers (non commités)
+- `gent_commons/agent_commons.egg-info/SOURCES.txt` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/competencies_test.db` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/drive_business_test.db` (M)
+- `drive_api/requirements.txt` (M)
+- `drive_api/spec.md` (M)
+- `items_api/items_test.db` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `prompts_api/prompts_test.db` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+- `users_api/users_test.db` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-23 08:50:34
 
 ### Couverture de Code
