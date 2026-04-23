@@ -25,8 +25,9 @@ def get_google_access_token() -> str:
         credentials.refresh(Request())
         return credentials.token
     except Exception as e:
-        print(f"Failed to get google access token: {e}")
+        logger.error(f"Failed to get google access token: {e}")
         return ""
+
 
 def get_m2m_jwt_token() -> str:
     """
@@ -48,7 +49,8 @@ def get_m2m_jwt_token() -> str:
         try:
             google_id_token = sa_id_token.fetch_id_token(req, audience)
         except Exception as e:
-            print(f"fetch_id_token failed: {e}. Trying fallback credentials refresh.")
+            logger.warning(f"fetch_id_token failed: {e}. Trying fallback credentials refresh.")
+
             credentials, _ = google.auth.default()
             credentials.refresh(req)
             google_id_token = getattr(credentials, 'id_token', None)
@@ -61,7 +63,8 @@ def get_m2m_jwt_token() -> str:
         res.raise_for_status()
         return res.json()["access_token"]
     except Exception as e:
-        print(f"Failed to acquire M2M JWT: {e}")
+        logger.error(f"Failed to acquire M2M JWT: {e}")
+
         return ""
 
 

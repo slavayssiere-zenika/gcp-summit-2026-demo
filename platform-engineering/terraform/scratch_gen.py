@@ -129,8 +129,8 @@ def generate_cr_mcp_tf(service_key):
         value = "http://api.internal.zenika/drive-api/"
       }}
       env {{
-        name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/market-mcp/"
+        name  = "ANALYTICS_MCP_URL"
+        value = "http://api.internal.zenika/analytics-mcp/"
       }}"""
 
     if service_key == "missions":

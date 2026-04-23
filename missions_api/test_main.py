@@ -101,7 +101,7 @@ def test_create_and_analyze_mission(mocker, mock_httpx, mock_genai):
     mock_user_info = MagicMock(status_code=200)
     mock_user_info.json.return_value = {"full_name": "Test User", "unavailability_periods": [], "is_active": True}
     
-    mock_market = MagicMock(status_code=200)
+    mock_analytics = MagicMock(status_code=200)
 
     def side_effect(*args, **kwargs):
         url = args[0] if args else kwargs.get("url", "")
@@ -116,7 +116,7 @@ def test_create_and_analyze_mission(mocker, mock_httpx, mock_genai):
         return MagicMock(status_code=200)
     
     mock_httpx.get.side_effect = side_effect
-    mock_httpx.post.return_value = mock_market
+    mock_httpx.post.return_value = mock_analytics
     
     request_data = {"title": "New Mission", "description": "Need Java developer."}
     response = client.post("/missions", data=request_data, headers={"Authorization": "Bearer fake_token"})

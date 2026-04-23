@@ -62,6 +62,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
+- **GET** `/ready` : Ready
 - **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
@@ -77,7 +78,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/search/query` : Search Items
 - **GET** `/user/{user_id}` : List User Items
 - **POST** `/internal/users/merge` : Merge Users
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp

@@ -29,6 +29,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from mcp_server import list_tools, call_tool, get_aiops_dashboard_data_internal
 from auth import verify_jwt
 from logger import setup_logging, LoggingMiddleware
+import logging
+
+logger = logging.getLogger(__name__)
 
 # La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py, 
 # importé ci-dessus, ce qui empêche une disparition prématurée de la variable d'env lors des imports.
@@ -37,7 +40,7 @@ sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
 sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "market-mcp",
+        ResourceAttributes.SERVICE_NAME: "analytics-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
     })
 ,
@@ -156,7 +159,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
 
     except Exception as e:
         import logging
-        logging.exception("Failed to fetch AIOps metrics in Market MCP REST endpoint")
+        logging.exception("Failed to fetch AIOps metrics in Analytics MCP REST endpoint")
         raise HTTPException(status_code=500, detail=str(e))
 
 @mcp_router.post("/call")
@@ -235,8 +238,36 @@ app.include_router(mcp_router, prefix="/mcp")
 app.include_router(api_router, prefix="/api")
 
 @app.get("/health")
+@app.get("/api/health")
 async def health():
-    return {"status": "healthy", "service": "market-mcp"}
+    return {"status": "healthy", "service": "analytics-mcp"}
+
+@app.get("/ready")
+@app.get("/api/ready")
+async def ready(response: Response):
+    import time
+    import asyncio
+    start_time = time.time()
+    logger.info("[HealthCheck] Started BQ health check.")
+    try:
+        from mcp_server import client as bq_client, PROJECT_ID, FINOPS_DATASET_ID
+        if bq_client:
+            # Perform a deep check of BigQuery connectivity without blocking the event loop
+            # and by using the environment-injected Dataset ID instead of a hardcoded string.
+            await asyncio.to_thread(bq_client.get_dataset, FINOPS_DATASET_ID, timeout=5.0)
+            elapsed = round((time.time() - start_time) * 1000, 2)
+            logger.info(f"[HealthCheck] BQ dataset '{FINOPS_DATASET_ID}' verified in {elapsed}ms.")
+            return {"status": "healthy", "service": "analytics-mcp", "bigquery": "connected"}
+        else:
+            elapsed = round((time.time() - start_time) * 1000, 2)
+            logger.error(f"[HealthCheck] BQ client not initialized after {elapsed}ms.")
+            response.status_code = 503
+            return {"status": "unhealthy", "service": "analytics-mcp", "error": "BQ client not initialized"}
+    except Exception as e:
+        elapsed = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"[HealthCheck] Error during BQ verification after {elapsed}ms: {e}")
+        response.status_code = 503
+        return {"status": "unhealthy", "service": "analytics-mcp", "error": str(e)}
 
 @app.get("/version")
 async def get_version():
@@ -248,7 +279,7 @@ async def get_spec():
         with open("spec.md", "r", encoding="utf-8") as f:
             return Response(content=f.read(), media_type="text/markdown")
     except Exception:
-        return Response(content="# Market MCP — Spécification introuvable", media_type="text/markdown")
+        return Response(content="# Analytics MCP — Spécification introuvable", media_type="text/markdown")
 
 
 import traceback
@@ -289,7 +320,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
     
     if token:
-        asyncio.create_task(report_exception_to_prompts_api("market_mcp", error_msg, trace_context, token))
+        asyncio.create_task(report_exception_to_prompts_api("analytics_mcp", error_msg, trace_context, token))
     
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 

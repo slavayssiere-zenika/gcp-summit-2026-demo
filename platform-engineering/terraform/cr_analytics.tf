@@ -1,5 +1,5 @@
-resource "google_cloud_run_v2_service" "market_mcp" {
-  name                = "market-mcp-${terraform.workspace}"
+resource "google_cloud_run_v2_service" "analytics_mcp" {
+  name                = "analytics-mcp-${terraform.workspace}"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   deletion_protection = false
@@ -7,7 +7,7 @@ resource "google_cloud_run_v2_service" "market_mcp" {
   custom_audiences = ["https://${var.base_domain}"]
 
   template {
-    service_account = google_service_account.market_sa.email
+    service_account = google_service_account.analytics_sa.email
     scaling {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances
@@ -22,25 +22,25 @@ resource "google_cloud_run_v2_service" "market_mcp" {
     }
     containers {
       name    = "api"
-      image   = var.image_market
+      image   = var.image_analytics
       command = ["python3"]
       args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]
       ports {
         container_port = 8080
       }
       startup_probe {
-        initial_delay_seconds = 10
-        timeout_seconds       = 3
-        period_seconds        = 5
+        initial_delay_seconds = 30
+        timeout_seconds       = 10
+        period_seconds        = 10
         failure_threshold     = 10
         http_get {
           path = "/health"
         }
       }
       liveness_probe {
-        initial_delay_seconds = 15
-        timeout_seconds       = 3
-        period_seconds        = 10
+        initial_delay_seconds = 45
+        timeout_seconds       = 10
+        period_seconds        = 15
         failure_threshold     = 3
         http_get {
           path = "/health"
@@ -73,11 +73,19 @@ resource "google_cloud_run_v2_service" "market_mcp" {
       }
       env {
         name  = "APP_VERSION"
-        value = var.market_mcp_version
+        value = var.analytics_mcp_version
       }
       env {
         name  = "FINOPS_ANOMALY_THRESHOLD"
         value = tostring(var.finops_anomaly_threshold)
+      }
+      env {
+        name  = "BQ_LOCATION"
+        value = var.bq_location
+      }
+      env {
+        name  = "FINOPS_DATASET_ID"
+        value = "finops_${terraform.workspace}"
       }
       env {
         name  = "USERS_API_URL"
@@ -108,35 +116,35 @@ resource "google_cloud_run_v2_service" "market_mcp" {
 # ==========================================
 # Identité et Permissions
 # ==========================================
-resource "google_service_account" "market_sa" {
-  account_id                   = "sa-market-${terraform.workspace}-${random_id.sa_suffix.hex}"
+resource "google_service_account" "analytics_sa" {
+  account_id                   = "sa-analytics-${terraform.workspace}-${random_id.sa_suffix.hex}"
   create_ignore_already_exists = true
 }
 
-resource "google_secret_manager_secret_iam_member" "market_jwt_access" {
+resource "google_secret_manager_secret_iam_member" "analytics_jwt_access" {
   project   = data.google_secret_manager_secret.jwt_secret.project
   secret_id = data.google_secret_manager_secret.jwt_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.market_sa.email}"
+  member    = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
 
-resource "google_project_iam_member" "market_otel_trace" {
+resource "google_project_iam_member" "analytics_otel_trace" {
   project = var.project_id
   role    = "roles/cloudtrace.agent"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
+  member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
 
-resource "google_project_iam_member" "market_otel_metric" {
+resource "google_project_iam_member" "analytics_otel_metric" {
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
+  member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
 
 # Autorisation invocation interne LB
-resource "google_cloud_run_v2_service_iam_member" "market_invoker" {
-  project  = google_cloud_run_v2_service.market_mcp.project
-  location = google_cloud_run_v2_service.market_mcp.location
-  name     = google_cloud_run_v2_service.market_mcp.name
+resource "google_cloud_run_v2_service_iam_member" "analytics_invoker" {
+  project  = google_cloud_run_v2_service.analytics_mcp.project
+  location = google_cloud_run_v2_service.analytics_mcp.location
+  name     = google_cloud_run_v2_service.analytics_mcp.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -144,52 +152,52 @@ resource "google_cloud_run_v2_service_iam_member" "market_invoker" {
 # ==========================================
 # Routage et Load Balancing
 # ==========================================
-resource "google_compute_region_network_endpoint_group" "market_neg" {
-  name                  = "neg-market-${terraform.workspace}"
+resource "google_compute_region_network_endpoint_group" "analytics_neg" {
+  name                  = "neg-analytics-${terraform.workspace}"
   network_endpoint_type = "SERVERLESS"
   region                = var.region
   cloud_run {
-    service = google_cloud_run_v2_service.market_mcp.name
+    service = google_cloud_run_v2_service.analytics_mcp.name
   }
 }
 
-resource "google_compute_region_backend_service" "market_internal_backend" {
-  name                  = "backend-internal-market-${terraform.workspace}"
+resource "google_compute_region_backend_service" "analytics_internal_backend" {
+  name                  = "backend-internal-analytics-${terraform.workspace}"
   region                = var.region
   protocol              = "HTTP"
   load_balancing_scheme = "INTERNAL_MANAGED"
   backend {
-    group           = google_compute_region_network_endpoint_group.market_neg.id
+    group           = google_compute_region_network_endpoint_group.analytics_neg.id
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
   }
 }
 
 # Backend global (EXTERNAL_MANAGED) pour accès via le LB externe (frontend AIOps, Admin)
-resource "google_compute_backend_service" "market_backend" {
-  name                  = "backend-market-${terraform.workspace}"
+resource "google_compute_backend_service" "analytics_backend" {
+  name                  = "backend-analytics-${terraform.workspace}"
   protocol              = "HTTPS"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   security_policy       = google_compute_security_policy.waf.id
   backend {
-    group = google_compute_region_network_endpoint_group.market_neg.id
+    group = google_compute_region_network_endpoint_group.analytics_neg.id
   }
 }
 
-resource "google_project_iam_member" "market_bq_admin" {
+resource "google_project_iam_member" "analytics_bq_admin" {
   project = var.project_id
   role    = "roles/bigquery.admin"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
+  member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
-resource "google_project_iam_member" "market_bq_job_user" {
+resource "google_project_iam_member" "analytics_bq_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
+  member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
-resource "google_project_iam_member" "market_trace_user" {
+resource "google_project_iam_member" "analytics_trace_user" {
   project = var.project_id
   role    = "roles/cloudtrace.user"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
+  member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
 
 
@@ -197,21 +205,21 @@ resource "google_project_iam_member" "market_trace_user" {
 # Monitoring Custom Service & SLOs
 # Latence cible : 1000ms (appels BigQuery FinOps + agrégations)
 # Disponibilité : 99.5% sur 30 jours glissants
-# Note : le service s'appelle market-mcp (pas market-api)
+# Note : le service s'appelle analytics-mcp (pas analytics-api)
 # ==============================================================
-resource "google_monitoring_custom_service" "market_mcp_svc" {
-  service_id   = "market-mcp-service-${terraform.workspace}"
-  display_name = "Market & FinOps MCP Service"
+resource "google_monitoring_custom_service" "analytics_mcp_svc" {
+  service_id   = "analytics-mcp-service-${terraform.workspace}"
+  display_name = "Analytics & FinOps MCP Service"
 
   telemetry {
-    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.market_mcp.name}"
+    resource_name = "//run.googleapis.com/projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.analytics_mcp.name}"
   }
 }
 
-resource "google_monitoring_slo" "market_mcp_availability" {
-  service      = google_monitoring_custom_service.market_mcp_svc.service_id
-  slo_id       = "market-mcp-availability-${terraform.workspace}"
-  display_name = "Availability 99.5% - Market & FinOps MCP"
+resource "google_monitoring_slo" "analytics_mcp_availability" {
+  service      = google_monitoring_custom_service.analytics_mcp_svc.service_id
+  slo_id       = "analytics-mcp-availability-${terraform.workspace}"
+  display_name = "Availability 99.5% - Analytics & FinOps MCP"
 
   goal                = 0.995
   rolling_period_days = 30
@@ -221,22 +229,22 @@ resource "google_monitoring_slo" "market_mcp_availability" {
       good_service_filter = join(" ", [
         "metric.type=\"run.googleapis.com/request_count\"",
         "resource.type=\"cloud_run_revision\"",
-        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.market_mcp.name}\"",
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.analytics_mcp.name}\"",
         "metric.label.\"response_code_class\"!=\"5xx\""
       ])
       total_service_filter = join(" ", [
         "metric.type=\"run.googleapis.com/request_count\"",
         "resource.type=\"cloud_run_revision\"",
-        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.market_mcp.name}\""
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.analytics_mcp.name}\""
       ])
     }
   }
 }
 
-resource "google_monitoring_slo" "market_mcp_latency" {
-  service      = google_monitoring_custom_service.market_mcp_svc.service_id
-  slo_id       = "market-mcp-latency-${terraform.workspace}"
-  display_name = "Latency p95 < 1000ms - Market & FinOps MCP"
+resource "google_monitoring_slo" "analytics_mcp_latency" {
+  service      = google_monitoring_custom_service.analytics_mcp_svc.service_id
+  slo_id       = "analytics-mcp-latency-${terraform.workspace}"
+  display_name = "Latency p95 < 1000ms - Analytics & FinOps MCP"
 
   goal                = 0.95
   rolling_period_days = 30
@@ -246,7 +254,7 @@ resource "google_monitoring_slo" "market_mcp_latency" {
       distribution_filter = join(" ", [
         "metric.type=\"run.googleapis.com/request_latencies\"",
         "resource.type=\"cloud_run_revision\"",
-        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.market_mcp.name}\""
+        "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.analytics_mcp.name}\""
       ])
       range {
         max = 1.0 # 1000ms — requêtes BigQuery FinOps + kill-switch

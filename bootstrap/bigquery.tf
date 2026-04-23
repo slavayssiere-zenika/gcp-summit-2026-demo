@@ -1,5 +1,5 @@
-resource "google_bigquery_dataset" "market_data" {
-  dataset_id                  = "market_data"
+resource "google_bigquery_dataset" "analytics_data" {
+  dataset_id                  = "analytics_data"
   friendly_name               = "Market Data Dataset"
   description                 = "Dataset containing job market data and related insights for LLM queries."
   location                    = "europe-west1"
@@ -7,7 +7,7 @@ resource "google_bigquery_dataset" "market_data" {
 }
 
 resource "google_bigquery_table" "job_offers" {
-  dataset_id          = google_bigquery_dataset.market_data.dataset_id
+  dataset_id          = google_bigquery_dataset.analytics_data.dataset_id
   table_id            = "job_offers"
   description         = "Flattened job offers table, optimized for Agentic MCP LLM consumption."
   deletion_protection = false

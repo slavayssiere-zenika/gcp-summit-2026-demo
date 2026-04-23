@@ -95,25 +95,25 @@ def test_status_route_uses_jwt_sub_for_audit():
 
 
 # ---------------------------------------------------------------------------
-# 3. Test structurel cross-service — market_mcp user_email schema
+# 3. Test structurel cross-service — analytics_mcp user_email schema
 # ---------------------------------------------------------------------------
 
-def test_market_mcp_user_email_required_in_log_ai_consumption():
+def test_analytics_mcp_user_email_required_in_log_ai_consumption():
     """
-    Structurel : market_mcp/mcp_server.py doit déclarer user_email comme
+    Structurel : analytics_mcp/mcp_server.py doit déclarer user_email comme
     champ REQUIRED dans log_ai_consumption. S'il devient optionnel, les
     appelants peuvent omettre le sub JWT et polluer BigQuery.
     """
-    mcp_path = pathlib.Path(__file__).parent.parent / "market_mcp" / "mcp_server.py"
+    mcp_path = pathlib.Path(__file__).parent.parent / "analytics_mcp" / "mcp_server.py"
     if not mcp_path.exists():
-        pytest.skip("market_mcp non accessible depuis missions_api")
+        pytest.skip("analytics_mcp non accessible depuis missions_api")
 
     source = mcp_path.read_text()
 
     # user_email doit être dans required
     assert '"user_email"' in source, \
-        "ANOMALIE: 'user_email' absent de market_mcp/mcp_server.py"
+        "ANOMALIE: 'user_email' absent de analytics_mcp/mcp_server.py"
 
     # Aucun hardcodage
     assert 'user_email": "user_1"' not in source, \
-        "REGRESSION: user_email hardcodé à 'user_1' dans market_mcp"
+        "REGRESSION: user_email hardcodé à 'user_1' dans analytics_mcp"

@@ -13,7 +13,7 @@ Ce micro-service se base sur :
 ## Intégrations
 - Interroge `cv_api` (`/search`) pour identifier les top-candidats.
 - Interroge `users_api` (`/users/{id}`) pour récupérer les disponibilités à date.
-- Loggue la consommation sur `market_mcp` par le biais des appels asynchrones internes.
+- Loggue la consommation sur `analytics_mcp` par le biais des appels asynchrones internes.
 
 ## Modèles
 
@@ -48,6 +48,7 @@ Ce micro-service se base sur :
 
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
+- **GET** `/ready` : Ready
 - **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
 - **POST** `/missions` : Create And Analyze Mission
@@ -60,7 +61,7 @@ Ce micro-service se base sur :
 - **GET** `/missions/{mission_id}/status/history` : Get Mission Status History
 - **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **GET** `/missions/{mission_id}` : Get Mission
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp

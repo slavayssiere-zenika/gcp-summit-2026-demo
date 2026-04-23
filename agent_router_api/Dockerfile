@@ -44,7 +44,7 @@ ENV AGENT_HR_API_URL=http://agent_hr_api:8080
 ENV AGENT_OPS_API_URL=http://agent_ops_api:8080
 ENV AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
 ENV PROMPTS_API_URL=http://prompts_api:8000
-ENV MARKET_MCP_URL=http://market_mcp:8080
+ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
 ENV REDIS_URL=redis://redis:6379/1
 # SEC-F06 — Semantic Cache LLM

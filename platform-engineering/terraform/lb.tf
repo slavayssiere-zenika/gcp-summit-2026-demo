@@ -77,8 +77,8 @@ resource "google_compute_url_map" "default" {
 
     route_rules {
       priority = 5
-      match_rules { prefix_match = "/api/market/" }
-      service = google_compute_backend_service.market_backend.id
+      match_rules { prefix_match = "/api/analytics/" }
+      service = google_compute_backend_service.analytics_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/api/"
@@ -88,8 +88,8 @@ resource "google_compute_url_map" "default" {
 
     route_rules {
       priority = 6
-      match_rules { prefix_match = "/mcp/market/" }
-      service = google_compute_backend_service.market_backend.id
+      match_rules { prefix_match = "/mcp/analytics/" }
+      service = google_compute_backend_service.analytics_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -263,8 +263,8 @@ resource "google_compute_url_map" "default" {
     # Compatibilité pour les anciens paths (Legacy)
     route_rules {
       priority = 35
-      match_rules { prefix_match = "/market-mcp/" }
-      service = google_compute_backend_service.market_backend.id
+      match_rules { prefix_match = "/analytics-mcp/" }
+      service = google_compute_backend_service.analytics_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

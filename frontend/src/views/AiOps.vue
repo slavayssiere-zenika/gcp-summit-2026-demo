@@ -62,7 +62,7 @@ const fetchMetrics = async (force: boolean = false) => {
   loading.value = true
   error.value = ''
   try {
-    const url = force ? '/api/market/metrics/aiops?force=true' : '/api/market/metrics/aiops'
+    const url = force ? '/api/analytics/metrics/aiops?force=true' : '/api/analytics/metrics/aiops'
     const res = await axios.get(url)
     data.value = res.data
   } catch (err: any) {

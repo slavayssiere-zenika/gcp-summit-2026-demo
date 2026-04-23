@@ -1,9 +1,9 @@
 """
-Tests de non-régression structurels : le tool log_ai_consumption de market_mcp
+Tests de non-régression structurels : le tool log_ai_consumption de analytics_mcp
 n'accepte jamais 'user_1' comme user_email valide en production, et le
 schema MCP exige user_email.
 
-Le market_mcp est un MCP passif (pas d'auth propre), il reçoit user_email
+Le analytics_mcp est un MCP passif (pas d'auth propre), il reçoit user_email
 depuis les services appelants. Ces tests vérifient le code source pour 
 détecter les régressions (hardcodage "user_1" ou modification du schema MCP)
 sans mock d'infrastructure (approche robuste et décorrélée de BigQuery).
@@ -33,14 +33,14 @@ def test_log_ai_consumption_schema_requires_user_email():
 
     # Le mot-clé user_email doit faire partie des définitions du json schema
     assert '"user_email"' in source or "'user_email'" in source, \
-        "ANOMALIE: 'user_email' absent de market_mcp/mcp_server.py"
+        "ANOMALIE: 'user_email' absent de analytics_mcp/mcp_server.py"
 
 
 # ---------------------------------------------------------------------------
-# 2. Test structurel — market_mcp source ne hardcode pas user_1
+# 2. Test structurel — analytics_mcp source ne hardcode pas user_1
 # ---------------------------------------------------------------------------
 
-def test_market_mcp_source_no_hardcoded_user1():
+def test_analytics_mcp_source_no_hardcoded_user1():
     """
     Structurel : le source de mcp_server.py ne doit jamais hardcoder 'user_1'
     comme valeur de user_email pour un insert BigQuery.
@@ -60,6 +60,6 @@ def test_market_mcp_source_no_hardcoded_user1():
     
     for pattern in problematic_patterns:
         assert pattern not in source, (
-            f"REGRESSION: Pattern {pattern!r} trouvé dans market_mcp/mcp_server.py — "
+            f"REGRESSION: Pattern {pattern!r} trouvé dans analytics_mcp/mcp_server.py — "
             "user_email ne doit jamais être hardcodé à 'user_1' dans le MCP"
         )

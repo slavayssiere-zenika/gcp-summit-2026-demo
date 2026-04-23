@@ -37,7 +37,7 @@ Adoption d'une architecture **Multi-Agent hiérarchique à deux niveaux** reposa
 | Agent | Service | Domaine | Outils MCP |
 |---|---|---|---|
 | `agent_hr_api` | Port 8080 | RH, CVs, compétences, recherche vectorielle | `users_mcp`, `items_mcp`, `competencies_mcp`, `cv_mcp`, `missions_mcp` |
-| `agent_ops_api` | Port 8080 | Monitoring, FinOps, Drive, Cloud Logging | `drive_mcp`, `market_mcp` |
+| `agent_ops_api` | Port 8080 | Monitoring, FinOps, Drive, Cloud Logging | `drive_mcp`, `analytics_mcp` |
 | `agent_missions_api` | Port 8080 | Missions client, staffing, scoring | `missions_mcp`, `cv_mcp`, `users_mcp` |
 
 **Caractéristiques communes des sous-agents :**
@@ -45,7 +45,7 @@ Adoption d'une architecture **Multi-Agent hiérarchique à deux niveaux** reposa
 - **Sessions éphémères** : chaque requête A2A génère un `ephemeral_session_id` (UUID4 frais). Le sous-agent ne voit jamais l'historique conversationnel du Router, évitant la contamination de contexte entre requêtes successives.
 - **Détection d'hallucination** : guardrail actif — si le LLM produit une réponse sans avoir appelé aucun outil MCP, un avertissement `GUARDRAIL` est injecté dans les `steps` et le texte de réponse est préfixé d'une alerte visible.
 - **Cache MCP** : les définitions de tools sont mises en cache 5 minutes (`_TOOLS_CACHE_TTL = 300s`) pour éviter 5 appels HTTP synchrones par requête.
-- **FinOps** : chaque sous-agent log ses propres tokens consommés dans BigQuery (via `market_mcp:log_ai_consumption`) de façon asynchrone (fire-and-forget via `asyncio.create_task`), séparément du Router.
+- **FinOps** : chaque sous-agent log ses propres tokens consommés dans BigQuery (via `analytics_mcp:log_ai_consumption`) de façon asynchrone (fire-and-forget via `asyncio.create_task`), séparément du Router.
 
 ### Protocole A2A : HTTP REST (pas SSE)
 
@@ -101,7 +101,7 @@ Les instructions système de tous les agents (Router, HR, Ops, Missions) sont ex
 - **Risque de dégradation silencieuse** : si un sous-agent échoue (timeout, crash), le Router retourne simplement "Échec de communication avec l'Agent HR" sans retry ni circuit-breaker. L'utilisateur n'a aucune information exploitable.
 - **Guardrail non-exhaustif** : le guardrail d'hallucination vérifie l'absence d'appel d'outil, mais ne valide pas la cohérence des données retournées (ex: un profil fictif retourné par un outil réel).
 - **Reformulation sous-optimale** : le Router reformule la requête dans son prompt avant délégation, mais cette reformulation n'est pas testée unitairement — une mauvaise reformulation peut mener le sous-agent sur une fausse piste.
-- **Coût de la double inférence** : sur les requêtes simples (ex: "liste les missions"), payer deux inférences LLM (Router + Agent) est un surcoût injustifié. Un mécanisme de cache sémantique (`market_mcp`) pourrait court-circuiter ce chemin à terme.
+- **Coût de la double inférence** : sur les requêtes simples (ex: "liste les missions"), payer deux inférences LLM (Router + Agent) est un surcoût injustifié. Un mécanisme de cache sémantique (`analytics_mcp`) pourrait court-circuiter ce chemin à terme.
 
 ---
 
@@ -121,7 +121,7 @@ async def run_agent_and_collect(agent, runner, session_id, query, user_id) -> Ag
 def check_hallucination_guardrail(steps, response_text) -> tuple[list, str]:
     ...
 # agent_commons/finops.py
-async def log_tokens_to_bq(market_url, auth_header, user_email, action, model, input_tokens, output_tokens, query):
+async def log_tokens_to_bq(analytics_url, auth_header, user_email, action, model, input_tokens, output_tokens, query):
     ...
 ```
 
@@ -134,7 +134,7 @@ Actuellement, un sous-agent qui échoue renvoie une erreur opaque sans retry. Me
 
 **3. Cache sémantique côté Router**
 
-Pour les requêtes identiques ou très proches (même embedding), bypasser l'inférence LLM via le cache Redis sémantique existant dans `market_mcp`. Le Router doit vérifier ce cache avant de déléguer au sous-agent.
+Pour les requêtes identiques ou très proches (même embedding), bypasser l'inférence LLM via le cache Redis sémantique existant dans `analytics_mcp`. Le Router doit vérifier ce cache avant de déléguer au sous-agent.
 
 ### 🟡 Moyen Terme (Amélioration Structurelle)
 

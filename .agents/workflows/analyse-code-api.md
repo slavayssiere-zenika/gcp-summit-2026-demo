@@ -4,47 +4,49 @@ description: Audit complet de toutes les APIs pour vérifier le respect des Gold
 
 Ce workflow permet à l'agent de scanner automatiquement toutes les APIs du projet pour vérifier leur conformité aux "Golden Rules" du projet Zenika.
 
-### Étape 1 : Détection des APIs
-Utilise l'outil `list_dir` ou `run_command` (ex: `find . -maxdepth 1 -name "*_api" -type d`) pour identifier tous les dossiers d'APIs dans le répertoire courant (exemple : `users_api`, `items_api`, `cv_api`, `agent_api`, `competencies_api`, `missions_api`, `prompts_api`, etc.).
+// turbo-all
+
+### Étape 1 : Détection et Catégorisation des Services
+Utilise l'outil `list_dir` ou `run_command` (ex: `find . -maxdepth 1 -name "*_api" -o -name "*_mcp" -type d`) pour identifier tous les dossiers de services dans le répertoire courant.
+Classe chaque service selon la typologie définie dans `AGENTS.md` :
+- **APIs Data 🔵** (producteurs MCP avec DB) : ex. `users_api`, `items_api`, `cv_api`, `competencies_api`, `missions_api`, `drive_api`, `prompts_api`
+- **Agents 🟣** (consommateurs MCP sans DB) : ex. `agent_router_api`, `agent_hr_api`, `agent_ops_api`, `agent_missions_api`
+- **MCP Natif 🟤** (sans DB) : ex. `analytics_mcp`
 
 ### Étape 2 : Analyse de configuration de `db_init_job.tf`
 Inspecte le fichier `platform-engineering/terraform/db_init_job.tf`.
-Vérifie la variable `services = [...]`. Compare cette liste avec la liste des APIs détectées (pour celles qui nécessitent une base de données). Note quelles APIs sont correctement enregistrées pour la création de leur logique DB et IAM.
+Vérifie la variable `services = [...]`. Compare cette liste avec la liste des **APIs Data** détectées (qui nécessitent une base de données). Note quelles APIs sont correctement enregistrées pour la création de leur logique DB et IAM.
 
-### Étape 3 : Audit de chaque API (Boucle)
-Pour chaque API détectée, vérifie les points d'audit suivants (utilise `grep_search`, `list_dir` ou `view_file` selon ton besoin) :
+### Étape 3 : Audit de Conformité (CHECKLIST AGENTS.md)
+Pour chaque service détecté, vérifie rigoureusement les points de la checklist de conformité de `AGENTS.md` en inspectant le code source (`grep_search`, `list_dir`, `view_file`) :
 
-#### 3.1. Architecture & Container Contract
-- Présence d'un `Dockerfile` avec `AS builder` (Multi-stage build).
-- Exécution non-root (présence de `USER`).
-- Syntaxe `CMD` correcte (pas de script shell direct).
-- Présence d'un `.dockerignore`.
-- Présence du fichier `VERSION` à la racine de l'API.
+#### 3.1. Règles communes (Tous les services)
+- [ ] **Observabilité** : `Instrumentator().instrument(app).expose(app)` est présent dans `main.py`.
+- [ ] **Traçabilité** : `FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")` est présent dans `main.py`.
+- [ ] **Versioning** : Fichier `VERSION` mis à jour (semver) présent à la racine.
+- [ ] **Modèles IA** : Aucun modèle IA hardcodé, utilisation des variables d'environnement.
+- [ ] **Container Contract** : Dockerfile multi-stage (`AS builder`), utilisateur non-root (`USER`), `CMD` sans shell (utilisation de `python3`), et présence d'un `.dockerignore`.
+- [ ] **Gestion des erreurs** : Absence de `except Exception: pass`. "Failfast" et zéro erreur silencieuse appliqués.
+- [ ] **Health Checks (Liveness/Readiness)** : Découplage strict entre la Liveness (`/health` instantané sans appels externes/DB) et la Readiness (`/ready` ou équivalent pour le test de connectivité BDD/BigQuery/Redis).
 
-#### 3.2. Observabilité & Logging
-- Fichier `main.py` contient l'instrumentation OpenTelemetry (avec exclusion de `/health,metrics` via `FastAPIInstrumentor`).
-- Déclaration Prometheus (`Instrumentator().instrument(app).expose(app)`).
-- Le fichier `logger.py` implémente `pythonjsonlogger` pour JSON et attache `trace_id` / `span_id`.
-- Utilisation de `LoggingMiddleware` qui filtre le bruit (`/health`, etc.).
-- Les appels HTTP sortants (si visibles dans le code) utilisent `inject(headers)`.
-- Implémentation du pattern global `@app.exception_handler(Exception)` reportant sur `prompts_api` (Golden Pattern).
+#### 3.2. Spécifique aux APIs Data 🔵
+- [ ] **Zero-Trust** : Endpoints protégés par `dependencies=[Depends(verify_jwt)]` sur le `APIRouter`.
+- [ ] **Interface MCP** : Tool MCP créé ou mis à jour dans `mcp_server.py`.
+- [ ] **Proxy MCP** : Route `/mcp/{path:path}` proxy vers le sidecar MCP présente dans `main.py`.
+- [ ] **Traçabilité sortante** : `inject(headers)` présent dans **chaque** appel `httpx` sortant.
+- [ ] **Base de données** : Changeset Liquibase présent dans `db_migrations/changelogs/` avec section `rollback`.
+- [ ] **Cache** : Cache Redis invalidé sur les mutations (POST, PUT, DELETE).
+- [ ] **Tests** : Tests de contrat MCP ajoutés dans `test_mcp_tools.py`.
+- [ ] **Golden Pattern Erreur** : Implémentation du pattern global `@app.exception_handler(Exception)` reportant sur `prompts_api`.
 
-#### 3.3. Sécurité
-- Utilisation de `verify_jwt` de `src.auth` pour protéger les routes.
-
-#### 3.4. MCP & Structure
-- Présence du fichier `mcp_server.py`.
-- L'API route `/mcp/{path:path}` vers le port d'exécution MCP.
-
-#### 3.5. Qualité & Tests
-- Dossier de tests ou fichiers `test_main.py` et `conftest.py`.
-- Traces de couverture (présence de fichiers configurant le coverage, ou d'artefacts comme `.coverage` ou `coverage.json`).
-
-#### 3.6. Gestion des Erreurs (Failfast Zéro Erreur Silencieuse)
-- Absence totale de blocs `except Exception: pass` ou de logs isolés capturant une erreur sans instruction `raise`.
-- Vérifier que les actions asynchrones (`asyncio.create_task`) finissent par lever l'exception (`raise e`) ou utiliser un outil explicite centralisé si elles échouent.
-- S'assurer que les outils MCP (`mcp_server.py`) retournent contractuellement la forme structurée `{"success": false, "error": "..."}` en cas d'erreur.
+#### 3.3. Spécifique aux Agents 🟣
+- [ ] **Zero-Trust Local** : `verify_jwt()` (validation signature HS256 + claim `sub`) définie localement dans `main.py`.
+- [ ] **Zero-Trust Application** : `protected_router = APIRouter(dependencies=[Depends(verify_jwt)])` obligatoirement utilisé.
+- [ ] **A2A & Traçabilité** : `inject(headers)` présent dans **chaque** appel HTTP sortant vers les APIs ou sous-agents.
+- [ ] **Propagation JWT** : `auth_header_var` propagé aux clients MCP pour transmettre le JWT aux APIs cibles.
+- [ ] **Tests** : Tests de session, guardrail, et propagation JWT ajoutés.
+- [ ] **Interdiction MCP** : Absence stricte de fichier `mcp_server.py`.
 
 ### Étape 4 : Génération du Rapport
-Une fois toutes les APIs analysées, génère un artefact détaillé (ex: `rapport_audit_apis.md`). 
-Le rapport doit contenir, pour chaque API, une matrice ou des encarts visuels (avec emojis ✅ ❌) montrant si chaque Golden Rule est respectée ou non, ainsi que des recommandations de fix pour les APIs non-conformes.
+Une fois l'audit terminé, génère un artefact détaillé (ex: `rapport_audit_apis.md`). 
+Le rapport doit catégoriser les services (APIs Data, Agents) et contenir une matrice d'audit (avec emojis ✅ ❌) montrant précisément quels points de la **CHECKLIST DE CONFORMITÉ** de `AGENTS.md` sont respectés ou violés, ainsi que le plan d'action recommandé pour corriger les non-conformités.

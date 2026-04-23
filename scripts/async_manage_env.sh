@@ -79,7 +79,7 @@ fi
 # 2. Collect local versions to pass as environment variables
 echo "[*] Collecting local component versions..."
 
-COMPONENTS=("agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp" "monitoring_mcp" "db_migrations" "frontend")
+COMPONENTS=("agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "analytics_mcp" "monitoring_mcp" "db_migrations" "frontend")
 ENV_VARS_ARGS=""
 
 for COMP in "${COMPONENTS[@]}"; do

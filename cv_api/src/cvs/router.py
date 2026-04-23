@@ -68,7 +68,7 @@ ADMIN_SERVICE_USERNAME = os.getenv("ADMIN_SERVICE_USERNAME", "")
 ADMIN_SERVICE_PASSWORD = os.getenv("ADMIN_SERVICE_PASSWORD", "")
 
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-MARKET_MCP_URL = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+ANALYTICS_MCP_URL = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
 
 if not GEMINI_API_KEY:
     print("WARNING: GOOGLE_API_KEY is missing. RAG embeddings will fail.")
@@ -102,7 +102,7 @@ async def force_invalidate_taxonomy_cache(_: dict = Depends(verify_jwt)):
     return {"message": "Cache de taxonomie invalidé"}
 
 async def _log_finops(user_email: str, action: str, model: str, usage_metadata: Any, metadata: dict = None, auth_token: str = None):
-    """Utility to log consumption to BigQuery via Market MCP sidecar."""
+    """Utility to log consumption to BigQuery via Analytics MCP sidecar."""
     if not usage_metadata:
         return
     
@@ -136,9 +136,9 @@ async def _log_finops(user_email: str, action: str, model: str, usage_metadata: 
                 inject(headers)
                 if auth_token:
                     headers["Authorization"] = f"Bearer {auth_token}"
-                await http_client.post(f"{MARKET_MCP_URL.rstrip('/')}/mcp/call", json=payload, headers=headers, timeout=2.0)
+                await http_client.post(f"{ANALYTICS_MCP_URL.rstrip('/')}/mcp/call", json=payload, headers=headers, timeout=2.0)
             except Exception as ex:
-                logger.warning(f"Market MCP unreachable for FinOps: {ex}")
+                logger.warning(f"Analytics MCP unreachable for FinOps: {ex}")
     except Exception as e:
         logger.error(f"FinOps logging analysis failed: {e}")
 
@@ -759,7 +759,8 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     def sanitize_field(val: Any) -> Optional[str]:
         if val is None: return None
         s = str(val).strip()
-        if s.lower() in ("null", "none", "", "unknown"): return None
+        clean_s = s.lower().strip(",").strip()
+        if clean_s in ("null", "none", "", "unknown", "n/a", "na", "nil"): return None
         return s
 
     def normalize_str(s: str) -> str:
@@ -1070,8 +1071,10 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                         return None
 
                     async def process_competency(comp):
-                        name = comp["name"]
-                        parent = comp.get("parent")
+                        name = sanitize_field(comp.get("name"))
+                        if not name:
+                            return True
+                        parent = sanitize_field(comp.get("parent"))
                         # ne pas assigner les compétences non pratiquées
                         # practiced=False = mentionnée contextuellement, non maîtrisée
                         if not comp.get("practiced", True):

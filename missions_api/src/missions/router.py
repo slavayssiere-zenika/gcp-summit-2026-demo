@@ -49,27 +49,27 @@ def extract_leaf_names(nodes: list[dict], max_leaves: int = 300) -> list[str]:
     return acc[:max_leaves]
 
 def _collect_all_known_names(nodes: list[dict]) -> set[str]:
-    """Retourne les noms canoniques ET tous les aliases des compétences feuilles.
+    """Retourne les noms canoniques ET tous les aliases de TOUTES les compétences (feuilles et parents).
 
     Utilisé pour le filtre pré-suggestion (Axe 4) : évite de soumettre
-    'GCP' comme suggestion alors que 'Google Cloud Platform' existe déjà
-    avec l'alias 'GCP' dans la taxonomie.
+    des suggestions pour des compétences (comme 'DevOps') qui existent déjà
+    comme nœuds parents ou avec des aliases dans la taxonomie.
     """
     known: set[str] = set()
 
     def _traverse(n_list: list[dict]) -> None:
         for n in n_list:
+            name: str | None = n.get("name")
+            if name:
+                known.add(name.lower())
+            aliases_str: str = n.get("aliases") or ""
+            for alias in aliases_str.split(","):
+                a = alias.strip()
+                if a:
+                    known.add(a.lower())
+            
             subs: list = n.get("sub_competencies") or []
-            if not subs:
-                name: str | None = n.get("name")
-                if name:
-                    known.add(name.lower())
-                aliases_str: str = n.get("aliases") or ""
-                for alias in aliases_str.split(","):
-                    a = alias.strip()
-                    if a:
-                        known.add(a.lower())
-            else:
+            if subs:
                 _traverse(subs)
 
     _traverse(nodes)
@@ -115,7 +115,7 @@ def find_domains_for_skills(skills: list[str], nodes: list[dict]) -> list[str]:
     _search(nodes)
     return sorted(list(domains))
 
-router = APIRouter(prefix="", tags=["Missions"])
+router = APIRouter(prefix="", tags=["Missions"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["Public"])
 
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -235,13 +235,13 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                 )
             )
 
-            market_mcp_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+            analytics_mcp_url = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
 
             async def fast_log_finops(action, model, usage):
                 try:
                     inject(headers)
                     await http_client.post(
-                        f"{market_mcp_url.rstrip('/')}/mcp/call",
+                        f"{analytics_mcp_url.rstrip('/')}/mcp/call",
                         json={
                             "name": "log_ai_consumption",
                             "arguments": {
@@ -267,10 +267,17 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             try:
                 # _taxonomy_leaf_names contient déjà les noms en lowercase (via _collect_all_known_names)
                 known_leaves = _taxonomy_leaf_names if '_taxonomy_leaf_names' in dir() else set()
-                new_skills = [
-                    c for c in extracted_competencies
-                    if c and c.lower() not in known_leaves
-                ]
+                new_skills = []
+                for c in extracted_competencies:
+                    if not c:
+                        continue
+                    c_clean = c.lower().strip()
+                    c_no_parens = re.sub(r'\(.*?\)', '', c_clean).strip()
+                    parens_matches = re.findall(r'\((.*?)\)', c_clean)
+                    in_parens = any(p.strip() in known_leaves for p in parens_matches)
+                    
+                    if c_clean not in known_leaves and c_no_parens not in known_leaves and not in_parens:
+                        new_skills.append(c)
                 if new_skills:
                     logger.info(f"[Mission→Taxonomy] {len(new_skills)} compétences candidates à suggestion : {new_skills}")
                     suggest_tasks = [

@@ -29,15 +29,21 @@ Si le fichier existe, extraire `ADMIN_PASSWORD` et `GCLOUD_BIN` depuis son conte
 Si le fichier **n'existe pas**, afficher ce message à l'utilisateur et **s'arrêter** :
 
 ```
-❌ Fichier .antigravity_env manquant. Crée-le une fois depuis ton terminal :
+❌ Fichier .antigravity_env manquant ou incomplet. Crée-le une fois depuis ton terminal :
 
   echo "GCLOUD_BIN=$(which gcloud)" > .antigravity_env
-  echo "ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=admin-password-dev)" >> .antigravity_env
 
-Ce fichier est gitignore — tes credentials ne seront pas commités.
+Ce fichier est gitignore.
+Le mot de passe admin sera récupéré automatiquement via Google Cloud Secret Manager.
 ```
 
-Une fois le mot de passe obtenu, vérifie que `httpx` est disponible :
+Une fois `GCLOUD_BIN` obtenu, récupère dynamiquement le mot de passe :
+```bash
+# // turbo
+ADMIN_PASSWORD=$($GCLOUD_BIN secrets versions access latest --secret=admin-password-dev --project=slavayssiere-sandbox-462015)
+```
+
+Vérifie ensuite que `httpx` est disponible :
 ```bash
 # // turbo
 pip3 install --target=/tmp/py_deps httpx 2>&1 | tail -1 && PYTHONPATH=/tmp/py_deps /opt/homebrew/bin/python3.13 -c "import httpx; print('httpx OK')"
@@ -58,12 +64,13 @@ Si `total < 10` consultants ou `missions < 5`, les tests data-dépendants échou
 
 ```bash
 # // turbo
-ADMIN_PASSWORD='<ADMIN_PASSWORD>' PYTHONPATH=/tmp/py_deps \
-  /opt/homebrew/bin/python3.13 -u -c "
+PYTHONPATH=/tmp/py_deps /opt/homebrew/bin/python3.13 -u -c "
 import httpx, os, sys
+import subprocess
 base = 'https://dev.zenika.slavayssiere.fr'
-pwd = os.environ['ADMIN_PASSWORD']
 try:
+    gcloud_bin = os.environ.get('GCLOUD_BIN', '/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin/gcloud')
+    pwd = subprocess.check_output([gcloud_bin, 'secrets', 'versions', 'access', 'latest', '--secret=admin-password-dev', '--project=slavayssiere-sandbox-462015']).decode('utf-8').strip()
     tok = httpx.post(f'{base}/api/auth/login', json={'email':'admin@zenika.com','password':pwd}, timeout=10).json()['access_token']
     h = {'Authorization': f'Bearer {tok}'}
     users = httpx.get(f'{base}/api/users/', headers=h, timeout=10).json()
@@ -73,10 +80,10 @@ try:
     print(f'Consultants : {nb_users}')
     print(f'Missions    : {nb_missions}')
     if nb_users < 10:
-        print('⚠️  AVERTISSEMENT : moins de 10 consultants — lancer /generate-gcp-summit-fake d\\'abord')
+        print('⚠️  AVERTISSEMENT : moins de 10 consultants — lancer /generate-gcp-summit-fake d\'abord')
         sys.exit(1)
     if nb_missions < 5:
-        print('⚠️  AVERTISSEMENT : moins de 5 missions — lancer /generate-gcp-summit-fake d\\'abord')
+        print('⚠️  AVERTISSEMENT : moins de 5 missions — lancer /generate-gcp-summit-fake d\'abord')
         sys.exit(1)
     print('✅ Données suffisantes — tests peuvent démarrer')
 except Exception as e:
@@ -108,7 +115,7 @@ mkdir -p reports && echo "reports/run_$(date +%Y%m%d_%H%M%S).log"
 ```bash
 # // turbo
 LOG_FILE="reports/run_all_$(date +%Y%m%d_%H%M%S).log" && \
-ADMIN_PASSWORD='<ADMIN_PASSWORD>' PYTHONPATH=/tmp/py_deps \
+ADMIN_PASSWORD=$($GCLOUD_BIN secrets versions access latest --secret=admin-password-dev --project=slavayssiere-sandbox-462015) PYTHONPATH=/tmp/py_deps \
   /opt/homebrew/bin/python3.13 -u scripts/agent_prompt_tests.py \
   --verbose --fail-fast --log-file "$LOG_FILE" 2>&1 | tee "$LOG_FILE"
 ```
@@ -117,7 +124,7 @@ ADMIN_PASSWORD='<ADMIN_PASSWORD>' PYTHONPATH=/tmp/py_deps \
 ```bash
 # // turbo
 LOG_FILE="reports/run_<catégorie>_$(date +%Y%m%d_%H%M%S).log" && \
-ADMIN_PASSWORD='<ADMIN_PASSWORD>' PYTHONPATH=/tmp/py_deps \
+ADMIN_PASSWORD=$($GCLOUD_BIN secrets versions access latest --secret=admin-password-dev --project=slavayssiere-sandbox-462015) PYTHONPATH=/tmp/py_deps \
   /opt/homebrew/bin/python3.13 -u scripts/agent_prompt_tests.py \
   --filter <catégorie> --verbose --fail-fast --log-file "$LOG_FILE" 2>&1 | tee "$LOG_FILE"
 ```
@@ -158,10 +165,11 @@ Si des dispatches multi-agents non justifiés sont détectés :
 - Modifier le prompt directement avec `write_to_file` ou `multi_replace_file_content`.
 - Lancer le sync du prompt vers GCP dev :
 ```bash
+ADMIN_PASSWORD=$($GCLOUD_BIN secrets versions access latest --secret=admin-password-dev --project=slavayssiere-sandbox-462015)
 python3 scripts/sync_prompts.py \
   --url "https://dev.zenika.slavayssiere.fr/api/prompts" \
   --email "admin@zenika.com" \
-  --password "<ADMIN_PASSWORD>"
+  --password "$ADMIN_PASSWORD"
 ```
 
 #### 4.3. Proposition 3 — Tests en échec à cause de données manquantes

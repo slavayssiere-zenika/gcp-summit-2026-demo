@@ -17,5 +17,5 @@
 #   - cr_agent_router.tf  → agent-router-api
 #   - cr_agent_hr.tf      → agent-hr-api
 #   - cr_agent_ops.tf     → agent-ops-api
-#   - cr_market.tf        → market-mcp
+#   - cr_analytics.tf        → analytics-mcp
 # ==============================================================

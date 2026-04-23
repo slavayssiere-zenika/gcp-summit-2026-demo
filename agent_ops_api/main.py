@@ -456,7 +456,7 @@ async def get_version():
 
 @protected_router.api_route("/mcp/proxy/{server_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
-    # Synchronisation avec les noms Terraform (market -> MARKET_MCP_URL, drive -> DRIVE_MCP_URL, etc.)
+    # Synchronisation avec les noms Terraform (market -> ANALYTICS_MCP_URL, drive -> DRIVE_MCP_URL, etc.)
     target_url_env = f"{server_name.upper()}_URL"
     base_url = os.getenv(target_url_env)
     

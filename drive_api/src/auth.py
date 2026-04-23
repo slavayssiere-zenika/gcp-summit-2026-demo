@@ -18,6 +18,7 @@ security = HTTPBearer(auto_error=False)
 
 from typing import Optional
 
+
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     """
     Vérifie le token JWT. Priorité au header Authorization, puis au cookie access_token.
@@ -81,7 +82,11 @@ def _decode_and_validate(token: str) -> dict:
 
         # Validation JWT applicative classique (HS256)
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload.get("sub"):
+            logger.warning("[JWT] Token HS256 valide mais claim 'sub' manquant — accès refusé.")
+            raise HTTPException(status_code=401, detail="Claim 'sub' manquant")
         return payload
-    except JWTError:
+    except JWTError as e:
+        logger.debug(f"[JWT] Erreur de décodage JWTError: {e}")
         raise
 

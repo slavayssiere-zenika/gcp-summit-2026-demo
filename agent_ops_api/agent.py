@@ -30,12 +30,12 @@ app_logger = logging.getLogger(__name__)
 # MCP Clients — URLs propres à l'agent Ops
 # ---------------------------------------------------------------------------
 DRIVE_MCP_URL = os.getenv("DRIVE_MCP_URL", "http://drive_api:8006")
-MARKET_MCP_URL = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+ANALYTICS_MCP_URL = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
 MONITORING_MCP_URL = os.getenv("MONITORING_MCP_URL", "http://monitoring_mcp:8010")
 PROMPTS_MCP_URL = os.getenv("PROMPTS_MCP_URL", "http://prompts_api:8000")
 
 drive_client = MCPHttpClient(DRIVE_MCP_URL)
-market_client = MCPHttpClient(MARKET_MCP_URL)
+market_client = MCPHttpClient(ANALYTICS_MCP_URL)
 monitoring_client = MCPHttpClient(MONITORING_MCP_URL)
 prompts_client = MCPHttpClient(PROMPTS_MCP_URL)
 
@@ -77,7 +77,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
     )
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url}/prompts/agent_ops_api.system_instruction/compiled")
+            res = await client.get(f"{prompts_api_url.rstrip('/')}/agent_ops_api.system_instruction/compiled")
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:
@@ -118,6 +118,26 @@ async def create_agent(session_id: str | None = None) -> Agent:
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
+def check_ops_hallucination_guardrail(query: str, response_text: str, steps: list[dict]) -> tuple[str, list[dict]]:
+    """Guardrail spécifique pour Ops : ignore le faux positif si la tâche est purement générative."""
+    if any(s.get("type") == "call" for s in steps):
+        return response_text, steps
+
+    generative_keywords = [
+        "génère", "genere", "rédige", "redige", "écris", "ecris", "propose"
+    ]
+    query_lower = query.lower()
+    
+    is_generative = any(kw in query_lower for kw in generative_keywords)
+
+    if is_generative:
+        app_logger.info("[Ops] ℹ️ Zero tools called, but query appears generative. Bypassing hallucination guardrail.")
+        return response_text, steps
+
+    return check_hallucination_guardrail(response_text, steps, "[Ops]")
+
+
 async def run_agent_query(
     query: str,
     session_id: str | None = None,
@@ -163,7 +183,7 @@ async def run_agent_query(
     )
 
     # --- Guardrail anti-hallucination ---
-    response_text, steps = check_hallucination_guardrail(response_text, steps, "[Ops]")
+    response_text, steps = check_ops_hallucination_guardrail(query, response_text, steps)
 
     return {
         "response": response_text,

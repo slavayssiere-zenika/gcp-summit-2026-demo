@@ -8,7 +8,7 @@ Dans l'ère des agents autonomes (LLMs), interroger différentes APIs internes �
 
 ## Décision
 - L'infrastructure expose les capacités à l'IA *uniquement* à travers la spécification standard **Model Context Protocol (MCP)**.
-- Des "Compagnons MCP" (`market_mcp`, `cv_mcp`, `items_mcp`) sont construits sous forme d'images séparées pour se coupler à chaque backend ou groupe de domaine.
+- Des "Compagnons MCP" (`analytics_mcp`, `cv_mcp`, `items_mcp`) sont construits sous forme d'images séparées pour se coupler à chaque backend ou groupe de domaine.
 - L'orchestrateur (`agent_api`) agit en tant que Client MCP Unique ; il scrute son écosystème via des variables d'environnement (`*_MCP_URL`) et liste les outils (`Tools`) dynamiquement mis à disposition.
 - On contraint fortement les appels asynchrones à repasser à `REST` là où le SSE (Server Sent Events) ajoute du statique non compatible avec notre infrastructure Cloud Run.
 

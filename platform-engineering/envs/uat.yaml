@@ -6,7 +6,8 @@
 project_id:                "slavayssiere-sandbox-462015"
 base_domain:               "zenika.slavayssiere.fr"
 parent_zone_name:          "slavayssiere-zenika"
-parent_zone_project_id:    "slavayssiere-sandbox-462015"  # Obligatoire depuis P2-2 (plus de défault dans variables.tf)
+parent_zone_project_id:    "slavayssiere-sandbox-462015"
+bq_location:               "europe-west1"  # Obligatoire depuis P2-2 (plus de défault dans variables.tf)
 
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}
@@ -25,7 +26,7 @@ competencies_api_version:   "v0.0.50"
 cv_api_version:             "v0.0.50"
 prompts_api_version:        "v0.0.50"
 drive_api_version:          "v0.0.50"
-market_mcp_version:         "v0.0.50"
+analytics_mcp_version:         "v0.0.50"
 db_migrations_version:      "v0.0.50"
 missions_api_version:       "v0.0.50"
 frontend_version:           "v0.0.50"

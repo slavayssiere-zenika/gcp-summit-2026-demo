@@ -40,8 +40,8 @@ def _resolve_gcp_project_id() -> str:
 
     # Fallback : détection automatique via ADC (sans réseau supplémentaire)
     try:
-        import google.auth
-        _, project_id = google.auth.default()
+        import google.auth as _google_auth  # noqa: PLC0415 — lazy import requis (évite circular si ADC absent)
+        _, project_id = _google_auth.default()
         if project_id:
             logger.info(f"[PubSub] GCP project ID résolu via ADC : '{project_id}'")
             return project_id

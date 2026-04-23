@@ -394,12 +394,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         missions_data = missions_response.json()
                         active_missions = missions_data.get("active_missions", [])
                 except Exception as missions_err:
-                    # Dégradation gracieuse : si missions_api est indisponible, on retourne
-                    # quand même les indisponibilités déclarées sans bloquer la réponse.
-                    logging.warning(
-                        f"[get_user_availability] missions_api indisponible pour user {user_id}: {missions_err}. "
-                        "Dégradation gracieuse : seules les unavailability_periods sont retournées."
-                    )
+                    logging.error(f"[get_user_availability] missions_api indisponible pour user {user_id}: {missions_err}")
+                    raise
 
                 result = {
                     "user_id": user_id,
@@ -438,7 +434,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                             m_res = await client.get(f"{missions_api_url}/missions/user/{uid}/active", timeout=5.0)
                             if m_res.status_code == 200:
                                 active_m = m_res.json().get("active_missions", [])
-                        except Exception: pass
+                        except Exception as e:
+                            logging.error(f"[get_users_availability_bulk] missions_api indisponible pour user {uid}: {e}")
+                            raise
                         
                         return {
                             "user_id": uid,
@@ -447,8 +445,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                             "is_available": len(active_m) == 0 and len(unavail) == 0,
                             "conflict_detected": len(active_m) > 0
                         }
-                    except Exception:
-                        return None
+                    except Exception as err:
+                        logging.error(f"[get_users_availability_bulk] Erreur sur user {uid}: {err}")
+                        raise
                         
                 results = await asyncio.gather(*(fetch_user_avail(uid) for uid in user_ids))
                 results = [r for r in results if r is not None]

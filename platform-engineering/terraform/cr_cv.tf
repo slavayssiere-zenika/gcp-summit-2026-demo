@@ -136,8 +136,8 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = "http://api.internal.zenika/api/drive/"
       }
       env {
-        name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/api/market/"
+        name  = "ANALYTICS_MCP_URL"
+        value = "http://api.internal.zenika/api/analytics/"
       }
       env {
         name  = "PUBSUB_INVOKER_SA_EMAIL"

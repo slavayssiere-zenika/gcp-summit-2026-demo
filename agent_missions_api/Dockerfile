@@ -54,7 +54,7 @@ ENV COMPETENCIES_MCP_URL=http://competencies_mcp:8000
 
 # ── Services support (Level 1) ─────────────────────────────────────────────────
 ENV PROMPTS_API_URL=http://prompts_api:8000
-ENV MARKET_MCP_URL=http://market_mcp:8080
+ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
 
 # ── Infrastructure (Level 2 — JAMAIS de valeur réelle ici, injectée par Cloud Run)

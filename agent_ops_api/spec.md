@@ -13,7 +13,7 @@ Il donne accès aux données de monitoring GCP, aux coûts IA (FinOps) et à la 
 
 | MCP | Outils principaux |
 |-----|------------------|
-| `market_mcp` | `get_finops_report`, `check_all_components_health`, `get_service_logs`, `get_infrastructure_topology` |
+| `analytics_mcp` | `get_finops_report`, `check_all_components_health`, `get_service_logs`, `get_infrastructure_topology` |
 | `drive_mcp` | `list_synced_folders`, `configure_drive_folder`, `remove_drive_folder` |
 
 ---
@@ -66,7 +66,7 @@ Il donne accès aux données de monitoring GCP, aux coûts IA (FinOps) et à la 
 - **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
 - **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

@@ -4,6 +4,8 @@ description: Workflow d'audit automatisé de sécurité applicative, Terraform e
 
 # Worfklow : Analyse de Sécurité Globale (/analyse-security)
 
+// turbo-all
+
 Ce workflow fournit une marche à suivre stricte pour auditer la posture de sécurité de la plateforme, depuis l'Infrastructure as Code (Terraform) jusqu'à la logique applicative (FastAPI, LLM). Lorsqu'un utilisateur exécute ce workflow, l'Agent DOIT exécuter les vérifications suivantes de manière autonome.
 
 ## 1. Audit Périmétrique et Terraform (Network & IAM)

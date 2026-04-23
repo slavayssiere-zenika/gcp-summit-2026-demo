@@ -1,13 +1,13 @@
-# Market MCP — Spécification
+# Analytics MCP — Spécification
 
 > Service MCP natif exposant les données marché, le tracking FinOps et les outils GCP Infrastructure.
 
 ## Vue d'ensemble
 
-Le **Market MCP** est un service MCP natif (HTTP direct) qui agrège des données issues de **Google BigQuery** et expose des outils utilisables par les agents IA de la plateforme Zenika Console.
+Le **Analytics MCP** est un service MCP natif (HTTP direct) qui agrège des données issues de **Google BigQuery** et expose des outils utilisables par les agents IA de la plateforme Zenika Console.
 
 - **Port** : `8008`
-- **Préfixe proxy Nginx** : `/market-mcp/`
+- **Préfixe proxy Nginx** : `/analytics-mcp/`
 - **Authentification** : JWT HS256 obligatoire sur toutes les routes (Zero-Trust)
 
 ---
@@ -94,6 +94,6 @@ Détecte les anomalies de consommation IA et déclenche le Kill-Switch utilisate
 ## Observabilité
 
 - **Métriques Prometheus** : `GET /metrics`
-- **Health check** : `GET /health` → `{"status": "healthy", "service": "market-mcp"}`
+- **Health check** : `GET /health` → `{"status": "healthy", "service": "analytics-mcp"}`
 - **Version** : `GET /version` → `{"version": "<APP_VERSION>"}`
 - **Traçage** : OpenTelemetry OTLP (Tempo)

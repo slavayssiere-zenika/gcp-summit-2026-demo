@@ -182,11 +182,11 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
                 # Log BigQuery en fire-and-forget (coût zéro pour l'utilisateur)
                 async def _log_cache_hit_bq():
                     try:
-                        market_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8080")
+                        analytics_url = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8080")
                         headers_bq = {"Authorization": auth_header}
                         inject(headers_bq)
                         async with httpx.AsyncClient(timeout=10.0) as bq_client:
-                            await bq_client.post(f"{market_url.rstrip('/')}/mcp/call", json={
+                            await bq_client.post(f"{analytics_url.rstrip('/')}/mcp/call", json={
                                 "name": "log_ai_consumption",
                                 "arguments": {
                                     "user_email": jwt_user_id,
@@ -560,7 +560,7 @@ MCP_SERVICES_CONFIG = [
     {"id": "cv",           "name": "CV API",              "env": "CV_API_URL"},
     {"id": "missions",     "name": "Missions API",        "env": "MISSIONS_API_URL"},
     {"id": "prompts",      "name": "Prompts API",         "env": "PROMPTS_API_URL"},
-    {"id": "market",       "name": "Market & FinOps MCP", "env": "MARKET_MCP_URL"},
+    {"id": "analytics",       "name": "Analytics & FinOps MCP", "env": "ANALYTICS_MCP_URL"},
     {"id": "monitoring",   "name": "Monitoring MCP",      "env": "MONITORING_MCP_URL"},
 ]
 
@@ -705,7 +705,7 @@ async def health_agents():
 
 @protected_router.api_route("/mcp/proxy/{server_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
-    # Normalisation du nom (market-mcp -> market, items_api -> items)
+    # Normalisation du nom (analytics-mcp -> market, items_api -> items)
     normalized_name = server_name.lower().replace("-", "_").replace("_api", "").replace("_mcp", "")
     
     # Recherche du service dans la config globale

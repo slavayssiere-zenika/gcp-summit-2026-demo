@@ -352,7 +352,7 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
                         if path.startswith("/api/users/"): service_name = "users-api-dev"
                         elif path.startswith("/api/items/"): service_name = "items-api-dev"
                         elif path.startswith("/api/prompts/"): service_name = "prompts-api-dev"
-                        elif path.startswith("/api/market/"): service_name = "market-mcp-dev"
+                        elif path.startswith("/api/analytics/"): service_name = "analytics-mcp-dev"
                         elif path.startswith("/monitoring-mcp/") or path.startswith("/api/monitoring/"): service_name = "monitoring-mcp-dev"
                         elif path.startswith("/api/cv/"): service_name = "cv-api-dev"
                         elif path.startswith("/api/missions/"): service_name = "missions-api-dev"
@@ -436,7 +436,7 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
 
         
         # 3. Filter nodes: Keep Zenika services OR nodes involved in links
-        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "monitoring", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive", "utilisateur", "lb_public"]
+        zenika_keywords = ["api", "mcp", "agent", "frontend", "analytics", "monitoring", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive", "utilisateur", "lb_public"]
         final_nodes = []
         linked_service_names = set()
         for l in links:
@@ -486,7 +486,7 @@ async def get_service_logs_internal(service_name: str, limit: int = 10, hours_lo
         
         logs = []
         for entry in entries:
-            log_content = entry.text_payload
+            log_content = getattr(entry, "payload", None)
             if hasattr(entry, 'json_payload') and entry.json_payload:
                 if isinstance(entry.json_payload, dict):
                     log_content = entry.json_payload.get("message", entry.json_payload)
@@ -518,7 +518,7 @@ async def search_cloud_logs_by_trace_internal(trace_id: str, limit: int = 50) ->
         
         logs = []
         for entry in entries:
-            log_content = entry.text_payload
+            log_content = getattr(entry, "payload", None)
             if hasattr(entry, 'json_payload') and entry.json_payload:
                 if isinstance(entry.json_payload, dict):
                     log_content = entry.json_payload.get("message", entry.json_payload)
@@ -554,7 +554,7 @@ async def get_recent_500_errors_internal(limit: int = 10, hours_lookback: int = 
         
         logs = []
         for entry in entries:
-            log_content = entry.text_payload
+            log_content = getattr(entry, "payload", None)
             if hasattr(entry, 'json_payload') and entry.json_payload:
                 if isinstance(entry.json_payload, dict):
                     log_content = entry.json_payload.get("message", entry.json_payload)
@@ -693,7 +693,7 @@ async def list_gcp_services_internal() -> list:
         client_run = run_v2.ServicesAsyncClient()
         parent = f"projects/{project_id}/locations/-"
         services_pager = await client_run.list_services(parent=parent)
-        zenika_keywords = ["api", "mcp", "agent", "frontend", "market", "monitoring", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive"]
+        zenika_keywords = ["api", "mcp", "agent", "frontend", "analytics", "monitoring", "users", "items", "cv", "competencies", "missions", "prompts", "prompt", "drive"]
         results = []
         async for service in services_pager:
             name = service.name.split("/")[-1]
@@ -738,7 +738,7 @@ async def check_component_health_internal(component_name: str) -> dict:
             "users": "/api/users/",
             "items": "/api/items/",
             "prompts": "/api/prompts/",
-            "market": "/api/market/",
+            "analytics": "/api/analytics/",
             "monitoring": "/monitoring-mcp/",
             "cv": "/api/cv/",
             "missions": "/api/missions/",
@@ -758,7 +758,7 @@ async def check_component_health_internal(component_name: str) -> dict:
         
         if target_path:
             import httpx
-            url = f"http://api.internal.zenika{target_path}health" if target_path != "/monitoring-mcp/" else f"http://api.internal.zenika/api/monitoring/health"
+            url = f"http://api.internal.zenika{target_path}health"
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     res = await client.get(url)
@@ -789,7 +789,7 @@ async def check_all_components_health_internal() -> list:
         "agent-hr-api",
         "agent-ops-api",
         "agent-missions-api",
-        "market-mcp",
+        "analytics-mcp",
         "monitoring-mcp",
         "agent-router-api",
     ]

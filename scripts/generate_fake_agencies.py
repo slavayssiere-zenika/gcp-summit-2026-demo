@@ -10,6 +10,8 @@ from google import genai
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
+from logger_config import logger
+
 # Configurations
 AGENCIES = ["Sèvres", "Saumur", "Bizanos", "Paris"]
 ROLES = [
@@ -32,7 +34,7 @@ fake = Faker('fr_FR')
 
 
 def get_drive_service():
-    print("Authentification Google Drive...")
+    logger.info("Authentification Google Drive...")
     # drive scope (not drive.file) is required to delete folders that may
     # contain files created by a different app session.
     credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/drive"])
@@ -81,7 +83,7 @@ def _delete_file_recursive(service, file_id: str):
     try:
         service.files().delete(fileId=file_id).execute()
     except Exception as e:
-        print(f"      -> Erreur suppression fichier {file_id}: {e}")
+        logger.error(f"      -> Erreur suppression fichier {file_id}: {e}")
 
 
 def delete_folder(service, folder_name):
@@ -91,9 +93,9 @@ def delete_folder(service, folder_name):
     for item in items:
         try:
             _delete_file_recursive(service, item['id'])
-            print(f"Dossier Drive '{folder_name}' supprimé.")
+            logger.info(f"Dossier Drive '{folder_name}' supprimé.")
         except Exception as e:
-            print(f"Erreur suppression Drive: {e}")
+            logger.error(f"Erreur suppression Drive: {e}")
 
 
 def generate_profile_text(client: genai.Client, name: str, role: str, experience_years: int, agency: str) -> str:
@@ -108,9 +110,13 @@ Il est rattaché à l'agence de {agency} et habite dans cette ville.
 
 Le CV doit impérativement contenir:
 - Une phrase de présentation ou résumé.
-- Ses compétences techniques et métiers détaillées. Assure-toi d'inclure une grande diversité de technologies sur l'ensemble du profil (Java, Node.js, TypeScript, Data Engineering, Agilité, etc.), MAIS la compétence centrale et le fil conducteur du CV DOIT ÊTRE GCP (Google Cloud Platform, Vertex AI, AgentSpace). Les mentions à GCP doivent être les plus visibles et les plus développées (c'est une démo pour le GCP Summit).
+- Ses compétences techniques et métiers détaillées. Assure-toi d'inclure une grande diversité de technologies sur l'ensemble du profil (Java, Node.js, TypeScript, Data Engineering, Agilité, etc.), MAIS la compétence centrale et le fil conducteur du CV DOIT ÊTRE GCP (Google Cloud Platform, Vertex AI, AgentSpace). Les mentions à GCP doivent être les plus visibles et les plus développées.
   Pense aussi à ajouter quelques compétences liées au contexte de l'entreprise "Zenika".
-- 2 à 3 expériences professionnelles expliquées avec le contexte technique et métier, en insistant particulièrement sur l'utilisation poussée de GCP.
+- 3 expériences professionnelles (missions) expliquées avec le contexte technique et métier, en respectant STRICTEMENT ces règles :
+  1. Chaque mission doit avoir une DATE DE DÉBUT et une DATE DE FIN (ex: "Janvier 2021 - Mars 2023").
+  2. Chaque mission doit IMPÉRATIVEMENT préciser la DURÉE EXPLICITE en toutes lettres (ex: "Durée : 24 mois" ou "Durée : 2 ans").
+  3. Varie les TYPES DE MISSIONS : inclut au moins une mission d'"Audit / Conseil", une mission d'"Accompagnement / Formation" ou d'"Expertise", en plus des missions de "Développement / Build". Utilise ces mots-clés dans les titres.
+  4. Pour CHAQUE mission, liste précisément l'environnement technique ou les compétences spécifiquement utilisées pendant cette mission.
 - Sa formation ou scolarité (invente si nécessaire).
 
 Structure le tout avec des retours à la ligne propres, et un titre. Fais en sorte que ça semble naturel, professionnel.
@@ -125,9 +131,9 @@ Structure le tout avec des retours à la ligne propres, et un titre. Fais en sor
         text = response.text
         if text:
             return text
-        print(f"      -> Avertissement: réponse vide de Gemini, utilisation du template par défaut.")
+        logger.warning(f"      -> Avertissement: réponse vide de Gemini, utilisation du template par défaut.")
     except Exception as e:
-        print(f"      -> Erreur avec Gemini, utilisation d'un template par défaut: {e}")
+        logger.warning(f"      -> Erreur avec Gemini, utilisation d'un template par défaut: {e}")
 
     # Fallback template — always a valid string
     return (
@@ -136,14 +142,24 @@ Structure le tout avec des retours à la ligne propres, et un titre. Fais en sor
         f"**Agence** : {agency}\n"
         f"**Expérience** : {experience_years} ans\n\n"
         "## Résumé\n"
-        f"Consultant expérimenté en {role}, spécialisé sur GCP.\n\n"
+        f"Consultant expérimenté en {role}, spécialisé sur GCP avec un focus sur l'audit et l'architecture cloud.\n\n"
         "## Compétences\n"
         "- Google Cloud Platform (GCP), Vertex AI, AgentSpace\n"
         "- Python, Java, Node.js, TypeScript\n"
         "- Data Engineering, Agilité\n\n"
         "## Expériences\n"
-        "- Mission 1 : Architecture cloud sur GCP pour un client grand compte.\n"
-        "- Mission 2 : Refonte du pipeline data avec BigQuery et Dataflow.\n\n"
+        "### Mission 1 : Audit d'Architecture Cloud sur GCP\n"
+        "**Janvier 2022 - Décembre 2023** | **Durée : 24 mois**\n"
+        "Réalisation d'un audit complet de l'infrastructure d'un client grand compte. Conseil et recommandations stratégiques.\n"
+        "**Environnement technique** : Google Cloud Platform, Terraform, Kubernetes.\n\n"
+        "### Mission 2 : Expert technique et Accompagnement Data\n"
+        "**Janvier 2020 - Décembre 2021** | **Durée : 24 mois**\n"
+        "Accompagnement et formation des équipes de développement sur la refonte du pipeline data.\n"
+        "**Environnement technique** : BigQuery, Dataflow, Python.\n\n"
+        "### Mission 3 : Développement d'application de gestion\n"
+        "**Janvier 2018 - Décembre 2019** | **Durée : 24 mois**\n"
+        "Mission de build et réalisation d'une application interne métier.\n"
+        "**Environnement technique** : Java, Spring Boot, PostgreSQL.\n\n"
         "## Formation\n"
         "- Ingénieur informatique, Grande École d'Ingénieurs (fictif)\n"
     )
@@ -167,7 +183,7 @@ def load_progress() -> dict:
             with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Avertissement: impossible de lire le fichier de progression ({e}). Repartons de zéro.")
+            logger.warning(f"Avertissement: impossible de lire le fichier de progression ({e}). Repartons de zéro.")
     return {}
 
 
@@ -184,7 +200,7 @@ def main():
         api_key = get_gemini_api_key()
         genai_client = genai.Client(api_key=api_key) if api_key else genai.Client()
     except Exception as e:
-        print(f"Attention, initialisation GenAI échouée. Erreur: {e}")
+        logger.error(f"Attention, initialisation GenAI échouée. Erreur: {e}")
         genai_client = None
 
     # --- Resume logic ---
@@ -192,22 +208,22 @@ def main():
     is_resume = bool(progress)
 
     if is_resume:
-        print(f"✔  Fichier de progression détecté — reprise en cours (sans suppression de l'historique).")
+        logger.info(f"✔  Fichier de progression détecté — reprise en cours (sans suppression de l'historique).")
         root_folder_id = progress.get("root_folder_id")
         if not root_folder_id:
-            print("Erreur: root_folder_id manquant dans progress.json. Relancez sans le fichier.")
+            logger.error("Erreur: root_folder_id manquant dans progress.json. Relancez sans le fichier.")
             return
     else:
-        print("Nettoyage de l'existant...")
-        print("- Suppression des anciens profils locaux...")
+        logger.info("Nettoyage de l'existant...")
+        logger.info("- Suppression des anciens profils locaux...")
         if os.path.exists(LOCAL_PROFILES_DIR):
             shutil.rmtree(LOCAL_PROFILES_DIR)
         os.makedirs(LOCAL_PROFILES_DIR, exist_ok=True)
 
-        print("- Suppression de l'ancien dossier 'Fake Agencies' sur Google Drive...")
+        logger.info("- Suppression de l'ancien dossier 'Fake Agencies' sur Google Drive...")
         delete_folder(service, "Fake Agencies")
 
-        print("\nCréation du dossier racine 'Fake Agencies'...")
+        logger.info("\\nCréation du dossier racine 'Fake Agencies'...")
         root_folder_id = get_or_create_folder(service, "Fake Agencies")
         progress["root_folder_id"] = root_folder_id
         save_progress(progress)
@@ -238,7 +254,7 @@ def main():
             save_progress(progress)
 
         num_consultants = len(planned)
-        print(f"\n--- Agence : {agency} ---")
+        logger.info(f"\\n--- Agence : {agency} ---")
 
         if not agency_folder_id:
             agency_folder_id = get_or_create_folder(service, agency, root_folder_id)
@@ -255,7 +271,7 @@ def main():
         if agency == "Paris":
             user_cv_name = "Sébastien Lavayssière"
             if user_cv_name not in done_names:
-                print(f"  -> Copie du CV réel de Sébastien dans l'agence Paris...")
+                logger.info(f"  -> Copie du CV réel de Sébastien dans l'agence Paris...")
                 try:
                     user_folder_id = get_or_create_folder(service, user_cv_name, agency_folder_id)
                     service.files().copy(
@@ -273,16 +289,16 @@ def main():
                     progress[agency] = agency_progress
                     save_progress(progress)
                 except Exception as e:
-                    print(f"  -> Erreur lors de la copie du CV réel: {e}")
+                    logger.error(f"  -> Erreur lors de la copie du CV réel: {e}")
         
         remaining = [c for c in planned if f"{c['first_name']} {c['last_name']}" not in done_names]
 
         if not remaining:
             already_done = len(done_consultants)
-            print(f"  (déjà complété : {already_done}/{num_consultants} consultants — passage à la suite)")
+            logger.info(f"  (déjà complété : {already_done}/{num_consultants} consultants — passage à la suite)")
             continue
 
-        print(f"Génération de {num_consultants} consultants... ({len(done_consultants)} déjà traités)")
+        logger.info(f"Génération de {num_consultants} consultants... ({len(done_consultants)} déjà traités)")
 
         for consultant in planned:
             first_name = consultant["first_name"]
@@ -295,10 +311,10 @@ def main():
 
             # Skip already processed consultants
             if full_name in done_names:
-                print(f"  [{idx}/{num_consultants}] {full_name} — déjà traité, saut.")
+                logger.info(f"  [{idx}/{num_consultants}] {full_name} — déjà traité, saut.")
                 continue
 
-            print(f"  [{idx}/{num_consultants}] {full_name} - {role} ({experience_years} ans)")
+            logger.info(f"  [{idx}/{num_consultants}] {full_name} - {role} ({experience_years} ans)")
 
             # 1. Dossier Google Drive du consultant
             consultant_folder_id = get_or_create_folder(service, full_name, agency_folder_id)
@@ -325,9 +341,9 @@ def main():
                     media_body=media,
                     fields='id'
                 ).execute()
-                print(f"      -> CV Google Doc créé avec succès (ID: {uploaded_file.get('id')})")
+                logger.info(f"      -> CV Google Doc créé avec succès (ID: {uploaded_file.get('id')})")
             except Exception as e:
-                print(f"      -> Erreur upload GDrive: {e}")
+                logger.error(f"      -> Erreur upload GDrive: {e}")
 
             # 5. Mark as done and persist immediately
             done_consultants.append(consultant)
@@ -338,7 +354,7 @@ def main():
 
             time.sleep(1)  # rate limit precaution
 
-    print("\n✅ Génération terminée !")
+    logger.info("\\n✅ Génération terminée !")
 
 
 if __name__ == "__main__":

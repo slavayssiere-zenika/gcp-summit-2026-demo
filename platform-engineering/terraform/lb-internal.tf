@@ -30,8 +30,8 @@ resource "google_compute_region_url_map" "internal_url_map" {
 
     route_rules {
       priority = 5
-      match_rules { prefix_match = "/api/market/" }
-      service = google_compute_region_backend_service.market_internal_backend.id
+      match_rules { prefix_match = "/api/analytics/" }
+      service = google_compute_region_backend_service.analytics_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -41,8 +41,8 @@ resource "google_compute_region_url_map" "internal_url_map" {
 
     route_rules {
       priority = 6
-      match_rules { prefix_match = "/mcp/market/" }
-      service = google_compute_region_backend_service.market_internal_backend.id
+      match_rules { prefix_match = "/mcp/analytics/" }
+      service = google_compute_region_backend_service.analytics_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -185,8 +185,8 @@ resource "google_compute_region_url_map" "internal_url_map" {
     # Compatibilité Legacy interne
     route_rules {
       priority = 200
-      match_rules { prefix_match = "/market-mcp/" }
-      service = google_compute_region_backend_service.market_internal_backend.id
+      match_rules { prefix_match = "/analytics-mcp/" }
+      service = google_compute_region_backend_service.analytics_internal_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"

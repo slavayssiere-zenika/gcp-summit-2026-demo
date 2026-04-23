@@ -54,7 +54,9 @@ app.dependency_overrides[verify_jwt] = override_verify_jwt
 def mock_google_auth(monkeypatch):
     from unittest.mock import MagicMock
     import google.auth
-    monkeypatch.setattr("google.auth.default", lambda: (MagicMock(), "test-project"))
+    creds = MagicMock()
+    creds.universe_domain = "googleapis.com"
+    monkeypatch.setattr("google.auth.default", lambda *args, **kwargs: (creds, "test-project"))
 
 @pytest.fixture(scope="module")
 def client():

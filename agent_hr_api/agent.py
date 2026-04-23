@@ -97,7 +97,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
     )
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url}/prompts/agent_hr_api.system_instruction/compiled")
+            res = await client.get(f"{prompts_api_url.rstrip('/')}/agent_hr_api.system_instruction/compiled")
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:

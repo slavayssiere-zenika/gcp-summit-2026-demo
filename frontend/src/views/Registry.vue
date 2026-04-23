@@ -88,7 +88,7 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
             <Database v-if="service.id === 'users'" />
             <Box v-else-if="service.id === 'items'" />
             <Cloud v-else-if="service.id === 'drive'" />
-            <Activity v-else-if="service.id === 'market'" />
+            <Activity v-else-if="service.id === 'analytics'" />
             <Activity v-else-if="service.id === 'monitoring'" />
             <Briefcase v-else-if="service.id === 'missions'" />
             <Network v-else-if="service.id === 'competencies'" />

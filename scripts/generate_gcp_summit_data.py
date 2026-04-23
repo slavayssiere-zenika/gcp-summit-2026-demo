@@ -8,6 +8,7 @@ import base64
 import subprocess
 import string
 import random
+from logger_config import logger
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration — lue depuis .antigravity_env si disponible
@@ -33,11 +34,11 @@ def get_admin_password():
     """Lit le mot de passe admin depuis .antigravity_env ou Secret Manager en fallback."""
     # Priorité 1 : variable d'environnement (depuis .antigravity_env)
     if os.getenv("ADMIN_PASSWORD"):
-        print("  -> Mot de passe admin lu depuis .antigravity_env")
+        logger.info("  -> Mot de passe admin lu depuis .antigravity_env")
         return os.environ["ADMIN_PASSWORD"]
 
     # Fallback : Secret Manager via ADC
-    print("Fetching admin password from Secret Manager...")
+    logger.info("Fetching admin password from Secret Manager...")
     credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     credentials.refresh(Request())
 
@@ -53,7 +54,7 @@ def get_admin_password():
     return base64.b64decode(payload).decode('utf-8')
 
 def authenticate(password):
-    print("Authenticating to users-api...")
+    logger.info("Authenticating to users-api...")
     response = httpx.post(
         f"{DEV_API_URL}/auth/login",
         json={
@@ -67,15 +68,15 @@ def authenticate(password):
     return response.json()["access_token"]
 
 def ensure_sebastien_admin(token):
-    print("Ensuring sebastien.lavayssiere@zenika.com is admin...")
+    logger.info("Ensuring sebastien.lavayssiere@zenika.com is admin...")
     with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10.0) as client:
         # Check if user exists
         res = client.get("/api/users/search?query=sebastien.lavayssiere&limit=1")
         if res.status_code == 200 and res.json().get("total", 0) > 0:
-            print("  -> sebastien.lavayssiere@zenika.com already exists.")
+            logger.info("  -> sebastien.lavayssiere@zenika.com already exists.")
             return
 
-        print("  -> Creating sebastien.lavayssiere@zenika.com as admin...")
+        logger.info("  -> Creating sebastien.lavayssiere@zenika.com as admin...")
         pwd = ''.join(random.choice(string.ascii_letters) for _ in range(16))
         payload = {
             "username": "slavayssiere",
@@ -90,14 +91,14 @@ def ensure_sebastien_admin(token):
         }
         res = client.post("/api/users/", json=payload)
         if res.status_code == 201:
-            print("  -> Created successfully.")
+            logger.info("  -> Created successfully.")
         else:
-            print(f"  -> Failed to create user: {res.text}")
+            logger.error(f"  -> Failed to create user: {res.text}")
 
 
 def setup_drive_scanner(token, progress):
     with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=20.0) as client:
-        print("Fetching currently tracked Drive folders...")
+        logger.info("Fetching currently tracked Drive folders...")
         res = client.get("/api/drive/folders")
         existing_folders = []
         if res.status_code == 200:
@@ -106,53 +107,53 @@ def setup_drive_scanner(token, progress):
         # Clean up old root folder to avoid duplicate scanning
         for f in existing_folders:
             if f.get("folder_name") == "Fake Agencies" or f.get("tag") == "GCP Summit":
-                print(f"  -> Deleting old root folder '{f.get('folder_name')}' from scanner...")
+                logger.info(f"  -> Deleting old root folder '{f.get('folder_name')}' from scanner...")
                 client.delete(f"/api/drive/folders/{f.get('id')}")
 
         # Register each agency
         for agency_name in ["Saumur", "Sèvres", "Bizanos", "Paris"]:
             if agency_name not in progress:
-                print(f"  -> Warning: {agency_name} not found in progress.json")
+                logger.warning(f"  -> Warning: {agency_name} not found in progress.json")
                 continue
             
             folder_id = progress[agency_name].get("folder_id")
             if not folder_id:
-                print(f"  -> No folder_id found for {agency_name}")
+                logger.warning(f"  -> No folder_id found for {agency_name}")
                 continue
                 
             # Check if already tracked
             if any(f.get("google_folder_id") == folder_id for f in existing_folders):
-                print(f"  -> Folder '{agency_name}' is already tracked.")
+                logger.info(f"  -> Folder '{agency_name}' is already tracked.")
                 continue
                 
-            print(f"  -> Adding '{agency_name}' to Drive scanner...")
+            logger.info(f"  -> Adding '{agency_name}' to Drive scanner...")
             res = client.post("/api/drive/folders", json={
                 "google_folder_id": folder_id,
                 "tag": agency_name,
                 "folder_name": agency_name
             })
             if res.status_code == 200:
-                print(f"  -> '{agency_name}' added successfully.")
+                logger.info(f"  -> '{agency_name}' added successfully.")
             else:
-                print(f"  -> Failed to add '{agency_name}': {res.text}")
+                logger.error(f"  -> Failed to add '{agency_name}': {res.text}")
         return True
 
 def trigger_drive_sync():
-    print("Triggering Drive sync via Cloud Scheduler...")
+    logger.info("Triggering Drive sync via Cloud Scheduler...")
     res = subprocess.run([
         GCLOUD_BIN, "scheduler", "jobs", "run", "drive-sync-trigger-dev",
         "--location=europe-west1", "--project", PROJECT_ID
     ], capture_output=True, text=True)
     if res.returncode == 0:
-        print("  -> Sync triggered.")
+        logger.info("  -> Sync triggered.")
     else:
-        print(f"  -> Failed to trigger sync: {res.stderr}")
+        logger.error(f"  -> Failed to trigger sync: {res.stderr}")
         raise Exception(f"gcloud scheduler trigger failed: {res.stderr}")
 
 
 def check_platform_health():
     """Vérifie que les services critiques sont up avant de lancer le workflow."""
-    print("\n0. Vérification de la santé de la plateforme...")
+    logger.info("\\n0. Vérification de la santé de la plateforme...")
     services = [
         ("users-api", f"{DEV_API_URL}/auth/health"),
         ("cv-api", f"{DEV_API_URL}/api/cv/health"),
@@ -164,18 +165,18 @@ def check_platform_health():
         try:
             r = httpx.get(url, timeout=5)
             status = "✅" if r.status_code == 200 else "❌"
-            print(f"  {status} {name}: HTTP {r.status_code}")
+            logger.info(f"  {status} {name}: HTTP {r.status_code}")
             if r.status_code != 200:
                 all_healthy = False
         except Exception as e:
-            print(f"  ❌ {name}: {e}")
+            logger.error(f"  ❌ {name}: {e}")
             all_healthy = False
     if not all_healthy:
         raise Exception("Un ou plusieurs services sont unhealthy. Annulation du workflow.")
-    print("  -> Tous les services sont opérationnels.")
+    logger.info("  -> Tous les services sont opérationnels.")
 
 def wait_for_drive_ingestion(token):
-    print("Waiting for Drive ingestion to complete...")
+    logger.info("Waiting for Drive ingestion to complete...")
     with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10.0) as client:
         while True:
             res = client.get("/api/drive/status")
@@ -185,17 +186,17 @@ def wait_for_drive_ingestion(token):
                 processing = data.get("processing", 0)
                 queued = data.get("queued", 0)
                 
-                print(f"  -> Status: Pending={pending}, Queued={queued}, Processing={processing}, Imported={data.get('imported', 0)}")
+                logger.info(f"  -> Status: Pending={pending}, Queued={queued}, Processing={processing}, Imported={data.get('imported', 0)}")
                 
                 if pending == 0 and processing == 0 and queued == 0:
-                    print("  -> Ingestion complete!")
+                    logger.info("  -> Ingestion complete!")
                     break
             else:
-                print(f"  -> Failed to check status: {res.text}")
+                logger.error(f"  -> Failed to check status: {res.text}")
             time.sleep(10)
 
 def wait_for_missions_ingestion(token):
-    print("Waiting for Missions ingestion to complete...")
+    logger.info("Waiting for Missions ingestion to complete...")
     with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10.0) as client:
         while True:
             res = client.get("/api/missions/missions")
@@ -203,23 +204,38 @@ def wait_for_missions_ingestion(token):
                 missions = res.json()
                 in_progress = [m for m in missions if m.get("status") == "ANALYSIS_IN_PROGRESS"]
                 
-                print(f"  -> Status: {len(in_progress)} missions still in ANALYSIS_IN_PROGRESS...")
+                logger.info(f"  -> Status: {len(in_progress)} missions still in ANALYSIS_IN_PROGRESS...")
                 
                 if len(in_progress) == 0:
-                    print("  -> Missions ingestion complete!")
+                    logger.info("  -> Missions ingestion complete!")
                     break
             else:
-                print(f"  -> Failed to check missions: {res.text}")
+                logger.error(f"  -> Failed to check missions: {res.text}")
             time.sleep(10)
 
+def trigger_recalculate_tree(token):
+    logger.info("Triggering Competency Tree Recalculation...")
+    with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=20.0) as client:
+        res = client.post("/api/cv/recalculate_tree")
+        if res.status_code in [200, 202]:
+            logger.info("  -> Tree recalculation started in background.")
+        else:
+            logger.error(f"  -> Failed to start tree recalculation: HTTP {res.status_code} - {res.text}")
+
 def main():
-    print("=== GCP Summit Data Generation Workflow ===")
-    print(f"   API URL : {DEV_API_URL}")
-    print(f"   gcloud  : {GCLOUD_BIN}")
+    logger.info("=== GCP Summit Data Generation Workflow ===")
+    logger.info(f"   API URL : {DEV_API_URL}")
+    logger.info(f"   gcloud  : {GCLOUD_BIN}")
 
     check_platform_health()
 
-    print("\n1. Running generate_fake_agencies.py...")
+    admin_password = get_admin_password()
+    token = authenticate(admin_password)
+
+    logger.info("\\n1. Adding Sebastien as admin (Early Injection)...")
+    ensure_sebastien_admin(token)
+
+    logger.info("\\n2. Running generate_fake_agencies.py...")
     subprocess.run(["python3", "scripts/generate_fake_agencies.py"], check=True)
 
     if not os.path.exists(PROGRESS_FILE):
@@ -232,31 +248,28 @@ def main():
     if not root_folder_id:
         raise Exception("Error: root_folder_id not found in progress.json.")
 
-    print(f"\n2. Found root folder ID: {root_folder_id}")
+    logger.info(f"\\n3. Found root folder ID: {root_folder_id}")
 
-    admin_password = get_admin_password()
-    token = authenticate(admin_password)
-
-    print("\n3. Adding Sebastien as admin...")
-    ensure_sebastien_admin(token)
-
-    print("\n4. Registering folders with Drive Scanner...")
+    logger.info("\\n4. Registering folders with Drive Scanner...")
     if setup_drive_scanner(token, progress):
-        print("\n5. Triggering Drive Sync...")
+        logger.info("\\n5. Triggering Drive Sync...")
         trigger_drive_sync()
 
-        print("\n6. Polling Drive Ingestion...")
+        logger.info("\\n6. Polling Drive Ingestion...")
         wait_for_drive_ingestion(token)
+        
+        logger.info("\\n6b. Triggering Competency Tree Recalculation...")
+        trigger_recalculate_tree(token)
 
-    print("\n7. Generating fake missions...")
+    logger.info("\\n7. Generating fake missions...")
     subprocess.run(["python3", "scripts/generate_fake_missions.py"], check=True)
 
-    print("\n8. Polling Missions Ingestion...")
+    logger.info("\\n8. Polling Missions Ingestion...")
     wait_for_missions_ingestion(token)
 
-    print("\n=== Workflow Completed Successfully ===")
-    print(f"   Données générées sur : {DEV_API_URL}")
-    print("   Prochaine étape : /analyse-prompt pour valider les agents")
+    logger.info("\\n=== Workflow Completed Successfully ===")
+    logger.info(f"   Données générées sur : {DEV_API_URL}")
+    logger.info("   Prochaine étape : /analyse-prompt pour valider les agents")
 
 
 if __name__ == "__main__":

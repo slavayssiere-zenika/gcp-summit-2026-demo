@@ -190,7 +190,7 @@ onMounted(() => {
         <p>{{ error }}</p>
         <div class="help-box">
           <Info size="16" />
-          <p>Assurez-vous que le Service Account <strong>sa-market</strong> possède bien le rôle <strong>roles/cloudtrace.user</strong>.</p>
+          <p>Assurez-vous que le Service Account <strong>sa-analytics</strong> possède bien le rôle <strong>roles/cloudtrace.user</strong>.</p>
         </div>
         <button @click="fetchTopology" class="retry-btn">Réessayer</button>
       </div>

@@ -52,7 +52,7 @@ ENV COMPETENCIES_API_URL=http://competencies_api:8003
 ENV CV_API_URL=http://cv_api:8004
 ENV MISSIONS_API_URL=http://missions_api:8009
 ENV PROMPTS_API_URL=http://prompts_api:8000
-ENV MARKET_MCP_URL=http://market_mcp:8080
+ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 # MCP Sidecars — internal, no JWT required on /mcp/tools and /mcp/call
 ENV USERS_MCP_URL=http://users_mcp:8000
 ENV ITEMS_MCP_URL=http://items_mcp:8000

@@ -15,8 +15,8 @@ const runAnalysis = async () => {
   
   try {
     const token = localStorage.getItem('access_token')
-    // Le call proxy HTTP va pointer sur Market MCP -> /api/admin/finops/detect
-    const response = await axios.post('/api/mcp/proxy/market_mcp/api/admin/finops/detect', {}, {
+    // Le call proxy HTTP va pointer sur Analytics MCP -> /api/admin/finops/detect
+    const response = await axios.post('/api/mcp/proxy/analytics_mcp/api/admin/finops/detect', {}, {
       headers: { Authorization: `Bearer ${token}` }
     })
     results.value = response.data

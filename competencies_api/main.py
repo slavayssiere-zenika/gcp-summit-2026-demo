@@ -72,7 +72,11 @@ HTTPXClientInstrumentor().instrument()
 
 
 @app.get("/health")
-async def health(response: Response):
+async def health():
+    return {"status": "healthy"}
+
+@app.get("/ready")
+async def ready(response: Response):
     if await database.check_db_connection():
         return {"status": "healthy"}
     response.status_code = 503

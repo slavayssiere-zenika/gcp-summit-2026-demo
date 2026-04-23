@@ -9,8 +9,6 @@ from mcp.types import Tool, TextContent
 from google.cloud import bigquery
 from google.protobuf.timestamp_pb2 import Timestamp
 import time
-from google.cloud import logging_v2 as logging_cloud
-from google.cloud import run_v2
 
 # Standard context var for MCP auth
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
@@ -70,7 +68,7 @@ async def get_gcp_project_id_from_metadata() -> str:
 
 
 PROJECT_ID = get_gcp_project_id()
-DATASET_ID = os.getenv("DATASET_ID", "market_data")
+DATASET_ID = os.getenv("DATASET_ID", "analytics_data")
 TABLE_ID = os.getenv("TABLE_ID", "job_offers")
 TABLE_REF = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 
@@ -79,17 +77,18 @@ FINOPS_DATASET_ID = os.getenv("FINOPS_DATASET_ID", "finops")
 FINOPS_TABLE_ID = os.getenv("FINOPS_TABLE_ID", "ai_usage")
 FINOPS_TABLE_REF = f"{PROJECT_ID}.{FINOPS_DATASET_ID}.{FINOPS_TABLE_ID}"
 
-server = Server("market-mcp")
+server = Server("analytics-mcp")
 
 try:
-    client = bigquery.Client(project=PROJECT_ID)
+    bq_location = os.getenv("BQ_LOCATION", "europe-west1")
+    client = bigquery.Client(project=PROJECT_ID, location=bq_location)
 except Exception as e:
     logger.warning(f"Failed to initialize BigQuery client: {e}")
     client = None
 
 
 # Note: Dataset for FinOps logic is now managed by Terraform in bigquery.tf
-# Market MCP only requires roles/bigquery.dataEditor and roles/bigquery.jobUser
+# Analytics MCP only requires roles/bigquery.dataEditor and roles/bigquery.jobUser
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -283,7 +282,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 
     except Exception as e:
-        logger.exception(f"Error in market-mcp tool call '{name}'")
+        logger.exception(f"Error in analytics-mcp tool call '{name}'")
         return [TextContent(type="text", text=json.dumps({
             "error": str(e),
             "tool": name,
@@ -343,6 +342,8 @@ async def get_aiops_dashboard_data_internal():
     
     # Helper pour la requête
     def fetch_data(q):
+        if not client:
+            raise Exception("BigQuery client is not initialized.")
         return [dict(row) for row in client.query(q).result()]
         
     import asyncio
@@ -378,7 +379,7 @@ async def main():
     from mcp.server.stdio import stdio_server
     from mcp.server import InitializationOptions
     options = InitializationOptions(
-        server_name="market-mcp",
+        server_name="analytics-mcp",
         server_version="1.0.0",
         capabilities={}
     )
