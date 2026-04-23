@@ -1,7 +1,8 @@
 resource "google_cloud_run_v2_service" "users_api" {
-  name     = "users-api-${terraform.workspace}"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  name                = "users-api-${terraform.workspace}"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
 
   template {
     service_account = google_service_account.users_sa.email
@@ -17,6 +18,7 @@ resource "google_cloud_run_v2_service" "users_api" {
         subnetwork = google_compute_subnetwork.main.id
         tags       = ["cr-egress"]
       }
+      egress = "PRIVATE_RANGES_ONLY"
     }
 
     # Conteneur principal (API)

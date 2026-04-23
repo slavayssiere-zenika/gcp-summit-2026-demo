@@ -2,159 +2,23 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import {
-  RefreshCw,
-  Users,
-  Tag,
-  Search,
-  AlertTriangle,
-  CheckCircle2,
   Network,
   ShieldCheck,
-  ChevronDown,
-  Unlock
+  CheckCircle2,
+  Search,
+  AlertTriangle
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
+import TaxonomySuggestions from '../components/TaxonomySuggestions.vue'
 
 const isLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
 const logs = ref<string[]>([])
 
-const filterType = ref<'all' | 'tag' | 'user'>('all')
-const filterTag = ref('')
-const selectedUser = ref<any>(null)
-const userSearchQuery = ref('')
-const userResults = ref<any[]>([])
-const isSearchingUsers = ref(false)
-const logContainer = ref<HTMLElement | null>(null)
-
-const searchUsers = async () => {
-  if (userSearchQuery.value.length < 2) {
-    userResults.value = []
-    return
-  }
-  
-  isSearchingUsers.value = true
-  try {
-    const resp = await axios.get('/api/users/search', { params: { query: userSearchQuery.value, limit: 10 } })
-    userResults.value = resp.data.items || []
-  } catch (e) {
-    console.error('User search failed', e)
-  } finally {
-    isSearchingUsers.value = false
-  }
-}
-
-const selectUser = (user: any) => {
-  selectedUser.value = user
-  userSearchQuery.value = user.full_name || user.username
-  userResults.value = []
-}
-
 const addLog = (msg: string) => {
   logs.value.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`)
-}
-
-const triggerReanalysis = async () => {
-  if (!confirm("Cette opération va EFFACER les compétences assignées aux utilisateurs ciblés et relancer l'analyse Gemini. Êtes-vous certain ?")) {
-    return
-  }
-
-  isLoading.value = true
-  error.value = ''
-  successMessage.value = ''
-  logs.value = []
-  addLog("Démarrage du processus de réanalyse...")
-
-  try {
-    const params = new URLSearchParams()
-    if (filterType.value === 'tag' && filterTag.value) {
-      params.append('tag', filterTag.value)
-      addLog(`Filtre appliqué : Tag = ${filterTag.value}`)
-    } else if (filterType.value === 'user' && selectedUser.value) {
-      params.append('user_id', selectedUser.value.id)
-      addLog(`Filtre appliqué : Utilisateur = ${selectedUser.value.username}`)
-    } else {
-      addLog("Filtre appliqué : TOUS LES CVS")
-    }
-
-    const response = await fetch(`/api/cv/reanalyze?${params.toString()}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authService.state.token}`
-      }
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.detail || 'Erreur lors de la réanalyse')
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (contentType && contentType.includes("application/json")) {
-       const data = await response.json()
-       addLog(JSON.stringify(data, null, 4))
-       return
-    }
-
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    
-    if (reader) {
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep the last partial line in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue
-          try {
-            const data = JSON.parse(line)
-            if (data.status === 'completed') {
-              successMessage.value = data.message
-              addLog(`TERMINÉ: ${data.message}`)
-              if (data.errors && data.errors.length > 0) {
-                data.errors.forEach((err: string) => addLog(`ERREUR: ${err}`))
-              }
-            } else {
-              addLog(data.message)
-            }
-          } catch (e) {
-            console.error('Failed to parse log line', line, e)
-          }
-        }
-      }
-    }
-  } catch (e: any) {
-    const errData = e?.response?.data || {}
-    const detail = errData?.detail || e.message || 'Erreur lors de la réanalyse'
-    // Détection du verrou zombie
-    if (detail.includes('déjà en cours') || detail.includes('already running')) {
-      error.value = detail + ' Utilisez le bouton "Écraser le verrou" si aucune opération n\'est réellement active.'
-    } else {
-      error.value = detail
-    }
-    addLog(`ÉCHEC CRITIQUE: ${error.value}`)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-const resetReanalysisLock = async () => {
-  if (!confirm('Forcer la réinitialisation du verrou de réanalyse ? À utiliser uniquement si une tâche est bloquée sans raison.')) return
-  try {
-    await axios.delete('/api/cv/reanalyze/reset')
-    isLoading.value = false
-    error.value = ''
-    addLog('✅ Verrou réinitialisé. Vous pouvez relancer une réanalyse.')
-  } catch (e: any) {
-    addLog(`Erreur reset verrou: ${e?.response?.data?.detail || e.message}`)
-  }
 }
 
 // Reuse logic from Admin.vue for tree recalculation
@@ -244,46 +108,10 @@ const applyTree = async () => {
   }
 }
 
-const pollingInterval = ref<any>(null)
-
-const checkTaskStatus = async () => {
-  try {
-    const resp = await axios.get('/api/cv/reanalyze/status')
-    const data = resp.data
-    
-    if (data.status === 'running') {
-      isLoading.value = true
-      logs.value = [...(data.logs || [])].reverse() // Invert for display
-      if (!pollingInterval.value) {
-        pollingInterval.value = setInterval(checkTaskStatus, 3000)
-      }
-    } else {
-      isLoading.value = false
-      if (pollingInterval.value) {
-        clearInterval(pollingInterval.value)
-        pollingInterval.value = null
-      }
-      if (data.status === 'completed') {
-        logs.value = [...(data.logs || [])].reverse()
-        // If it was running and now it's done, show success
-        if (isLoading.value) {
-            successMessage.value = data.message
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Failed to check task status', e)
-  }
-}
-
 onMounted(() => {
-  checkTaskStatus()
   checkTreeTaskStatus()
 })
 onUnmounted(() => {
-  if (pollingInterval.value) {
-    clearInterval(pollingInterval.value)
-  }
   if (treePollingInterval.value) {
     clearInterval(treePollingInterval.value)
   }
@@ -293,14 +121,16 @@ onUnmounted(() => {
 <template>
   <div class="reanalysis-wrapper fade-in">
     <PageHeader
-      title="Réanalyse & Taxonomie IA"
-      subtitle="Relancez l'analyse Gemini sur les CVs existants et reconstruisez la taxonomie des compétences."
-      :icon="RefreshCw"
+      title="Taxonomie & Structure IA"
+      subtitle="Reconstruisez la taxonomie globale des compétences basée sur le contenu des CVs."
+      :icon="Network"
       :breadcrumb="[
         { label: 'Administration', to: '/admin' },
-        { label: 'Réanalyse & Taxonomie IA' }
+        { label: 'Taxonomie & Structure IA' }
       ]"
     />
+
+    <TaxonomySuggestions />
 
     <div class="dashboard-grid">
       <!-- Section 1: Recalcul de l'Arbre -->
@@ -320,89 +150,6 @@ onUnmounted(() => {
               {{ isTreeLoading ? 'Calcul en cours...' : "Recalculer l'Arbre" }}
             </button>
           </div>
-        </div>
-      </div>
-
-      <!-- Section 2: Réanalyse des CVs -->
-      <div class="glass-panel cv-panel">
-        <div class="panel-header">
-          <h3><RefreshCw size="20" /> Réanalyse des Profils</h3>
-        </div>
-        
-        <div class="filter-controls">
-          <div class="control-group">
-            <label>Portée de la réanalyse</label>
-            <div class="filter-pills">
-              <button 
-                :class="{ active: filterType === 'all' }" 
-                @click="filterType = 'all'"
-              >Tous les CVs</button>
-              <button 
-                :class="{ active: filterType === 'tag' }" 
-                @click="filterType = 'tag'"
-              >Par Tag</button>
-              <button 
-                :class="{ active: filterType === 'user' }" 
-                @click="filterType = 'user'"
-              >Par Utilisateur</button>
-            </div>
-          </div>
-
-          <div v-if="filterType === 'tag'" class="control-group fade-in">
-            <label>Saisir le Tag (ex: 'Niort')</label>
-            <div class="input-with-icon">
-              <Tag size="18" />
-              <input type="text" v-model="filterTag" placeholder="Nom du tag...">
-            </div>
-          </div>
-
-          <div v-if="filterType === 'user'" class="control-group fade-in">
-            <label>Rechercher un Utilisateur</label>
-            <div class="user-search-container">
-              <div class="input-with-icon">
-                <Search size="18" />
-                <input 
-                  type="text" 
-                  v-model="userSearchQuery" 
-                  @input="searchUsers" 
-                  placeholder="Nom, prénom ou email..."
-                >
-              </div>
-              <div class="user-dropdown" v-if="userResults.length > 0">
-                <div 
-                  v-for="u in userResults" 
-                  :key="u.id" 
-                  @click="selectUser(u)"
-                  class="user-option"
-                >
-                  <strong>{{ u.full_name }}</strong>
-                  <span>@{{ u.username }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="actions">
-          <button 
-            class="action-btn danger-btn" 
-            @click="triggerReanalysis" 
-            :disabled="isLoading || (filterType === 'tag' && !filterTag) || (filterType === 'user' && !selectedUser)"
-            id="btn-launch-reanalysis"
-          >
-            <RefreshCw :class="{ spin: isLoading }" size="20" />
-            {{ isLoading ? 'Réanalyse en cours...' : 'Lancer la Réanalyse' }}
-          </button>
-          <button
-            v-if="isLoading"
-            class="action-btn reset-btn"
-            @click="resetReanalysisLock"
-            id="btn-reset-reanalysis-lock"
-            title="Forcer la réinitialisation du verrou si la tâche est bloquée"
-          >
-            <Unlock size="16" />
-            Écraser le verrou (tâche zombie)
-          </button>
         </div>
       </div>
 

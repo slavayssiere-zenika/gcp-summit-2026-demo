@@ -42,8 +42,9 @@ resource "google_secret_manager_secret_iam_member" "platform_sa_gemini_key_acces
 
 # Define the Cloud Run v2 Job
 resource "google_cloud_run_v2_job" "platform_engineering_job" {
-  name     = "platform-engineering"
-  location = var.region
+  name                = "platform-engineering"
+  location            = var.region
+  deletion_protection = false
 
   template {
     template {

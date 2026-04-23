@@ -127,7 +127,7 @@ def verify_jwt(auth: HTTPAuthorizationCredentials = Depends(security)) -> dict:
 from fastapi import APIRouter
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
-@protected_router.get("/spec")
+@app.get("/spec")
 async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
@@ -191,8 +191,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
                                     "metadata": {"query": request.query[:100], "cache_hit": True}
                                 }
                             }, headers=headers_bq)
-                    except Exception:
-                        pass
+                    except Exception: raise
                 asyncio.create_task(_log_cache_hit_bq())
                 return cached_response
 
@@ -554,7 +553,9 @@ MCP_SERVICES_CONFIG = [
     {"id": "competencies", "name": "Competencies API",    "env": "COMPETENCIES_API_URL"},
     {"id": "cv",           "name": "CV API",              "env": "CV_API_URL"},
     {"id": "missions",     "name": "Missions API",        "env": "MISSIONS_API_URL"},
+    {"id": "prompts",      "name": "Prompts API",         "env": "PROMPTS_API_URL"},
     {"id": "market",       "name": "Market & FinOps MCP", "env": "MARKET_MCP_URL"},
+    {"id": "monitoring",   "name": "Monitoring MCP",      "env": "MONITORING_MCP_URL"},
 ]
 
 @protected_router.get("/mcp/registry")
@@ -744,6 +745,49 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
 
 
 app.include_router(protected_router)
+
+
+import traceback
+from fastapi.responses import JSONResponse
+import httpx
+import logging
+import asyncio
+
+async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        from opentelemetry.propagate import inject
+        inject(headers)
+    except Exception: raise
+
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{prompts_api_url}/errors/report",
+                json={
+                    "service_name": service_name,
+                    "error_message": error_msg,
+                    "context": trace_context[:2000]
+                },
+                headers=headers
+            )
+        except Exception as e:
+            logging.error(f"Failed to report error to prompts_api: {e}")
+            raise e
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    
+    if token:
+        asyncio.create_task(report_exception_to_prompts_api("agent_router_api", error_msg, trace_context, token))
+    
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8002)

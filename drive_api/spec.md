@@ -51,10 +51,11 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **GET** `/spec` : Get Spec
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
 - **GET** `/folders` : List Folders
@@ -66,7 +67,9 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/files/{google_file_id}` : Get File State
 - **POST** `/retry-errors` : Retry Errors
 - **GET** `/tokens/google` : Get Google Token
+- **GET** `/dlq/status` : Get Dlq Status
+- **DELETE** `/dlq/message` : Delete Dlq Message
+- **POST** `/dlq/replay` : Replay Dlq
 - **PATCH** `/files/{file_id}` : Update File
 - **POST** `/scheduled/retry-errors` : Scheduled Retry Errors
 - **POST** `/sync` : Trigger Sync
-- **GET** `/spec` : Get Spec

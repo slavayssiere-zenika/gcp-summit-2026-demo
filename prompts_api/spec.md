@@ -35,11 +35,11 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health Check
 - **GET** `/version` : Get Version
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/user/me` : Get My Prompt
 - **PUT** `/user/me` : Update My Prompt
 - **GET** `/` : List Prompts
@@ -48,3 +48,4 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **PUT** `/{key}` : Update Prompt
 - **POST** `/{key}/analyze` : Analyze Prompt
 - **POST** `/errors/report` : Report Error For Prompt
+- **GET** `/{key}/compiled` : Read Compiled Prompt

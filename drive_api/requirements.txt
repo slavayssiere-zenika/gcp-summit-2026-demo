@@ -1,8 +1,8 @@
 fastapi>=0.100.0
 uvicorn>=0.23.0
 prometheus-client>=0.17.0
-opentelemetry-api>=1.20.0
-opentelemetry-sdk>=1.20.0
+opentelemetry-api>=1.36.0,<1.39.0
+opentelemetry-sdk>=1.36.0,<1.39.0
 opentelemetry-instrumentation-fastapi>=0.41b0
 opentelemetry-instrumentation-sqlalchemy>=0.41b0
 google-cloud-alloydb-connector[asyncpg]>=1.4.0
@@ -20,11 +20,11 @@ python-json-logger>=2.0.7
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 mcp[fastapi]>=1.0.0
-opentelemetry-exporter-otlp-proto-grpc>=1.20.0
+opentelemetry-exporter-otlp-proto-grpc>=1.36.0,<1.39.0
 opentelemetry-exporter-gcp-trace>=1.6.0
 opentelemetry-exporter-gcp-monitoring>=1.6.0a0a0
 
-opentelemetry-exporter-otlp-proto-http>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.36.0,<1.39.0
 tenacity
 python-jose[cryptography]>=3.3.0
 

@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText, MessageSquare, Activity } from 'lucide-vue-next'
+import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText, MessageSquare, Activity, Users, Briefcase } from 'lucide-vue-next'
 
 const md = markdownit({
   html: true,
@@ -18,7 +18,10 @@ interface SpecTab {
 }
 
 const tabs: SpecTab[] = [
-  { id: 'agent', name: 'Agent API', url: '/api/spec', versionUrl: '/api/version', icon: Cpu },
+  { id: 'router', name: 'Agent Router', url: '/api/spec', versionUrl: '/api/version', icon: Cpu },
+  { id: 'agent-hr', name: 'Agent HR', url: '/api/agent-hr/spec', versionUrl: '/api/agent-hr/version', icon: Users },
+  { id: 'agent-missions', name: 'Agent Missions', url: '/api/agent-missions/spec', versionUrl: '/api/agent-missions/version', icon: Briefcase },
+  { id: 'agent-ops', name: 'Agent Ops', url: '/api/agent-ops/spec', versionUrl: '/api/agent-ops/version', icon: Activity },
   { id: 'prompts', name: 'Prompts API', url: '/api/prompts/spec', versionUrl: '/api/prompts/version', icon: MessageSquare },
   { id: 'missions', name: 'Missions API', url: '/api/missions/spec', versionUrl: '/api/missions/version', icon: BookOpen },
   { id: 'users', name: 'Users API', url: '/api/users/spec', versionUrl: '/api/users/version', icon: KeyRound },

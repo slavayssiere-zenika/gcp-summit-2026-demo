@@ -37,8 +37,8 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo -e "  agent_missions_api Agent Missions/Staffing (A2A Worker)"
   echo -e "  frontend       Frontend Vue.js"
   echo -e "  db_migrations  Migrations de base de données (non inclus dans 'all')"
-  echo -e "  db_init       Initialise la base de données via Cloud Run Job"
-  echo -e "  sync_prompts  Synchronise uniquement les system prompts vers prompts_api"
+  echo -e "  db_init        Build + exécute le Cloud Run Job d'initialisation AlloyDB"
+  echo -e "  sync_prompts   Synchronise uniquement les system prompts vers prompts_api"
   echo ""
   echo "Bump Types (SemVer):"
   echo "  patch (défaut), minor, major, none"
@@ -55,6 +55,54 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  $0 db_migrations"
   exit 0
 fi
+
+# Déclaration des tableaux de suivi
+DEPLOYS_SUCCESS=()
+DEPLOYS_FAILED=()
+DEPLOYS_SKIPPED=()
+CURRENT_DEPLOYING_SERVICE=""
+
+print_summary() {
+  local exit_code=$?
+  # Si le script plante inopinément pendant un service (ex: docker build failed)
+  if [ -n "$CURRENT_DEPLOYING_SERVICE" ]; then
+    DEPLOYS_FAILED+=("${CURRENT_DEPLOYING_SERVICE} (Fatal/Build error)")
+  fi
+
+  echo -e "\n${GREY}============================================================${RESET}"
+  if [ $exit_code -eq 0 ] && [ ${#DEPLOYS_FAILED[@]} -eq 0 ]; then
+    echo -e "              ${GREEN}✅ DÉPLOIEMENTS TERMINÉS AVEC SUCCÈS${RESET}"
+  else
+    echo -e "              ${RED}⚠️ DÉPLOIEMENTS TERMINÉS AVEC ERREURS${RESET}"
+  fi
+  echo -e "${GREY}============================================================${RESET}"
+  
+  if [ ${#DEPLOYS_SUCCESS[@]} -gt 0 ]; then
+    echo -e "${GREEN}✅ RÉUSSIS :${RESET}"
+    for svc in "${DEPLOYS_SUCCESS[@]}"; do
+      echo -e "   - $svc"
+    done
+  fi
+
+  if [ ${#DEPLOYS_SKIPPED[@]} -gt 0 ]; then
+    echo -e "${YELLOW}⏭️ SKIPPÉS (Aucun changement) :${RESET}"
+    for svc in "${DEPLOYS_SKIPPED[@]}"; do
+      echo -e "   - $svc"
+    done
+  fi
+  
+  if [ ${#DEPLOYS_FAILED[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ÉCHOUÉS :${RESET}"
+    for svc in "${DEPLOYS_FAILED[@]}"; do
+      echo -e "   - $svc"
+    done
+  fi
+  echo -e "${GREY}============================================================${RESET}\n"
+  
+  exit $exit_code
+}
+
+trap print_summary EXIT
 
 echo -e "${RED}=== Préparation de l'environnement GCP ===${RESET}"
 gcloud config set project "$PROJECT_ID"
@@ -181,20 +229,32 @@ update_cloudrun() {
     CMD_ARGS+=( "--container" "mcp" "--image" "$IMAGE_URL" "--update-env-vars" "APP_VERSION=$TAG" )
   fi
   
-  "${CMD_ARGS[@]}" || echo "/!\ Échec partiel du déploiement Cloud Run pour $SERVICE"
+  if "${CMD_ARGS[@]}"; then
+    return 0
+  else
+    echo -e "${RED}/!\ Échec partiel du déploiement Cloud Run pour $SERVICE${RESET}"
+    return 1
+  fi
 }
 
 run_db_init_job() {
   local JOB_NAME="db-init-job-dev"
-  
+
+  # AlloyDB n'est accessible que depuis le VPC GCP (IP privée).
+  # Le job doit obligatoirement être exécuté via Cloud Run (accès VPC direct).
   if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
     echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
-    gcloud run jobs execute "$JOB_NAME" \
+    if gcloud run jobs execute "$JOB_NAME" \
       --region "$REGION" \
       --project "$PROJECT_ID" \
-      --wait
+      --wait; then
+      return 0
+    else
+      return 1
+    fi
   else
-    echo -e "${RED}--- Cloud Run Job $JOB_NAME introuvable, impossible de l'exécuter ---${RESET}"
+    echo -e "${RED}--- Cloud Run Job $JOB_NAME introuvable. Exécutez d'abord: ./scripts/deploy.sh db_init ---${RESET}"
+    return 1
   fi
 }
 
@@ -235,6 +295,7 @@ build_and_push_standard() {
   
   if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_migrations" ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
     echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
+    DEPLOYS_SKIPPED+=("$SERVICE")
     return 0
   fi
 
@@ -252,12 +313,17 @@ build_and_push_standard() {
   
   if [ "$SKIP_CLOUDRUN" = true ]; then
     echo "--- Skipping update_cloudrun/jobs for $SERVICE ---"
+    DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
   else
     if [ "$SERVICE" != "db_migrations" ]; then
-      update_cloudrun "$SERVICE" "$TAG"
+      if update_cloudrun "$SERVICE" "$TAG"; then
+        DEPLOYS_SUCCESS+=("$SERVICE")
+      else
+        DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
+      fi
     else
       # Chaine automatiquement avec le init_job
-      run_db_init_job
+      run_db_init_job || true
 
       local CLEAN_NAME="${SERVICE//_/-}"
       local JOB_NAME="${CLEAN_NAME}-job-dev"
@@ -270,12 +336,17 @@ build_and_push_standard() {
           --image "${IMAGE_NAME}:${TAG}"
         
         echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
-        gcloud run jobs execute "$JOB_NAME" \
+        if gcloud run jobs execute "$JOB_NAME" \
           --region "$REGION" \
           --project "$PROJECT_ID" \
-          --wait
+          --wait; then
+          DEPLOYS_SUCCESS+=("$SERVICE")
+        else
+          DEPLOYS_FAILED+=("$SERVICE (Job execution failed)")
+        fi
       else
         echo "--- Skipping update_cloudrun for $SERVICE (Cloud Run Job $JOB_NAME introuvable) ---"
+        DEPLOYS_FAILED+=("$SERVICE (Job introuvable)")
       fi
     fi
   fi
@@ -287,6 +358,7 @@ build_and_push_agent() {
   
   if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "$SERVICE"; then
     echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
+    DEPLOYS_SKIPPED+=("$SERVICE")
     return 0
   fi
 
@@ -302,8 +374,13 @@ build_and_push_agent() {
   
   if [ "$SKIP_CLOUDRUN" = true ]; then
     echo "--- Skipping update_cloudrun for $SERVICE ---"
+    DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
   else
-    update_cloudrun "$SERVICE" "$TAG"
+    if update_cloudrun "$SERVICE" "$TAG"; then
+      DEPLOYS_SUCCESS+=("$SERVICE")
+    else
+      DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
+    fi
   fi
 }
 
@@ -312,6 +389,7 @@ build_and_upload_frontend() {
 
   if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "frontend"; then
     echo -e "${YELLOW}--- Skipped frontend (no changes detected since last deployment) ---${RESET}"
+    DEPLOYS_SKIPPED+=("frontend")
     return 0
   fi
 
@@ -353,8 +431,10 @@ build_and_upload_frontend() {
 
     echo "-> Invalidation du cache CDN (Google Cloud CDN)..."
     gcloud compute url-maps invalidate-cdn-cache "lb-dev" --path "/*" --async --project "$PROJECT_ID" || echo "/!\ Attention: impossible d'invalider le cache CDN"
+    DEPLOYS_SUCCESS+=("frontend")
   else
     echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform."
+    DEPLOYS_FAILED+=("frontend (Bucket introuvable)")
   fi
 }
 
@@ -379,7 +459,11 @@ sync_system_prompts() {
   local API_URL="https://api.dev.${BASE_DOMAIN}/api/prompts"
   
   # 3. Exécution du script Python
-  python3 scripts/sync_prompts.py --url "$API_URL" --password "$ADMIN_PWD"
+  if python3 scripts/sync_prompts.py --url "$API_URL" --password "$ADMIN_PWD"; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 # ==============================================================================
@@ -430,11 +514,39 @@ for svc in "${NEW_TARGETS[@]}"; do
 done
 
 for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
+  CURRENT_DEPLOYING_SERVICE="$TARGET_SERVICE"
   if [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
     show_progress "$TARGET_SERVICE"
     build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
   elif [ "$TARGET_SERVICE" = "db_init" ]; then
-    run_db_init_job
+    # ── DB Init : build image dédiée + mise à jour du Cloud Run Job + exécution ──
+    # AlloyDB n'est accessible qu'en VPC GCP (IP privée) : pas d'exécution locale possible.
+    show_progress "db_init"
+    local_tag=$(cat db_init/VERSION 2>/dev/null || echo "v0.1.0")
+    db_init_image="${DOCKER_REPO}/db_init:${local_tag}"
+    echo "--- Building db_init ($local_tag) ---"
+    docker build --platform linux/amd64 \
+      -t "${DOCKER_REPO}/db_init:${local_tag}" \
+      -t "${DOCKER_REPO}/db_init:latest" \
+      ./db_init
+    echo "--- Pushing db_init ---"
+    docker push "${DOCKER_REPO}/db_init:${local_tag}"
+    docker push "${DOCKER_REPO}/db_init:latest"
+
+    JOB_NAME="db-init-job-dev"
+    if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+      echo "--- Mise à jour de l'image du Cloud Run Job $JOB_NAME ---"
+      gcloud run jobs update "$JOB_NAME" \
+        --region "$REGION" \
+        --project "$PROJECT_ID" \
+        --image "$db_init_image"
+    fi
+
+    if run_db_init_job; then
+      DEPLOYS_SUCCESS+=("db_init")
+    else
+      DEPLOYS_FAILED+=("db_init (Job failed)")
+    fi
   elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
     show_progress "$TARGET_SERVICE"
     build_and_push_agent "$TARGET_SERVICE" "$BUMP_TYPE"
@@ -442,17 +554,39 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
     show_progress "frontend"
     build_and_upload_frontend "$BUMP_TYPE"
   elif [ "$TARGET_SERVICE" = "sync_prompts" ]; then
-    sync_system_prompts
+    if sync_system_prompts; then DEPLOYS_SUCCESS+=("sync_prompts"); else DEPLOYS_FAILED+=("sync_prompts"); fi
   else
     echo -e "${RED}Erreur : Service '${TARGET_SERVICE}' inconnu.${RESET}"
     echo "Utilisez --help pour voir la liste des services disponibles."
     exit 1
   fi
+  CURRENT_DEPLOYING_SERVICE=""
 done
 
-# Sync automatique des prompts en fin de déploiement (sauf si c'était la seule action demandée)
-if [ "${TARGET_SERVICES[*]}" != "sync_prompts" ]; then
-  sync_system_prompts
+# Sync automatique des prompts en fin de déploiement si l'un des services impactés est concerné
+PROMPT_SERVICES=("prompts_api" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "cv_api" "missions_api")
+SHOULD_SYNC=false
+
+for svc in "${PROMPT_SERVICES[@]}"; do
+  if [[ " ${ALL_TASKS[*]} " == *" $svc "* ]]; then
+    SHOULD_SYNC=true
+    break
+  fi
+done
+
+if [ "$SHOULD_SYNC" = true ]; then
+  # On s'assure que si prompts_api était dans la liste, son déploiement n'a pas échoué
+  if [[ " ${ALL_TASKS[*]} " == *" prompts_api "* ]] && [[ ! " ${DEPLOYS_SUCCESS[*]} " == *" prompts_api "* && ! " ${DEPLOYS_SKIPPED[*]} " == *" prompts_api "* ]]; then
+    echo -e "${YELLOW}--- Synchronisation des prompts ignorée car le déploiement de prompts_api a échoué ---${RESET}"
+  else
+    CURRENT_DEPLOYING_SERVICE="sync_prompts"
+    if sync_system_prompts; then 
+      DEPLOYS_SUCCESS+=("sync_prompts")
+    else 
+      DEPLOYS_FAILED+=("sync_prompts")
+    fi
+    CURRENT_DEPLOYING_SERVICE=""
+  fi
 fi
 
-echo -e "\n${GREEN}=== Déploiement terminé avec succès ! ===${RESET}"
+# Le summary de fin est géré par le trap EXIT.

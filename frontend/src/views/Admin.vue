@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { HardDriveUpload } from 'lucide-vue-next'
 import PageHeader from '../components/ui/PageHeader.vue'
-import TaxonomySuggestions from '../components/TaxonomySuggestions.vue'
+import CVReanalysisPanel from '../components/CVReanalysisPanel.vue'
 import DriveAdminPanel from '../components/DriveAdminPanel.vue'
 import CVImportMonitor from '../components/CVImportMonitor.vue'
 </script>
@@ -10,13 +10,13 @@ import CVImportMonitor from '../components/CVImportMonitor.vue'
   <div class="admin-wrapper fade-in">
 
     <PageHeader
-      title="Supervision Ingestion & Taxonomie"
-      subtitle="Gérez les sources Drive, le pipeline IA, et modérez la taxonomie."
+      title="Supervision Ingestion & Réanalyse"
+      subtitle="Gérez les sources Drive, le pipeline IA et forcez la réanalyse de profils ciblés."
       :icon="HardDriveUpload"
       :breadcrumb="[{ label: 'Administration' }]"
     />
 
-    <TaxonomySuggestions />
+    <CVReanalysisPanel />
     <CVImportMonitor />
     <DriveAdminPanel />
 

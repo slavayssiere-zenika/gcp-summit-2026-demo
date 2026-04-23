@@ -241,7 +241,7 @@ async def create_agent(session_id: str | None = None):
     instruction_text = "Tu es l'Orchestrateur Principal de la plateforme Zenika, le 'Front-Desk'. Ton rôle est de diriger la demande vers le hub approprié en utilisant tes outils de délégation (A2A). Ne dis pas 'je vais interroger mon collègue', sois direct."
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url}/prompts/agent_router_api.system_instruction")
+            res = await client.get(f"{prompts_api_url}/prompts/agent_router_api.system_instruction/compiled")
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:
@@ -260,8 +260,7 @@ async def create_agent(session_id: str | None = None):
                     user_prompt = res.json().get("value", "")
                     if user_prompt:
                         instruction_text += f"\n\n--- INSTRUCTIONS UTILISATEUR ({session_id}) ---\n{user_prompt}\n------------------------------------------------------------"
-        except Exception:
-            pass
+        except Exception: raise
             
     model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     
@@ -503,10 +502,9 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
                                 "metadata": {"query": query[:100]}
                             }
                         })
-                except Exception: pass
+                except Exception: raise
             asyncio.create_task(log_bq())
-        except Exception:
-            pass
+        except Exception: raise
 
     final_result = {
         "response": response_text,

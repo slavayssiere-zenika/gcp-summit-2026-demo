@@ -52,8 +52,7 @@ async def get_my_prompt(db: AsyncSession = Depends(get_db), payload: dict = Depe
     if cached_value:
         try:
             return json.loads(cached_value)
-        except Exception:
-            pass
+        except Exception: raise
 
     # 2. Query DB
     prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
@@ -100,8 +99,7 @@ async def read_prompt(key: str, db: AsyncSession = Depends(get_db)):
     if cached_value:
         try:
             return json.loads(cached_value)
-        except Exception:
-            pass
+        except Exception: raise
 
     # 2. Query DB
     prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
@@ -182,6 +180,7 @@ async def report_error_for_prompt(
     db: AsyncSession = Depends(get_db), 
     token_payload: dict = Depends(verify_jwt)
 ):
+    import hashlib
     try:
         stmt = select(models.Prompt).where(models.Prompt.key == "prompts_api.error_correction")
         result = await db.execute(stmt)
@@ -196,12 +195,25 @@ Output ONLY the raw prompt text. No markdown formatting, no generic introduction
         # Generates the prompt
         correction_text = await generate_error_correction_prompt(payload, system_instruction)
         
-        # Store it
-        uid = str(uuid.uuid4())[:8]
-        prompt_key = f"error_correction:{payload.service_name}:{uid}"
+        # Store as JSON string inside `value`
+        value_data = {
+            "rule": correction_text,
+            "original_error": payload.error_message,
+            "service": payload.service_name,
+            "context": payload.context
+        }
         
-        prompt = models.Prompt(key=prompt_key, value=correction_text)
-        db.add(prompt)
+        # Hash to prevent spam
+        error_hash = hashlib.sha256(payload.error_message.encode('utf-8')).hexdigest()[:12]
+        prompt_key = f"error_correction:{payload.service_name}:{error_hash}"
+        
+        prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == prompt_key))).scalars().first()
+        if prompt:
+            prompt.value = json.dumps(value_data)
+        else:
+            prompt = models.Prompt(key=prompt_key, value=json.dumps(value_data))
+            db.add(prompt)
+            
         await db.commit()
         await db.refresh(prompt)
         await delete_cache(f"prompts:{prompt_key}")
@@ -209,3 +221,46 @@ Output ONLY the raw prompt text. No markdown formatting, no generic introduction
         return prompt
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{key}/compiled", response_model=schemas.Prompt)
+async def read_compiled_prompt(key: str, db: AsyncSession = Depends(get_db)):
+    # 1. get the base prompt (using the logic from read_prompt but without Dependency injection directly)
+    # 1. Check cache
+    cached_value = await get_cache(f"prompts:{key}")
+    prompt = None
+    if cached_value:
+        try:
+            prompt_data = json.loads(cached_value)
+            prompt = schemas.Prompt(**prompt_data)
+        except Exception: raise
+
+    if not prompt:
+        db_prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
+        if not db_prompt:
+            raise HTTPException(status_code=404, detail="Prompt not found")
+        prompt = schemas.Prompt(key=db_prompt.key, value=db_prompt.value, updated_at=db_prompt.updated_at)
+        prompt_dict = {"key": db_prompt.key, "value": db_prompt.value, "updated_at": db_prompt.updated_at.isoformat() if db_prompt.updated_at else None}
+        await set_cache(f"prompts:{key}", json.dumps(prompt_dict))
+
+    # 2. get the active errors
+    stmt = select(models.Prompt).where(models.Prompt.key.like("error_correction:%"))
+    errors = (await db.execute(stmt)).scalars().all()
+    
+    if not errors:
+        return prompt
+        
+    compiled_value = prompt.value + "\n\n=== EXIGENCES DE CORRECTION D'ERREURS RÉCENTES ===\n"
+    for err in errors:
+        try:
+            data = json.loads(err.value)
+            # Extrait le nom du service depuis la clé (ex: error_correction:users_api:1234)
+            parts = err.key.split(':')
+            service_name = parts[1] if len(parts) > 1 else "Système"
+            compiled_value += f"- [{service_name}] {data.get('rule', '')}\n"
+        except Exception:
+            # Rétrocompatibilité si d'anciens enregistrements en texte brut existent
+            compiled_value += f"- {err.value}\n"
+            
+    compiled_prompt = schemas.Prompt(key=prompt.key, value=compiled_value)
+    return compiled_prompt
+

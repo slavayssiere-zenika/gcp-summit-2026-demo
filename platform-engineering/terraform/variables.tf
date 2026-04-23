@@ -17,15 +17,16 @@ variable "base_domain" {
 }
 
 variable "parent_zone_name" {
-  description = "Nom de la zone parente Google Cloud DNS pour injecter les records NS"
+  description = "Nom de la zone parente Google Cloud DNS pour injecter les records NS (obligatoire, défini dans envs/*.yaml)"
   type        = string
-  default     = "zenika-slavayssiere-fr"
+  # Pas de valeur par défaut : une erreur dès le plan si le YAML ne fournit pas cette variable.
+  # Prévient toute modification accidentelle de la zone parente réelle.
 }
 
 variable "parent_zone_project_id" {
-  description = "Project ID contenant la zone parente"
+  description = "Project ID contenant la zone parente (obligatoire, défini dans envs/*.yaml)"
   type        = string
-  default     = "slavayssiere-sandbox-462015"
+  # Pas de valeur par défaut : aligné sur parent_zone_name pour cohérence.
 }
 
 variable "admin_user" {
@@ -119,7 +120,12 @@ variable "image_monitoring" {
 }
 
 variable "image_db_migrations" {
-  description = "Image for DB Migrations container"
+  description = "Image for DB Migrations container (Liquibase)"
+  type        = string
+}
+
+variable "image_db_init" {
+  description = "Image for DB Init Job container (asyncpg IAM grants)"
   type        = string
 }
 
@@ -155,6 +161,7 @@ variable "drive_api_version" { type = string }
 variable "market_mcp_version" { type = string }
 variable "monitoring_mcp_version" { type = string }
 variable "db_migrations_version" { type = string }
+variable "db_init_version" { type = string }
 variable "frontend_version" { type = string }
 
 variable "finops_anomaly_threshold" {
@@ -168,4 +175,26 @@ variable "gemini_embedding_model" {
   description = "Modèle Gemini Embedding pour le cache sémantique (agent_router_api)"
   type        = string
   default     = "gemini-embedding-001"
+}
+
+# =========================================================
+# Domaines DNS additionnels (ex: gen-skillz.znk.io en prd)
+# =========================================================
+variable "extra_domains" {
+  description = <<-EOT
+    Liste de domaines DNS additionnels à provisionner sur cet environnement.
+    Chaque objet contient :
+      - zone_name       : nom de la zone GCP Cloud DNS à créer (ex: "zone-gen-skillz")
+      - dns_name        : nom DNS complet terminé par un point (ex: "gen-skillz.znk.io.")
+      - parent_zone_name       : nom de la zone GCP parente pour la délégation NS
+      - parent_zone_project_id : projet GCP contenant la zone parente
+    Si vide (défaut), aucun domaine additionnel n'est créé.
+  EOT
+  type = list(object({
+    zone_name              = string
+    dns_name               = string
+    parent_zone_name       = string
+    parent_zone_project_id = string
+  }))
+  default = []
 }

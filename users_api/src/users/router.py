@@ -493,24 +493,29 @@ async def create_service_token(
     (défaut: 90 min) pour couvrir les traitements batch dépassant la durée standard de 15 min.
     Ce token inclut le même payload que l'appelant (sub, role, allowed_category_ids).
     """
-    if token_payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Privilèges administrateur requis pour générer un service token.")
+    if token_payload.get("role") not in ["admin", "service_account"]:
+        raise HTTPException(status_code=403, detail="Privilèges administrateur (ou compte de service) requis pour générer un service token.")
 
     username = token_payload.get("sub")
     if not username:
         raise HTTPException(status_code=401, detail="Claim 'sub' manquant dans le token appelant.")
 
-    user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=403, detail="Compte inactif ou introuvable.")
+    allowed_ids = []
+    role = token_payload.get("role")
+    
+    if role != "service_account":
+        user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
+        if not user or not user.is_active:
+            raise HTTPException(status_code=403, detail="Compte inactif ou introuvable.")
+        allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
+        role = user.role
 
-    allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
     ttl_minutes = int(os.getenv("SERVICE_TOKEN_TTL_MINUTES", "90"))
 
     service_token_data = {
-        "sub": user.username,
+        "sub": username,
         "allowed_category_ids": allowed_ids,
-        "role": user.role,
+        "role": role,
     }
     access_token = create_access_token(data=service_token_data, expires_delta=timedelta(minutes=ttl_minutes))
 
@@ -519,8 +524,8 @@ async def create_service_token(
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        username=user.username,
-        role=user.role
+        username=username,
+        role=role
     )
 
 

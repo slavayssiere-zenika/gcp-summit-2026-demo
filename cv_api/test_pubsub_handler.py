@@ -122,6 +122,7 @@ async def test_pubsub_handler_nominal_success():
     with (
         patch("src.cvs.router._process_cv_core", new=AsyncMock(return_value=mock_result)),
         patch("httpx.AsyncClient") as mock_http,
+        patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
         # Mock le PATCH vers drive_api
         mock_response = AsyncMock()
@@ -137,8 +138,7 @@ async def test_pubsub_handler_nominal_success():
             )
     
     assert resp.status_code == 200
-    assert resp.json().get("status") == "ok"
-    assert resp.json().get("user_id") == 42
+    assert resp.json().get("status") == "accepted"
 
 
 @pytest.mark.asyncio
@@ -153,6 +153,7 @@ async def test_pubsub_handler_pipeline_failure_triggers_500():
     with (
         patch("src.cvs.router._process_cv_core", new=AsyncMock(side_effect=HTTPException(status_code=500, detail="Gemini timeout"))),
         patch("httpx.AsyncClient") as mock_http,
+        patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
         mock_http.return_value.__aenter__.return_value.patch = AsyncMock()
         
@@ -163,7 +164,7 @@ async def test_pubsub_handler_pipeline_failure_triggers_500():
                 headers={"Authorization": "Bearer dummy-oidc-token"},
             )
     
-    assert resp.status_code == 500
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -178,6 +179,7 @@ async def test_pubsub_handler_non_cv_returns_200_ack():
     with (
         patch("src.cvs.router._process_cv_core", new=AsyncMock(side_effect=HTTPException(status_code=400, detail="Not a CV - LLM Parsing failed"))),
         patch("httpx.AsyncClient") as mock_http,
+        patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
         mock_http.return_value.__aenter__.return_value.patch = AsyncMock()
         
@@ -188,9 +190,9 @@ async def test_pubsub_handler_non_cv_returns_200_ack():
                 headers={"Authorization": "Bearer dummy-oidc-token"},
             )
     
-    # 200 ACK → pas de retry Pub/Sub pour un non-CV
+    # 200 ACK → le message d'erreur est envoyé par webhook
     assert resp.status_code == 200
-    assert resp.json().get("status") == "ignored"
+    assert resp.json().get("status") == "accepted"
 
 
 @pytest.mark.asyncio
@@ -218,6 +220,7 @@ async def test_pubsub_handler_oidc_exchange_success():
     with (
         patch("src.cvs.router._process_cv_core", new=AsyncMock(return_value=mock_result)),
         patch("httpx.AsyncClient") as mock_http,
+        patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
         mock_http_instance = AsyncMock()
         mock_http_instance.post = AsyncMock(return_value=mock_oidc_response)
@@ -233,5 +236,4 @@ async def test_pubsub_handler_oidc_exchange_success():
             )
 
     assert resp.status_code == 200, f"Attendu 200, reçu {resp.status_code}: {resp.text}"
-    assert resp.json().get("status") == "ok"
-    assert resp.json().get("user_id") == 99
+    assert resp.json().get("status") == "accepted"

@@ -1,7 +1,10 @@
 resource "google_cloud_run_v2_service" "market_mcp" {
-  name     = "market-mcp-${terraform.workspace}"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  name                = "market-mcp-${terraform.workspace}"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
+  # Audience OIDC fixe pour les Schedulers FinOps (cf. AGENTS.md §4)
+  custom_audiences = ["https://${var.base_domain}"]
 
   template {
     service_account = google_service_account.market_sa.email
@@ -15,6 +18,7 @@ resource "google_cloud_run_v2_service" "market_mcp" {
         subnetwork = google_compute_subnetwork.main.id
         tags       = ["cr-egress"]
       }
+      egress = "PRIVATE_RANGES_ONLY"
     }
     containers {
       name    = "api"

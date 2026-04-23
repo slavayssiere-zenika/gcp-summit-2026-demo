@@ -1,8 +1,16 @@
 # ==============================================================
-# Cloud Run Job for IAM DB Initialisation (Grants Schema)
+# Cloud Run Job — DB Init (IAM AlloyDB Schema Grants)
+# ==============================================================
+# Ce job initialise les bases de données AlloyDB et octroie les
+# permissions IAM aux service accounts de chaque microservice.
+#
+# Image dédiée : db_init (cf. /db_init/Dockerfile)
+# Exécution : via deploy.sh -> build + gcloud run jobs execute
 # ==============================================================
 
-# Autorisation pour le Service Account "users" d'accéder au mot de passe root DB
+# Le Service Account du job db_init dispose d'un accès au secret
+# du mot de passe root AlloyDB (via le SA du service users_api pour
+# éviter de créer un SA supplémentaire pour une tâche ponctuelle).
 resource "google_secret_manager_secret_iam_member" "alloydb_password_access" {
   project   = google_secret_manager_secret.alloydb_password.project
   secret_id = google_secret_manager_secret.alloydb_password.secret_id
@@ -10,15 +18,18 @@ resource "google_secret_manager_secret_iam_member" "alloydb_password_access" {
   member    = "serviceAccount:${google_service_account.users_sa.email}"
 }
 
-# Définition du Job Cloud Run
+# Définition du Cloud Run Job (image dédiée db_init)
 resource "google_cloud_run_v2_job" "db_init" {
-  name     = "db-init-job-${terraform.workspace}"
-  location = var.region
+  name                = "db-init-job-${terraform.workspace}"
+  location            = var.region
+  deletion_protection = false
 
   template {
     template {
+      # Réutilise le SA de users_api (accès Secret Manager + AlloyDB IAM déjà configurés)
       service_account = google_service_account.users_sa.email
 
+      # Accès VPC requis pour joindre l'IP privée AlloyDB
       vpc_access {
         network_interfaces {
           network    = google_compute_network.main.id
@@ -28,9 +39,13 @@ resource "google_cloud_run_v2_job" "db_init" {
       }
 
       containers {
-        image   = var.image_users
-        command = ["python", "-c", "import os; exec(os.environ['SCRIPT_PAYLOAD'])"]
+        # Image dédiée db_init — construite et poussée par deploy.sh
+        # Source : /db_init/Dockerfile — asyncpg only, ~80MB, non-root
+        image   = var.image_db_init
+        command = ["python3"]
+        args    = ["-m", "db_init"]
 
+        # Mot de passe root AlloyDB (depuis Secret Manager)
         env {
           name = "ROOT_DB_URL"
           value_source {
@@ -40,6 +55,7 @@ resource "google_cloud_run_v2_job" "db_init" {
             }
           }
         }
+        # IP privée de l'instance AlloyDB primary (accessible uniquement depuis le VPC)
         env {
           name  = "DB_IP"
           value = google_alloydb_instance.primary.ip_address
@@ -52,95 +68,9 @@ resource "google_cloud_run_v2_job" "db_init" {
           name  = "ENV_VAL"
           value = terraform.workspace
         }
-
         env {
           name  = "SA_SUFFIX"
           value = random_id.sa_suffix.hex
-        }
-        env {
-          name  = "SCRIPT_PAYLOAD"
-          value = <<-EOT
-import os
-import asyncio
-import asyncpg
-import urllib.parse
-import sys
-
-root_pw = os.environ['ROOT_DB_URL']
-root_pw_encoded = urllib.parse.quote(root_pw)
-db_ip = os.environ['DB_IP']
-project_id = os.environ["PROJECT_ID"]
-env_name = os.environ["ENV_VAL"]
-sa_suffix = os.environ["SA_SUFFIX"]
-admin_user = os.environ.get("ADMIN_USER")
-
-master_db_url = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/postgres?sslmode=require"
-services = ["users", "items", "competencies", "cv", "prompts", "drive", "missions"]
-all_iam_services = services
-
-async def main():
-    try:
-        print("[DB INIT] Stage 1: Creating Databases and Users from Master...")
-        conn = await asyncpg.connect(master_db_url)
-
-
-
-
-
-        for svc in services:
-            try:
-                await conn.execute(f"CREATE DATABASE \"{svc}\";")
-                print(f"[DB INIT] Created database '{svc}'")
-            except Exception as e:
-                if "already exists" in str(e):
-                    print(f"[DB INIT] Database '{svc}' already exists.")
-                else:
-                    print(f"[DB INIT] Warning creating DB '{svc}': {e}")
-
-        await conn.close()
-        
-        print("\n[DB INIT] Stage 2: Granting Schema Permissions per Database...")
-        for svc in all_iam_services:
-            target_db = svc
-            iam_user = f"sa-drive-{env_name}-v2@{project_id}.iam" if svc == "drive" else f"sa-{svc}-{env_name}-{sa_suffix}@{project_id}.iam"
-            svc_db_url = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/{target_db}?sslmode=require"
-            
-            try:
-                svc_conn = await asyncpg.connect(svc_db_url)
-                
-                try:
-                    await svc_conn.execute(f"GRANT ALL ON SCHEMA public TO \"{iam_user}\";")
-                    await svc_conn.execute(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \"{iam_user}\";")
-                    await svc_conn.execute(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \"{iam_user}\";")
-                    await svc_conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO \"{iam_user}\";")
-                    await svc_conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO \"{iam_user}\";")
-                    print(f"[DB INIT] Granted full permissions on '{target_db}' to '{iam_user}'")
-                except Exception as e:
-                    print(f"[DB INIT] Warning on {iam_user} for DB {target_db}: {e}")
-                
-                if admin_user:
-                    try:
-                        await svc_conn.execute(f"GRANT ALL ON SCHEMA public TO \"{admin_user}\";")
-                        await svc_conn.execute(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \"{admin_user}\";")
-                        await svc_conn.execute(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \"{admin_user}\";")
-                        await svc_conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO \"{admin_user}\";")
-                        await svc_conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO \"{admin_user}\";")
-                        print(f"[DB INIT] Granted full permissions on '{target_db}' to admin '{admin_user}'")
-                    except Exception as e:
-                        print(f"[DB INIT] Warning on admin {admin_user} for DB {target_db}: {e}")
-                        
-                await svc_conn.close()
-            except Exception as e:
-                print(f"[DB INIT] Global connection error on DB {target_db}: {e}")
-
-        print("\n[DB INIT] Finished successfully.")
-    except Exception as e:
-        print(f"[DB INIT] Fatal error: {e}")
-        sys.exit(1)
-
-if __name__ == '__main__':
-    asyncio.run(main())
-EOT
         }
         env {
           name  = "ADMIN_USER"
@@ -151,24 +81,26 @@ EOT
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.alloydb_password_access
+    google_secret_manager_secret_iam_member.alloydb_password_access,
   ]
 }
 
-# Déclencheur du Cloud Run Job
-# S'exécute quand la définition du job Cloud Run change
+# Déclencheur du Cloud Run Job via local-exec
+# Note : exécuté uniquement quand la définition du job change (trigger sur l'ID).
+# Pour un déclenchement manuel : deploy.sh db_init
 resource "null_resource" "run_db_init_job" {
   triggers = {
     job_updated = google_cloud_run_v2_job.db_init.id
   }
 
   provisioner "local-exec" {
-    command = "gcloud run jobs execute ${google_cloud_run_v2_job.db_init.name} --region ${var.region} --project ${var.project_id} --wait"
+    on_failure = continue # Ne pas bloquer l'apply si le job a déjà réussi
+    command    = "gcloud run jobs execute ${google_cloud_run_v2_job.db_init.name} --region ${var.region} --project ${var.project_id} --wait"
   }
 
   depends_on = [
     google_cloud_run_v2_job.db_init,
     google_alloydb_user.users_db_user,
-    google_alloydb_user.admin_user
+    google_alloydb_user.admin_user,
   ]
 }

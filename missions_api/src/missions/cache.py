@@ -59,5 +59,4 @@ async def force_invalidate_prompt(prompt_key: str):
     """Invalide manuellement le cache (Webhook use-case)."""
     try:
         await redis_client.delete(f"mission_prompt_v1:{prompt_key}")
-    except Exception as e:
-        pass
+    except Exception as e: raise

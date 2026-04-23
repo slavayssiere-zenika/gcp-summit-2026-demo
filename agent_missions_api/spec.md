@@ -49,9 +49,9 @@ Tous les noms de consultants ou propositions de profils DOIVENT s'appuyer sur de
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
 - **GET** `/version` : Version
+- **GET** `/spec` : Get Spec
 - **POST** `/query` : Query Agent
 - **POST** `/a2a/query` : A2A Query Agent
 - **GET** `/history` : Get History
 - **DELETE** `/history` : Delete History
-- **GET** `/spec` : Get Spec
 - **GET** `/mcp/registry` : Mcp Registry

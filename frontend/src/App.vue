@@ -94,8 +94,8 @@ const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
               <RouterLink to="/import-cv" class="nav-pill" active-class="dropdown-active" aria-label="Import manuel d'un CV depuis le poste">
                 <BookOpen size="14" /> Import CV Manuel
               </RouterLink>
-              <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" aria-label="Réanalyse batch des CVs par Gemini">
-                <RefreshCw size="14" /> Réanalyse & Taxonomie IA
+              <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" aria-label="Restructuration de la taxonomie par l'IA">
+                <Network size="14" /> Taxonomie & Structure IA
               </RouterLink>
 
               <div class="dropdown-section-label">Configuration Agents</div>
@@ -388,6 +388,15 @@ body {
   flex-direction: column;
   gap: 2px;
   backdrop-filter: blur(12px);
+}
+
+.dropdown-content::before {
+  content: '';
+  position: absolute;
+  top: -15px; /* Bridge the gap */
+  left: 0;
+  right: 0;
+  height: 15px;
 }
 
 .dropdown-wide {

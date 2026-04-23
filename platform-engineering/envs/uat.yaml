@@ -3,9 +3,10 @@
 # ══════════════════════════════════════════════════════════
 
 # ── GCP ───────────────────────────────────────────────────
-project_id:       "slavayssiere-sandbox-462015"
-base_domain:      "zenika.slavayssiere.fr"
-parent_zone_name: "slavayssiere-zenika"
+project_id:                "slavayssiere-sandbox-462015"
+base_domain:               "zenika.slavayssiere.fr"
+parent_zone_name:          "slavayssiere-zenika"
+parent_zone_project_id:    "slavayssiere-sandbox-462015"  # Obligatoire depuis P2-2 (plus de défault dans variables.tf)
 
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}

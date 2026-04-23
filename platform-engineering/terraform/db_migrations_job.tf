@@ -3,8 +3,9 @@
 # ==============================================================
 
 resource "google_cloud_run_v2_job" "db_migrations" {
-  name     = "db-migrations-job-${terraform.workspace}"
-  location = var.region
+  name                = "db-migrations-job-${terraform.workspace}"
+  location            = var.region
+  deletion_protection = false
 
   template {
     template {

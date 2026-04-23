@@ -1,7 +1,8 @@
 resource "google_cloud_run_v2_service" "monitoring_mcp" {
-  name     = "monitoring-mcp-${terraform.workspace}"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  name                = "monitoring-mcp-${terraform.workspace}"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
 
   template {
     service_account = google_service_account.monitoring_sa.email
@@ -15,6 +16,7 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
         subnetwork = google_compute_subnetwork.main.id
         tags       = ["cr-egress"]
       }
+      egress = "PRIVATE_RANGES_ONLY"
     }
     containers {
       name    = "api"

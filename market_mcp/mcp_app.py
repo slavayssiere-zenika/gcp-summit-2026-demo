@@ -78,64 +78,6 @@ async def get_tools():
     tools = await list_tools()
     return [{"name": t.name, "description": t.description, "inputSchema": t.inputSchema} for t in tools]
 
-@api_router.get("/topology")
-async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 1, force: bool = False):
-    """Native REST endpoint to fetch infrastructure topology from GCP Cloud Trace with Caching."""
-    from mcp_server import get_infrastructure_topology
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/1")
-    try:
-        r = redis.from_url(redis_url, socket_timeout=2.0)
-        cache_key = f"cache:metrics:topology:{hours_lookback}"
-        lock_key = f"lock:metrics:topology:{hours_lookback}"
-
-        async def async_background_refresh():
-            acquired = r.set(lock_key, "1", ex=30, nx=True)
-            if not acquired: return
-            try:
-                data = await get_infrastructure_topology(hours_lookback)
-                # Hard TTL 1 hour. We'll use 5 minutes for Soft TTL.
-                data["generated_at"] = datetime.utcnow().isoformat()
-                r.set(cache_key, json.dumps(data), ex=3600)
-            except Exception as e:
-                import logging
-                logging.error(f"Topology refresh failed: {e}")
-            finally:
-                r.delete(lock_key)
-
-        from datetime import datetime
-        if not force:
-            try:
-                cached_str = r.get(cache_key)
-                if cached_str:
-                    cached_data = json.loads(cached_str)
-                    if "generated_at" in cached_data:
-                        gen_time = datetime.fromisoformat(cached_data["generated_at"])
-                        age = (datetime.utcnow() - gen_time).total_seconds()
-                        if age > 300: # 5 minutes soft TTL
-                            background_tasks.add_task(async_background_refresh)
-                    return cached_data
-            except Exception:
-                pass
-
-        # Execution or Waiting for lock
-        acquired = r.set(lock_key, "1", ex=30, nx=True)
-        if not acquired and not force:
-            for _ in range(50):
-                await asyncio.sleep(0.2)
-                d = r.get(cache_key)
-                if d: return json.loads(d)
-
-        data = await get_infrastructure_topology(hours_lookback)
-        data["generated_at"] = datetime.utcnow().isoformat()
-        r.set(cache_key, json.dumps(data), ex=3600)
-        
-        if acquired: r.delete(lock_key)
-        return data
-
-    except Exception as e:
-        import logging
-        logging.exception("Failed to fetch topology in Market MCP REST endpoint")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/metrics/aiops")
 async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = False):
@@ -181,8 +123,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                             if age > 3600:
                                 # Stale! Schedule background refresh and return old data
                                 background_tasks.add_task(async_background_refresh)
-                        except Exception:
-                            pass
+                        except Exception: raise
                     return cached_data
             except Exception as re:
                 import logging
@@ -302,6 +243,49 @@ async def get_spec():
             return Response(content=f.read(), media_type="text/markdown")
     except Exception:
         return Response(content="# Market MCP — Spécification introuvable", media_type="text/markdown")
+
+
+import traceback
+from fastapi.responses import JSONResponse
+import httpx
+import logging
+import asyncio
+
+async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        from opentelemetry.propagate import inject
+        inject(headers)
+    except Exception: raise
+
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{prompts_api_url}/errors/report",
+                json={
+                    "service_name": service_name,
+                    "error_message": error_msg,
+                    "context": trace_context[:2000]
+                },
+                headers=headers
+            )
+        except Exception as e:
+            logging.error(f"Failed to report error to prompts_api: {e}")
+            raise e
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    
+    if token:
+        asyncio.create_task(report_exception_to_prompts_api("market_mcp", error_msg, trace_context, token))
+    
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))

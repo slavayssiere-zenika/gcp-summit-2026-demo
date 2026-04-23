@@ -37,7 +37,7 @@ const fetchTopology = async () => {
   error.value = null
   try {
     const token = localStorage.getItem('access_token')
-    const response = await axios.get(`/market-mcp/api/topology?hours_lookback=${hoursLookback.value}`, {
+    const response = await axios.get(`/monitoring-mcp/api/topology?hours_lookback=${hoursLookback.value}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
     
@@ -76,7 +76,7 @@ const renderGraph = async () => {
   if (!topologyData.value || !mermaidContainer.value) return
 
   // Build Mermaid Syntax
-  let chart = 'graph LR\n'
+  let chart = 'graph TD\n'
   
   // Custom styles for Zenika services
   chart += '  classDef default fill:#fff,stroke:#e2e8f0,stroke-width:2px,color:#1e293b,rx:8,ry:8;\n'
@@ -85,6 +85,8 @@ const renderGraph = async () => {
   chart += '  classDef lb fill:#0f172a,stroke:#0f172a,stroke-width:2px,color:#fff,rx:8,ry:8;\n'
   chart += '  classDef metadata fill:#64748b,stroke:#64748b,stroke-width:2px,color:#fff,rx:4,ry:4;\n'
   chart += '  classDef pubsub fill:#f59e0b,stroke:#f59e0b,stroke-width:2px,color:#fff,rx:8,ry:8;\n'
+  chart += '  classDef user fill:#fff,stroke:#E31937,stroke-width:3px,color:#E31937,rx:20,ry:20;\n'
+
 
   const { nodes, links } = topologyData.value
   
@@ -107,6 +109,10 @@ const renderGraph = async () => {
        // Subroutine shape for PubSub
        chart += `  ${sId}[["${label}"]]\n`
        chart += `  class ${sId} pubsub\n`
+    } else if (type === 'user') {
+       // Circle shape for User
+       chart += `  ${sId}(("${label}"))\n`
+       chart += `  class ${sId} user\n`
     } else if (type === 'metadata') {
        chart += `  ${sId}["${label}"]\n`
        chart += `  class ${sId} metadata\n`
@@ -198,6 +204,9 @@ onMounted(() => {
         <div ref="mermaidContainer" class="mermaid-output"></div>
         
         <div class="legend">
+          <div class="legend-item">
+            <span class="dot user"></span> Utilisateur
+          </div>
           <div class="legend-item">
             <span class="dot zenika"></span> Service Backend
           </div>
@@ -450,6 +459,7 @@ onMounted(() => {
 }
 
 .dot.zenika { background: var(--zenika-red); }
+.dot.user { border: 2px solid var(--zenika-red); background: white; border-radius: 50%; }
 .dot.storage { background: #1A1A1A; }
 .dot.lb { background: #0f172a; }
 .dot.metadata { background: #64748b; }

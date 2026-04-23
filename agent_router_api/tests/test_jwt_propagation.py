@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from jose import jwt as jose_jwt
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "testsecret")
+from main import SECRET_KEY
 ALGORITHM = "HS256"
 
 

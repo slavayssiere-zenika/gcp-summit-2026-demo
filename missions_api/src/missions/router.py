@@ -155,17 +155,32 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
             
             try:
                 COMPETENCIES_API_URL_LOCAL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
-                tree_res = await http_client.get(f"{COMPETENCIES_API_URL_LOCAL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
-                if tree_res.status_code == 200:
-                    items = tree_res.json().get('items', [])
+                # Pagination scalable : pages de 100 nœuds racines jusqu'à épuisement
+                items: list = []
+                skip = 0
+                page_size = 100
+                while True:
+                    page_res = await http_client.get(
+                        f"{COMPETENCIES_API_URL_LOCAL.rstrip('/')}/",
+                        params={"skip": skip, "limit": page_size},
+                        headers=headers, timeout=5.0
+                    )
+                    if page_res.status_code != 200:
+                        break
+                    page_items = page_res.json().get("items", [])
+                    items.extend(page_items)
+                    if len(page_items) < page_size:
+                        break  # dernière page
+                    skip += page_size
 
+                if items:
                     taxonomy_context, _, _ = build_taxonomy_context(items)
                     # Mémoriser les feuilles pour la boucle de rétroaction (Axe 4)
                     _taxonomy_leaf_names = set(extract_leaf_names(items))
                     gemini_contents.append(taxonomy_context)
-
             except Exception as e:
                 logger.warning(f"Failed to fetch competencies tree for mission context: {e}")
+
 
             res_extract = await generate_content_with_retry(
                 client,
@@ -207,8 +222,7 @@ async def _process_mission_core(title: str, description: str, url: str, file_byt
                         },
                         headers=headers
                     )
-                except Exception:
-                    pass
+                except Exception: raise
             await fast_log_finops("RAG_Mission_Extraction", model_extract, res_extract.usage_metadata)
 
             extracted_data = json.loads(res_extract.text)

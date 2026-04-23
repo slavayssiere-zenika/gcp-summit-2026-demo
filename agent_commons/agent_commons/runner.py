@@ -113,8 +113,7 @@ async def run_agent_and_collect(
                     ):
                         try:
                             res_data = json.loads(res_data["result"])
-                        except Exception:
-                            pass
+                        except Exception: raise
                     sig = f"result:{json.dumps(res_data, sort_keys=True)}"
                     if sig not in seen_steps:
                         last_tool_data = res_data

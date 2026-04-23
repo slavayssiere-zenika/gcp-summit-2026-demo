@@ -28,18 +28,10 @@ resource "google_storage_bucket_iam_member" "frontend_public" {
   member = "allUsers"
 }
 
-# Bucket Loki (Backend Tempo Logging)
-resource "google_storage_bucket" "loki" {
-  name                        = "loki-${terraform.workspace}-${var.project_id}-${random_id.bucket_suffix.hex}"
-  location                    = var.region
-  force_destroy               = true
-  uniform_bucket_level_access = true
-}
+# NOTE P2-5 : Les buckets loki et tempo (Loki/Tempo monitoring local) ont été
+# supprimés car ils ne sont pas utilisés sur GCP. L'observabilité est assurée
+# par Cloud Trace, Cloud Logging et Cloud Monitoring natifs.
+# Commande de nettoyage si les buckets existent encore dans le state :
+#   terraform state rm google_storage_bucket.loki
+#   terraform state rm google_storage_bucket.tempo
 
-# Bucket Tempo (Backend Tempo Tracing)
-resource "google_storage_bucket" "tempo" {
-  name                        = "tempo-${terraform.workspace}-${var.project_id}-${random_id.bucket_suffix.hex}"
-  location                    = var.region
-  force_destroy               = true
-  uniform_bucket_level_access = true
-}

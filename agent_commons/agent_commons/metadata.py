@@ -70,8 +70,7 @@ def extract_metadata_from_session(session) -> dict:
                     if isinstance(args, str):
                         try:
                             args = json.loads(args)
-                        except Exception:
-                            pass
+                        except Exception: raise
                     sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
                     if sig not in seen_steps:
                         steps.append({"type": "call", "tool": name, "args": args})
@@ -114,8 +113,7 @@ def extract_metadata_from_session(session) -> dict:
                 ):
                     try:
                         res_data = json.loads(res_data["result"])
-                    except Exception:
-                        pass
+                    except Exception: raise
                 sig = f"result:{json.dumps(res_data, sort_keys=True)}"
                 if sig not in seen_steps:
                     last_tool_data = res_data

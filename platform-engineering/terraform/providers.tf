@@ -4,7 +4,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 5.15.0"
+      version = "6.50.0" # Pinned — dernière 6.x stable (2026-04-xx). Ne pas upgrader vers 7.x sans migration.
     }
   }
 
@@ -15,6 +15,7 @@ terraform {
 }
 
 provider "google" {
-  project = var.project_id
-  region  = var.region
+  add_terraform_attribution_label = false
+  project                         = var.project_id
+  region                          = var.region
 }

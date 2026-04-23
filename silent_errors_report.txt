@@ -1,0 +1,299 @@
+./fetch_logs.py:11 - Except block does not raise or return.
+./seed_data.py:107 - Except block does not raise or return.
+./seed_data.py:107 - Silent pass in except block.
+./seed_data.py:166 - Except block does not raise or return.
+./seed_data.py:233 - Except block does not raise or return.
+./seed_data.py:276 - Except block does not raise or return.
+./seed_data.py:301 - Except block does not raise or return.
+./seed_data.py:334 - Except block does not raise or return.
+./seed_data.py:378 - Except block does not raise or return.
+./seed_data.py:421 - Except block does not raise or return.
+./fix_agents.py:15 - Except block does not raise or return.
+./agent_ops_api/metadata.py:57 - Except block does not raise or return.
+./agent_ops_api/metadata.py:57 - Silent pass in except block.
+./agent_ops_api/metadata.py:94 - Except block does not raise or return.
+./agent_ops_api/metadata.py:94 - Silent pass in except block.
+./agent_ops_api/session.py:27 - Except block does not raise or return.
+./agent_ops_api/session.py:40 - Except block does not raise or return.
+./agent_ops_api/agent.py:85 - Except block does not raise or return.
+./agent_ops_api/agent.py:151 - Except block does not raise or return.
+./agent_ops_api/mcp_client.py:127 - Except block does not raise or return.
+./agent_ops_api/test_zero_trust.py:40 - Except block does not raise or return.
+./agent_ops_api/main.py:308 - Except block does not raise or return.
+./agent_ops_api/main.py:504 - Except block does not raise or return.
+./agent_ops_api/main.py:504 - Silent pass in except block.
+./agent_ops_api/main.py:518 - Except block does not raise or return.
+./platform-engineering/manage_env.py:232 - Except block does not raise or return.
+./platform-engineering/manage_env.py:234 - Except block does not raise or return.
+./platform-engineering/manage_env.py:322 - Except block does not raise or return.
+./platform-engineering/manage_env.py:450 - Except block does not raise or return.
+./platform-engineering/manage_env.py:512 - Except block does not raise or return.
+./platform-engineering/manage_env.py:539 - Except block does not raise or return.
+./platform-engineering/manage_env.py:782 - Except block does not raise or return.
+./platform-engineering/manage_env.py:797 - Except block does not raise or return.
+./platform-engineering/manage_env.py:797 - Silent pass in except block.
+./platform-engineering/manage_env.py:812 - Except block does not raise or return.
+./platform-engineering/manage_env.py:828 - Except block does not raise or return.
+./platform-engineering/manage_env.py:832 - Except block does not raise or return.
+./platform-engineering/manage_env.py:845 - Except block does not raise or return.
+./platform-engineering/manage_env.py:864 - Except block does not raise or return.
+./platform-engineering/manage_env.py:866 - Except block does not raise or return.
+./platform-engineering/manage_env.py:930 - Except block does not raise or return.
+./platform-engineering/manage_env.py:937 - Except block does not raise or return.
+./platform-engineering/manage_env.py:954 - Except block does not raise or return.
+./platform-engineering/manage_env.py:959 - Except block does not raise or return.
+./platform-engineering/manage_env.py:970 - Except block does not raise or return.
+./platform-engineering/manage_env.py:993 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1051 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1051 - Silent pass in except block.
+./platform-engineering/manage_env.py:1067 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1070 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1076 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1217 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1217 - Silent pass in except block.
+./platform-engineering/manage_env.py:1236 - Except block does not raise or return.
+./platform-engineering/manage_env.py:1243 - Except block does not raise or return.
+./market_mcp/mcp_app.py:103 - Except block does not raise or return.
+./market_mcp/mcp_app.py:126 - Except block does not raise or return.
+./market_mcp/mcp_app.py:126 - Silent pass in except block.
+./market_mcp/mcp_app.py:129 - Except block does not raise or return.
+./market_mcp/mcp_app.py:222 - Except block does not raise or return.
+./market_mcp/mcp_app.py:261 - Except block does not raise or return.
+./market_mcp/mcp_app.py:261 - Silent pass in except block.
+./market_mcp/mcp_app.py:275 - Except block does not raise or return.
+./market_mcp/test_zero_trust.py:40 - Except block does not raise or return.
+./market_mcp/mcp_server.py:38 - Except block does not raise or return.
+./market_mcp/mcp_server.py:66 - Except block does not raise or return.
+./market_mcp/mcp_server.py:86 - Except block does not raise or return.
+./items_api/mcp_app.py:65 - Except block does not raise or return.
+./items_api/mcp_app.py:65 - Silent pass in except block.
+./items_api/mcp_app.py:79 - Except block does not raise or return.
+./items_api/test_zero_trust.py:40 - Except block does not raise or return.
+./items_api/main.py:127 - Except block does not raise or return.
+./items_api/main.py:127 - Silent pass in except block.
+./items_api/main.py:137 - Except block does not raise or return.
+./items_api/main.py:137 - Silent pass in except block.
+./items_api/main.py:151 - Except block does not raise or return.
+./items_api/scripts/cleanup_items.py:29 - Except block does not raise or return.
+./items_api/scripts/cleanup_items.py:32 - Except block does not raise or return.
+./items_api/scripts/cleanup_items.py:32 - Silent pass in except block.
+./items_api/src/auth.py:22 - Except block does not raise or return.
+./items_api/src/auth.py:22 - Silent pass in except block.
+./items_api/src/items/router.py:94 - Except block does not raise or return.
+./competencies_api/mcp_app.py:65 - Except block does not raise or return.
+./competencies_api/mcp_app.py:65 - Silent pass in except block.
+./competencies_api/mcp_app.py:79 - Except block does not raise or return.
+./competencies_api/test_zero_trust.py:40 - Except block does not raise or return.
+./competencies_api/main.py:126 - Except block does not raise or return.
+./competencies_api/main.py:126 - Silent pass in except block.
+./competencies_api/main.py:136 - Except block does not raise or return.
+./competencies_api/main.py:136 - Silent pass in except block.
+./competencies_api/main.py:150 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies.py:37 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies.py:40 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies.py:40 - Silent pass in except block.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:45 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:89 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:136 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:193 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:193 - Silent pass in except block.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:201 - Except block does not raise or return.
+./competencies_api/scripts/cleanup_corrupted_competencies_api.py:201 - Silent pass in except block.
+./competencies_api/src/auth.py:21 - Except block does not raise or return.
+./competencies_api/src/auth.py:21 - Silent pass in except block.
+./competencies_api/src/competencies/router.py:62 - Except block does not raise or return.
+./competencies_api/src/competencies/router.py:73 - Except block does not raise or return.
+./competencies_api/src/competencies/router.py:1097 - Except block does not raise or return.
+./competencies_api/src/competencies/router.py:1216 - Except block does not raise or return.
+./competencies_api/src/competencies/router.py:1251 - Except block does not raise or return.
+./competencies_api/src/competencies/router.py:1312 - Except block does not raise or return.
+./missions_api/mcp_app.py:57 - Except block does not raise or return.
+./missions_api/mcp_app.py:57 - Silent pass in except block.
+./missions_api/mcp_app.py:71 - Except block does not raise or return.
+./missions_api/test_zero_trust.py:40 - Except block does not raise or return.
+./missions_api/main.py:156 - Except block does not raise or return.
+./missions_api/main.py:156 - Silent pass in except block.
+./missions_api/main.py:166 - Except block does not raise or return.
+./missions_api/main.py:166 - Silent pass in except block.
+./missions_api/main.py:180 - Except block does not raise or return.
+./missions_api/src/auth.py:21 - Except block does not raise or return.
+./missions_api/src/auth.py:21 - Silent pass in except block.
+./missions_api/src/gemini_retry.py:29 - Except block does not raise or return.
+./missions_api/src/gemini_retry.py:29 - Silent pass in except block.
+./missions_api/src/gemini_retry.py:38 - Except block does not raise or return.
+./missions_api/src/gemini_retry.py:38 - Silent pass in except block.
+./missions_api/src/missions/cache.py:22 - Except block does not raise or return.
+./missions_api/src/missions/cache.py:53 - Except block does not raise or return.
+./missions_api/src/missions/cache.py:62 - Except block does not raise or return.
+./missions_api/src/missions/cache.py:62 - Silent pass in except block.
+./missions_api/src/missions/router.py:144 - Except block does not raise or return.
+./missions_api/src/missions/router.py:181 - Except block does not raise or return.
+./missions_api/src/missions/router.py:225 - Except block does not raise or return.
+./missions_api/src/missions/router.py:225 - Silent pass in except block.
+./missions_api/src/missions/router.py:254 - Except block does not raise or return.
+./missions_api/src/missions/router.py:382 - Except block does not raise or return.
+./missions_api/src/missions/router.py:444 - Except block does not raise or return.
+./missions_api/src/missions/router.py:697 - Except block does not raise or return.
+./prompts_api/cache.py:19 - Except block does not raise or return.
+./prompts_api/cache.py:25 - Except block does not raise or return.
+./prompts_api/test_zero_trust.py:40 - Except block does not raise or return.
+./prompts_api/main.py:161 - Except block does not raise or return.
+./prompts_api/main.py:161 - Silent pass in except block.
+./prompts_api/main.py:171 - Except block does not raise or return.
+./prompts_api/main.py:171 - Silent pass in except block.
+./prompts_api/main.py:185 - Except block does not raise or return.
+./prompts_api/src/gemini_retry.py:29 - Except block does not raise or return.
+./prompts_api/src/gemini_retry.py:29 - Silent pass in except block.
+./prompts_api/src/gemini_retry.py:38 - Except block does not raise or return.
+./prompts_api/src/gemini_retry.py:38 - Silent pass in except block.
+./prompts_api/src/prompts/router.py:55 - Except block does not raise or return.
+./prompts_api/src/prompts/router.py:55 - Silent pass in except block.
+./prompts_api/src/prompts/router.py:103 - Except block does not raise or return.
+./prompts_api/src/prompts/router.py:103 - Silent pass in except block.
+./prompts_api/src/prompts/router.py:237 - Except block does not raise or return.
+./prompts_api/src/prompts/router.py:237 - Silent pass in except block.
+./prompts_api/src/prompts/router.py:263 - Except block does not raise or return.
+./drive_api/mcp_app.py:57 - Except block does not raise or return.
+./drive_api/mcp_app.py:57 - Silent pass in except block.
+./drive_api/mcp_app.py:71 - Except block does not raise or return.
+./drive_api/test_zero_trust.py:41 - Except block does not raise or return.
+./drive_api/main.py:160 - Except block does not raise or return.
+./drive_api/main.py:160 - Silent pass in except block.
+./drive_api/main.py:170 - Except block does not raise or return.
+./drive_api/main.py:170 - Silent pass in except block.
+./drive_api/main.py:184 - Except block does not raise or return.
+./drive_api/src/auth.py:32 - Except block does not raise or return.
+./drive_api/src/google_auth.py:50 - Except block does not raise or return.
+./drive_api/src/router.py:60 - Except block does not raise or return.
+./drive_api/src/router.py:72 - Except block does not raise or return.
+./drive_api/src/router.py:150 - Except block does not raise or return.
+./drive_api/src/router.py:354 - Except block does not raise or return.
+./drive_api/src/router.py:459 - Except block does not raise or return.
+./drive_api/src/router.py:536 - Except block does not raise or return.
+./drive_api/src/router.py:550 - Except block does not raise or return.
+./drive_api/src/router.py:569 - Except block does not raise or return.
+./drive_api/src/router.py:671 - Except block does not raise or return.
+./drive_api/src/router.py:683 - Except block does not raise or return.
+./drive_api/src/router.py:759 - Except block does not raise or return.
+./drive_api/src/drive_service.py:48 - Except block does not raise or return.
+./drive_api/src/drive_service.py:81 - Except block does not raise or return.
+./drive_api/src/drive_service.py:90 - Except block does not raise or return.
+./drive_api/src/drive_service.py:251 - Except block does not raise or return.
+./drive_api/src/drive_service.py:538 - Except block does not raise or return.
+./monitoring_mcp/mcp_app.py:99 - Except block does not raise or return.
+./monitoring_mcp/mcp_app.py:117 - Except block does not raise or return.
+./monitoring_mcp/mcp_app.py:117 - Silent pass in except block.
+./monitoring_mcp/mcp_app.py:191 - Except block does not raise or return.
+./monitoring_mcp/mcp_app.py:191 - Silent pass in except block.
+./monitoring_mcp/mcp_app.py:205 - Except block does not raise or return.
+./monitoring_mcp/test_zero_trust.py:40 - Except block does not raise or return.
+./monitoring_mcp/mcp_server.py:37 - Except block does not raise or return.
+./monitoring_mcp/mcp_server.py:57 - Except block does not raise or return.
+./agent_commons/agent_commons/runner.py:116 - Except block does not raise or return.
+./agent_commons/agent_commons/runner.py:116 - Silent pass in except block.
+./agent_commons/agent_commons/metadata.py:73 - Except block does not raise or return.
+./agent_commons/agent_commons/metadata.py:73 - Silent pass in except block.
+./agent_commons/agent_commons/metadata.py:117 - Except block does not raise or return.
+./agent_commons/agent_commons/metadata.py:117 - Silent pass in except block.
+./agent_commons/agent_commons/finops.py:97 - Except block does not raise or return.
+./agent_commons/agent_commons/session.py:62 - Except block does not raise or return.
+./agent_commons/agent_commons/session.py:75 - Except block does not raise or return.
+./agent_commons/agent_commons/mcp_client.py:35 - Except block does not raise or return.
+./agent_commons/agent_commons/mcp_proxy.py:151 - Except block does not raise or return.
+./agent_commons/agent_commons/mcp_proxy.py:154 - Except block does not raise or return.
+./agent_missions_api/metadata.py:60 - Except block does not raise or return.
+./agent_missions_api/metadata.py:60 - Silent pass in except block.
+./agent_missions_api/metadata.py:104 - Except block does not raise or return.
+./agent_missions_api/metadata.py:104 - Silent pass in except block.
+./agent_missions_api/session.py:32 - Except block does not raise or return.
+./agent_missions_api/session.py:45 - Except block does not raise or return.
+./agent_missions_api/agent.py:93 - Except block does not raise or return.
+./agent_missions_api/agent.py:161 - Except block does not raise or return.
+./agent_missions_api/test_zero_trust.py:40 - Except block does not raise or return.
+./agent_missions_api/main.py:61 - Except block does not raise or return.
+./agent_missions_api/main.py:113 - Except block does not raise or return.
+./agent_missions_api/main.py:303 - Except block does not raise or return.
+./agent_missions_api/main.py:396 - Except block does not raise or return.
+./agent_missions_api/main.py:396 - Silent pass in except block.
+./agent_missions_api/main.py:410 - Except block does not raise or return.
+./scripts/generate_changelog.py:9 - Except block does not raise or return.
+./scripts/generate_changelog.py:14 - Except block does not raise or return.
+./scripts/generate_changelog.py:44 - Except block does not raise or return.
+./scripts/cleanup_plural_duplicates.py:87 - Except block does not raise or return.
+./scripts/get_rarest_competencies.py:50 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:83 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:95 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:129 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:159 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:159 - Silent pass in except block.
+./scripts/generate_fake_agencies.py:170 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:187 - Except block does not raise or return.
+./scripts/generate_fake_agencies.py:305 - Except block does not raise or return.
+./scripts/sync_prompts.py:49 - Except block does not raise or return.
+./scripts/sync_prompts.py:92 - Except block does not raise or return.
+./scripts/sync_prompts.py:95 - Except block does not raise or return.
+./scripts/agent_prompt_tests.py:2121 - Except block does not raise or return.
+./scripts/agent_prompt_tests.py:2121 - Silent pass in except block.
+./scripts/agent_prompt_tests.py:2152 - Except block does not raise or return.
+./scripts/agent_prompt_tests.py:2152 - Silent pass in except block.
+./scripts/agent_prompt_tests.py:2172 - Except block does not raise or return.
+./scripts/agent_prompt_tests.py:2176 - Except block does not raise or return.
+./scripts/agent_prompt_tests.py:2176 - Silent pass in except block.
+./scripts/agent_prompt_tests.py:2234 - Except block does not raise or return.
+./scripts/agent_prompt_tests.py:2234 - Silent pass in except block.
+./agent_hr_api/metadata.py:57 - Except block does not raise or return.
+./agent_hr_api/metadata.py:57 - Silent pass in except block.
+./agent_hr_api/metadata.py:94 - Except block does not raise or return.
+./agent_hr_api/metadata.py:94 - Silent pass in except block.
+./agent_hr_api/session.py:27 - Except block does not raise or return.
+./agent_hr_api/session.py:40 - Except block does not raise or return.
+./agent_hr_api/agent.py:103 - Except block does not raise or return.
+./agent_hr_api/agent.py:185 - Except block does not raise or return.
+./agent_hr_api/mcp_client.py:127 - Except block does not raise or return.
+./agent_hr_api/test_zero_trust.py:40 - Except block does not raise or return.
+./agent_hr_api/main.py:306 - Except block does not raise or return.
+./agent_hr_api/main.py:496 - Except block does not raise or return.
+./agent_hr_api/main.py:496 - Silent pass in except block.
+./agent_hr_api/main.py:510 - Except block does not raise or return.
+./users_api/mcp_app.py:65 - Except block does not raise or return.
+./users_api/mcp_app.py:65 - Silent pass in except block.
+./users_api/mcp_app.py:79 - Except block does not raise or return.
+./users_api/test_zero_trust.py:40 - Except block does not raise or return.
+./users_api/main.py:116 - Except block does not raise or return.
+./users_api/main.py:185 - Except block does not raise or return.
+./users_api/main.py:185 - Silent pass in except block.
+./users_api/main.py:195 - Except block does not raise or return.
+./users_api/main.py:195 - Silent pass in except block.
+./users_api/main.py:209 - Except block does not raise or return.
+./users_api/mcp_server.py:372 - Except block does not raise or return.
+./users_api/src/auth.py:79 - Except block does not raise or return.
+./users_api/src/auth.py:79 - Silent pass in except block.
+./users_api/src/users/pubsub.py:29 - Except block does not raise or return.
+./users_api/src/users/pubsub.py:40 - Except block does not raise or return.
+./users_api/src/users/pubsub.py:67 - Except block does not raise or return.
+./users_api/src/users/router.py:126 - Except block does not raise or return.
+./db_init/db_init.py:60 - Except block does not raise or return.
+./db_init/db_init.py:87 - Except block does not raise or return.
+./db_init/db_init.py:95 - Except block does not raise or return.
+./db_init/db_init.py:122 - Except block does not raise or return.
+./.tmp/list_recent_svcs.py:15 - Except block does not raise or return.
+./.tmp/fetch_logs.py:23 - Except block does not raise or return.
+./.tmp/fetch_services.py:10 - Except block does not raise or return.
+./.tmp/fetch_services.py:10 - Silent pass in except block.
+./.tmp/fetch_services.py:24 - Except block does not raise or return.
+./.tmp/fetch_cv_logs_concise_wait.py:19 - Except block does not raise or return.
+./.tmp/fetch_logs_correct.py:23 - Except block does not raise or return.
+./.tmp/fetch_any_logs2.py:15 - Except block does not raise or return.
+./.tmp/fetch_cv_logs_end.py:23 - Except block does not raise or return.
+./.tmp/list_recent_svcs_dev.py:15 - Except block does not raise or return.
+./.tmp/log_my_errors.py:21 - Except block does not raise or return.
+./.tmp/log_my_errors.py:21 - Silent pass in except block.
+./.tmp/log_my_errors.py:74 - Except block does not raise or return.
+./.tmp/log_my_errors.py:74 - Silent pass in except block.
+./.tmp/log_my_errors.py:102 - Except block does not raise or return.
+./.tmp/log_my_errors.py:102 - Silent pass in except block.
+./.tmp/fetch_dev_logs.py:20 - Except block does not raise or return.
+./.tmp/fetch_dev_logs.py:34 - Except block does not raise or return.
+./.tmp/fetch_cv_to_file.py:20 - Except block does not raise or return.
+./.tmp/fetch_cv_logs_concise.py:17 - Except block does not raise or return.
+./.tmp/fetch_any_logs.py:16 - Except block does not raise or return.

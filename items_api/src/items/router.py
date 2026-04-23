@@ -160,9 +160,9 @@ async def get_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    # Authorization Check — admin/rh bypass dynamic categories (e.g. "Missions")
+    # Authorization Check — admin/rh/service bypass dynamic categories (e.g. "Missions")
     user_role = auth_payload.get("role", "")
-    if user_role not in ("admin", "rh"):
+    if user_role not in ("admin", "rh", "service_account"):
         allowed_ids = set(auth_payload.get("allowed_category_ids", []))
         item_categories = {c.id for c in item.categories}
         if not item_categories.intersection(allowed_ids):
@@ -189,10 +189,10 @@ async def create_item(
         raise HTTPException(status_code=400, detail="One or more category IDs are invalid")
 
     # Check if user has permission for ALL requested categories using JWT payload
-    # Admin and RH roles bypass category ACL (they operate on behalf of services/other users,
+    # Admin, RH and service_account roles bypass category ACL (they operate on behalf of services/other users,
     # and categories like "Missions" are created dynamically — never in JWT at login time).
     user_role = auth_payload.get("role", "")
-    if user_role not in ("admin", "rh"):
+    if user_role not in ("admin", "rh", "service_account"):
         allowed_ids = auth_payload.get("allowed_category_ids", [])
         forbidden_ids = [cid for cid in item.category_ids if cid not in allowed_ids]
         if forbidden_ids:
@@ -259,10 +259,10 @@ async def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    # Authorization — admin/rh bypass dynamic categories (e.g. "Missions")
+    # Authorization — admin/rh/service_account bypass dynamic categories (e.g. "Missions")
     user_role = auth_payload.get("role", "")
     allowed_ids = set(auth_payload.get("allowed_category_ids", []))
-    if user_role not in ("admin", "rh"):
+    if user_role not in ("admin", "rh", "service_account"):
         item_categories = {c.id for c in item.categories}
         if not item_categories.intersection(allowed_ids):
             raise HTTPException(status_code=403, detail="Not authorized to update this item")
@@ -270,7 +270,7 @@ async def update_item(
     update_data = item_update.model_dump(exclude_unset=True)
     if "category_ids" in update_data:
         forbidden_ids = [cid for cid in update_data["category_ids"] if cid not in allowed_ids]
-        if user_role not in ("admin", "rh") and forbidden_ids:
+        if user_role not in ("admin", "rh", "service_account") and forbidden_ids:
             raise HTTPException(status_code=403, detail=f"User does not have rights for categories: {forbidden_ids}")
         cats = (await db.execute(select(Category).filter(Category.id.in_(update_data["category_ids"])))).scalars().all()
         item.categories = cats
@@ -302,7 +302,7 @@ async def delete_item(
         raise HTTPException(status_code=404, detail="Item not found")
 
     user_role = auth_payload.get("role", "")
-    if user_role not in ("admin", "rh"):
+    if user_role not in ("admin", "rh", "service_account"):
         allowed_ids = set(auth_payload.get("allowed_category_ids", []))
         item_categories = {c.id for c in item.categories}
         if not item_categories.intersection(allowed_ids):

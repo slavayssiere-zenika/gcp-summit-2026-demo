@@ -54,19 +54,19 @@ Il donne accès aux données de monitoring GCP, aux coûts IA (FinOps) et à la 
 
 - **GET** `/metrics` : Metrics
 - **GET** `/` : Root
+- **GET** `/spec` : Get Spec
 - **POST** `/login` : Login
 - **POST** `/logout` : Logout
 - **GET** `/me` : Get Me
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
-- **GET** `/spec` : Get Spec
 - **POST** `/query` : Query
 - **POST** `/a2a/query` : A2A Query
 - **GET** `/history` : Get History
 - **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

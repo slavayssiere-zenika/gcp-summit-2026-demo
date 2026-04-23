@@ -35,7 +35,7 @@ def discover_versions():
         "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
         "users_api", "items_api", "competencies_api",
         "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp", "monitoring_mcp",
-        "db_migrations", "frontend"
+        "db_migrations", "db_init", "frontend"
     ]
     
     for comp in components:
@@ -68,6 +68,7 @@ SERVICE_IMAGE_MAP = {
     "missions":       "missions_api",
     "prompts":        "prompts_api",
     "db_migrations":  "db_migrations",
+    "db_init":        "db_init",        # Image dédiée au Cloud Run Job d'initialisation AlloyDB
     "market":         "market_mcp",
     "monitoring":     "monitoring_mcp",
     "agent_router":   "agent_router_api",
@@ -142,10 +143,15 @@ def check_binary_dependencies():
 TERRAFORM_DIR = os.path.join(os.path.dirname(__file__), "terraform")
 
 PERSISTENT_RESOURCES = [
+    # ── Zones DNS ───────────────────────────────────────────────────────────────
     "google_dns_managed_zone.env_zone",
+    "google_dns_record_set.ns_delegation",   # délégation NS vers la zone parente
+    # ── SSL & DNS records LB ─────────────────────────────────────────────────────
     "google_compute_managed_ssl_certificate.default",
     "google_dns_record_set.a",
-    "google_dns_record_set.api_a"
+    "google_dns_record_set.api_a",
+    # Les zones extra (ex: zone-gen-skillz) et leurs ns_delegation sont éjectées
+    # dynamiquement dans destroy() en fonction de extra_domains dans le YAML.
 ]
 
 def run_cmd(cmd, check=True, capture_output=False, live=False):
@@ -195,9 +201,47 @@ def resource_exists_in_gcp(resource_type, name, project_id):
         return res.returncode == 0
     return False
 
-def get_tf_args():
-    api_key = os.environ.get("GOOGLE_API_KEY")
+def get_gemini_api_key(project_id: str) -> str:
+    """
+    Résout la clé API Gemini depuis GCP Secret Manager uniquement.
+
+    La clé n'est jamais lue depuis une variable d'environnement : elle doit avoir été
+    stockée lors d'un premier déploiement manuel via Secret Manager (gcloud ou console).
+    Si le secret est absent ou vide, Terraform ne crée pas de nouvelle version (count=0).
+    """
+    logger.info("[*] Lecture de la clé Gemini depuis Secret Manager (gemini-api-key)...")
+    try:
+        res = subprocess.run(
+            [
+                "gcloud", "secrets", "versions", "access", "latest",
+                "--secret=gemini-api-key",
+                f"--project={project_id}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            logger.info("[+] Clé Gemini résolue depuis Secret Manager.")
+            return res.stdout.strip()
+        else:
+            logger.warning(
+                "[!] Secret 'gemini-api-key' introuvable ou vide dans Secret Manager. "
+                "Terraform ne mettra pas à jour la version du secret (var.gemini_api_key vide)."
+            )
+    except subprocess.TimeoutExpired:
+        logger.warning("[!] Timeout lors de la lecture du secret Gemini depuis Secret Manager.")
+    except Exception as e:
+        logger.warning(f"[!] Erreur lors de la lecture du secret Gemini : {e}")
+
+    return ""
+
+
+def get_tf_args(project_id: str = "slavayssiere-sandbox-462015") -> list:
+    """Retourne les arguments -var supplémentaires pour terraform apply/plan/import."""
+    api_key = get_gemini_api_key(project_id)
     return [f"-var=gemini_api_key={api_key}"] if api_key else []
+
 
 
 def toggle_prevent_destroy(disable=True):
@@ -256,7 +300,7 @@ def toggle_prevent_destroy(disable=True):
             print("    -> Override file not found (already cleaned up).")
 
 def init_tf():
-    run_cmd(["terraform", "init", "-reconfigure"])
+    run_cmd(["terraform", "init", "-reconfigure", "-upgrade"])
 
 def set_workspace(env):
     # Try to select, if it fails, create it
@@ -278,7 +322,7 @@ def import_persistent_resource(env, address, resource_id):
         except subprocess.TimeoutExpired:
             print(f"    -> [!] Import timed out for {address}. Proceeding without it.")
 
-def build_importable_resources_map(env, project_id, region):
+def build_importable_resources_map(env, project_id, region, extra_domains=None):
     """
     Retourne la table de correspondance exhaustive entre adresses Terraform et IDs
     GCP pour toutes les ressources susceptibles de générer une erreur 409 lors d'un
@@ -289,7 +333,7 @@ def build_importable_resources_map(env, project_id, region):
     mon_base = f"projects/{project_id}/services"
     dns_base = f"projects/{project_id}/managedZones"
 
-    return {
+    importable_map = {
         # ── Cloud Run Services ───────────────────────────────────────────────
         "google_cloud_run_v2_service.agent_hr_api":       f"{cr_base}/agent-hr-api-{env}",
         "google_cloud_run_v2_service.agent_ops_api":      f"{cr_base}/agent-ops-api-{env}",
@@ -325,21 +369,28 @@ def build_importable_resources_map(env, project_id, region):
         "google_compute_managed_ssl_certificate.default": f"projects/{project_id}/global/sslCertificates/ssl-{env}",
     }
 
+    # ── Zones DNS additionnelles (extra_domains) ──────────────────────
+    # Ces ressources sont persistantes et doivent être importées si elles existent dans GCP.
+    if extra_domains:
+        for d in extra_domains:
+            zone_name = d.get("zone_name", "")
+            dns_name  = d.get("dns_name", "")  # ex: "gen-skillz.znk.io."
+            if not zone_name:
+                continue
+            tf_zone_addr = f'google_dns_managed_zone.extra_zones["{zone_name}"]'
+            tf_a_addr    = f'google_dns_record_set.extra_a["{zone_name}"]'
+            gcp_zone_id  = f"{dns_base}/{zone_name}"
+            importable_map[tf_zone_addr] = gcp_zone_id
+            importable_map[tf_a_addr]    = f"{gcp_zone_id}/rrsets/{dns_name}/A"
 
-def import_resources_on_409(output, env, project_id, region):
+    return importable_map
+def import_resources_on_409(output, env, project_id, region, extra_domains=None):
     """
     Analyse la sortie d'un `terraform apply` pour détecter les erreurs 409
     (Conflict / Resource already exists) et importe automatiquement les
     ressources conflictuelles dans le state Terraform.
-
-    Le parsing repose sur les blocs d'erreur Terraform :
-        │ Error: Error creating …: googleapi: Error 409: …
-        │   with google_cloud_run_v2_service.agent_hr_api,
-        │   on cr_agent_hr.tf line …
-
-    Retourne le nombre de ressources importées avec succès.
     """
-    importable = build_importable_resources_map(env, project_id, region)
+    importable = build_importable_resources_map(env, project_id, region, extra_domains=extra_domains)
 
     # Extrait les adresses Terraform depuis les blocs d'erreur 409
     found_addresses = set()
@@ -387,7 +438,7 @@ def import_resources_on_409(output, env, project_id, region):
         print(f"    [→] Import de {addr}\n        depuis {import_id}")
         try:
             imp_res = subprocess.run(
-                ["terraform", "import"] + get_tf_args() + [addr, import_id],
+                ["terraform", "import"] + get_tf_args(project_id) + [addr, import_id],
                 cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=90
             )
             if imp_res.returncode == 0:
@@ -522,20 +573,35 @@ def deploy(env, base_domain, project_id, config, force=False):
     set_workspace(env)
 
     print("[*] Probing GCP to deterministically import persistent resources...")
+    # Récupération des domaines additionnels depuis la config (ex: gen-skillz.znk.io en prd)
+    extra_domains = config.get("extra_domains", [])
+
     zone_name = f"zone-{env}"
     if resource_exists_in_gcp("dns_zone", zone_name, project_id):
         import_persistent_resource(env, "google_dns_managed_zone.env_zone", f"projects/{project_id}/managedZones/{zone_name}")
         dns_name = f"{env}.{base_domain}."
         import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/{zone_name}/rrsets/{dns_name}/A")
         import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/{zone_name}/rrsets/api.{dns_name}/A")
-    
+
+    # Import des zones DNS additionnelles persistantes (ex: zone-gen-skillz pour gen-skillz.znk.io)
+    for d in extra_domains:
+        extra_zone_name = d.get("zone_name", "")
+        extra_dns_name  = d.get("dns_name", "")
+        if not extra_zone_name:
+            continue
+        if resource_exists_in_gcp("dns_zone", extra_zone_name, project_id):
+            tf_addr = f'google_dns_managed_zone.extra_zones["{extra_zone_name}"]'
+            import_persistent_resource(env, tf_addr, f"projects/{project_id}/managedZones/{extra_zone_name}")
+            tf_a_addr = f'google_dns_record_set.extra_a["{extra_zone_name}"]'
+            import_persistent_resource(env, tf_a_addr, f"projects/{project_id}/managedZones/{extra_zone_name}/rrsets/{extra_dns_name}/A")
+
     ssl_name = f"ssl-{env}"
     if resource_exists_in_gcp("ssl_cert", ssl_name, project_id):
         import_persistent_resource(env, "google_compute_managed_ssl_certificate.default", f"projects/{project_id}/global/sslCertificates/{ssl_name}")
 
-    sa_email = f"sa-drive-{env}-v2@{project_id}.iam.gserviceaccount.com"
-    if resource_exists_in_gcp("sa", sa_email, project_id):
-        import_persistent_resource(env, 'google_service_account.cr_sa["drive"]', f"projects/{project_id}/serviceAccounts/{sa_email}")
+    # NOTE: le SA sa-drive-{env}-v2 est déclaré comme data source (cr_drive.tf) — pas une resource Terraform.
+    # Il est créé en dehors du cycle Terraform et est naturellement persistant (jamais détruit par apply/destroy).
+    # Aucun import nécessaire.
 
     if force:
         print("[!] FORCE MODE: Bypassing prevent_destroy logic to allow replacements.")
@@ -548,7 +614,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         # Parallelisme adaptatif base sur les quotas GCP courants
         parallelism = get_gcp_quota_parallelism(project_id, region)
         apply_cmd = ["terraform", "apply", "-auto-approve",
-                     f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args()
+                     f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args(project_id)
 
         print(f"[*] Terraform Apply...")
         res = run_cmd(apply_cmd, check=False, live=True)
@@ -556,7 +622,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         if res.returncode != 0:
             # ── Passe 1 : import auto des ressources en conflit 409 ──────────
             print("[*] Apply échoué. Analyse des conflits 409 pour auto-import...")
-            imported = import_resources_on_409(res.stdout, env, project_id, region)
+            imported = import_resources_on_409(res.stdout, env, project_id, region, extra_domains=extra_domains)
 
             if imported > 0:
                 print(f"[+] {imported} ressource(s) importée(s). Nouveau tentative d'apply...")
@@ -569,7 +635,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         if res.returncode != 0:
             # ── Passe 2 : un 2e lot de 409 peut apparaître après le 1er import ──
             print("[*] 2ème apply échoué. Nouvelle analyse des conflits 409...")
-            imported2 = import_resources_on_409(res.stdout, env, project_id, region)
+            imported2 = import_resources_on_409(res.stdout, env, project_id, region, extra_domains=extra_domains)
 
             if imported2 > 0:
                 print(f"[+] {imported2} ressource(s) supplémentaire(s) importée(s). Dernier apply...")
@@ -595,11 +661,15 @@ def deploy(env, base_domain, project_id, config, force=False):
             return
 
         SOURCE_ARCHIVES_BUCKET = "z-gcp-summit-frontend"
-        
+
+        # Sur macOS, gsutil multiprocessing cause un bug Python connu.
+        # On limite automatiquement parallel_process_count=1 (le multithreading reste actif).
+        _gsutil_macos_flag = ["-o", "GSUtil:parallel_process_count=1"] if sys.platform == "darwin" else []
+
         # 2. Identifier la dernière archive déposée (en utilisant gsutil ls trié par date)
         # gsutil ls -l renvoie: SIZE  DATE  gs://...
         print(f"[*] Looking for the latest archive in gs://{SOURCE_ARCHIVES_BUCKET}/...")
-        raw_ls = subprocess.run(["gsutil", "ls", "-l", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
+        raw_ls = subprocess.run(["gsutil"] + _gsutil_macos_flag + ["ls", "-l", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
         if raw_ls.returncode != 0:
             print(f"[!] Failed to list gs://{SOURCE_ARCHIVES_BUCKET}/")
             return
@@ -621,7 +691,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = os.path.join(tmpdir, "archive")
             print(f"[*] Downloading {latest_archive_url}...")
-            subprocess.run(["gsutil", "cp", latest_archive_url, archive_path], check=True)
+            subprocess.run(["gsutil"] + _gsutil_macos_flag + ["cp", latest_archive_url, archive_path], check=True)
             
             extract_dir = os.path.join(tmpdir, "extracted")
             os.makedirs(extract_dir, exist_ok=True)
@@ -633,7 +703,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                         zip_ref.extractall(extract_dir)
                 else: # Fallback to tar
                     with tarfile.open(archive_path, 'r:*') as tar_ref:
-                        tar_ref.extractall(extract_dir)
+                        tar_ref.extractall(extract_dir, filter='data')
             except Exception as e:
                 print(f"[!] Extraction failed: {e}. Is it a valid tar/zip archive?")
                 return
@@ -671,7 +741,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                 sync_dir += "/"
                 
             rsync_res = subprocess.run(
-                ["gsutil", "-m", "rsync", "-r", "-d", sync_dir, f"gs://{target_bucket}/"],
+                ["gsutil"] + _gsutil_macos_flag + ["-m", "rsync", "-r", "-d", sync_dir, f"gs://{target_bucket}/"],
                 capture_output=True, text=True
             )
             
@@ -901,9 +971,23 @@ def deploy(env, base_domain, project_id, config, force=False):
                         if e.code >= 500:
                             print(f"  [-] API Server Error {e.code} (Possible Database IAM propagation delay). Retrying in 30s... (Attempt {attempt+1}/16)")
                             time.sleep(30)
+                        elif e.code == 403:
+                            # 403 peut être transitoire lors d'un 1er déploiement :
+                            # la propagation IAM du rôle allUsers Cloud Run invoker
+                            # peut prendre plusieurs minutes.
+                            # On distingue le 403 infra GCP (HTML) du 403 applicatif (JSON).
+                            raw = e.read()
+                            msg = raw.decode('utf-8', errors='replace') if raw else 'N/A'
+                            is_gcp_infra = '<html' in msg.lower() or '<!doctype' in msg.lower()
+                            if is_gcp_infra:
+                                print(f"  [-] 403 GCP Infrastructure (IAM not yet propagated). Retrying in 30s... (Attempt {attempt+1}/16)")
+                                time.sleep(30)
+                            else:
+                                print(f"[-] Sanity Test FAIL: HTTP 403 (App-level) during login. (Msg: {msg})")
+                                break
                         else:
-                            # Traite le cas classique d'erreur d'applicatif
-                            msg = e.read().decode('utf-8') if hasattr(e, 'read') else 'N/A'
+                            # Erreur applicative définitive (400, 401, 422...)
+                            msg = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else 'N/A'
                             print(f"[-] Sanity Test FAIL: HTTP {e.code} during login via POST /auth/login. (Msg: {msg})")
                             break
                     except Exception as e:
@@ -948,6 +1032,54 @@ def deploy(env, base_domain, project_id, config, force=False):
                     futures = {executor.submit(check_route, route): route for route in api_routes}
                     for future in as_completed(futures):
                         logger.info(future.result())
+
+                # --- CHECK EXTRA DOMAINS: DNS + SSL pour chaque domaine additionnel ---
+                if extra_domains:
+                    print(f"\n[*] Check Extra Domains: Validating additional domains DNS + SSL...")
+                    for _d in extra_domains:
+                        _host = _d.get("dns_name", "").rstrip(".")  # ex: "gen-skillz.znk.io"
+                        if not _host:
+                            continue
+                        # DNS check
+                        _resolved = False
+                        for _ in range(12):  # 12 * 10s = 2 mins max
+                            try:
+                                _ip = socket.gethostbyname(_host)
+                                if _ip == lb_ip:
+                                    _resolved = True
+                                    break
+                            except Exception: raise
+                            time.sleep(10)
+                        if _resolved:
+                            print(f"  [+] DNS {_host} -> {lb_ip} OK")
+                        else:
+                            print(f"  [-] DNS {_host} -> FAIL (ne pointe pas vers {lb_ip})")
+                            continue
+                        # SSL check
+                        _ssl_ok = False
+                        for _attempt in range(6):  # 6 * 20s = 2 mins max
+                            try:
+                                _req = urllib.request.Request(f"https://{_host}/", method="GET")
+                                urllib.request.urlopen(_req, timeout=10, context=ctx_to_use)
+                                _ssl_ok = True
+                                break
+                            except urllib.error.HTTPError:
+                                _ssl_ok = True  # TLS handshake réussi même si HTTP error
+                                break
+                            except urllib.error.URLError as _e:
+                                if "CERTIFICATE_VERIFY_FAILED" in str(_e.reason) and "unable to get local issuer" in str(_e.reason):
+                                    _ssl_ok = True  # Bug macOS CA, on considère OK
+                                    break
+                                print(f"  [-] SSL {_host} not yet active (attempt {_attempt+1}/6). Retrying in 20s...")
+                                time.sleep(20)
+                            except Exception as _e:
+                                print(f"  [-] SSL {_host} unexpected error ({_e}). Retrying in 20s...")
+                                time.sleep(20)
+                        if _ssl_ok:
+                            print(f"  [+] SSL {_host} -> ACTIVE")
+                        else:
+                            print(f"  [!] SSL {_host} -> not provisioned yet (certificate may take 15-30 mins)")
+
             else:
                 logger.error(f"[-] Sanity Test FAIL: DNS resolution timeout. {front_dns_name} doesn't match {lb_ip}")
         else:
@@ -962,7 +1094,8 @@ def plan(env):
     set_workspace(env)
     
     logger.info(f"[*] Generating dry-run (terraform plan) for environment '{env}'...")
-    cmd = ["terraform", "plan"] + get_tf_args()
+    project_id = os.environ.get("TF_VAR_project_id", "slavayssiere-sandbox-462015")
+    cmd = ["terraform", "plan"] + get_tf_args(project_id)
     run_cmd(cmd)
 
 def destroy(env, project_id, config, force=False):
@@ -980,12 +1113,26 @@ def destroy(env, project_id, config, force=False):
         for res in PERSISTENT_RESOURCES:
             run_cmd(["terraform", "state", "rm", res], check=False)
 
+        # Éjecter aussi les zones DNS additionnelles (extra_domains) pour les préserver
+        _extra = config.get("extra_domains", [])
+        for _d in _extra:
+            _zone = _d.get("zone_name", "")
+            if not _zone:
+                continue
+            _tf_zone = f'google_dns_managed_zone.extra_zones["{_zone}"]'
+            _tf_ns   = f'google_dns_record_set.extra_ns_delegation["{_zone}"]'
+            _tf_a    = f'google_dns_record_set.extra_a["{_zone}"]'
+            run_cmd(["terraform", "state", "rm", _tf_zone], check=False)
+            run_cmd(["terraform", "state", "rm", _tf_ns], check=False)
+            run_cmd(["terraform", "state", "rm", _tf_a], check=False)
+
     print("[*] Ejecting AlloyDB users and Drive Service Account from Terraform state to preserve them...")
     state_list_res = subprocess.run(["terraform", "state", "list"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
     if state_list_res.returncode == 0:
         for line in state_list_res.stdout.splitlines():
             line = line.strip()
-            if line.startswith("google_alloydb_user.") or line == 'google_service_account.cr_sa["drive"]':
+            if line.startswith("google_alloydb_user."):
+                # NOTE: google_service_account.cr_sa["drive"] n'existe pas (data source) — pas à éjecter
                 run_cmd(["terraform", "state", "rm", line], check=False)
 
     print(f"[*] Destroying all other components for environment '{env}'...")
@@ -995,7 +1142,7 @@ def destroy(env, project_id, config, force=False):
     region = config.get("region", "europe-west1")
     parallelism = get_gcp_quota_parallelism(project_id, region)
     cmd = ["terraform", "destroy", "-auto-approve",
-           f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args()
+           f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args(project_id)
 
     try:
         res = run_cmd(cmd, check=False, live=True)

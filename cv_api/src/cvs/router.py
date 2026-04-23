@@ -74,7 +74,12 @@ logger = logging.getLogger(__name__)
 import asyncio
 from datetime import datetime, timedelta
 
-_COMP_CREATION_LOCK = asyncio.Lock()
+# Note : plus de lock global ici.
+# competencies_api gère l'idempotence nativement : POST avec un nom existant
+# retourne HTTP 200 avec l'entité existante (check_grammatical_conflict → exact match).
+# Un lock global asyncio.Lock() ici sérialisait ALL les BackgroundTasks CV concurrents,
+# causant N_cvs × N_comps × 2 acquisitions séquentielles (ex: 47 × 25 × 2 = 2350 appels
+# en file unique → 1-2h de blocage observé sous charge).
 _CV_CACHE = {
     "prompt": {"value": None, "expires": datetime.min},
     "tree_items": {"value": None, "expires": datetime.min},
@@ -184,15 +189,20 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, backgrou
 
 
 @public_router.post("/pubsub/import-cv")
-async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(get_db)):
+async def handle_pubsub_cv_import(request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """
     Worker Pub/Sub push subscriber pour l'ingestion des CVs.
 
     Workflow :
     1. Validation OIDC du token Google (RS256) — vérifie que l'émetteur est bien le SA pubsub_invoker.
     2. Décodage base64 du payload Pub/Sub.
-    3. Exécution SYNCHRONE du pipeline LLM + Compétences + Missions via _process_cv_core.
-    4. Notification PATCH drive_api : IMPORTED_CV (succès) ou ERROR (échec).
+    3. ACK IMMÉDIAT (202) → Pub/Sub augmente sa concurrence (slow-start algorithm).
+    4. Traitement ASYNCHRONE du pipeline LLM en BackgroundTask.
+    5. Notification PATCH drive_api : IMPORTED_CV (succès) ou ERROR (échec).
+
+    ARCHITECTURE : Le retour 202 immédiat est essentiel pour le parallélisme.
+    Pub/Sub mesure le temps de réponse de l'endpoint pour calibrer sa concurrence.
+    Une réponse en 2 min forçait une concurrence de 1-2 messages. Avec < 1s → 10+ parallèles.
 
     Sécurité : si le token OIDC est absent ou invalide → 401 (Pub/Sub va retenter).
     Idempotence : si le CV existe déjà (même email), mise à jour au lieu de création.
@@ -285,6 +295,25 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
             logger.error(f"[PubSub] Impossible d'échanger l'OIDC token: {e_oidc}")
             raise HTTPException(status_code=500, detail=f"OIDC exchange error: {e_oidc}")
 
+        # ── Upgrade vers un service-token longue durée (90 min) ─────────────
+        # Le JWT issu de service-account/login n'a que 15 min (ACCESS_TOKEN_EXPIRE_MINUTES).
+        # Le traitement Gemini + compétences + missions peut dépasser ce délai → 403 sur items_api.
+        # On échange vers /internal/service-token qui délivre un token de 90 min.
+        if jwt:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as svc_client:
+                    svc_res = await svc_client.post(
+                        f"{USERS_API_URL.rstrip('/')}/internal/service-token",
+                        headers={"Authorization": f"Bearer {jwt}"},
+                    )
+                    if svc_res.status_code == 200:
+                        jwt = svc_res.json().get("access_token", jwt)
+                        logger.info(f"[PubSub] Service-token longue durée obtenu (90 min).")
+                    else:
+                        logger.warning(f"[PubSub] Upgrade service-token échoué (HTTP {svc_res.status_code}) — JWT court conservé (15 min).")
+            except Exception as e_svc:
+                logger.warning(f"[PubSub] Impossible d'obtenir le service-token longue durée: {e_svc} — JWT court conservé.")
+
     if not jwt:
         logger.error("[PubSub] Aucun token d'authentification dans le payload (ni oidc_token, ni jwt).")
         raise HTTPException(status_code=500, detail="Configuration error: aucun token dans le message Pub/Sub")
@@ -321,56 +350,110 @@ async def handle_pubsub_cv_import(request: Request, db: AsyncSession = Depends(g
         raise HTTPException(status_code=500, detail=f"JWT interne invalide: {e}")
 
 
-    # ── 5. Exécution du pipeline LLM synchrone ───────────────────────────────
+    # ── 5. Pipeline LLM en BackgroundTask → ACK immédiat pour Pub/Sub ─────────
+    # ARCHITECTURE : Pub/Sub slow-start algorithm mesure le temps de réponse de
+    # l'endpoint pour calibrer sa concurrence. Une réponse en 2 min → concurrence=1.
+    # En retournant 202 en < 1s, Pub/Sub monte la concurrence à 10+ messages simultanés.
+    # Le pipeline complet (Gemini + compétences + missions) s'exécute en arrière-plan.
+    # Les statuts drive_api (PROCESSING → IMPORTED_CV / ERROR) restent correctement trackés.
+
+    async def _run_cv_pipeline_bg(
+        bg_google_file_id: str,
+        bg_url: str,
+        bg_google_access_token: Optional[str],
+        bg_source_tag: Optional[str],
+        bg_folder_name: Optional[str],
+        bg_headers: dict,
+        bg_jwt: str,
+        bg_token_payload: dict,
+        bg_drive_api_url: str,
+    ):
+        """Pipeline complet exécuté en arrière-plan après ACK Pub/Sub."""
+        async with database.SessionLocal() as bg_db:
+            try:
+                local_bg_tasks = BackgroundTasks()
+                result = await _process_cv_core(
+                    url=bg_url,
+                    google_access_token=bg_google_access_token,
+                    source_tag=bg_source_tag,
+                    folder_name=bg_folder_name,
+                    headers=bg_headers,
+                    token_payload=bg_token_payload,
+                    db=bg_db,
+                    auth_token=bg_jwt,
+                    background_tasks=local_bg_tasks  # BackgroundTasks locales pour competencies/missions
+                )
+                
+                # IMPORTANT: Starlette's BackgroundTasks are not automatically executed 
+                # when not returned in an HTTP response. We must execute them manually.
+                await local_bg_tasks()
+                # Notification succès → drive_api
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                        res = await patch_client.patch(
+                            f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
+                            json={"status": "IMPORTED_CV", "user_id": result.user_id, "error_message": None},
+                            headers=bg_headers
+                        )
+                        if res.is_error:
+                            logger.error(f"[PubSub/BG] Échec PATCH IMPORTED_CV: HTTP {res.status_code}")
+                        else:
+                            logger.info(f"[PubSub/BG] Import réussi {bg_google_file_id} → user_id={result.user_id}")
+                except Exception as e:
+                    logger.warning(f"[PubSub/BG] Impossible de notifier drive_api (IMPORTED_CV): {e}")
+
+            except HTTPException as he:
+                error_detail = he.detail
+                status = "IGNORED_NOT_CV" if ("Not a CV" in str(error_detail) or "LLM Parsing failed" in str(error_detail)) else "ERROR"
+                logger.error(f"[PubSub/BG] Échec pipeline {bg_google_file_id}: {error_detail} → statut={status}")
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                        await patch_client.patch(
+                            f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
+                            json={"status": status, "error_message": str(error_detail)},
+                            headers=bg_headers
+                        )
+                except Exception as e:
+                    logger.warning(f"[PubSub/BG] Impossible de notifier drive_api ({status}): {e}")
+
+            except Exception as ex:
+                logger.error(f"[PubSub/BG] Erreur inattendue pour {bg_google_file_id}: {ex}", exc_info=True)
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                        await patch_client.patch(
+                            f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
+                            json={"status": "ERROR", "error_message": f"Erreur inattendue: {ex}"},
+                            headers=bg_headers
+                        )
+                except Exception: raise
+
+    # Lancement du pipeline en arrière-plan
+    # IMPORTANT : toute exception ici (NameError, AttributeError, etc.) laisserait
+    # le CV en PROCESSING sans jamais le passer en ERROR. On wrappe add_task pour
+    # attraper ces erreurs de setup et notifier drive_api immédiatement.
     try:
-        result = await _process_cv_core(
-            url=url,
-            google_access_token=google_access_token,
-            source_tag=source_tag,
-            folder_name=folder_name,
-            headers=headers,
-            token_payload=token_payload,
-            db=db,
-            auth_token=jwt,
-            background_tasks=None  # BackgroundTasks désactivées en mode Pub/Sub : tout doit être synchrone
+        background_tasks.add_task(
+            _run_cv_pipeline_bg,
+            google_file_id, url, google_access_token, source_tag, folder_name,
+            headers, jwt, token_payload, drive_api_url
         )
-        # ── 6. Notification succès → drive_api ──────────────────────────────
+    except Exception as setup_err:
+        logger.error(f"[PubSub] Impossible de planifier le BackgroundTask pour {google_file_id}: {setup_err}", exc_info=True)
+        # PATCH drive_api en ERROR pour éviter que le CV reste bloqué en PROCESSING
         try:
-            async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                res = await patch_client.patch(
+            async with httpx.AsyncClient(timeout=10.0) as err_client:
+                await err_client.patch(
                     f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
-                    json={"status": "IMPORTED_CV", "user_id": result.user_id, "error_message": None},
+                    json={"status": "ERROR", "error_message": f"Erreur setup pipeline: {setup_err}"},
                     headers=headers
                 )
-                if res.is_error:
-                    logger.error(f"[PubSub] Échec PATCH IMPORTED_CV vers drive_api: HTTP {res.status_code} - {res.text}")
-                else:
-                    logger.info(f"[PubSub] Import réussi pour {google_file_id} → user_id={result.user_id}")
-        except Exception as e:
-            logger.warning(f"[PubSub] Impossible de notifier drive_api (IMPORTED_CV): {e}")
+        except Exception: raise
+        # Retourner 500 pour que Pub/Sub retente après correction du code
+        raise
 
-        return {"status": "ok", "user_id": result.user_id}
-
-    except HTTPException as he:
-        error_detail = he.detail
-        status = "IGNORED_NOT_CV" if ("Not a CV" in str(error_detail) or "LLM Parsing failed" in str(error_detail)) else "ERROR"
-        logger.error(f"[PubSub] Échec pipeline pour {google_file_id}: {error_detail} → statut={status}")
-        # Notification d'erreur → drive_api pour visibilité frontend
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                res = await patch_client.patch(
-                    f"{drive_api_url.rstrip('/')}/files/{google_file_id}",
-                    json={"status": status, "error_message": str(error_detail)},
-                    headers=headers
-                )
-                if res.is_error:
-                    logger.error(f"[PubSub] Échec PATCH ERROR vers drive_api: HTTP {res.status_code} - {res.text}")
-        except Exception as e:
-            logger.warning(f"[PubSub] Impossible de notifier drive_api (ERROR): {e}")
-        # Retourner 200 pour IGNORED_NOT_CV (ACK), 500 pour ERROR (retry Pub/Sub)
-        if status == "IGNORED_NOT_CV":
-            return {"status": "ignored", "detail": str(error_detail)}
-        raise HTTPException(status_code=500, detail=str(error_detail))
+    # ACK immédiat → Pub/Sub augmente la concurrence via slow-start
+    logger.info(f"[PubSub] Message {google_file_id} accepté — pipeline en arrière-plan.")
+    return {"status": "accepted", "google_file_id": google_file_id}
 
 
 async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None, folder_name: Optional[str] = None, background_tasks: BackgroundTasks = None) -> CVResponse:
@@ -473,10 +556,26 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     else:
         try:
             async with httpx.AsyncClient() as http_client:
-                tree_res = await http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=headers, timeout=2.0)
-                if tree_res.status_code == 200:
-                    items = tree_res.json().get('items', [])
+                # Pagination scalable : pages de 100 nœuds racines jusqu'à épuisement
+                items: list = []
+                skip = 0
+                page_size = 100
+                while True:
+                    page_res = await http_client.get(
+                        f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                        params={"skip": skip, "limit": page_size},
+                        headers=headers, timeout=5.0
+                    )
+                    if page_res.status_code != 200:
+                        break
+                    page_data = page_res.json()
+                    page_items = page_data.get('items', [])
+                    items.extend(page_items)
+                    if len(page_items) < page_size:
+                        break  # dernière page
+                    skip += page_size
 
+                if items:
                     tree_context, nb_parents, nb_leaves = build_taxonomy_context(items)
                     logger.info(
                         f"[CV_STEP] llm_parse — taxonomy context injected",
@@ -867,72 +966,89 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
             logger.info(f"[user_resolve] Utilisateur créé avec ID {user_id}")
         dur = int((time.monotonic() - t0) * 1000)
         _step_ok("user_resolve", "Résolution & création d'identité", dur, f"User ID {user_id}")
-        # ── Étape 4 & 5 : Traitement asynchrone (Background Task) ─────────────────
-        # On délègue la création des compétences et des missions pour ne pas bloquer 
+        # ── Étapes 4 & 5 : Traitement asynchrone (Background Task) ─────────────────
+        # On délègue la création des compétences et des missions pour ne pas bloquer
         # le timeout de la réponse HTTP vers `drive_api`.
         async def _bg_process_competencies_and_missions(bg_user_id, bg_structured_cv, bg_headers, bg_url):
             logger.info(f"[BG_TASK] Démarrage traitement asynchrone pour CV {bg_url}")
             bg_errors = []
             async with httpx.AsyncClient(timeout=120.0) as bg_http_client:
-                # ── Étape 4 : Mapping des compétences ─────────────────────────────────
+                # ── Étape 4 : Mapping des compétences (scalable via /search) ──────────
+                # Ancien anti-pattern supprimé : GET /?limit=1000 + find_comp_id local.
+                # Nouveau pattern : appel /search?query=<name>&limit=1 par compétence,
+                # ce qui est stateless, scalable et évite tout chargement bulk.
                 try:
-                    comp_res = await bg_http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/?limit=1000", headers=bg_headers)
-                    comp_data = comp_res.json()
-                    all_comps = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
-
                     def normalize_comp(text):
                         if not text: return ""
                         text = text.strip().lower()
                         return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
 
-                    def find_comp_id(node_list, t_name):
-                        t_norm = normalize_comp(t_name)
-                        for n in node_list:
-                            if normalize_comp(n['name']) == t_norm: return n['id']
-                            found = find_comp_id(n.get('sub_competencies', []), t_name)
-                            if found: return found
+                    async def resolve_comp_id(name: str) -> int | None:
+                        """Recherche une compétence par nom exact via /search (scalable, sans bulk fetch)."""
+                        try:
+                            res = await bg_http_client.get(
+                                f"{COMPETENCIES_API_URL.rstrip('/')}/search",
+                                params={"query": name, "limit": 5},
+                                headers=bg_headers, timeout=5.0
+                            )
+                            if res.status_code == 200:
+                                n_norm = normalize_comp(name)
+                                for item in res.json().get("items", []):
+                                    if normalize_comp(item.get("name", "")) == n_norm:
+                                        return item["id"]
+                        except Exception as e:
+                            logger.warning(f"[BG_TASK] resolve_comp_id('{name}') search failed: {e}")
                         return None
 
                     async def process_competency(comp):
                         name = comp["name"]
                         parent = comp.get("parent")
-                        # Option B : ne pas assigner les compétences non pratiquées
-                        # practiced=False signifie que la compétence est mentionnée
-                        # contextuellement (ex: "utilise GitLab CI plutôt que Jenkins")
-                        # mais que le consultant ne la maîtrise pas réellement.
+                        # ne pas assigner les compétences non pratiquées
+                        # practiced=False = mentionnée contextuellement, non maîtrisée
                         if not comp.get("practiced", True):
                             logger.info(
                                 f"[BG_TASK] Skipping non-practiced competency '{name}' (practiced=False)",
                                 extra={"cv_url": bg_url}
                             )
-                            return True  # pas une erreur, juste un skip
+                            return True
                         try:
-                            c_id = find_comp_id(all_comps, name)
+                            # 1. Résolution via /search (sans bulk load)
+                            c_id = await resolve_comp_id(name)
                             if not c_id:
                                 p_id = None
                                 if parent:
-                                    async with _COMP_CREATION_LOCK:
-                                        p_id = find_comp_id(all_comps, parent)
-                                        if not p_id:
-                                            p_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=bg_headers)
-                                            if p_res.status_code < 400:
-                                                p_id = p_res.json()["id"]
-                                                all_comps.append(p_res.json())
+                                    # competencies_api est idempotent :
+                                    # HTTP 200 si doublon exact, HTTP 409 si variante grammaticale.
+                                    p_id = await resolve_comp_id(parent)
+                                    if not p_id:
+                                        p_res = await bg_http_client.post(
+                                            f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                                            json={"name": parent, "description": "Auto-identified from CV"},
+                                            headers=bg_headers
+                                        )
+                                        if p_res.status_code < 400:
+                                            p_id = p_res.json()["id"]
 
                                 aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
                                 leaf_data = {"name": name, "description": "Candidate CV Skill", "aliases": aliases_str}
-                                if p_id: leaf_data["parent_id"] = p_id
+                                if p_id:
+                                    leaf_data["parent_id"] = p_id
 
-                                async with _COMP_CREATION_LOCK:
-                                    c_id = find_comp_id(all_comps, name)
-                                    if not c_id:
-                                        c_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=bg_headers)
-                                        if c_res.status_code < 400:
-                                            c_id = c_res.json()["id"]
-                                            all_comps.append(c_res.json())
+                                # 2. Double-check avant création (race condition entre CVs concurrents)
+                                c_id = await resolve_comp_id(name)
+                                if not c_id:
+                                    c_res = await bg_http_client.post(
+                                        f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                                        json=leaf_data, headers=bg_headers
+                                    )
+                                    if c_res.status_code < 400:
+                                        c_id = c_res.json()["id"]
 
                             if c_id:
-                                assign_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/{c_id}", headers=bg_headers)
+                                assign_res = await bg_http_client.post(
+                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/{c_id}",
+                                    headers=bg_headers
+                                )
                                 if assign_res.status_code < 400:
                                     return True
                                 return f"Échec d'assignation de '{name}' (HTTP {assign_res.status_code}: {assign_res.text})"
@@ -996,7 +1112,7 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                             }
                             m_post = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/", json=item_data, headers=bg_headers)
                             if m_post.status_code >= 400:
-                                logger.warning(f"[BG_TASK] missions — failed to create item '{m['title']}': HTTP {m_post.status_code}")
+                                logger.warning(f"[BG_TASK] missions — failed to create item '{m['title']}': HTTP {m_post.status_code} — {m_post.text[:300]}")
                                 return f"Création de la mission '{m['title']}' échouée (HTTP {m_post.status_code}: {m_post.text})"
                             return True
                         except Exception as e:
@@ -1035,6 +1151,28 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
                             )
                 except Exception as patch_e:
                     logger.error(f"[BG_TASK] Impossible d'alerter drive_api: {patch_e}")
+
+            # ── Hook : Scoring IA des compétences (déclenché ICI, après assignation) ──
+            # IMPORTANT : ce hook DOIT être appelé à l'intérieur de la background task,
+            # APRÈS que toutes les compétences ont été assignées dans user_competency.
+            # L'appeler depuis le handler HTTP (avant le return) provoque une race condition :
+            # ai-score-all lit user_competency encore vide → 0 compétences traitées.
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as _score_client:
+                    _score_headers = dict(bg_headers)
+                    from opentelemetry.propagate import inject as _inject
+                    _inject(_score_headers)
+                    score_res = await _score_client.post(
+                        f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{bg_user_id}/ai-score-all",
+                        headers=_score_headers,
+                        timeout=5.0
+                    )
+                    logger.info(
+                        f"[BG_TASK] ai_scoring_triggered — user_id={bg_user_id} "
+                        f"status={score_res.status_code} text={score_res.text}"
+                    )
+            except Exception as _score_e:
+                logger.warning(f"[BG_TASK] ai_scoring_trigger_failed — user_id={bg_user_id} error={_score_e} (non-bloquant)")
 
             logger.info(f"[BG_TASK] Fin traitement asynchrone pour CV {bg_url}")
 
@@ -1121,21 +1259,9 @@ async def _process_cv_core(url: str, google_access_token: Optional[str], source_
     )
     CV_PROCESSING_TOTAL.labels(status="success").inc()
 
-    # ── Hook : Scoring IA automatique des compétences (BackgroundTask) ─────────
-    # Déclenché à chaque import/réanalyse CV pour recalculer les notes IA.
-    if user_id:
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as _bg_client:
-                _bg_headers = dict(headers)
-                inject(_bg_headers)
-                await _bg_client.post(
-                    f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{user_id}/ai-score-all",
-                    headers=_bg_headers,
-                    timeout=5.0
-                )
-            logger.info(f"[CV_STEP] ai_scoring_triggered — user_id={user_id}")
-        except Exception as _e:
-            logger.warning(f"[CV_STEP] ai_scoring_trigger_failed — {_e} (non-bloquant)")
+    # NOTE : le hook ai-score-all est maintenant déclenché à la FIN de
+    # _bg_process_competencies_and_missions (après assignation des compétences).
+    # NE PAS rappeler ici pour éviter la race condition décrite dans le ticket.
 
     return CVResponse(
         message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
@@ -1749,7 +1875,7 @@ async def reanalyze_cvs(
     try:
         async with httpx.AsyncClient(timeout=10.0) as http_client:
             svc_res = await http_client.post(
-                f"{USERS_API_URL.rstrip('/')}/auth/internal/service-token",
+                f"{USERS_API_URL.rstrip('/')}/internal/service-token",
                 headers=headers,
                 timeout=10.0
             )

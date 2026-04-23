@@ -1,12 +1,26 @@
 #!/bin/bash
 set -e
 
+PROJECT_ID="slavayssiere-sandbox-462015"
+REGION="europe-west1"
+AR_NAME="z-gcp-summit-services"
+JOB_NAME="platform-engineering"
+
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_NAME}/${JOB_NAME}"
+
+if [ "$1" = "list-versions" ] || [ "$1" = "--list-versions" ] || [ "$1" = "-l" ]; then
+    echo "[*] Liste des versions du conteneur dans Artifact Registry..."
+    gcloud artifacts docker images list "$IMAGE" --sort-by=~UPDATE_TIME
+    exit 0
+fi
+
 ACTION=$1
 ENV=$2
 VERSION=$3
 
 if [ -z "$ACTION" ] || [ -z "$ENV" ]; then
     echo "Usage: $0 <deploy|destroy|plan> <env> [container_version]"
+    echo "       $0 list-versions"
     echo "Example: $0 deploy dev v1.0.0"
     exit 1
 fi
@@ -15,13 +29,6 @@ if [ ! -d "platform-engineering" ]; then
     echo "[!] Please run this script from the root of the repository."
     exit 1
 fi
-
-PROJECT_ID="slavayssiere-sandbox-462015"
-REGION="europe-west1"
-AR_NAME="z-gcp-summit-services"
-JOB_NAME="platform-engineering"
-
-IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_NAME}/${JOB_NAME}"
 
 if [ -z "$VERSION" ]; then
     echo "[*] Aucune version spécifiée. Recherche de la dernière version poussée sur Artifact Registry..."

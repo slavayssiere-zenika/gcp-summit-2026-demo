@@ -58,6 +58,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Router Health
 - **GET** `/version` : Get Version
+- **GET** `/spec` : Get Spec
 - **POST** `/login` : Login
 - **POST** `/refresh` : Refresh Token Route
 - **POST** `/logout` : Logout
@@ -67,7 +68,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/google/callback` : Google Callback
 - **POST** `/internal/service-token` : Create Service Token
 - **POST** `/suspend/{email}` : Suspend User
-- **GET** `/spec` : Get Spec
 - **GET** `/stats` : Get User Stats
 - **GET** `/` : List Users
 - **POST** `/` : Create User
@@ -81,5 +81,5 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **DELETE** `/{user_id}` : Delete User
 - **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
