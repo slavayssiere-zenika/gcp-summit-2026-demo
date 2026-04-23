@@ -44,7 +44,7 @@ ENV COMPETENCIES_API_URL=http://competencies_api:8003
 ENV ITEMS_API_URL=http://items_api:8001
 ENV DRIVE_API_URL=http://drive_api:8080
 ENV PROMPTS_API_URL=http://prompts_api:8000
-ENV MARKET_MCP_URL=http://market_mcp:8080
+ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 ENV PUBSUB_INVOKER_SA_EMAIL=sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com
 ENV GCP_PROJECT_ID=your-gcp-project-id
 EXPOSE 8004

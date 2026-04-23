@@ -45,7 +45,7 @@ const getComponentIcon = (name: string) => {
   if (n.includes('redis')) return Database
   if (n.includes('bigquery') || n.includes('alloydb') || n.includes('db')) return Database
   if (n.includes('agent') || n.includes('router')) return Cpu
-  if (n.includes('mcp') || n.includes('market')) return Activity
+  if (n.includes('mcp') || n.includes('analytics')) return Activity
   return Server
 }
 

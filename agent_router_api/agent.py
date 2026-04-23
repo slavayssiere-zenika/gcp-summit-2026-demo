@@ -241,7 +241,7 @@ async def create_agent(session_id: str | None = None):
     instruction_text = "Tu es l'Orchestrateur Principal de la plateforme Zenika, le 'Front-Desk'. Ton rôle est de diriger la demande vers le hub approprié en utilisant tes outils de délégation (A2A). Ne dis pas 'je vais interroger mon collègue', sois direct."
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url}/prompts/agent_router_api.system_instruction/compiled")
+            res = await client.get(f"{prompts_api_url.rstrip('/')}/agent_router_api.system_instruction/compiled")
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:
@@ -255,7 +255,7 @@ async def create_agent(session_id: str | None = None):
             auth_header = auth_header_var.get()
             headers = {"Authorization": auth_header} if auth_header else {}
             async with httpx.AsyncClient() as client:
-                res = await client.get(f"{prompts_api_url}/prompts/user_{session_id}", headers=headers, timeout=5.0)
+                res = await client.get(f"{prompts_api_url.rstrip('/')}/user_{session_id}", headers=headers, timeout=5.0)
                 if res.status_code == 200:
                     user_prompt = res.json().get("value", "")
                     if user_prompt:
@@ -484,14 +484,14 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
             user_email = user_id if "@" in str(user_id) else f"{user_id}@zenika.com"
             from mcp_client import auth_header_var
             auth_header = auth_header_var.get()
-            market_url = os.getenv("MARKET_MCP_URL", "http://api.internal.zenika/market-mcp/")
+            analytics_url = os.getenv("ANALYTICS_MCP_URL", "http://api.internal.zenika/analytics-mcp/")
             headers = {"Authorization": auth_header} if auth_header else {}
             inject(headers)
             import asyncio
             async def log_bq():
                 try:
                     async with httpx.AsyncClient(timeout=10.0, headers=headers) as c:
-                        await c.post(f"{market_url.rstrip('/')}/mcp/call", json={
+                        await c.post(f"{analytics_url.rstrip('/')}/mcp/call", json={
                             "name": "log_ai_consumption",
                             "arguments": {
                                 "user_email": user_email,

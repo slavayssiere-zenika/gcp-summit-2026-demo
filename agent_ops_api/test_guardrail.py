@@ -187,7 +187,7 @@ async def test_guardrail_not_triggered_when_tool_called(mocker):
 
 
 @pytest.mark.asyncio
-async def test_guardrail_not_triggered_with_market_tool(mocker):
+async def test_guardrail_not_triggered_with_analytics_tool(mocker):
     """
     GUARDRAIL 1 : L'appel d'un outil FinOps (get_finops_report) doit
     désactiver le guardrail hallucination.
@@ -213,6 +213,33 @@ async def test_guardrail_not_triggered_with_market_tool(mocker):
     guardrail_steps = [s for s in result.get("steps", []) if s.get("tool") == "GUARDRAIL"]
     assert len(guardrail_steps) == 0, \
         "get_finops_report est un vrai outil → le guardrail NE doit pas s'activer"
+
+
+@pytest.mark.asyncio
+async def test_guardrail_not_triggered_for_generative_tasks(mocker):
+    """
+    GUARDRAIL 1 (Ops custom) : Si la requête est purement générative (ex: 'Génère un prompt'),
+    le guardrail NE DOIT PAS s'activer même s'il n'y a eu aucun outil appelé.
+    """
+    evt_text = _make_mock_event("model", text="Voici le prompt demandé : ...")
+
+    _, _, mock_runner = _patch_agent_infra(mocker)
+
+    async def mock_run_async(**kwargs):
+        yield evt_text
+
+    mock_runner.run_async = mock_run_async
+
+    result = await agent_module.run_agent_query(
+        "Génère un prompt de signalement d'incident technique",
+        session_id="ops_generative_test",
+        user_id="ops_user@zenika.com"
+    )
+
+    guardrail_steps = [s for s in result.get("steps", []) if s.get("tool") == "GUARDRAIL"]
+    assert len(guardrail_steps) == 0, \
+        "Tâche purement générative (génère...) → le guardrail NE doit pas s'activer"
+    assert "⚠️" not in result["response"], "Le warning ne doit pas être injecté"
 
 
 # ---------------------------------------------------------------------------

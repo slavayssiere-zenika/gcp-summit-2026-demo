@@ -4,6 +4,15 @@ description: Aide au diagnostic de bug — collecte structurée du contexte et p
 
 Voici les étapes strictes à suivre pour l'exécution du workflow `/bug` :
 
+### Étape 0 : Recherche en mémoire (OBLIGATOIRE)
+
+// turbo
+Avant toute analyse, rechercher dans la base de connaissance :
+1. `search_past_errors` avec les mots-clés de l'erreur
+2. `search_learnings` avec la technologie concernée
+
+Si un résultat pertinent est trouvé (score RRF > 0), appliquer la solution mémorisée directement sans re-analyser.
+
 1. **Collecter le contexte automatique**
    Récupère les informations disponibles dans l'environnement courant pour pré-remplir le template :
    - Fichier actif dans l'éditeur (service impacté)
@@ -68,3 +77,8 @@ Procéder à la correction ? (oui / non / modifier le plan)
 
 6. **Attendre la confirmation de l'utilisateur**
    Ne pas commencer la correction avant que l'utilisateur ait validé le plan ou demandé des modifications.
+
+### Étape 7 : Post-Mortem Obligatoire
+
+Une fois la correction confirmée et implémentée avec succès par l'agent, l'agent DOIT systématiquement mémoriser l'erreur.
+**L'agent utilisera l'outil MCP `log_error_and_solution`** pour documenter la stacktrace originale, le contexte et la solution qui a fonctionné, AVANT d'annoncer à l'utilisateur que le bug est résolu.

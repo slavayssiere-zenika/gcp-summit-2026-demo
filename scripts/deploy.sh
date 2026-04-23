@@ -345,8 +345,8 @@ build_and_push_standard() {
           DEPLOYS_FAILED+=("$SERVICE (Job execution failed)")
         fi
       else
-        echo "--- Skipping update_cloudrun for $SERVICE (Cloud Run Job $JOB_NAME introuvable) ---"
-        DEPLOYS_FAILED+=("$SERVICE (Job introuvable)")
+        echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
+        DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
       fi
     fi
   fi
@@ -470,7 +470,7 @@ sync_system_prompts() {
 # Main logic
 # ==============================================================================
 # Liste des services applicatifs (déployés par 'all')
-APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "market_mcp" "monitoring_mcp")
+APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "analytics_mcp" "monitoring_mcp")
 # Liste de tous les services possibles pour la validation
 VALID_SERVICES=("db_migrations" "db_init" "sync_prompts" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "${APP_MICROSERVICES[@]}")
 
@@ -521,8 +521,14 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
   elif [ "$TARGET_SERVICE" = "db_init" ]; then
     # ── DB Init : build image dédiée + mise à jour du Cloud Run Job + exécution ──
     # AlloyDB n'est accessible qu'en VPC GCP (IP privée) : pas d'exécution locale possible.
+    if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "db_init"; then
+      echo -e "${YELLOW}--- Skipped db_init (no changes detected since last deployment) ---${RESET}"
+      DEPLOYS_SKIPPED+=("db_init")
+      CURRENT_DEPLOYING_SERVICE=""
+      continue
+    fi
     show_progress "db_init"
-    local_tag=$(cat db_init/VERSION 2>/dev/null || echo "v0.1.0")
+    local_tag=$(get_service_tag "db_init" "$BUMP_TYPE")
     db_init_image="${DOCKER_REPO}/db_init:${local_tag}"
     echo "--- Building db_init ($local_tag) ---"
     docker build --platform linux/amd64 \
@@ -533,19 +539,27 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
     docker push "${DOCKER_REPO}/db_init:${local_tag}"
     docker push "${DOCKER_REPO}/db_init:latest"
 
-    JOB_NAME="db-init-job-dev"
-    if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
-      echo "--- Mise à jour de l'image du Cloud Run Job $JOB_NAME ---"
-      gcloud run jobs update "$JOB_NAME" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --image "$db_init_image"
-    fi
-
-    if run_db_init_job; then
-      DEPLOYS_SUCCESS+=("db_init")
+    if [ "$SKIP_CLOUDRUN" = true ]; then
+      echo "--- Skipping update_cloudrun/jobs for db_init ---"
+      DEPLOYS_SUCCESS+=("db_init (Docker only)")
     else
-      DEPLOYS_FAILED+=("db_init (Job failed)")
+      JOB_NAME="db-init-job-dev"
+      if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+        echo "--- Mise à jour de l'image du Cloud Run Job $JOB_NAME ---"
+        gcloud run jobs update "$JOB_NAME" \
+          --region "$REGION" \
+          --project "$PROJECT_ID" \
+          --image "$db_init_image"
+        
+        if run_db_init_job; then
+          DEPLOYS_SUCCESS+=("db_init")
+        else
+          DEPLOYS_FAILED+=("db_init (Job failed)")
+        fi
+      else
+        echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
+        DEPLOYS_SUCCESS+=("db_init (Docker only)")
+      fi
     fi
   elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
     show_progress "$TARGET_SERVICE"

@@ -4,7 +4,7 @@ import re
 base_dir = "/Users/sebastien.lavayssiere/Code/test-open-code/platform-engineering/terraform"
 
 services = ["users", "items", "competencies", "cv", "missions", "prompts", "drive", "market", "agent_router", "agent_hr", "agent_ops"]
-# market_mcp will be "market"
+# analytics_mcp will be "market"
 # agent_api will be replaced by agent_router, agent_hr, agent_ops
 
 def read_tf(filename):
@@ -171,30 +171,30 @@ resource "google_project_iam_member" "{svc}_logging_viewer" {{
 resource "google_project_iam_member" "market_bq_admin" {{
   project = var.project_id
   role    = "roles/bigquery.admin"
-  member  = "serviceAccount:${{google_service_account.market_sa.email}}"
+  member  = "serviceAccount:${{google_service_account.analytics_sa.email}}"
 }}
 resource "google_project_iam_member" "market_bq_job_user" {{
   project = var.project_id
   role    = "roles/bigquery.jobUser"
-  member  = "serviceAccount:${{google_service_account.market_sa.email}}"
+  member  = "serviceAccount:${{google_service_account.analytics_sa.email}}"
 }}
 resource "google_project_iam_member" "market_trace_user" {{
   project = var.project_id
   role    = "roles/cloudtrace.user"
-  member  = "serviceAccount:${{google_service_account.market_sa.email}}"
+  member  = "serviceAccount:${{google_service_account.analytics_sa.email}}"
 }}
 """
 
     if "market" in svc:
-        sa_block = sa_block.replace(f"google_cloud_run_v2_service.{svc}_api", f"google_cloud_run_v2_service.market_mcp")
+        sa_block = sa_block.replace(f"google_cloud_run_v2_service.{svc}_api", f"google_cloud_run_v2_service.analytics_mcp")
         
     unrolled_blocks[svc].append(sa_block)
 
 # Let's fix the files by appending these blocks and replacing internal google_service_account references
 for svc in services:
     if svc == "market":
-        fname = "cr_market.tf" # wait, earlier we viewed cloudrun.tf and it had resource "google_cloud_run_v2_service" "market_mcp"
-        fname = "cr_agent.tf" # let's just make sure cr_market.tf is where market_mcp lives
+        fname = "cr_market.tf" # wait, earlier we viewed cloudrun.tf and it had resource "google_cloud_run_v2_service" "analytics_mcp"
+        fname = "cr_agent.tf" # let's just make sure cr_market.tf is where analytics_mcp lives
         pass
     
     # We will just append them to the existing cr_*.tf
@@ -207,7 +207,7 @@ for svc in services:
         # Check if cr_market.tf exists
         if not os.path.exists(os.path.join(base_dir, "cr_market.tf")):
             with open(os.path.join(base_dir, "cr_market.tf"), "w") as f:
-                # Need to move market_mcp here if not done
+                # Need to move analytics_mcp here if not done
                 pass
                 
     if os.path.exists(os.path.join(base_dir, fname)):

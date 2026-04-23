@@ -143,8 +143,8 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
         value = "http://api.internal.zenika/api/prompts/"
       }
       env {
-        name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/api/market/"
+        name  = "ANALYTICS_MCP_URL"
+        value = "http://api.internal.zenika/api/analytics/"
       }
       env {
         name  = "MONITORING_MCP_URL"

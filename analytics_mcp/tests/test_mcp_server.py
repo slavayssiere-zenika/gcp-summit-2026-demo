@@ -1,5 +1,5 @@
 """
-Tests manquants pour market_mcp :
+Tests manquants pour analytics_mcp :
 - log_ai_consumption vers BigQuery
 - get_finops_report avec filtrages
 - check_component_health (redis, service Cloud Run)
@@ -175,7 +175,7 @@ async def test_bigquery_client_none_returns_error(mock_client):
     original_client = mcp_server.client
     mcp_server.client = None
     try:
-        result = await call_tool("get_market_demand_volume", {"category": "DevOps"})
+        result = await call_tool("get_analytics_demand_volume", {"category": "DevOps"})
         assert len(result) == 1
         # Ne doit pas lever d'exception non catchée
         data = json.loads(result[0].text)
@@ -196,7 +196,7 @@ async def test_unknown_tool_returns_error_dict():
 
 @pytest.mark.asyncio
 @patch('mcp_server.client')
-async def test_get_market_skills_bigquery_network_error(mock_client):
+async def test_get_analytics_skills_bigquery_network_error(mock_client):
     """Une erreur réseau BigQuery doit être capturée et retournée en dict structuré."""
     mock_client.query.side_effect = Exception("Network timeout connecting to BigQuery")
 
@@ -214,7 +214,7 @@ async def test_get_market_skills_bigquery_network_error(mock_client):
 
 @pytest.mark.asyncio
 async def test_list_tools_returns_all_expected_tools():
-    """list_tools doit retourner tous les outils attendus du market_mcp."""
+    """list_tools doit retourner tous les outils attendus du analytics_mcp."""
     tools = await list_tools()
     tool_names = [t.name for t in tools]
 

@@ -109,8 +109,8 @@ variable "image_agent_missions" {
   type        = string
 }
 
-variable "image_market" {
-  description = "Image for Market & FinOps MCP container"
+variable "image_analytics" {
+  description = "Image for Analytics & FinOps MCP container"
   type        = string
 }
 
@@ -152,7 +152,7 @@ variable "cv_api_version" { type = string }
 variable "missions_api_version" { type = string }
 variable "prompts_api_version" { type = string }
 variable "drive_api_version" { type = string }
-variable "market_mcp_version" { type = string }
+variable "analytics_mcp_version" { type = string }
 variable "monitoring_mcp_version" { type = string }
 variable "db_migrations_version" { type = string }
 variable "db_init_version" { type = string }
@@ -197,4 +197,10 @@ variable "trace_sampling_rate" {
   description = "Sampling rate for OpenTelemetry traces (0.0 to 1.0)"
   type        = string
   default     = "1.0"
+}
+
+variable "bq_location" {
+  description = "Localisation par défaut pour les datasets BigQuery (ex: europe-west1)"
+  type        = string
+  default     = "europe-west1"
 }

@@ -209,7 +209,7 @@ def test_sync_returns_started_when_drive_accessible(client, mocker):
     """POST /sync avec Google Drive accessible doit retourner {'status': 'started'}."""
     mock_drive = MagicMock()
     mock_drive.about.return_value.get.return_value.execute.return_value = {"user": {"emailAddress": "sa@project.iam.gserviceaccount.com"}}
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     # Mock SessionLocal pour la background task (sinon TypeError: NoneType not callable)
     mock_session = AsyncMock()
@@ -228,7 +228,7 @@ def test_sync_returns_403_when_drive_permission_lost(client, mocker):
     """POST /sync lorsque le Service Account a perdu l'accès Drive doit retourner 403."""
     mock_drive = MagicMock()
     mock_drive.about.return_value.get.return_value.execute.side_effect = Exception("403 Forbidden: Service Account access revoked")
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     resp = client.post("/sync")
     assert resp.status_code == 403
@@ -287,7 +287,7 @@ def test_add_folder_stores_folder_name(client, mocker):
     """POST /folders avec un folder Google Drive doit stocker le folder_name récupéré via l'API Drive."""
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Marie Dupont"}
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     resp = client.post(
         "/folders",
@@ -303,7 +303,7 @@ def test_add_folder_uses_manual_folder_name_if_drive_fails(client, mocker):
     """POST /folders : si l'API Drive échoue, le folder_name fourni manuellement est retenu."""
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.side_effect = Exception("Drive unavailable")
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     resp = client.post(
         "/folders",
@@ -319,7 +319,7 @@ def test_add_folder_folder_name_nullable_when_drive_fails(client, mocker):
     """POST /folders : si Drive échoue ET pas de folder_name manuel, folder_name est null."""
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.side_effect = Exception("Drive unavailable")
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     resp = client.post(
         "/folders",
@@ -335,7 +335,7 @@ def test_add_folder_invalidates_redis_cache(client, mocker):
     """POST /folders doit invalider la clé Redis drive:roots."""
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Test Folder"}
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     mock_redis = MagicMock()
     mocker.patch("src.router.get_redis", return_value=mock_redis)
@@ -353,7 +353,7 @@ def test_delete_folder_invalidates_redis_cache(client, mocker):
     """DELETE /folders/{id} doit invalider la clé Redis drive:roots."""
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Delete Test"}
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
 
     mock_redis = MagicMock()
     mocker.patch("src.router.get_redis", return_value=mock_redis)
@@ -431,7 +431,7 @@ def test_get_file_state_by_id_with_parent_folder_name(client, mocker):
     # Créer un folder d'abord
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Sophia Weber"}
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
     mocker.patch("src.redis_client.get_redis", return_value=MagicMock())
 
     folder_resp = client.post(
@@ -473,7 +473,7 @@ def test_get_file_state_by_id_found_without_folder_name(client, mocker):
     """
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "CVs Bordeaux"}
-    mocker.patch("src.google_auth.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.router.get_drive_service", return_value=mock_drive)
     mocker.patch("src.redis_client.get_redis", return_value=MagicMock())
 
     folder_resp = client.post(

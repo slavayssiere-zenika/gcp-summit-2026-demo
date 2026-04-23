@@ -9,7 +9,8 @@ project_id:                "prod-ia-staffing"
 # La racine "zenika.slavayssiere.fr" n'est JAMAIS touchée.
 base_domain:               "zenika.slavayssiere.fr"
 parent_zone_name:          "slavayssiere-zenika"
-parent_zone_project_id:    "slavayssiere-sandbox-462015"  # Obligatoire depuis P2-2 (plus de défault dans variables.tf)
+parent_zone_project_id:    "slavayssiere-sandbox-462015"
+bq_location:               "europe-west1"  # Obligatoire depuis P2-2 (plus de défault dans variables.tf)
 
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}
@@ -18,28 +19,29 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.3"
-agent_hr_api_version:       "v0.0.64"
-agent_ops_api_version:      "v0.0.35"
-agent_missions_api_version: "v0.1.10"
-users_api_version:          "v0.0.35"
-items_api_version:          "v0.0.25"
-competencies_api_version:   "v0.1.7"
-cv_api_version:             "v0.0.50"
-prompts_api_version:        "v0.0.21"
-drive_api_version:          "v0.0.32"
-market_mcp_version:         "v0.0.57"
-monitoring_mcp_version:     "v0.0.57"
-db_migrations_version:      "v0.0.10"
-missions_api_version:       "v0.0.43"
-frontend_version:           "v0.0.90"
+agent_router_api_version:   "v0.1.12"
+agent_hr_api_version:       "v0.0.75"
+agent_ops_api_version:      "v0.0.46"
+agent_missions_api_version: "v0.1.21"
+users_api_version:          "v0.0.49"
+items_api_version:          "v0.0.37"
+competencies_api_version:   "v0.1.27"
+cv_api_version:             "v0.0.102"
+prompts_api_version:        "v0.0.29"
+drive_api_version:          "v0.0.82"
+analytics_mcp_version:         "v0.0.67"
+monitoring_mcp_version:     "v0.0.69"
+db_migrations_version:      "v0.0.19"
+db_init_version:            "v0.1.1"
+missions_api_version:       "v0.0.58"
+frontend_version:           "v0.0.138"
 
 # ── Cloud Run ─────────────────────────────────────────────
-cloudrun_min_instances: 2
-cloudrun_max_instances: 50
+cloudrun_min_instances: 0
+cloudrun_max_instances: 5
 
 # ── AlloyDB ───────────────────────────────────────────────
-alloydb_cpu: 8   # 8 vCPU pour supporter la charge production
+alloydb_cpu: 2   # 2 vCPU (downscale optimisation coûts)
 
 # ── Sécurité / WAF ────────────────────────────────────────
 waf_rate_limit: 10000

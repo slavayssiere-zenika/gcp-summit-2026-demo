@@ -181,7 +181,7 @@ services:
       - PROMPTS_API_URL=http://prompts_api:8000
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
-      - MARKET_MCP_URL=http://market_mcp:8008
+      - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - DRIVE_API_URL=http://drive_api:8006
       - ROOT_PATH=/cv-api
     depends_on:
@@ -298,10 +298,10 @@ services:
     networks:
       - monitoring_net
 
-  market_mcp:
-    build: ./market_mcp
-    container_name: market_mcp
-    hostname: market_mcp
+  analytics_mcp:
+    build: ./analytics_mcp
+    container_name: analytics_mcp
+    hostname: analytics_mcp
     ports:
       - "8008:8008"
     environment:
@@ -310,7 +310,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=market-mcp
+      - OTEL_SERVICE_NAME=analytics-mcp
     networks:
       - monitoring_net
 
@@ -346,7 +346,7 @@ services:
       - AGENT_HR_API_URL=http://agent_hr_api:8080
       - AGENT_OPS_API_URL=http://agent_ops_api:8080
       - AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
-      - MARKET_MCP_URL=http://market_mcp:8008
+      - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/2
       - TRACE_EXPORTER=http
@@ -395,7 +395,7 @@ services:
       - CV_MCP_URL=http://cv_mcp:8000
       - MISSIONS_MCP_URL=http://missions_mcp:8000
       - PROMPTS_API_URL=http://prompts_api:8005
-      - MARKET_MCP_URL=http://market_mcp:8008
+      - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/10
       - TRACE_EXPORTER=http
@@ -436,7 +436,7 @@ services:
       - GEMINI_MODEL=gemini-3.1-flash-lite-preview
       - PROMPTS_API_URL=http://prompts_api:8005
       - DRIVE_MCP_URL=http://drive_mcp:8000
-      - MARKET_MCP_URL=http://market_mcp:8008
+      - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - LOKI_MCP_URL=http://loki_mcp:8080/sse
       - REDIS_URL=redis://redis:6379/11
@@ -471,7 +471,7 @@ services:
       - CV_MCP_URL=http://cv_api:8004
       - USERS_MCP_URL=http://users_api:8001
       - COMPETENCIES_MCP_URL=http://competencies_api:8003
-      - MARKET_MCP_URL=http://market_mcp:8008
+      - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/12
       - TRACE_EXPORTER=http

@@ -1,6 +1,13 @@
+import os
+import traceback
+import asyncio
+import logging
 from fastapi import FastAPI, Response, Request
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import database
+import httpx
+from opentelemetry.propagate import inject
 from prometheus_fastapi_instrumentator import Instrumentator
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -113,7 +120,11 @@ async def get_spec():
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 @app.get("/health")
-async def health(response: Response):
+async def health():
+    return {"status": "healthy"}
+
+@app.get("/ready")
+async def ready(response: Response):
     if await database.check_db_connection():
         return {"status": "healthy"}
     response.status_code = 503
@@ -131,20 +142,9 @@ app.include_router(router)
 app.include_router(public_router)
 app.include_router(protected_router)
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
-
 
 
 async def get_service_token_fallback() -> str:
-    import httpx, os, logging
     logger = logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
@@ -163,16 +163,20 @@ async def get_service_token_fallback() -> str:
                 res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
                 if res.status_code == 200:
                     return res.json().get("access_token", "")
-    except Exception: raise
+    except Exception as e:
+        logging.getLogger(__name__).error(f"[ServiceToken] Impossible d'obtenir un token de service: {e}")
+        raise
     return ""
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
+    _logger = logging.getLogger(__name__)
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        from opentelemetry.propagate import inject
         inject(headers)
-    except Exception: raise
+    except Exception as e:
+        _logger.warning(f"[OTel] Impossible d'injecter les headers de trace: {e}")
+        raise
 
     async with httpx.AsyncClient() as client:
         try:

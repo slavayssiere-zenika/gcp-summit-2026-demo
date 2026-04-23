@@ -6,6 +6,7 @@ import google.auth
 from google.auth.transport.requests import Request
 import base64
 from google import genai
+from logger_config import logger
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration — lue depuis .env puis .antigravity_env
@@ -59,10 +60,10 @@ MISSION_TOPICS = [
 def get_admin_password():
     """Lit le mot de passe admin depuis .antigravity_env ou Secret Manager en fallback."""
     if os.getenv("ADMIN_PASSWORD"):
-        print("  -> Mot de passe admin lu depuis .antigravity_env")
+        logger.info("  -> Mot de passe admin lu depuis .antigravity_env")
         return os.environ["ADMIN_PASSWORD"]
 
-    print("Fetching admin password from Secret Manager...")
+    logger.info("Fetching admin password from Secret Manager...")
     credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     credentials.refresh(Request())
 
@@ -78,7 +79,7 @@ def get_admin_password():
     return base64.b64decode(payload).decode('utf-8')
 
 def authenticate(password):
-    print("Authenticating to users-api...")
+    logger.info("Authenticating to users-api...")
     response = httpx.post(
         f"{DEV_API_URL}/auth/login",
         json={
@@ -92,20 +93,77 @@ def authenticate(password):
     return response.json()["access_token"]
 
 def clear_existing_missions(token):
-    print("Clearing existing missions in the database...")
+    logger.info("Clearing existing missions in the database...")
     with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=20.0) as client:
         res = client.delete("/api/missions/missions")
         if res.status_code in [200, 204]:
-            print("  -> Missions cleared successfully.")
+            logger.info("  -> Missions cleared successfully.")
         elif res.status_code == 404:
-            print("  -> DELETE endpoint not found. Make sure to deploy missions_api first.")
+            logger.warning("  -> DELETE endpoint not found. Make sure to deploy missions_api first.")
         else:
-            print(f"  -> Failed to clear missions: {res.text}")
+            logger.error(f"  -> Failed to clear missions: {res.text}")
+
+import concurrent.futures
+import threading
+
+CACHE_FILE = "reports/fake_profiles/missions_cache.json"
+cache_lock = threading.Lock()
+
+def _load_cache():
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load cache: {e}")
+    return {}
+
+def _save_to_cache(cache):
+    os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, indent=2, ensure_ascii=False)
+
+def _process_single_mission(i, topic, model, client, prompt_template, http_client, cache):
+    logger.info(f"[{i}/{len(MISSION_TOPICS)}] Generating RFP for: {topic}")
+    try:
+        with cache_lock:
+            long_description = cache.get(topic)
+            
+        if long_description:
+            logger.info(f"  -> Using cached content for '{topic}'")
+        else:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt_template.format(topic=topic)
+            )
+            long_description = response.text
+            
+            with cache_lock:
+                cache[topic] = long_description
+                _save_to_cache(cache)
+        
+        logger.info(f"  -> Submitted {len(long_description)} characters to API...")
+        
+        api_response = http_client.post(
+            "/api/missions/missions",
+            data={
+                "title": f"Appel d'offre : {topic}",
+                "description": long_description
+            }
+        )
+        
+        if api_response.status_code == 202:
+            task_id = api_response.json().get("task_id")
+            logger.info(f"  -> Accepted (Task ID: {task_id}). Asynchronous processing started.")
+        else:
+            logger.error(f"  -> API Error: {api_response.status_code} - {api_response.text}")
+    except Exception as e:
+        logger.error(f"  -> Generation failed for '{topic}': {e}")
 
 def generate_missions(token):
     clear_existing_missions(token)
 
-    print(f"Generating fake missions with LLM (2-4 pages per mission)...")
+    logger.info(f"Generating fake missions with LLM (2-4 pages per mission)...")
     # Utilise la GOOGLE_API_KEY depuis .env (Gemini AI Studio)
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -127,41 +185,20 @@ Inclus obligatoirement les sections suivantes :
 
 Le document doit être structuré, professionnel et très exhaustif."""
 
+    cache = _load_cache()
+
     with httpx.Client(base_url=DEV_API_URL, headers={"Authorization": f"Bearer {token}"}, timeout=60.0) as http_client:
-        for i, topic in enumerate(MISSION_TOPICS, 1):
-            print(f"[{i}/{len(MISSION_TOPICS)}] Generating RFP for: {topic}")
-            
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt_template.format(topic=topic)
-                )
-                long_description = response.text
-                
-                print(f"  -> Generated {len(long_description)} characters. Submitting to API...")
-                
-                api_response = http_client.post(
-                    "/api/missions/missions",
-                    data={
-                        "title": f"Appel d'offre : {topic}",
-                        "description": long_description
-                    }
-                )
-                
-                if api_response.status_code == 202:
-                    task_id = api_response.json().get("task_id")
-                    print(f"  -> Accepted (Task ID: {task_id}). Waiting for Gemini backend processing...")
-                    time.sleep(5)  # Let the backend process it
-                else:
-                    print(f"  -> API Error: {api_response.status_code} - {api_response.text}")
-            except Exception as e:
-                print(f"  -> Generation failed for '{topic}': {e}")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = []
+            for i, topic in enumerate(MISSION_TOPICS, 1):
+                futures.append(executor.submit(_process_single_mission, i, topic, model, client, prompt_template, http_client, cache))
+            concurrent.futures.wait(futures)
                 
 if __name__ == "__main__":
     try:
         admin_password = get_admin_password()
         token = authenticate(admin_password)
         generate_missions(token)
-        print("✅ Finished generating long-form fake missions.")
+        logger.info("✅ Finished generating long-form fake missions.")
     except Exception as e:
-        print(f"❌ Script failed: {e}")
+        logger.error(f"❌ Script failed: {e}")

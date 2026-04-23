@@ -60,6 +60,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 
 - **GET** `/metrics` : Metrics
 - **GET** `/health` : Health
+- **GET** `/ready` : Ready
 - **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
 - **GET** `/` : List Competencies
@@ -89,7 +90,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/analytics/agency-coverage` : Get Agency Competency Coverage
 - **GET** `/analytics/skill-gaps` : Get Skill Gaps
 - **GET** `/analytics/similar-consultants/{user_id}` : Get Similar Consultants
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp

@@ -9,7 +9,7 @@ env_pattern = re.compile(r'os\.(?:getenv|environ\.get|environ\[)\s*[\'"]([A-Z0-9
 # 1. Parse PY files
 dirs_to_check = [
     "users_api", "items_api", "competencies_api", "cv_api", "missions_api", 
-    "prompts_api", "drive_api", "market_mcp", 
+    "prompts_api", "drive_api", "analytics_mcp", 
     "agent_router_api", "agent_hr_api", "agent_ops_api"
 ]
 
@@ -38,7 +38,7 @@ for d in dirs_to_check:
     tf_file = f"cr_{d.replace('_api', '')}.tf"
     tf_path = os.path.join(tf_dir, tf_file)
     if not os.path.exists(tf_path):
-        # drive is cr_drive.tf, market_mcp is cr_market.tf or market_mcp.tf?
+        # drive is cr_drive.tf, analytics_mcp is cr_market.tf or analytics_mcp.tf?
         # let's try direct matches
         pass
     

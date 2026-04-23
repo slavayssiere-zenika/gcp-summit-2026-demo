@@ -20,7 +20,7 @@ def extract_env_vars_for_dir(directory):
 
 dirs_to_check = [
     "users_api", "items_api", "competencies_api", "cv_api", "missions_api", 
-    "prompts_api", "drive_api", "market_mcp", 
+    "prompts_api", "drive_api", "analytics_mcp", 
     "agent_router_api", "agent_hr_api", "agent_ops_api"
 ]
 

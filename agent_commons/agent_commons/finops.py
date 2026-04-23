@@ -7,9 +7,9 @@ standardises that behaviour for all agents.
 
 Key export:
   - log_tokens_to_bq(session_id, action, model, input_tokens, output_tokens,
-                     query, market_url, auth_header)
+                     query, analytics_url, auth_header)
       Fire-and-forget async task that logs AI consumption to BigQuery via the
-      market_mcp ``log_ai_consumption`` tool.  Retries up to 3 times with
+      analytics_mcp ``log_ai_consumption`` tool.  Retries up to 3 times with
       exponential backoff via tenacity.
 """
 
@@ -39,7 +39,7 @@ def log_tokens_to_bq(
     input_tokens: int,
     output_tokens: int,
     query: str,
-    market_url: str | None = None,
+    analytics_url: str | None = None,
     auth_header: str | None = None,
 ) -> None:
     """Schedule a fire-and-forget async task to log AI consumption to BigQuery.
@@ -55,13 +55,13 @@ def log_tokens_to_bq(
         input_tokens:  Total prompt token count for the request.
         output_tokens: Total response token count for the request.
         query:         First 100 chars of the user query (for BigQuery metadata).
-        market_url:    Base URL of market_mcp (defaults to MARKET_MCP_URL env var).
+        analytics_url: Base URL of analytics_mcp (defaults to ANALYTICS_MCP_URL env var).
         auth_header:   ``Authorization: Bearer <token>`` string for OTel propagation.
     """
     if input_tokens <= 0 and output_tokens <= 0:
         return
 
-    _market_url = (market_url or os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")).rstrip("/")
+    _analytics_url = (analytics_url or os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")).rstrip("/")
     user_email = session_id if "@" in str(session_id) else f"{session_id}@zenika.com"
 
     _headers: dict[str, str] = {}
@@ -89,7 +89,7 @@ def log_tokens_to_bq(
     )
     async def _log_with_retry() -> None:
         async with httpx.AsyncClient(timeout=10.0, headers=_headers) as c:
-            await c.post(f"{_market_url}/mcp/call", json=_payload)
+            await c.post(f"{_analytics_url}/mcp/call", json=_payload)
 
     async def _task() -> None:
         try:

@@ -40,4 +40,4 @@ Toutes les étapes d'audit expertes définies ci-dessous sont **BLOQUANTES**. En
 Avant de donner la commande complète `deploy` pour la PROD, donne un résumé des *Smoke Tests* attendus post-MEP :
 - Cible API à faire pinger en healthcheck direct et URLs Cloud Run.
 - Requête/Commande à utiliser pour invalider le cache Redis si la BDD a subit de grosses altérations.
-- Vérification que la télémétrie (`test_zero_trust` / traces) remonte bien dans `market_mcp`/Cloud Logging.
+- Vérification que la télémétrie (`test_zero_trust` / traces) remonte bien dans `analytics_mcp`/Cloud Logging.

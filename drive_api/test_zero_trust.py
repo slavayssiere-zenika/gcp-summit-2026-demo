@@ -4,6 +4,7 @@ from fastapi.routing import APIRoute
 # Liste blanche des URL publiques autorisées sans authentification JWT
 PUBLIC_WHITELIST = {
     "/health",
+    "/ready",
     "/metrics",
     "/docs",
     "/openapi.json",

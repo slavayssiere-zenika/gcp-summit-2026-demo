@@ -1,2 +1,2 @@
 GCLOUD_BIN=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin/gcloud
-ADMIN_PASSWORD='snMwtAVzffG1tH!a'
+# ADMIN_PASSWORD supprimé — doit être récupéré dynamiquement via gcloud secrets

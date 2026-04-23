@@ -1,10 +1,17 @@
+import base64 as _b64
+import os as _os
+import json as _json
+import google.auth
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi.responses import JSONResponse
+from google.cloud import pubsub_v1
+from google.api_core.exceptions import DeadlineExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, func
-from src.schemas import FolderCreate, FolderResponse, StatusResponse, FileStateResponse, FileUpdate
+from src.schemas import FolderCreate, FolderResponse, StatusResponse, FileStateResponse, FileUpdate, FolderStats
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
-from src.google_auth import get_google_access_token
+from src.google_auth import get_google_access_token, get_drive_service
 from database import get_db
 import re
 import asyncio
@@ -18,11 +25,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# For Admin endpoints we should optionally check JWT. In an internal protected network, UI uses users_api gateway.
-# For simplicity, we just protect it minimally or assume the M2M or Gateway ensures roles.
-# Actually, the Frontend calls these. Let's add basic token validation if we want, or proxy it through a unified gateway.
-# Here, we don't import `users_api` `verify_jwt` because it's a standalone service, but we could decode the auth header.
-from src.auth import verify_jwt
 router = APIRouter(prefix="", tags=["Drive Admin"], dependencies=[Depends(verify_jwt)])
 
 # Basic pseudo JWT role-check stub. Since frontend calls this via Nginx /api/drive-api
@@ -55,7 +57,6 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
     # Récupération automatique du nom du dossier Drive (nomenclature Zenika "Prénom Nom")
     resolved_folder_name = folder.folder_name  # Fallback sur la valeur manuelle si fournie
     try:
-        from src.google_auth import get_drive_service
         drive = get_drive_service()
         folder_meta = drive.files().get(
             fileId=raw_id,
@@ -85,9 +86,6 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
 async def list_folders(db: AsyncSession = Depends(get_db)):
     folders = (await db.execute(select(DriveFolder))).scalars().all()
     
-    from sqlalchemy import func
-    from src.schemas import FolderStats
-    from src.models import DriveSyncStatus
     
     stats_query = select(
         DriveSyncState.folder_id,
@@ -124,7 +122,6 @@ async def list_folders(db: AsyncSession = Depends(get_db)):
 
 @router.post("/folders/reset-sync")
 async def reset_folder_sync(tag: str | None = None, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import update
     stmt = update(DriveFolder).values(is_initial_sync_done=False)
     if tag:
         stmt = stmt.where(DriveFolder.tag.ilike(f"%{tag}%"))
@@ -160,7 +157,6 @@ async def delete_folder(folder_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/status", response_model=StatusResponse)
 async def get_status(db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import func
     total = (await db.execute(select(func.count()).select_from(DriveSyncState))).scalar()
     
     pending_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.PENDING).subquery())
@@ -330,13 +326,11 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
     
     # 1. Verification synchrone des droits d'accès
     try:
-        from src.google_auth import get_drive_service
         drive = get_drive_service()
         # Fast API call to verify the OAuth binding hasn't been lost or deleted
         await asyncio.to_thread(lambda: drive.about().get(fields="user").execute())
     except Exception as e:
         logger.error(f"[DRIVE_API_AUTH_LOSS] Le Service Account a perdu l'accès au Drive: {e}")
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=403,
             content={"status": "error", "message": "SERVICE_ACCOUNT_ACCESS_LOSS", "details": str(e)}
@@ -380,8 +374,6 @@ async def get_google_token():
 
 # ── DLQ (Dead Letter Queue) Management ───────────────────────────────────────
 
-import os as _os
-import json as _json
 
 def _get_dlq_subscription_path() -> str:
     """Retourne le chemin complet de la subscription DLQ Pub/Sub."""
@@ -389,7 +381,6 @@ def _get_dlq_subscription_path() -> str:
     workspace = _os.getenv("WORKSPACE", "dev")
     sub_name = _os.getenv("PUBSUB_DLQ_SUBSCRIPTION", f"cv-import-events-dlq-sub-{workspace}")
     if not project_id:
-        import google.auth
         _, project_id = google.auth.default()
     return f"projects/{project_id}/subscriptions/{sub_name}"
 
@@ -404,9 +395,6 @@ async def get_dlq_status(db: AsyncSession = Depends(get_db)):
     pour permettre la suppression individuelle.
     """
     try:
-        from google.cloud import pubsub_v1
-        import base64 as _b64
-
         sub_path = _get_dlq_subscription_path()
         subscriber = pubsub_v1.SubscriberClient()
 
@@ -421,7 +409,6 @@ async def get_dlq_status(db: AsyncSession = Depends(get_db)):
             )
             messages = response.received_messages
         except Exception as e:
-            from google.api_core.exceptions import DeadlineExceeded
             if isinstance(e, DeadlineExceeded) or "504" in str(e) or "Deadline" in str(e):
                 return {
                     "subscription": sub_path.split("/")[-1],
@@ -532,9 +519,6 @@ async def delete_dlq_message(
         raise HTTPException(status_code=422, detail="ack_id, google_file_id ou pubsub_message_id requis")
 
     try:
-        from google.cloud import pubsub_v1
-        import base64 as _b64
-
         sub_path = _get_dlq_subscription_path()
         subscriber = pubsub_v1.SubscriberClient()
 
@@ -652,9 +636,6 @@ async def replay_dlq(db: AsyncSession = Depends(get_db)):
     Idempotent : si un google_file_id n'existe pas en DB, il est ignoré.
     """
     try:
-        from google.cloud import pubsub_v1
-        import base64 as _b64
-
         sub_path = _get_dlq_subscription_path()
         subscriber = pubsub_v1.SubscriberClient()
 

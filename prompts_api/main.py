@@ -67,7 +67,11 @@ Instrumentator().instrument(app).expose(app)
 # 6. Include Router
 
 @app.get("/health")
-async def health_check(response: Response):
+async def health_check():
+    return {"status": "healthy"}
+
+@app.get("/ready")
+async def ready(response: Response):
     if await database.check_db_connection():
         return {"status": "healthy"}
     response.status_code = 503

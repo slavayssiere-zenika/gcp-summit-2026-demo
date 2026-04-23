@@ -76,15 +76,15 @@ resource "google_bigquery_table" "ai_usage" {
 EOF
 }
 
-# Permissions pour le service market_mcp
-resource "google_bigquery_dataset_iam_member" "market_editor" {
+# Permissions pour le service analytics_mcp
+resource "google_bigquery_dataset_iam_member" "analytics_editor" {
   dataset_id = google_bigquery_dataset.finops.dataset_id
   role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:${google_service_account.market_sa.email}"
+  member     = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
 
-resource "google_project_iam_member" "market_job_user" {
+resource "google_project_iam_member" "analytics_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
-  member  = "serviceAccount:${google_service_account.market_sa.email}"
+  member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }

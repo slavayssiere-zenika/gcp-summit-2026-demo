@@ -100,36 +100,36 @@ def test_analyze_cv_uses_jwt_sub_as_user_caller():
 
 
 # ---------------------------------------------------------------------------
-# 3. Test structurel — market_mcp : log_ai_consumption reçoit user_email
+# 3. Test structurel — analytics_mcp : log_ai_consumption reçoit user_email
 # ---------------------------------------------------------------------------
 
-def test_market_mcp_log_ai_consumption_expects_user_email():
+def test_analytics_mcp_log_ai_consumption_expects_user_email():
     """
-    Test structurel sur market_mcp : la fonction log_ai_consumption doit accepter
+    Test structurel sur analytics_mcp : la fonction log_ai_consumption doit accepter
     un paramètre user_email (jamais hardcodé à 'user_1' dans l'outil MCP).
     """
     import sys
-    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "market_mcp"))
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "analytics_mcp"))
 
     try:
         import importlib
         mcp_spec = importlib.util.spec_from_file_location(
             "mcp_server",
-            str(pathlib.Path(__file__).parent.parent / "market_mcp" / "mcp_server.py"),
+            str(pathlib.Path(__file__).parent.parent / "analytics_mcp" / "mcp_server.py"),
         )
         mcp_module = importlib.util.module_from_spec(mcp_spec)
 
         # Lire le source sans l'exécuter (évite les effets de bord)
-        mcp_source = (pathlib.Path(__file__).parent.parent / "market_mcp" / "mcp_server.py").read_text()
+        mcp_source = (pathlib.Path(__file__).parent.parent / "analytics_mcp" / "mcp_server.py").read_text()
 
         # log_ai_consumption ne doit jamais hardcoder user_1
         assert '"user_1"' not in mcp_source.split("def log_ai_consumption")[1].split("def ")[0] \
             if "def log_ai_consumption" in mcp_source else True, \
-            "REGRESSION: 'user_1' hardcodé dans log_ai_consumption tool de market_mcp"
+            "REGRESSION: 'user_1' hardcodé dans log_ai_consumption tool de analytics_mcp"
 
         # Le tool doit accepter user_email comme paramètre
         assert "user_email" in mcp_source, \
-            "ANOMALIE: 'user_email' introuvable dans market_mcp/mcp_server.py"
+            "ANOMALIE: 'user_email' introuvable dans analytics_mcp/mcp_server.py"
 
     except Exception:
-        pytest.skip("market_mcp non accessible depuis cv_api — skip structurel")
+        pytest.skip("analytics_mcp non accessible depuis cv_api — skip structurel")

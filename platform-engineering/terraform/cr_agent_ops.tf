@@ -85,8 +85,8 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = "http://api.internal.zenika/api/prompts/"
       }
       env {
-        name  = "MARKET_MCP_URL"
-        value = "http://api.internal.zenika/api/market/"
+        name  = "ANALYTICS_MCP_URL"
+        value = "http://api.internal.zenika/api/analytics/"
       }
       env {
         name  = "MONITORING_MCP_URL"
@@ -256,7 +256,7 @@ resource "google_project_iam_member" "agent_ops_logging_viewer" {
 # ==============================================================
 # Monitoring Custom Service & SLOs
 # Latence cible : 30 000ms (requêtes ops avec accès Drive MCP,
-# Market MCP, Loki MCP + raisonnement LLM)
+# Analytics MCP, Loki MCP + raisonnement LLM)
 # Disponibilité : 99.5% sur 30 jours glissants
 # ==============================================================
 resource "google_monitoring_custom_service" "agent_ops_api_svc" {
@@ -309,7 +309,7 @@ resource "google_monitoring_slo" "agent_ops_api_latency" {
         "resource.label.\"service_name\"=\"${google_cloud_run_v2_service.agent_ops_api.name}\""
       ])
       range {
-        max = 30.0 # 30 000ms — Drive/Market/Loki MCP + raisonnement LLM Ops
+        max = 30.0 # 30 000ms — Drive/Analytics/Loki MCP + raisonnement LLM Ops
       }
     }
   }

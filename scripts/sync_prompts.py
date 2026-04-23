@@ -34,9 +34,9 @@ CACHE_INVALIDATION_MAP = {
 
 async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
     base_url = api_url.rstrip("/")
-    # Auth is handled at the API gateway level — route is /api/login (not /auth/login directly)
-    base_domain = base_url.replace('/api/prompts', '')
-    auth_url = f"{base_domain}/api/login"
+    base_domain = base_url.replace('/api/prompts', '').replace('/prompts', '')
+    # Handle dev API gateway vs frontend proxy
+    auth_url = f"{base_domain}/auth/login" if "api.dev" in base_domain or "dev.zenika" in base_domain else f"{base_domain}/api/auth/login"
     
     logger.info(f"{YELLOW}[*] Authenticating as {admin_email}...{RESET}")
     

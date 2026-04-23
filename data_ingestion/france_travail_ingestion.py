@@ -21,7 +21,7 @@ if not CLIENT_ID or not CLIENT_SECRET:
 
 # GCP / BigQuery
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "slavayssiere-sandbox-462015") # Adapt if needed
-DATASET_ID = "market_data"
+DATASET_ID = "analytics_data"
 TABLE_ID = "job_offers"
 
 # Zenika Categories to search

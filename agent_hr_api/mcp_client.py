@@ -144,11 +144,11 @@ competencies_mcp_client: Optional[MCPHttpClient] = None
 cv_mcp_client: Optional[MCPHttpClient] = None
 drive_mcp_client: Optional[MCPHttpClient] = None
 missions_mcp_client: Optional[MCPHttpClient] = None
-market_mcp_client: Optional[MCPHttpClient] = None
+analytics_mcp_client: Optional[MCPHttpClient] = None
 _mcp_lock = threading.Lock()
 
 def init_mcp_clients():
-    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, missions_mcp_client, market_mcp_client, loki_mcp_client
+    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client, loki_mcp_client
     import os
     
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))
@@ -157,7 +157,7 @@ def init_mcp_clients():
     cv_url = os.getenv("CV_MCP_URL", os.getenv("CV_API_URL", "http://cv_mcp:8000"))
     drive_url = os.getenv("DRIVE_MCP_URL", "http://drive_mcp:8000")
     missions_url = os.getenv("MISSIONS_MCP_URL", os.getenv("MISSIONS_API_URL", "http://missions_mcp:8009"))
-    market_url = os.getenv("MARKET_MCP_URL", "http://market_mcp:8008")
+    analytics_url = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
 
     with _mcp_lock:
         if users_mcp_client is None:
@@ -172,8 +172,8 @@ def init_mcp_clients():
             drive_mcp_client = MCPHttpClient(drive_url)
         if missions_mcp_client is None:
             missions_mcp_client = MCPHttpClient(missions_url)
-        if market_mcp_client is None:
-            market_mcp_client = MCPHttpClient(market_url)
+        if analytics_mcp_client is None:
+            analytics_mcp_client = MCPHttpClient(analytics_url)
 
 async def get_users_mcp() -> MCPHttpClient:
     init_mcp_clients()
@@ -196,9 +196,9 @@ async def get_drive_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return drive_mcp_client
 
-async def get_market_mcp() -> MCPHttpClient:
-    init_mcp_clients()
-    return market_mcp_client
+async def get_analytics_mcp() -> MCPHttpClient:
+    await init_mcp_clients()
+    return analytics_mcp_client
 
 async def get_missions_mcp() -> MCPHttpClient:
     init_mcp_clients()

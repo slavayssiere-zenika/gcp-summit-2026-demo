@@ -41,7 +41,7 @@ def local_versions():
     comps = [
         "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
         "users_api", "items_api", "competencies_api", "cv_api", "prompts_api",
-        "drive_api", "missions_api", "market_mcp", "monitoring_mcp", "db_migrations", "db_init", "frontend",
+        "drive_api", "missions_api", "analytics_mcp", "monitoring_mcp", "db_migrations", "db_init", "frontend",
     ]
     return {f"{c}_version": "v0.0.1" for c in comps}
 
@@ -49,7 +49,7 @@ def local_versions():
 @pytest.fixture
 def tmp_project(tmp_path):
     """Arborescence minimale pour simuler discover_versions() en mode fichier."""
-    for svc in ["agent_router_api", "users_api", "market_mcp"]:
+    for svc in ["agent_router_api", "users_api", "analytics_mcp"]:
         svc_dir = tmp_path / svc
         svc_dir.mkdir()
         (svc_dir / "VERSION").write_text(f"v1.2.3")
@@ -130,7 +130,7 @@ class TestServiceImageMap:
 
     def test_known_services_present(self):
         """Les services critiques doivent être dans la map."""
-        for expected in ("agent_router", "agent_hr", "users", "cv", "missions", "market"):
+        for expected in ("agent_router", "agent_hr", "users", "cv", "missions", "analytics"):
             assert expected in me.SERVICE_IMAGE_MAP, (
                 f"Service '{expected}' absent de SERVICE_IMAGE_MAP."
             )
@@ -140,7 +140,7 @@ class TestServiceImageMap:
         known_components = {
             "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
             "users_api", "items_api", "competencies_api", "cv_api", "prompts_api",
-            "drive_api", "missions_api", "market_mcp", "monitoring_mcp", "db_migrations", "db_init", "frontend",
+            "drive_api", "missions_api", "analytics_mcp", "monitoring_mcp", "db_migrations", "db_init", "frontend",
         }
         for tf_name, docker_name in me.SERVICE_IMAGE_MAP.items():
             assert docker_name in known_components, (
@@ -196,13 +196,13 @@ class TestBuildImageUrls:
         for url in images.values():
             assert "://" not in url.split("://", 1)[-1], f"Double slash dans '{url}'."
 
-    def test_market_mcp_mapping(self, local_versions):
-        """market_mcp (docker) → image_market (TF) : mapping non trivial."""
-        versions = {**local_versions, "market_mcp_version": "v1.0.0"}
+    def test_analytics_mcp_mapping(self, local_versions):
+        """analytics_mcp (docker) → image_analytics (TF) : mapping non trivial."""
+        versions = {**local_versions, "analytics_mcp_version": "v1.0.0"}
         images = me.build_image_urls(REGISTRY, versions)
-        assert "image_market" in images
-        assert "market_mcp" in images["image_market"]
-        assert images["image_market"].endswith(":v1.0.0")
+        assert "image_analytics" in images
+        assert "analytics_mcp" in images["image_analytics"]
+        assert images["image_analytics"].endswith(":v1.0.0")
 
     def test_db_migrations_mapping(self, local_versions):
         """db_migrations est à la fois la clé TF et le nom Docker."""
@@ -222,7 +222,7 @@ class TestDiscoverVersions:
         versions = me.discover_versions()
         expected_keys = [
             "agent_router_api_version", "agent_hr_api_version", "users_api_version",
-            "market_mcp_version", "monitoring_mcp_version", "db_migrations_version", "db_init_version", "frontend_version",
+            "analytics_mcp_version", "monitoring_mcp_version", "db_migrations_version", "db_init_version", "frontend_version",
         ]
         for key in expected_keys:
             assert key in versions, f"Clé '{key}' absente du résultat de discover_versions()."

@@ -27,6 +27,33 @@ def elapsed() -> str:
     m, s = divmod(rem, 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
 
+def generate_antigravity_error_report(task_context: str, error_message: str, tags: list = None):
+    """Génère ou met à jour un rapport d'erreur Markdown pour l'Agent Antigravity."""
+    report_file = os.path.join(os.path.dirname(__file__), "antigravity_sanity_error.md")
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+    tags_str = ", ".join(tags) if tags else "sanity-check"
+    
+    is_new = not os.path.exists(report_file)
+    with open(report_file, "a", encoding="utf-8") as f:
+        if is_new:
+            f.write("# 🚨 Rapport d'Erreur Sanity Check (pour Antigravity)\n\n")
+            f.write("> **Directives pour l'Agent Antigravity :**\n")
+            f.write("> Analyse ces erreurs, cherche les causes probables et propose une réparation.\n")
+            f.write("> Une fois résolues, utilise la CLI Antigravity Memory pour logguer la solution.\n\n")
+        
+        f.write(f"## Erreur interceptée à {timestamp}\n\n")
+        f.write(f"- **Contexte** : {task_context}\n")
+        f.write(f"- **Tags** : `{tags_str}`\n")
+        f.write(f"- **Détails de l'erreur** :\n\n")
+        f.write("```text\n")
+        f.write(f"{error_message}\n")
+        f.write("```\n\n")
+        f.write("---\n\n")
+        
+    # On utilise print car logger n'est défini que plus bas
+    print(f"  [!] Rapport d'erreur Antigravity généré/mis à jour : {report_file}")
+
+
 def discover_versions():
     """Scans for VERSION files in component directories and returns a mapping."""
     versions = {}
@@ -34,7 +61,7 @@ def discover_versions():
     components = [
         "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
         "users_api", "items_api", "competencies_api",
-        "cv_api", "prompts_api", "drive_api", "missions_api", "market_mcp", "monitoring_mcp",
+        "cv_api", "prompts_api", "drive_api", "missions_api", "analytics_mcp", "monitoring_mcp",
         "db_migrations", "db_init", "frontend"
     ]
     
@@ -69,7 +96,7 @@ SERVICE_IMAGE_MAP = {
     "prompts":        "prompts_api",
     "db_migrations":  "db_migrations",
     "db_init":        "db_init",        # Image dédiée au Cloud Run Job d'initialisation AlloyDB
-    "market":         "market_mcp",
+    "analytics":         "analytics_mcp",
     "monitoring":     "monitoring_mcp",
     "agent_router":   "agent_router_api",
     "agent_hr":       "agent_hr_api",
@@ -302,7 +329,7 @@ def build_importable_resources_map(env, project_id, region, extra_domains=None):
         "google_cloud_run_v2_service.agent_ops_api":      f"{cr_base}/agent-ops-api-{env}",
         "google_cloud_run_v2_service.agent_router_api":   f"{cr_base}/agent-router-api-{env}",
         "google_cloud_run_v2_service.agent_missions_api": f"{cr_base}/agent-missions-api-{env}",
-        "google_cloud_run_v2_service.market_mcp":         f"{cr_base}/market-mcp-{env}",
+        "google_cloud_run_v2_service.analytics_mcp":         f"{cr_base}/analytics-mcp-{env}",
         "google_cloud_run_v2_service.monitoring_mcp":     f"{cr_base}/monitoring-mcp-{env}",
         "google_cloud_run_v2_service.prompts_api":      f"{cr_base}/prompts-api-{env}",
         "google_cloud_run_v2_service.users_api":        f"{cr_base}/users-api-{env}",
@@ -320,7 +347,7 @@ def build_importable_resources_map(env, project_id, region, extra_domains=None):
         "google_monitoring_custom_service.cv_api_svc":           f"{mon_base}/cv-api-service-{env}",
         "google_monitoring_custom_service.drive_api_svc":        f"{mon_base}/drive-api-service-{env}",
         "google_monitoring_custom_service.items_api_svc":        f"{mon_base}/items-api-service-{env}",
-        "google_monitoring_custom_service.market_mcp_svc":       f"{mon_base}/market-mcp-service-{env}",
+        "google_monitoring_custom_service.analytics_mcp_svc":       f"{mon_base}/analytics-mcp-service-{env}",
         "google_monitoring_custom_service.monitoring_mcp_svc":   f"{mon_base}/monitoring-mcp-service-{env}",
         "google_monitoring_custom_service.missions_api_svc":     f"{mon_base}/missions-api-service-{env}",
         "google_monitoring_custom_service.prompts_api_svc":      f"{mon_base}/prompts-api-service-{env}",
@@ -823,11 +850,17 @@ def deploy(env, base_domain, project_id, config, force=False):
                     if resp_front.status == 200:
                         print(f"  [+] Frontend loaded OK (HTTP 200)")
                     else:
-                        print(f"  [-] Frontend FAIL (HTTP {resp_front.status})")
+                        err_msg = f"Frontend FAIL (HTTP {resp_front.status})"
+                        print(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", f"HTTP_{resp_front.status}"])
                 except urllib.error.HTTPError as e:
-                    print(f"  [-] Frontend FAIL (HTTP {e.code})")
+                    err_msg = f"Frontend FAIL (HTTP {e.code})"
+                    print(f"  [-] {err_msg}")
+                    generate_antigravity_error_report("Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", f"HTTP_{e.code}"])
                 except Exception as e:
-                    print(f"  [-] Frontend FAIL ({type(e).__name__}: {e})")
+                    err_msg = f"Frontend FAIL ({type(e).__name__}: {e})"
+                    print(f"  [-] {err_msg}")
+                    generate_antigravity_error_report("Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", "exception"])
                 
                 # --- CHECK 4: API LOGIN ---
                 print(f"\n[*] Check 4/5: Testing Web API login with seeded admin user (Waiting for IAM Sync up to 8 mins)...")
@@ -905,6 +938,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     p_req = urllib.request.Request(upsert_url, data=p_data, headers=headers, method=http_method)
                                     
                                     seeded = False
+                                    last_error_msg = ""
                                     for attempt in range(8):
                                         try:
                                             p_resp = urllib.request.urlopen(p_req, timeout=15, context=ctx_to_use)
@@ -913,19 +947,24 @@ def deploy(env, base_domain, project_id, config, force=False):
                                                 seeded = True
                                                 break
                                             else:
-                                                print(f"  [-] Failed to seed {p_key} (HTTP {p_resp.status}). Retrying... (Attempt {attempt+1}/8)")
+                                                last_error_msg = f"HTTP {p_resp.status}"
+                                                print(f"  [-] Failed to seed {p_key} ({last_error_msg}). Retrying... (Attempt {attempt+1}/8)")
                                         except urllib.error.HTTPError as e:
                                             if e.code >= 500:
                                                 print(f"  [-] API Server Error {e.code} for {p_key} (Possible IAM propagation delay). Retrying in 15s... (Attempt {attempt+1}/8)")
                                             else:
-                                                print(f"  [-] Error seeding {p_key}: HTTP {e.code}. Retrying... (Attempt {attempt+1}/8)")
+                                                last_error_msg = f"HTTP {e.code}"
+                                                print(f"  [-] Error seeding {p_key}: {last_error_msg}. Retrying... (Attempt {attempt+1}/8)")
                                         except Exception as e:
-                                            print(f"  [-] Error seeding {p_key} ({type(e).__name__}): {e}. Retrying... (Attempt {attempt+1}/8)")
+                                            last_error_msg = f"{type(e).__name__}: {e}"
+                                            print(f"  [-] Error seeding {p_key} ({last_error_msg}). Retrying... (Attempt {attempt+1}/8)")
                                         
                                         time.sleep(15)
 
                                     if not seeded:
-                                        print(f"  [!] Failed to seed {p_key} after all attempts.")
+                                        err_msg = f"Failed to seed {p_key} after all attempts. Last error: {last_error_msg}"
+                                        print(f"  [!] {err_msg}")
+                                        generate_antigravity_error_report(f"Sanity Check 4.5 : Seeding Prompts ({p_key})", err_msg, ["prompts_api", "sanity-check"])
                             break
                         else:
                             print(f"[-] Sanity Test FAIL: Login returned {response.status}")
@@ -946,12 +985,16 @@ def deploy(env, base_domain, project_id, config, force=False):
                                 print(f"  [-] 403 GCP Infrastructure (IAM not yet propagated). Retrying in 30s... (Attempt {attempt+1}/16)")
                                 time.sleep(30)
                             else:
-                                print(f"[-] Sanity Test FAIL: HTTP 403 (App-level) during login. (Msg: {msg})")
+                                err_msg = f"HTTP 403 (App-level) during login. (Msg: {msg})"
+                                print(f"[-] Sanity Test FAIL: {err_msg}")
+                                generate_antigravity_error_report("Sanity Check 4/5 : API Login", err_msg, ["users_api", "auth", "sanity-check", "HTTP_403"])
                                 break
                         else:
                             # Erreur applicative définitive (400, 401, 422...)
                             msg = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else 'N/A'
-                            print(f"[-] Sanity Test FAIL: HTTP {e.code} during login via POST /auth/login. (Msg: {msg})")
+                            err_msg = f"HTTP {e.code} during login via POST /auth/login. (Msg: {msg})"
+                            print(f"[-] Sanity Test FAIL: {err_msg}")
+                            generate_antigravity_error_report("Sanity Check 4/5 : API Login", err_msg, ["users_api", "auth", "sanity-check", f"HTTP_{e.code}"])
                             break
                     except Exception as e:
                         print(f"  [-] Unexpected error Exception request: {e}. Retrying in 30s... (Attempt {attempt+1}/16)")
@@ -968,13 +1011,15 @@ def deploy(env, base_domain, project_id, config, force=False):
                     "/api/agent-hr/health",        # agent_hr_api
                     "/api/agent-ops/health",       # agent_ops_api
                     "/api/agent-missions/health",  # agent_missions_api ← NEW
-                    "/api/users/health",           # users_api
-                    "/api/items/health",           # items_api
-                    "/api/prompts/health",         # prompts_api
-                    "/api/competencies/health",    # competencies_api
-                    "/api/cv/health",              # cv_api
-                    "/api/drive/health",           # drive_api
-                    "/api/missions/health"         # missions_api
+                    "/api/users/ready",            # users_api
+                    "/api/items/ready",            # items_api
+                    "/api/prompts/ready",          # prompts_api
+                    "/api/competencies/ready",     # competencies_api
+                    "/api/cv/ready",               # cv_api
+                    "/api/drive/ready",            # drive_api
+                    "/api/missions/ready",         # missions_api
+                    "/api/analytics/ready",           # analytics_mcp (Deep readiness check)
+                    "/monitoring-mcp/health"       # monitoring_mcp
                 ]
                 
                 def check_route(route):
@@ -987,9 +1032,13 @@ def deploy(env, base_domain, project_id, config, force=False):
                         if e.code < 500:
                             return f"  [+] {route:<15} -> OK (HTTP {e.code} - App Responded)"
                         else:
-                            return f"  [-] {route:<15} -> FAIL (HTTP {e.code} Server/Proxy Error)"
+                            err_msg = f"FAIL (HTTP {e.code} Server/Proxy Error) sur {route}"
+                            generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
+                            return f"  [-] {route:<15} -> {err_msg}"
                     except Exception as e:
-                        return f"  [-] {route:<15} -> FAIL ({type(e).__name__}: {e})"
+                        err_msg = f"FAIL ({type(e).__name__}: {e}) sur {route}"
+                        generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", "exception"])
+                        return f"  [-] {route:<15} -> {err_msg}"
 
                 with ThreadPoolExecutor(max_workers=5) as executor:
                     futures = {executor.submit(check_route, route): route for route in api_routes}
