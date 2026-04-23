@@ -23,7 +23,7 @@ echo "Modules détectés : ${apis[*]}"
 
 for api in "${apis[@]}"; do
     echo "Lancement des tests pour $api..."
-    (cd "$api" && OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none OTEL_LOGS_EXPORTER=none SECRET_KEY="testsecret" PYTHONPATH=..:. ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1) &
+    (cd "$api" && OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none OTEL_LOGS_EXPORTER=none SECRET_KEY="testsecret" PYTHONPATH=..:. python3 -m pytest --cov=. --cov-report=json > pytest.log 2>&1) &
     pids+=("$api:$!")
 done
 

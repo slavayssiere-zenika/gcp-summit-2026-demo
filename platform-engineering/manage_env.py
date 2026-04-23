@@ -201,46 +201,9 @@ def resource_exists_in_gcp(resource_type, name, project_id):
         return res.returncode == 0
     return False
 
-def get_gemini_api_key(project_id: str) -> str:
-    """
-    Résout la clé API Gemini depuis GCP Secret Manager uniquement.
-
-    La clé n'est jamais lue depuis une variable d'environnement : elle doit avoir été
-    stockée lors d'un premier déploiement manuel via Secret Manager (gcloud ou console).
-    Si le secret est absent ou vide, Terraform ne crée pas de nouvelle version (count=0).
-    """
-    logger.info("[*] Lecture de la clé Gemini depuis Secret Manager (gemini-api-key)...")
-    try:
-        res = subprocess.run(
-            [
-                "gcloud", "secrets", "versions", "access", "latest",
-                "--secret=gemini-api-key",
-                f"--project={project_id}",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            logger.info("[+] Clé Gemini résolue depuis Secret Manager.")
-            return res.stdout.strip()
-        else:
-            logger.warning(
-                "[!] Secret 'gemini-api-key' introuvable ou vide dans Secret Manager. "
-                "Terraform ne mettra pas à jour la version du secret (var.gemini_api_key vide)."
-            )
-    except subprocess.TimeoutExpired:
-        logger.warning("[!] Timeout lors de la lecture du secret Gemini depuis Secret Manager.")
-    except Exception as e:
-        logger.warning(f"[!] Erreur lors de la lecture du secret Gemini : {e}")
-
-    return ""
-
-
 def get_tf_args(project_id: str = "slavayssiere-sandbox-462015") -> list:
     """Retourne les arguments -var supplémentaires pour terraform apply/plan/import."""
-    api_key = get_gemini_api_key(project_id)
-    return [f"-var=gemini_api_key={api_key}"] if api_key else []
+    return []
 
 
 

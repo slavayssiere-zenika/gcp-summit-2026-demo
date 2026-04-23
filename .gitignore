@@ -65,7 +65,13 @@ test_*.py.antigravity_env
 # =========================
 .tmp/
 scratch_*.py
+refactor_*.py
+fix_*.py
+fetch_*.py
+*_report.txt
 reports/
+test_env/
+.antigravity_env/
 
 # =========================
 # Dev SQLite databases (non-test)

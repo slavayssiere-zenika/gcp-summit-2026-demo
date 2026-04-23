@@ -67,11 +67,3 @@ resource "google_secret_manager_secret_version" "alloydb_password_version" {
   secret_data = random_password.alloydb_password.result
 }
 
-# =========================================================
-# Stockage de la clé API Gemini
-# =========================================================
-resource "google_secret_manager_secret_version" "gemini_api_key_version" {
-  count       = var.gemini_api_key != "" ? 1 : 0
-  secret      = data.google_secret_manager_secret.gemini_api_key.id
-  secret_data = var.gemini_api_key
-}
