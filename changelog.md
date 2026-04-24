@@ -1,3 +1,115 @@
+## Mise à jour automatique - 2026-04-24 15:26:41
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 2179  | 857  |  61% |
+| cv_api           | 2890  | 954  |  67% |
+| drive_api        | 2135  | 659  |  69% |
+| items_api        | 1353  | 413  |  69% |
+| prompts_api      | 1073  | 376  |  65% |
+| users_api        | 1574  | 551  |  65% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Release prd analytics_mcp and fixes
+
+#### Fichiers (non commités)
+- `gent_hr_api/main.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/main.py` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/agent.py` (M)
+- `agent_router_api/main.py` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/mcp_app.py` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/database.py` (M)
+- `competencies_api/main.py` (M)
+- `competencies_api/mcp_app.py` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/database.py` (M)
+- `cv_api/main.py` (M)
+- `cv_api/mcp_app.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `docker-compose.yml` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/main.py` (M)
+- `drive_api/mcp_app.py` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/src/router.py` (M)
+- `drive_api/src/schemas.py` (M)
+- `drive_api/tests/test_drive_business.py` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/components/DriveAdminPanel.vue` (M)
+- `frontend/src/stores/chatStore.ts` (M)
+- `frontend/src/types/index.ts` (M)
+- `frontend/src/views/Home.vue` (M)
+- `items_api/VERSION` (M)
+- `items_api/main.py` (M)
+- `items_api/mcp_app.py` (M)
+- `items_api/spec.md` (M)
+- `items_api/src/items/router.py` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/main.py` (M)
+- `missions_api/mcp_app.py` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/mcp_app.py` (M)
+- `platform-engineering/antigravity_sanity_error.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/cr_agent_hr.tf` (M)
+- `platform-engineering/terraform/cr_agent_missions.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_agent_router.tf` (M)
+- `platform-engineering/terraform/cr_analytics.tf` (M)
+- `platform-engineering/terraform/cr_competencies.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/cr_drive.tf` (M)
+- `platform-engineering/terraform/cr_items.tf` (M)
+- `platform-engineering/terraform/cr_missions.tf` (M)
+- `platform-engineering/terraform/cr_monitoring.tf` (M)
+- `platform-engineering/terraform/cr_prompts.tf` (M)
+- `platform-engineering/terraform/cr_users.tf` (M)
+- `platform-engineering/terraform/db_migrations_job.tf` (M)
+- `platform-engineering/terraform/dns.tf` (M)
+- `platform-engineering/terraform/lb.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `platform-engineering/terraform/waf.tf` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/main.py` (M)
+- `prompts_api/prompts_api.error_correction.txt` (M)
+- `prompts_api/spec.md` (M)
+- `prompts_api/src/prompts/analyzer.py` (M)
+- `prompts_api/src/prompts/router.py` (M)
+- `scripts/agent_prompt_tests.py` (M)
+- `scripts/generate_fake_agencies.py` (M)
+- `scripts/generate_gcp_summit_data.py` (M)
+- `users_api/VERSION` (M)
+- `users_api/main.py` (M)
+- `users_api/mcp_app.py` (M)
+- `users_api/spec.md` (M)
+- `users_api/src/users/router.py` (M)
+- `frontend/src/components/agent/CloudRunLogsViewer.vue` (??)
+- `frontend/src/components/agent/DebugPromptCard.vue` (??)
+- `missions_api/test_mcp_tools.py` (??)
+- `prompts_api/mcp_app.py` (??)
+- `scripts/_insert_ui_format_tests.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-24 08:02:12
 
 ### Couverture de Code

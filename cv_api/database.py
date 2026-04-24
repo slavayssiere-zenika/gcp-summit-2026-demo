@@ -31,9 +31,14 @@ SessionLocal = None
 async def init_db_connector():
     global connector, engine, SessionLocal
     
+    pool_size = int(os.getenv("DB_POOL_SIZE", "20"))
+    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "30"))
+
     pool_params = {
         "pool_pre_ping": True,
         "pool_recycle": 1800,
+        "pool_size": pool_size,
+        "max_overflow": max_overflow,
     }
 
     if USE_IAM_AUTH and ALLOYDB_INSTANCE_URI:

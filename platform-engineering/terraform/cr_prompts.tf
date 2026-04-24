@@ -90,6 +90,10 @@ resource "google_cloud_run_v2_service" "prompts_api" {
         value = var.prompts_api_version
       }
       env {
+        name  = "MCP_SIDECAR_URL"
+        value = "http://localhost:8081"
+      }
+      env {
         name = "SECRET_KEY"
         value_source {
           secret_key_ref {
@@ -100,12 +104,43 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       }
     }
 
+
+    # Conteneur Sidecar (MCP)
+    containers {
+      name    = "mcp"
+      image   = var.image_prompts
+      command = ["python3"]
+      args    = ["-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8081", "--no-server-header"]
+      dynamic "startup_probe" {
+        for_each = terraform.workspace == "dev" ? [] : [1]
+        content {
+          initial_delay_seconds = 15
+          timeout_seconds       = 3
+          period_seconds        = 5
+          failure_threshold     = 20
+          http_get {
+            path = "/health"
+            port = 8081
+          }
+        }
+      }
+      resources {
+        limits = {
+          memory = "256Mi"
+        }
+      }
+      env {
+        name  = "PROMPTS_API_URL"
+        value = "http://127.0.0.1:8080"
+      }
+    }
   }
 
   lifecycle {
     ignore_changes = [
       client,
       client_version,
+      scaling,
 
       template[0].containers[0].resources[0].limits["cpu"]
     ]

@@ -19,6 +19,8 @@ import ToolExecutionList from '@/components/agent/ToolExecutionList.vue'
 import CandidateProfileCard from '@/components/agent/CandidateProfileCard.vue'
 import ConsultantAvailabilityCard from '@/components/agent/ConsultantAvailabilityCard.vue'
 import SystemHealthCard from '@/components/agent/SystemHealthCard.vue'
+import CloudRunLogsViewer from '@/components/agent/CloudRunLogsViewer.vue'
+import DebugPromptCard from '@/components/agent/DebugPromptCard.vue'
 
 const isHealthComponent = (obj: any) => obj && typeof obj.status === 'string' && typeof obj.component === 'string'
 const isHealthData = (arr: any[]) => arr && arr.length > 0 && arr.every((o: any) => isHealthComponent(o))
@@ -41,6 +43,7 @@ const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissio
 const hasBusinessData = (obj: any) => filteredKeys(obj).length > 0 || isBusinessObj(obj);
 const hasAnyBusinessData = (msg: any) => {
   if (msg.displayType === 'text_only') return false;
+  if (msg.displayType === 'cloudrun_logs') return false; // géré par CloudRunLogsViewer
   if (!msg.parsedData || msg.parsedData.length === 0) return false;
   return msg.parsedData.some((obj: any) => hasBusinessData(obj));
 };
@@ -302,8 +305,23 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- Logs Cloud Run Viewer -->
+            <CloudRunLogsViewer
+              v-if="msg.displayType === 'cloudrun_logs' && msg.parsedData && msg.parsedData.length > 0"
+              :logs="msg.parsedData"
+              class="dashboard-content"
+            />
+
+            <!-- Debug Prompt Card -->
+            <DebugPromptCard
+              v-if="msg.debugPrompt"
+              :content="msg.debugPrompt"
+              class="dashboard-content"
+              @use-prompt="sendQuery"
+            />
+
             <!-- Tool Execution Fallback (When no business visual is shown) -->
-            <div v-if="!hasAnyBusinessData(msg) && msg.steps && msg.steps.length > 0">
+            <div v-if="!hasAnyBusinessData(msg) && msg.steps && msg.steps.length > 0 && msg.displayType !== 'cloudrun_logs'">
               <ToolExecutionList :steps="msg.steps" />
             </div>
           </div>

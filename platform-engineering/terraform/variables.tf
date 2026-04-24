@@ -176,18 +176,16 @@ variable "gemini_embedding_model" {
 # =========================================================
 variable "extra_domains" {
   description = <<-EOT
-    Liste de domaines DNS additionnels à provisionner sur cet environnement.
+    Liste de domaines DNS additionnels à lier à cet environnement.
     Chaque objet contient :
-      - zone_name       : nom de la zone GCP Cloud DNS à créer (ex: "zone-gen-skillz")
+      - zone_name       : nom de la zone GCP Cloud DNS existante (ex: "gen-skillz")
       - dns_name        : nom DNS complet terminé par un point (ex: "gen-skillz.znk.io.")
-      - parent_zone_name       : nom de la zone GCP parente pour la délégation NS
-      - parent_zone_project_id : projet GCP contenant la zone parente
-    Si vide (défaut), aucun domaine additionnel n'est créé.
+      - parent_zone_project_id : projet GCP contenant cette zone existante
+    Si vide (défaut), aucun domaine additionnel n'est géré.
   EOT
   type = list(object({
     zone_name              = string
     dns_name               = string
-    parent_zone_name       = string
     parent_zone_project_id = string
   }))
   default = []

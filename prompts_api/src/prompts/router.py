@@ -195,6 +195,21 @@ Output ONLY the raw prompt text. No markdown formatting, no generic introduction
         # Generates the prompt
         correction_text = await generate_error_correction_prompt(payload, system_instruction)
         
+        # Récupération dynamique du Project ID
+        try:
+            import google.auth
+            _, project_id = google.auth.default()
+        except Exception:
+            project_id = "unknown-project"
+            
+        # Injection directe dans le prompt par l'API
+        logging_directive = (
+            f"\n\n[INVESTIGATION REQUISE] "
+            f"En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging "
+            f"pour le service '{payload.service_name}' sur le projet GCP '{project_id}'."
+        )
+        correction_text += logging_directive
+        
         # Store as JSON string inside `value`
         value_data = {
             "rule": correction_text,

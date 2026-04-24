@@ -5,6 +5,7 @@ import uvicorn
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
+from opentelemetry.propagate import inject
 
 from mcp_server import list_tools, call_tool
 
@@ -51,10 +52,7 @@ import asyncio
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception: raise
+    inject(headers)
 
     async with httpx.AsyncClient() as client:
         try:
@@ -80,7 +78,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
     
     if token:
-        asyncio.create_task(report_exception_to_prompts_api("cv_api", error_msg, trace_context, token))
+        await report_exception_to_prompts_api("cv_api", error_msg, trace_context, token)
     
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 

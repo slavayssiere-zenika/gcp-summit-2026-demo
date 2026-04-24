@@ -2,6 +2,7 @@ from fastapi import FastAPI, Response, Request
 from contextlib import asynccontextmanager
 import database
 from prometheus_fastapi_instrumentator import Instrumentator
+from opentelemetry.propagate import inject
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
@@ -166,10 +167,7 @@ async def get_service_token_fallback() -> str:
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception: raise
+    inject(headers)
 
     async with httpx.AsyncClient() as client:
         try:
@@ -203,16 +201,19 @@ async def global_exception_handler(request: Request, exc: Exception):
         # rejetera avec 401 si invalide, ce qui est géré silencieusement.
         token = candidate
 
-    if not token:
-        token = await get_service_token_fallback()
+    try:
+        if not token:
+            token = await get_service_token_fallback()
 
-    # On reporte TOUJOURS, même sans token :
-    # prompts_api peut accepter des rapports non authentifiés sur /errors/report
-    # ou rejeter avec 401 — dans les deux cas on ne bloque pas le handler.
-    asyncio.create_task(
-        report_exception_to_prompts_api("cv_api", error_msg, trace_context, token)
-    )
+        # On reporte TOUJOURS, même sans token :
+        # prompts_api peut accepter des rapports non authentifiés sur /errors/report
+        # ou rejeter avec 401 — dans les deux cas on ne bloque pas le handler.
+        asyncio.create_task(
+            report_exception_to_prompts_api("cv_api", error_msg, trace_context, token)
+        )
 
+    except Exception as fallback_e:
+        logging.error(f"Failed to process exception reporting: {fallback_e}")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 

@@ -468,7 +468,9 @@ async def google_callback(request: Request, code: str, response: Response, db: A
     })
     refresh_token = create_refresh_token(data={"sub": user.username})
     
-    frontend_url = os.getenv("FRONTEND_URL", "/")
+    scheme = request.headers.get("x-forwarded-proto", "http")
+    host = request.headers.get("host", "localhost")
+    frontend_url = f"{scheme}://{host}/"
     redirect_response = RedirectResponse(frontend_url)
 
     _set_auth_cookies(request, redirect_response, access_token, refresh_token)
@@ -674,8 +676,27 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
         is_anonymous=user.is_anonymous
     )
     db.add(db_user)
-    await db.commit()
-    await db.refresh(db_user)
+    
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await db.commit()
+        await db.refresh(db_user)
+    except IntegrityError:
+        await db.rollback()
+        # En cas de retry (email déjà existant), on met à jour l'utilisateur existant
+        existing = (await db.execute(select(User).filter(User.email == user.email))).scalars().first()
+        if existing:
+            existing.first_name = user.first_name
+            existing.last_name = user.last_name
+            existing.full_name = user.full_name or (f"{user.first_name} {user.last_name}" if user.first_name and user.last_name else existing.full_name)
+            existing.hashed_password = get_password_hash(user.password)
+            existing.allowed_category_ids = allowed_ids_str
+            existing.is_anonymous = user.is_anonymous
+            await db.commit()
+            await db.refresh(existing)
+            db_user = existing
+        else:
+            raise
 
     if needs_auto_email:
         db_user.email = f"{db_user.id}@zenika.com"

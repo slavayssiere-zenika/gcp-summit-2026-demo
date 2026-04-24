@@ -411,6 +411,43 @@ def test_underscore_folder_excluded_in_resolve(mocker):
     assert parent_name is None
 
 
+def test_excluded_folders_in_resolve(mocker):
+    """
+    _resolve_root_and_parent doit retourner (None, None, None) quand un dossier
+    fait partie de la liste excluded_folders de la racine.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+    from src.drive_service import DriveService
+
+    mock_db = AsyncMock()
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # Mock Drive API : la remontée trouve "o1.old" puis la racine
+    mock_drive = MagicMock()
+    mock_drive.files.return_value.get.return_value.execute.side_effect = [
+        {"name": "o1.old", "parents": ["root_id_abc"]},
+        {"name": "Racine", "parents": []}
+    ]
+
+    service = DriveService.__new__(DriveService)
+    service.db = mock_db
+    service.drive = mock_drive
+    service.redis = mock_redis
+
+    import asyncio
+    # "O1.old" (majuscule) doit matcher "o1.old" (insensible à la casse)
+    roots = [{"id": 1, "google_folder_id": "root_id_abc", "tag": "Lyon", "folder_name": "CVs Lyon", "excluded_folders": ["O1.old", "Test"]}]
+
+    result = asyncio.get_event_loop().run_until_complete(
+        service._resolve_root_and_parent("some_parent_id", roots)
+    )
+    root, parent_id, parent_name = result
+    assert root is None, "Un dossier présent dans excluded_folders doit être exclu"
+    assert parent_id is None
+    assert parent_name is None
+
+
 def test_filestate_response_has_parent_folder_name(client):
     """GET /files doit retourner parent_folder_name dans chaque FileStateResponse."""
     resp = client.get("/files", headers=AUTH_HEADER)

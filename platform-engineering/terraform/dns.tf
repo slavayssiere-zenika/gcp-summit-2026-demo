@@ -42,59 +42,26 @@ resource "google_dns_record_set" "ns_delegation" {
 # =========================================================
 # Zones DNS additionnelles (optionnelles, ex: gen-skillz en prd)
 # Déclarez-les dans extra_domains dans prd.yaml.
-# Chaque zone est persistante (prevent_destroy = true).
+# Ces zones doivent DÉJÀ EXISTER dans le projet cible.
 # =========================================================
-resource "google_dns_managed_zone" "extra_zones" {
+data "google_dns_managed_zone" "extra_zones" {
   for_each = { for d in var.extra_domains : d.zone_name => d }
 
-  name        = each.value.zone_name
-  dns_name    = each.value.dns_name
-  description = "Zone DNS additionnelle ${each.value.dns_name} — ${terraform.workspace}"
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# Délégation NS vers la zone parente de chaque domaine additionnel
-# (ex: le registrar znk.io doit pointer ses NS vers cette zone)
-data "google_dns_managed_zone" "extra_parent_zones" {
-  for_each = { for d in var.extra_domains : d.zone_name => d }
-
-  name    = each.value.parent_zone_name
+  name    = each.value.zone_name
   project = each.value.parent_zone_project_id
-}
-
-resource "google_dns_record_set" "extra_ns_delegation" {
-  for_each = { for d in var.extra_domains : d.zone_name => d }
-
-  name         = google_dns_managed_zone.extra_zones[each.key].dns_name
-  managed_zone = data.google_dns_managed_zone.extra_parent_zones[each.key].name
-  type         = "NS"
-  ttl          = 300
-
-  rrdatas = google_dns_managed_zone.extra_zones[each.key].name_servers
-  project = each.value.parent_zone_project_id
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # Enregistrements A vers le LB pour chaque domaine additionnel
 resource "google_dns_record_set" "extra_a" {
   for_each = { for d in var.extra_domains : d.zone_name => d }
 
-  name         = google_dns_managed_zone.extra_zones[each.key].dns_name
-  managed_zone = google_dns_managed_zone.extra_zones[each.key].name
+  name         = data.google_dns_managed_zone.extra_zones[each.key].dns_name
+  managed_zone = data.google_dns_managed_zone.extra_zones[each.key].name
   type         = "A"
   ttl          = 300
 
   rrdatas = [google_compute_global_address.lb_ip.address]
-
-  lifecycle {
-    prevent_destroy = true
-  }
+  project = each.value.parent_zone_project_id
 }
 
 # =========================================================

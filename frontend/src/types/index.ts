@@ -47,7 +47,7 @@ export interface Message {
   content: string
   data?: any // Raw original tool data
   parsedData?: any[] // Formatted or treeified data
-  displayType?: string // 'text_only', 'cards', 'table', 'tree'
+  displayType?: string // 'text_only', 'cards', 'table', 'tree', 'cloudrun_logs'
   typing?: boolean
 
   // Expert Mode & History fields
@@ -55,7 +55,10 @@ export interface Message {
   thoughts?: string
   rawResponse?: string
   activeTab?: 'preview' | 'expert'
-  
+
+  // Prompt de débogage extrait du markdown de l'agent ops
+  debugPrompt?: string
+
   // Controls
   pagination?: Pagination
   usage?: Usage

@@ -97,6 +97,9 @@
             <div class="form-group">
               <input v-model="newFolder.tag" placeholder="Tag (ex: Paris, Lille)" required />
             </div>
+            <div class="form-group">
+              <input v-model="newFolder.excluded_folders_str" placeholder="Dossiers à exclure (ex: O1.old, _trash)" />
+            </div>
             <button type="submit" class="btn-primary" :disabled="isAdding">
               <Plus class="icon-sm" /> Inscrire la source
             </button>
@@ -325,7 +328,7 @@ const isSyncing = ref(false)
 const isAdding = ref(false)
 const isRetrying = ref(false)
 const isFlushingZombies = ref(false)
-const newFolder = ref({ google_folder_id: '', tag: '' })
+const newFolder = ref({ google_folder_id: '', tag: '', excluded_folders_str: '' })
 const showAddFolder = ref(false)
 const flushResult = ref<{zombies_reset: number, errors_reset: number} | null>(null)
 const actionError = ref('')  // Message d'erreur visible dans l'UI
@@ -521,8 +524,15 @@ const addFolder = async () => {
   if (!newFolder.value.google_folder_id || !newFolder.value.tag) return
   isAdding.value = true
   try {
-    await axios.post('/api/drive/folders', newFolder.value, { headers: authHeader() })
-    newFolder.value = { google_folder_id: '', tag: '' }
+    const payload = {
+      google_folder_id: newFolder.value.google_folder_id,
+      tag: newFolder.value.tag,
+      excluded_folders: newFolder.value.excluded_folders_str
+        ? newFolder.value.excluded_folders_str.split(',').map(s => s.trim()).filter(s => s)
+        : []
+    }
+    await axios.post('/api/drive/folders', payload, { headers: authHeader() })
+    newFolder.value = { google_folder_id: '', tag: '', excluded_folders_str: '' }
     showAddFolder.value = false
     await fetchFolders()
     triggerSync()

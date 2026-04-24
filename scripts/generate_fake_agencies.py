@@ -172,7 +172,8 @@ def get_gemini_api_key():
             for line in f:
                 if line.startswith("export GOOGLE_API_KEY="):
                     return line.split("=")[1].strip()
-    except Exception: raise
+    except Exception:
+        pass
     return os.getenv("GEMINI_API_KEY")
 
 
@@ -217,7 +218,10 @@ def main():
         logger.info("Nettoyage de l'existant...")
         logger.info("- Suppression des anciens profils locaux...")
         if os.path.exists(LOCAL_PROFILES_DIR):
-            shutil.rmtree(LOCAL_PROFILES_DIR)
+            for item in os.listdir(LOCAL_PROFILES_DIR):
+                item_path = os.path.join(LOCAL_PROFILES_DIR, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
         os.makedirs(LOCAL_PROFILES_DIR, exist_ok=True)
 
         logger.info("- Suppression de l'ancien dossier 'Fake Agencies' sur Google Drive...")

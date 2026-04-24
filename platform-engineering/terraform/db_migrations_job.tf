@@ -51,7 +51,7 @@ resource "google_cloud_run_v2_job" "db_migrations" {
 
 resource "null_resource" "run_db_migrations_job" {
   triggers = {
-    job_updated = google_cloud_run_v2_job.db_migrations.id
+    image_version = var.image_db_migrations
   }
 
   provisioner "local-exec" {
