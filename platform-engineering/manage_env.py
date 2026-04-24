@@ -29,7 +29,7 @@ def elapsed() -> str:
 
 def generate_antigravity_error_report(task_context: str, error_message: str, tags: list = None):
     """Génère ou met à jour un rapport d'erreur Markdown pour l'Agent Antigravity."""
-    report_file = os.path.join(os.path.dirname(__file__), "antigravity_sanity_error.md")
+    report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "antigravity_sanity_error.md")
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
     tags_str = ", ".join(tags) if tags else "sanity-check"
     
@@ -57,7 +57,7 @@ def generate_antigravity_error_report(task_context: str, error_message: str, tag
 def discover_versions():
     """Scans for VERSION files in component directories and returns a mapping."""
     versions = {}
-    base_dir = os.path.dirname(os.path.dirname(__file__))
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     components = [
         "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
         "users_api", "items_api", "competencies_api",
@@ -167,7 +167,7 @@ def check_binary_dependencies():
         raise DeploymentError(f"Dépendances manquantes : {', '.join(missing)}")
     logger.info("[+] Toutes les dépendances binaires sont satisfaites.")
 
-TERRAFORM_DIR = os.path.join(os.path.dirname(__file__), "terraform")
+TERRAFORM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "terraform")
 
 PERSISTENT_RESOURCES = [
     # ── Zones DNS ───────────────────────────────────────────────────────────────
@@ -644,8 +644,13 @@ def deploy(env, base_domain, project_id, config, force=False):
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
         
         # 1. Obtenir le nom du bucket de destination
-        res = subprocess.run(["terraform", "output", "-raw", "frontend_bucket_name"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
-        target_bucket = res.stdout.strip()
+        res = subprocess.run(["terraform", "output", "-json"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
+        try:
+            import json
+            outputs = json.loads(res.stdout)
+            target_bucket = outputs.get("frontend_bucket_name", {}).get("value", "").strip()
+        except Exception:
+            target_bucket = ""
         if not target_bucket:
             print("[!] Could not retrieve frontend_bucket_name from terraform outputs.")
             return
@@ -1181,7 +1186,7 @@ if __name__ == "__main__":
         check_binary_dependencies()
         
         # Load YAML Configuration
-        config_path = os.path.join(os.path.dirname(__file__), "envs", f"{args.env}.yaml")
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "envs", f"{args.env}.yaml")
         if not os.path.exists(config_path):
             logger.error(f"[!] Configuration file not found: {config_path}")
             sys.exit(1)
