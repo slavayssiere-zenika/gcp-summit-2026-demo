@@ -1,3 +1,40 @@
+## Mise à jour automatique - 2026-04-24 08:02:12
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_api        | N/A   | N/A  | N/A  |
+| competencies_api | 2176  | 854  |  61% |
+| cv_api           | 2861  | 927  |  68% |
+| drive_api        | 2084  | 663  |  68% |
+| items_api        | 1331  | 391  |  71% |
+| prompts_api      | 998   | 301  |  70% |
+| users_api        | 1553  | 532  |  66% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/bundled_prompts/agent_router_api/agent_router_api.system_instruction.txt` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+- `platform-engineering/test.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-23 20:22:45
 
 ### Couverture de Code
