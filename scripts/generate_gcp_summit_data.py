@@ -73,7 +73,16 @@ def ensure_sebastien_admin(token):
         # Check if user exists
         res = client.get("/api/users/search?query=sebastien.lavayssiere&limit=1")
         if res.status_code == 200 and res.json().get("total", 0) > 0:
-            logger.info("  -> sebastien.lavayssiere@zenika.com already exists.")
+            user = res.json()["items"][0]
+            if user.get("role") != "admin":
+                logger.info(f"  -> Upgrading {user['email']} to admin role...")
+                update_res = client.put(f"/api/users/{user['id']}", json={"role": "admin"})
+                if update_res.status_code == 200:
+                    logger.info("  -> Upgraded successfully.")
+                else:
+                    logger.error(f"  -> Failed to upgrade user: {update_res.text}")
+            else:
+                logger.info("  -> sebastien.lavayssiere@zenika.com already exists and is admin.")
             return
 
         logger.info("  -> Creating sebastien.lavayssiere@zenika.com as admin...")

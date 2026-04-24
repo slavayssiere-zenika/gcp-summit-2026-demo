@@ -81,7 +81,7 @@ resource "google_compute_url_map" "default" {
       service = google_compute_backend_service.analytics_backend.id
       route_action {
         url_rewrite {
-          path_prefix_rewrite = "/api/"
+          path_prefix_rewrite = "/"
         }
       }
     }

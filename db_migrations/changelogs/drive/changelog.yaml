@@ -202,3 +202,20 @@ databaseChangeLog:
             referencedTableName: "drive_folders"
             referencedColumnNames: "id"
 
+  - changeSet:
+      id: "11"
+      author: "antigravity"
+      comment: "Ajout de la colonne excluded_folders pour ignorer des sous-dossiers spécifiques"
+      changes:
+        - addColumn:
+            tableName: "drive_folders"
+            columns:
+              - column:
+                  name: "excluded_folders"
+                  type: "json"
+                  defaultValue: "[]"
+      rollback:
+        - dropColumn:
+            tableName: "drive_folders"
+            columnName: "excluded_folders"
+

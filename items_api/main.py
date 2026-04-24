@@ -168,12 +168,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
     
-    if not token:
-        token = await get_service_token_fallback()
+    try:
+        if not token:
+            token = await get_service_token_fallback()
     
-    if token:
-        asyncio.create_task(report_exception_to_prompts_api("items_api", error_msg, trace_context, token))
+        if token:
+            await report_exception_to_prompts_api("items_api", error_msg, trace_context, token)
     
+    except Exception as fallback_e:
+        logging.error(f"Failed to process exception reporting: {fallback_e}")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 

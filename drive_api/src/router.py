@@ -68,7 +68,7 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         logger.warning(f"[add_folder] Impossible de récupérer le nom Drive pour {raw_id}: {e}")
 
-    db_f = DriveFolder(google_folder_id=raw_id, tag=folder.tag.strip(), folder_name=resolved_folder_name)
+    db_f = DriveFolder(google_folder_id=raw_id, tag=folder.tag.strip(), folder_name=resolved_folder_name, excluded_folders=folder.excluded_folders)
     db.add(db_f)
     await db.commit()
     await db.refresh(db_f)
@@ -342,7 +342,11 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
         async with SessionLocal() as session:
             try:
                 service = DriveService(session)
-                await service.discover_files()
+                
+                try:
+                    await service.discover_files()
+                except Exception as discover_err:
+                    logger.error(f"Erreur durant la découverte Drive (discover_files), on continue l'ingestion: {discover_err}")
                 
                 total_processed = 0
                 while True:

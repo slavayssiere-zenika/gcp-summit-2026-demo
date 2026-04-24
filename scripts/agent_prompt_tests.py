@@ -611,6 +611,7 @@ TEST_CASES: list[TestCase] = [
         expected_tools=["check_all_components_health"],
         forbidden_tools=["list_users", "list_missions", "get_mission", "get_mission_candidates"],  # Sur-routage RH interdit
         min_tool_calls=1,
+        data_quality_strict=True,
     ),
     TestCase(
         id="ROUTE-003",
@@ -630,7 +631,8 @@ TEST_CASES: list[TestCase] = [
         expected_agent="hr",
         min_tool_calls=1,
         # Zenika étant international, l'agent répond dans la langue de l'interlocuteur.
-        # On vérifie uniquement le routage correct (HR) et la présence du terme métier,
+        # On vérifie uniquement le routage correct (HR    data_quality_strict=True,
+    ) et la présence du terme métier,
         # quelle que soit la langue de la réponse (fr: "consultant", en: "consultant").
         must_contain=["consultant"],  # terme identique en français et en anglais
         data_schema_validator=validate_users_list_data,
@@ -647,7 +649,8 @@ TEST_CASES: list[TestCase] = [
     TestCase(
         id="ROUTE-006",
         category="routing",
-        description="Question missions → doit router vers l'agent Missions (PAS HR)",
+        description="Question missions → doit router vers l'agent Missions (PAS HR    data_quality_strict=True,
+    )",
         prompt="Montre-moi toutes les missions actuellement actives",
         expected_agent="missions",
         forbidden_tools=["list_users", "search_best_candidates"],  # Ne doit pas aller sur HR
@@ -679,7 +682,8 @@ TEST_CASES: list[TestCase] = [
         category="hr",
         description="Recherche d'utilisateur par nom exact",
         prompt="Quels sont les informations du consultant Alice Martin ?",
-        # L'agent utilise search_users (puis list_users en fallback) — get_user n'est appelé que si l'ID est connu
+        # L'agent utilise search_users (puis list_users en fallback    data_quality_strict=True,
+    ) — get_user n'est appelé que si l'ID est connu
         expected_tools=["search_users"],
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
@@ -691,7 +695,8 @@ TEST_CASES: list[TestCase] = [
         category="hr",
         description="Recherche de compétences — taxonomie",
         prompt="Quelles sont les compétences Cloud disponibles dans le référentiel Zenika ?",
-        # L'agent utilise search_competencies (plus efficace que list_competencies/get_competency_tree)
+        # L'agent utilise search_competencies (plus efficace que list_competencies/get_competency_tree    data_quality_strict=True,
+    )
         expected_tools=["search_competencies"],
         min_tool_calls=1,
         # Correction [HR-002] : 'DevOps' n'est pas dans la taxonomie Cloud mais dans une
@@ -704,7 +709,8 @@ TEST_CASES: list[TestCase] = [
         category="hr",
         description="Matching candidat/mission — profil Java senior",
         prompt="J'ai besoin d'un développeur Java senior pour une mission FinTech. Qui proposeriez-vous parmi nos consultants ?",
-        # Pipeline réel : search_best_candidates + get_candidate_rag_context (list_users n'est pas appelé)
+        # Pipeline réel : search_best_candidates + get_candidate_rag_context (list_users n'est pas appelé    data_quality_strict=True,
+    )
         expected_tools=["search_best_candidates"],
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
@@ -718,6 +724,7 @@ TEST_CASES: list[TestCase] = [
         prompt="Analyse le CV du consultant Sébastien Lavayssière et liste ses compétences clés",
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
+        data_quality_strict=True,
     ),
     TestCase(
         id="HR-005",
@@ -728,6 +735,7 @@ TEST_CASES: list[TestCase] = [
         expect_no_hallucination_warning=True,
         must_not_contain=["⚠️ ATTENTION"],
         data_schema_validator=validate_users_list_data,
+        data_quality_strict=True,
     ),
     TestCase(
         id="HR-006",
@@ -736,6 +744,7 @@ TEST_CASES: list[TestCase] = [
         prompt="Combien de consultants Zenika maîtrisent Docker ?",
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
+        data_quality_strict=True,
     ),
     TestCase(
         id="HR-007",
@@ -760,6 +769,7 @@ TEST_CASES: list[TestCase] = [
         expect_data=True,
         # L'agent répond en français : "en bonne santé", "opérationnel" — pas le mot anglais 'health'
         must_contain=["santé", "opérationnel"],
+        data_quality_strict=True,
     ),
     TestCase(
         id="OPS-002",
@@ -768,6 +778,7 @@ TEST_CASES: list[TestCase] = [
         prompt="Y a-t-il eu des erreurs 500 dans les logs ces dernières 24 heures ?",
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
+        data_quality_strict=True,
     ),
     TestCase(
         id="OPS-003",
@@ -777,6 +788,7 @@ TEST_CASES: list[TestCase] = [
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
         must_not_contain=["⚠️ ATTENTION"],
+        data_quality_strict=True,
     ),
     TestCase(
         id="OPS-004",
@@ -785,6 +797,7 @@ TEST_CASES: list[TestCase] = [
         prompt="Quel est le coût IA estimé en dollars pour la journée d'aujourd'hui ?",
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
+        data_quality_strict=True,
     ),
     TestCase(
         id="OPS-005",
@@ -2166,6 +2179,95 @@ TEST_CASES: list[TestCase] = [
         # 'disponibilit' = requête temps-réel → l'agent fait un vrai appel LLM
         must_not_contain=["500", "erreur interne"],
         tags=["semantic-cache", "realtime-bypass", "sec-f06"],
+    ),
+    # -- UI FORMAT - Integration Frontend ----------------------------------------
+    # Ces tests verifient que les donnees retournees par l'agent ops
+    # sont dans le format attendu par CloudRunLogsViewer.vue et DebugPromptCard.vue.
+    # Source: frontend/src/stores/chatStore.ts -> isCloudRunLogs() + extractDebugPrompt()
+    # ---------------------------------------------------------------------------
+
+    TestCase(
+        id="UI-FMT-001",
+        category="ui-format",
+        description="[CloudRunLogsViewer] Logs Cloud Run - format timestamp + cloud_run_service",
+        prompt="Donne-moi les logs du service cv-api-dev des derniers 24 heures",
+        expected_agent="ops",
+        min_tool_calls=1,
+        expect_data=True,
+        data_schema_validator=validate_cloudrun_logs_data,
+        data_quality_strict=True,
+        must_contain=["cv-api"],
+        must_not_contain=["erreur interne", "500 internal"],
+        tags=["ui-format", "cloudrun-logs", "ops", "frontend-contract"],
+    ),
+    TestCase(
+        id="UI-FMT-002",
+        category="ui-format",
+        description="[CloudRunLogsViewer] Logs avec filtre severity ERROR - contrat de format",
+        prompt="Y a-t-il des erreurs 500 dans les logs du service agent-hr-api-dev ces dernieres heures ?",
+        expected_agent="ops",
+        min_tool_calls=1,
+        expect_data=True,
+        data_schema_validator=validate_cloudrun_logs_data,
+        must_not_contain=["500 interne"],
+        tags=["ui-format", "cloudrun-logs", "ops", "errors", "frontend-contract"],
+    ),
+    TestCase(
+        id="UI-FMT-003",
+        category="ui-format",
+        description="[CloudRunLogsViewer] Logs multi-services - meme contrat de format",
+        prompt="Montre-moi les logs recents de tous les agents IA deployes sur Cloud Run",
+        expected_agent="ops",
+        min_tool_calls=1,
+        expect_data=True,
+        data_schema_validator=validate_cloudrun_logs_data,
+        must_contain=["agent"],
+        tags=["ui-format", "cloudrun-logs", "ops", "multi-service", "frontend-contract"],
+    ),
+    TestCase(
+        id="UI-FMT-004",
+        category="ui-format",
+        description="[DebugPromptCard] Prompt de debogage - format *** avec structure markdown",
+        prompt=(
+            "Analyse les logs du service cv-api-dev et genere-moi un prompt de debogage "
+            "pour l'erreur NameError: name 'inject' is not defined"
+        ),
+        expected_agent="ops",
+        min_tool_calls=1,
+        must_contain=["NameError", "inject"],
+        must_not_contain=["Je ne sais pas", "donnees insuffisantes"],
+        tags=["ui-format", "debug-prompt", "ops", "frontend-contract", "markdown-structure"],
+    ),
+    TestCase(
+        id="UI-FMT-005",
+        category="ui-format",
+        description="[DebugPromptCard] Prompt avec contexte service + type d'erreur identifie",
+        prompt=(
+            "Le service competencies-api-dev retourne des erreurs 500 sur /search. "
+            "Peux-tu analyser les logs et me generer un prompt structure pour debugger ?"
+        ),
+        expected_agent="ops",
+        min_tool_calls=1,
+        must_contain=["competencies", "500"],
+        must_not_contain=["Je ne sais pas"],
+        tags=["ui-format", "debug-prompt", "ops", "frontend-contract"],
+    ),
+    TestCase(
+        id="UI-FMT-006",
+        category="ui-format",
+        description="[CloudRunLogsViewer + DebugPromptCard] Reponse combinee logs + prompt - double composant",
+        prompt=(
+            "Oui, demande des logs du cv-api-dev et genere-moi un prompt d'erreur pour "
+            "l'erreur NameError: name 'inject' is not defined"
+        ),
+        expected_agent="ops",
+        min_tool_calls=1,
+        expect_data=True,
+        data_schema_validator=validate_cloudrun_logs_data,
+        data_quality_strict=True,
+        must_contain=["inject", "NameError"],
+        must_not_contain=["Je ne sais pas", "500 interne"],
+        tags=["ui-format", "debug-prompt", "cloudrun-logs", "ops", "frontend-contract", "combined"],
     ),
 ]
 

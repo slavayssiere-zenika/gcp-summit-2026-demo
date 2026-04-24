@@ -28,7 +28,7 @@ async def generate_test_cases(prompt_value: str) -> list:
     
     response = await generate_content_with_retry(
         client,
-        model='gemini-2.5-flash',
+        model=os.getenv('GEMINI_MODEL', 'gemini-2.5-flash'),
         contents=prompt_value,
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -70,7 +70,7 @@ async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
             
         config = {
             "prompts": ["prompt.txt"],
-            "providers": ["google:gemini-2.5-flash"],
+            "providers": [f"google:{os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')}"],
             "tests": tests_yaml
         }
         
@@ -136,7 +136,7 @@ async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> s
     
     response = await generate_content_with_retry(
         client,
-        model='gemini-2.5-flash',
+        model=os.getenv('GEMINI_MODEL', 'gemini-2.5-flash'),
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -163,7 +163,7 @@ async def generate_error_correction_prompt(error_report, system_instruction: str
     
     response = await generate_content_with_retry(
         client,
-        model='gemini-3.1-pro-preview',
+        model=os.getenv('GEMINI_MODEL', 'gemini-3.1-pro-preview'),
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,

@@ -343,6 +343,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_MODEL=gemini-3.1-flash-lite-preview
       - PROMPTS_API_URL=http://prompts_api:8005
+      - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - AGENT_HR_API_URL=http://agent_hr_api:8080
       - AGENT_OPS_API_URL=http://agent_ops_api:8080
       - AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
@@ -361,7 +362,24 @@ services:
         condition: service_healthy
       prompts_api:
         condition: service_started
-      agent_hr_api:
+    
+  prompts_mcp:
+    build: ./prompts_api
+    container_name: prompts_mcp
+    hostname: prompts_mcp
+    command: ["python3", "-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      - PROMPTS_API_URL=http://prompts_api:8000
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=prompts_mcp
+    depends_on:
+      prompts_api:
+        condition: service_started
+    networks:
+      - monitoring_net
+
+  agent_hr_api:
         condition: service_started
       agent_ops_api:
         condition: service_started
@@ -373,6 +391,23 @@ services:
           - agent_router_api
 
   # The Intelligent HR Agent (A2A Worker)
+
+  prompts_mcp:
+    build: ./prompts_api
+    container_name: prompts_mcp
+    hostname: prompts_mcp
+    command: ["python3", "-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      - PROMPTS_API_URL=http://prompts_api:8000
+      - TRACE_EXPORTER=http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_SERVICE_NAME=prompts_mcp
+    depends_on:
+      prompts_api:
+        condition: service_started
+    networks:
+      - monitoring_net
+
   agent_hr_api:
     build:
       context: .
@@ -395,6 +430,7 @@ services:
       - CV_MCP_URL=http://cv_mcp:8000
       - MISSIONS_MCP_URL=http://missions_mcp:8000
       - PROMPTS_API_URL=http://prompts_api:8005
+      - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/10
@@ -435,6 +471,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_MODEL=gemini-3.1-flash-lite-preview
       - PROMPTS_API_URL=http://prompts_api:8005
+      - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - DRIVE_MCP_URL=http://drive_mcp:8000
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
@@ -467,6 +504,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_MODEL=gemini-3.1-flash-lite-preview
       - PROMPTS_API_URL=http://prompts_api:8005
+      - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - MISSIONS_MCP_URL=http://missions_api:8009
       - CV_MCP_URL=http://cv_api:8004
       - USERS_MCP_URL=http://users_api:8001

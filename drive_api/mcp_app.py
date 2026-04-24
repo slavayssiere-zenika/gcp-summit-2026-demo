@@ -80,7 +80,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
     
     if token:
-        asyncio.create_task(report_exception_to_prompts_api("drive_api", error_msg, trace_context, token))
+        await report_exception_to_prompts_api("drive_api", error_msg, trace_context, token)
     
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 

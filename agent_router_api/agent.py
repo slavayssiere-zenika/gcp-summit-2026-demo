@@ -170,6 +170,7 @@ async def ask_ops_agent(query: str, user_id: str = "user_1") -> dict:
     - Le FinOps, la facture IA, l'estimation des coûts, le marché.
     - La modification de la configuration système de parsing Google Drive (dossiers synchronisés).
     - L'exploration technique de logs bruts Applicatifs avec Grafana/Loki.
+    - La gestion des System Prompts (création, modification) et la remontée d'erreurs pour générer des directives de prompt.
     
     Args:
         query (str): La requête ou la commande technique à envoyer à l'Agent Ops.

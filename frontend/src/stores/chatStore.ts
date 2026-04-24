@@ -16,6 +16,39 @@ function looksLikeJson(s: string): boolean {
   return trimmed.startsWith('{') || trimmed.startsWith('[')
 }
 
+/**
+ * Détecte si un tableau de données correspond à des logs Cloud Run structurés.
+ * Un log Cloud Run a: timestamp + cloud_run_service + (message | severity)
+ */
+function isCloudRunLogs(data: any[]): boolean {
+  if (!Array.isArray(data) || data.length === 0) return false
+  const sample = data.slice(0, 3)
+  return sample.every(
+    (item: any) =>
+      item &&
+      typeof item.timestamp === 'string' &&
+      typeof item.cloud_run_service === 'string'
+  )
+}
+
+/**
+ * Détecte si le texte de réponse markdown contient un prompt de débogage suggéré.
+ * L'agent ops génère typiquement des sections avec blockquotes `>` et des titres ###.
+ */
+export function extractDebugPrompt(markdown: string): string | null {
+  // Cherche une section de prompt entre *** ou --- délimiteurs
+  const sectionMatch = markdown.match(/\*{3,}\s*\n([\s\S]*?)(?:\*{3,}|$)/)
+  if (sectionMatch && sectionMatch[1].length > 100) {
+    return sectionMatch[1].trim()
+  }
+  // Cherche une section ### Prompt
+  const promptSection = markdown.match(/###\s+Prompt[^\n]*\n([\s\S]*?)(?=\n###|\n\*{3,}|$)/i)
+  if (promptSection && promptSection[1].length > 80) {
+    return promptSection[1].trim()
+  }
+  return null
+}
+
 function unwrapToolData(toolData: any): any[] {
   if (!toolData) return []
 
@@ -109,9 +142,20 @@ export const useChatStore = defineStore('chat', {
           if (displayType === 'text_only') displayType = 'cards'
         }
 
+        // Détection logs Cloud Run — prioritaire sur les cards génériques
+        if (parsedData && isCloudRunLogs(parsedData)) {
+          displayType = 'cloudrun_logs'
+        }
+
         if (toolData && toolData.dataType === 'competency' && Array.isArray(parsedData)) {
           parsedData = treeify(parsedData)
           displayType = 'tree'
+        }
+
+        // Détection prompt de débogage dans la réponse markdown
+        const debugPrompt = extractDebugPrompt(replyText)
+        if (debugPrompt) {
+          replyText = replyText.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
         }
 
         if (responseData.response) {
@@ -134,7 +178,8 @@ export const useChatStore = defineStore('chat', {
             activeTab: 'preview',
             pagination: { currentPage: 1, itemsPerPage: 10 },
             usage: responseData.usage,
-            semanticCacheHit: responseData.semantic_cache_hit === true
+            semanticCacheHit: responseData.semantic_cache_hit === true,
+            debugPrompt: debugPrompt || undefined
           })
         } else {
           this.addMessage({
@@ -176,6 +221,8 @@ export const useChatStore = defineStore('chat', {
         const response = await agentApi.history()
         if (response.history && response.history.length > 0) {
           this.messages = response.history.map((msg: Message) => {
+            if (msg.role !== 'assistant') return msg
+
             const hasMcpEnvelope = msg.data && typeof msg.data === 'object' && Array.isArray(msg.data.result)
             const missingParsedData = !msg.parsedData || msg.parsedData.length === 0
 
@@ -197,6 +244,27 @@ export const useChatStore = defineStore('chat', {
               }
             }
 
+            // ── Re-apply intelligent display type detection (same logic as sendQuery) ──
+            // The backend persists displayType='cards' for all data messages. We must
+            // re-detect Cloud Run logs and debug prompts on every history load.
+            if (msg.parsedData && Array.isArray(msg.parsedData) && isCloudRunLogs(msg.parsedData)) {
+              msg.displayType = 'cloudrun_logs'
+            }
+
+            // Re-extract debug prompt from rawResponse or content if not already set
+            if (!msg.debugPrompt) {
+              const markdownSource = msg.rawResponse || msg.content || ''
+              const debugPrompt = extractDebugPrompt(markdownSource)
+              if (debugPrompt) {
+                msg.debugPrompt = debugPrompt
+                // Strip the *** ... *** block from the visible content (same as sendQuery)
+                if (!msg.rawResponse) {
+                  // rawResponse was not stored — strip from content directly
+                  msg.content = msg.content.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
+                }
+              }
+            }
+
             if (msg.data && msg.data.dataType === 'competency' && Array.isArray(msg.parsedData) && msg.displayType === 'tree') {
               msg.parsedData = treeify(msg.parsedData)
             }
@@ -204,6 +272,7 @@ export const useChatStore = defineStore('chat', {
             return msg
           })
         }
+
       } catch (e) {
         console.warn('Could not load agent history', e)
         uxStore.showToast("Impossible de charger l'historique de conversation", 'error')

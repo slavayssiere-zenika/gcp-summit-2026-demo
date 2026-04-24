@@ -127,6 +127,7 @@ class DriveService:
                 "google_folder_id": f.google_folder_id,
                 "tag": f.tag,
                 "folder_name": f.folder_name,
+                "excluded_folders": f.excluded_folders or [],
             }
             for f in db_folders
         ]
@@ -161,6 +162,7 @@ class DriveService:
         """
         current_id = start_parent_id
         path_traversed = []
+        path_traversed_names = []  # Pour vérifier les exclusions plus tard
         parent_folder_name = None  # Nom du dossier parent direct du fichier
 
         while current_id:
@@ -172,6 +174,22 @@ class DriveService:
                 logger.info(
                     f"[_resolve_root_and_parent] Trouvé racine: {current_id} → tag={root['tag']}"
                 )
+                
+                # Vérifier les exclusions sur les dossiers parcourus jusqu'ici
+                excluded_list = [e.lower() for e in root.get("excluded_folders", [])]
+                for node_name in path_traversed_names:
+                    if node_name.lower() in excluded_list:
+                        logger.info(
+                            f"[_resolve_root_and_parent] Dossier '{node_name}' exclu (présent dans excluded_folders). Arrêt."
+                        )
+                        # Blacklister ce chemin pour les prochaines fois
+                        oos_ids = path_traversed + [current_id]
+                        pipe = self.redis.pipeline()
+                        for oos_id in oos_ids:
+                            pipe.set(f"drive:oos:{oos_id}", "1", ex=REDIS_TTL_OUT_OF_SCOPE)
+                        pipe.execute()
+                        return None, None, None
+
                 self._cache_path(path_traversed, root["id"])
                 return root, start_parent_id, parent_folder_name
 
@@ -188,6 +206,22 @@ class DriveService:
                 logger.info(f"[_resolve_root_and_parent] Cache graphe HIT: {current_id} → root_id={cached_root_id}")
                 root = next((r for r in roots if r["id"] == int(cached_root_id)), None)
                 if root:
+                    # Vérifier les exclusions sur les dossiers parcourus (le cache graphe indique juste que current_id -> root est valide)
+                    excluded_list = [e.lower() for e in root.get("excluded_folders", [])]
+                    for node_name in path_traversed_names:
+                        if node_name.lower() in excluded_list:
+                            logger.info(
+                                f"[_resolve_root_and_parent] Dossier '{node_name}' exclu (présent dans excluded_folders). Arrêt."
+                            )
+                            # Blacklister les enfants parcourus
+                            oos_ids = path_traversed
+                            if oos_ids:
+                                pipe = self.redis.pipeline()
+                                for oos_id in oos_ids:
+                                    pipe.set(f"drive:oos:{oos_id}", "1", ex=REDIS_TTL_OUT_OF_SCOPE)
+                                pipe.execute()
+                            return None, None, None
+
                     self._cache_path(path_traversed, root["id"])
                     return root, start_parent_id, parent_folder_name
                 else:
@@ -246,6 +280,7 @@ class DriveService:
                     break
 
                 path_traversed.append(current_id)
+                path_traversed_names.append(folder_name_raw)
                 current_id = parents[0]
 
             except Exception as e:

@@ -332,7 +332,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                     res_to_process = getattr(fres, 'response', fres)
                 elif raw_text and role_val in ["tool", "user"]:
                     try: res_to_process = json.loads(raw_text)
-                    except: pass
+                    except Exception as e: logging.warning(f"Parse error: {e}")
                 
                 if res_to_process is not None:
                     if hasattr(res_to_process, 'model_dump'): res_to_process = res_to_process.model_dump()
@@ -341,7 +341,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                     # Unwrap MCP 'result' JSON string (Crucial for sub-agent data access)
                     if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
                         try: res_to_process = json.loads(res_to_process["result"])
-                        except: pass
+                        except Exception as e: logging.warning(f"Parse error: {e}")
 
                     # A2A Unwrapping (Router Specific)
                     if isinstance(res_to_process, dict) and "response" in res_to_process:
@@ -365,7 +365,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                     # Unwrap MCP 'result' JSON string
                     if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
                         try: res_to_process = json.loads(res_to_process["result"])
-                        except: pass
+                        except Exception as e: logging.warning(f"Parse error: {e}")
                     
                     sig = f"result:{json.dumps(res_to_process, sort_keys=True)}"
                     if sig not in current_assistant_seen_steps:
@@ -791,7 +791,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
     
     if token:
-        asyncio.create_task(report_exception_to_prompts_api("agent_router_api", error_msg, trace_context, token))
+        await report_exception_to_prompts_api("agent_router_api", error_msg, trace_context, token)
     
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 

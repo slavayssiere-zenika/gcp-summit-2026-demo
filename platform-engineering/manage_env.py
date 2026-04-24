@@ -19,6 +19,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Timer global ---
 START_TIME = time.monotonic()
+CURRENT_PROJECT_ID = "slavayssiere-sandbox-462015"
+SANITY_ERROR_COUNT = 0
 
 def elapsed() -> str:
     """Retourne le temps écoulé depuis le démarrage du script, formaté en HH:MM:SS."""
@@ -29,6 +31,9 @@ def elapsed() -> str:
 
 def generate_antigravity_error_report(task_context: str, error_message: str, tags: list = None):
     """Génère ou met à jour un rapport d'erreur Markdown pour l'Agent Antigravity."""
+    global CURRENT_PROJECT_ID, SANITY_ERROR_COUNT
+    SANITY_ERROR_COUNT += 1
+    project_id = CURRENT_PROJECT_ID
     report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "antigravity_sanity_error.md")
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
     tags_str = ", ".join(tags) if tags else "sanity-check"
@@ -39,10 +44,12 @@ def generate_antigravity_error_report(task_context: str, error_message: str, tag
             f.write("# 🚨 Rapport d'Erreur Sanity Check (pour Antigravity)\n\n")
             f.write("> **Directives pour l'Agent Antigravity :**\n")
             f.write("> Analyse ces erreurs, cherche les causes probables et propose une réparation.\n")
+            f.write(f"> 🔎 **IMPORTANT** : Pense à rechercher les logs pertinents directement dans GCP pour le projet `{project_id}` via les outils MCP.\n")
             f.write("> Une fois résolues, utilise la CLI Antigravity Memory pour logguer la solution.\n\n")
         
         f.write(f"## Erreur interceptée à {timestamp}\n\n")
         f.write(f"- **Contexte** : {task_context}\n")
+        f.write(f"- **Projet GCP** : `{project_id}`\n")
         f.write(f"- **Tags** : `{tags_str}`\n")
         f.write(f"- **Détails de l'erreur** :\n\n")
         f.write("```text\n")
@@ -157,7 +164,7 @@ def load_config(filepath):
 
 def check_binary_dependencies():
     """Vérifie que les outils nécessaires sont installés."""
-    dependencies = ["terraform", "gcloud", "gsutil"]
+    dependencies = ["terraform", "gcloud"]
     missing = []
     for dep in dependencies:
         if subprocess.run(["which", dep], capture_output=True).returncode != 0:
@@ -294,9 +301,13 @@ def init_tf():
 
 def set_workspace(env):
     # Try to select, if it fails, create it
+    logger.info(f"[*] Selecting Terraform workspace: '{env}'...")
     res = run_cmd(["terraform", "workspace", "select", env], check=False)
     if res.returncode != 0:
+        logger.info(f"[*] Workspace '{env}' not found. Creating it...")
         run_cmd(["terraform", "workspace", "new", env])
+    else:
+        logger.info(f"[*] Workspace '{env}' successfully selected.")
 
 def import_persistent_resource(env, address, resource_id):
     # Check if resource is in state, silence output to avoid confusing users on first deploy
@@ -657,26 +668,20 @@ def deploy(env, base_domain, project_id, config, force=False):
 
         SOURCE_ARCHIVES_BUCKET = "z-gcp-summit-frontend"
 
-        # Sur macOS, gsutil multiprocessing cause un bug Python connu.
-        # On limite automatiquement parallel_process_count=1 (le multithreading reste actif).
-        _gsutil_macos_flag = ["-o", "GSUtil:parallel_process_count=1"] if sys.platform == "darwin" else []
-
-        # 2. Identifier la dernière archive déposée (en utilisant gsutil ls trié par date)
-        # gsutil ls -l renvoie: SIZE  DATE  gs://...
+        # 2. Identifier la dernière archive déposée (en utilisant gcloud storage ls)
         print(f"[*] Looking for the latest archive in gs://{SOURCE_ARCHIVES_BUCKET}/...")
-        raw_ls = subprocess.run(["gsutil"] + _gsutil_macos_flag + ["ls", "-l", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
+        raw_ls = subprocess.run(["gcloud", "storage", "ls", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
         if raw_ls.returncode != 0:
             print(f"[!] Failed to list gs://{SOURCE_ARCHIVES_BUCKET}/")
             return
             
-        lines = [l.strip() for l in raw_ls.stdout.split('\n') if l.strip() and not l.startswith("TOTAL")]
-        if not lines:
+        lines = [l.strip() for l in raw_ls.stdout.split('\n') if l.strip()]
+        urls = [line for line in lines if line.startswith("gs://")]
+        if not urls:
             print(f"[*] No archives found in gs://{SOURCE_ARCHIVES_BUCKET}/. Skipping frontend sync.")
             return
             
-        # Sort by filename (which includes the timestamp for correct temporal ordering) 
-        # instead of sorting by the full line which starts with varying file sizes.
-        urls = [line.split()[-1] for line in lines if line.split()]
+        # Sort by filename
         urls.sort()
         latest_archive_url = urls[-1]
         
@@ -686,7 +691,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = os.path.join(tmpdir, "archive")
             print(f"[*] Downloading {latest_archive_url}...")
-            subprocess.run(["gsutil"] + _gsutil_macos_flag + ["cp", latest_archive_url, archive_path], check=True)
+            subprocess.run(["gcloud", "storage", "cp", latest_archive_url, archive_path], check=True)
             
             extract_dir = os.path.join(tmpdir, "extracted")
             os.makedirs(extract_dir, exist_ok=True)
@@ -736,7 +741,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                 sync_dir += "/"
                 
             rsync_res = subprocess.run(
-                ["gsutil"] + _gsutil_macos_flag + ["-m", "rsync", "-r", "-d", sync_dir, f"gs://{target_bucket}/"],
+                ["gcloud", "storage", "rsync", sync_dir, f"gs://{target_bucket}/", "--recursive", "--delete-unmatched-destination-objects"],
                 capture_output=True, text=True
             )
             
@@ -781,70 +786,140 @@ def deploy(env, base_domain, project_id, config, force=False):
         if lb_ip and admin_pwd:
             front_dns_name = f"{env}.{base_domain}"
             api_dns_name = f"api.{env}.{base_domain}"
-            print(f"[*] Check 1/3: Waiting for DNS {front_dns_name} to resolve to IP {lb_ip}...")
-            resolved = False
-            for _ in range(30):  # 30 * 10s = 5 mins max
-                try:
-                    ip = socket.gethostbyname(front_dns_name)
-                    if ip == lb_ip:
-                        resolved = True
-                        break
-                except:
-                    pass
-                time.sleep(10)
+            all_domains = [front_dns_name, api_dns_name]
+            if extra_domains:
+                for d in extra_domains:
+                    if d.get("dns_name"):
+                        all_domains.append(d.get("dns_name").rstrip("."))
+                        
+            print(f"[*] Check 1/5: Waiting for DNS resolution to IP {lb_ip} for domains: {', '.join(all_domains)}...")
             
-            if resolved:
-                print(f"[+] DNS resolves correctly to {lb_ip}!")
+            all_resolved = True
+            for domain in all_domains:
+                resolved = False
+                for _ in range(30):  # 30 * 10s = 5 mins max
+                    try:
+                        ip = socket.gethostbyname(domain)
+                        if ip == lb_ip:
+                            resolved = True
+                            break
+                    except Exception: pass
+                    time.sleep(10)
+                
+                if resolved:
+                    print(f"  [+] DNS {domain} resolves correctly to {lb_ip}")
+                else:
+                    err_msg = f"DNS resolution timeout (5 mins). {domain} does NOT point to {lb_ip}."
+                    print(f"  [-] {err_msg}")
+                    generate_antigravity_error_report("Sanity Check 1/3 : DNS Resolution", err_msg, ["dns", "sanity-check", "timeout"])
+                    all_resolved = False
+                    break
+            
+            if all_resolved:
                 
                 # --- CHECK 2: SSL PROVISIONING ---
                 print(f"\n[*] Check 2/5: Waiting for GCP Managed SSL Certificate provisioning (Can take 15-30 mins)...")
                 ssl_ready = False
-                
-                # Charger les certificats Mozilla si possible (contourne le bug macOS Python)
-                try:
-                    import certifi
-                    ctx_strict = ssl.create_default_context(cafile=certifi.where())
-                except ImportError:
-                    ctx_strict = ssl.create_default_context()
-                
-                ctx_fallback = ssl.create_default_context()
-                ctx_fallback.check_hostname = False
-                ctx_fallback.verify_mode = ssl.CERT_NONE
-                
-                # Par défaut on utilisera la vérification stricte
-                ctx_to_use = ctx_strict
+                cert_creation_time = "Inconnue"
+                cert_name = f"ssl-{env}"
                 
                 for attempt in range(60):
-                    try:
-                        req_test = urllib.request.Request(f"https://{front_dns_name}/", method="GET")
-                        urllib.request.urlopen(req_test, timeout=10, context=ctx_to_use)
-                        ssl_ready = True
-                        break
-                    except urllib.error.HTTPError as e:
-                        # Une erreur HTTP (404, 400, 502) signifie que la poignée de main TLS a RÉUSSI !
-                        ssl_ready = True
-                        break
-                    except urllib.error.URLError as e:
-                        # Erreur typique de certificat SSL
-                        err_msg = str(e.reason)
-                        # Si l'environnement local Python du Mac n'a pas les certificats racine d'installés...
-                        if "CERTIFICATE_VERIFY_FAILED" in err_msg:
-                            if "unable to get local issuer certificate" in err_msg:
-                                print(f"  [!] macOS Python CA Bug detected: local issuer missing. Bypassing strict verification...")
-                                ctx_to_use = ctx_fallback
-                                ssl_ready = True
-                                break
+                    res = subprocess.run([
+                        "gcloud", "compute", "ssl-certificates", "describe", cert_name,
+                        "--global", "--project", project_id, "--format=json"
+                    ], capture_output=True, text=True)
+                    
+                    if res.returncode == 0:
+                        try:
+                            cert_data = json.loads(res.stdout)
+                            cert_creation_time = cert_data.get("creationTimestamp", "Inconnue")
+                            managed = cert_data.get("managed", {})
+                            status = managed.get("status", "")
+                            domain_status = managed.get("domainStatus", {})
                             
-                        print(f"  [-] Certificate not yet ACTIVE (attempt {attempt+1}/60). Retrying in 20s... (Error: {err_msg})")
-                        time.sleep(20)
-                    except Exception as e:
-                        print(f"  [-] Unexpected error (attempt {attempt+1}/60). Retrying in 20s... (Error: {e})")
+                            if status == "ACTIVE":
+                                print(f"  [+] SSL Certificate {cert_name} is fully ACTIVE!")
+                                for d, st in sorted(domain_status.items()):
+                                    print(f"      {d:<35} {st}")
+                                ssl_ready = True
+                                
+                                # --- Fallback urllib verification for TLS handshake ---
+                                try:
+                                    import certifi
+                                    ctx = ssl.create_default_context(cafile=certifi.where())
+                                except ImportError:
+                                    ctx = ssl.create_default_context()
+                                ctx_to_use = ctx
+                                break
+                            else:
+                                print(f"  [-] Certificate status: {status} (attempt {attempt+1}/60). Retrying in 20s...")
+                                for d, st in sorted(domain_status.items()):
+                                    # Print details of domains that are not yet active
+                                    if st != "ACTIVE":
+                                        print(f"      {d:<35} {st}")
+                                time.sleep(20)
+                        except Exception as e:
+                            print(f"  [-] Error parsing gcloud output: {e}. Retrying in 20s...")
+                            time.sleep(20)
+                    else:
+                        print(f"  [-] Failed to fetch certificate status. Retrying in 20s... (Error: {res.stderr.strip()[:100]})")
                         time.sleep(20)
                 
                 if ssl_ready:
-                    print(f"  [+] Managed SSL Certificate is fully ACTIVE and verified!")
+                    age_str = ""
+                    try:
+                        if cert_creation_time != "Inconnue":
+                            from datetime import datetime, timezone
+                            dt = datetime.fromisoformat(cert_creation_time)
+                            age = datetime.now(timezone.utc) - dt
+                            mins = int(age.total_seconds() // 60)
+                            age_str = f" [Il y a {mins} minutes]"
+                    except Exception:
+                        pass
+                    print(f"  [+] Managed SSL Certificate is ACTIVE in GCP API. (Créé le: {cert_creation_time}){age_str}")
+                    print(f"  [*] Waiting for the certificate to propagate to Google Edge nodes (TLS handshake)...")
+                    tls_ready = False
+                    
+                    ctx_fallback = ssl.create_default_context()
+                    ctx_fallback.check_hostname = False
+                    ctx_fallback.verify_mode = ssl.CERT_NONE
+                    
+                    for attempt in range(90): # Wait up to 30 mins (90 * 20s) for Edge propagation
+                        try:
+                            req_test = urllib.request.Request(f"https://{front_dns_name}/", method="GET")
+                            urllib.request.urlopen(req_test, timeout=10, context=ctx_to_use)
+                            tls_ready = True
+                            break
+                        except urllib.error.HTTPError as e:
+                            # 404/400/502 means TLS handshake succeeded!
+                            tls_ready = True
+                            break
+                        except urllib.error.URLError as e:
+                            err_msg = str(e.reason)
+                            if "CERTIFICATE_VERIFY_FAILED" in err_msg:
+                                if "unable to get local issuer certificate" in err_msg:
+                                    print(f"  [!] macOS Python CA Bug detected. Bypassing strict verification...")
+                                    ctx_to_use = ctx_fallback
+                                    tls_ready = True
+                                    break
+                            print(f"  [-] TLS propagation not yet complete (attempt {attempt+1}/90). Retrying in 20s... (Error: {err_msg})")
+                            time.sleep(20)
+                        except Exception as e:
+                            print(f"  [-] Unexpected error during TLS check (attempt {attempt+1}/90). Retrying in 20s... (Error: {e})")
+                            time.sleep(20)
+                            
+                    if tls_ready:
+                        print(f"  [+] TLS Handshake successful! The certificate is fully propagated.")
+                    else:
+                        err_msg = "SSL Edge propagation timeout (30 mins). TLS handshake failed. Sanity checks aborted."
+                        print(f"  [!] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 2/5 : TLS Handshake", err_msg, ["ssl", "tls", "sanity-check", "timeout"])
+                        sys.exit(1)
                 else:
-                    print(f"  [!] SSL provisioning timeout. Sanity checks might fail.")
+                    err_msg = "SSL provisioning timeout (20 mins). Certificate is not ACTIVE in GCP API. Sanity checks aborted."
+                    print(f"  [!] {err_msg}")
+                    generate_antigravity_error_report("Sanity Check 2/5 : SSL Provisioning", err_msg, ["ssl", "sanity-check", "timeout"])
+                    sys.exit(1)
                 
                 # --- CHECK 3: FRONTEND ---
                 print(f"\n[*] Check 3/5: Testing Frontend website on https://{front_dns_name}/...")
@@ -1011,7 +1086,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                 # --- CHECK 5/5: API MICROSERVICES ---
                 logger.info(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
                 # On teste toutes les routes déclarées dans le Load Balancer (lb.tf)
-                api_routes = [
+                health_ready_routes = [
                     "/api/health",                 # agent_router_api
                     "/api/agent-hr/health",        # agent_hr_api
                     "/api/agent-ops/health",       # agent_ops_api
@@ -1027,6 +1102,14 @@ def deploy(env, base_domain, project_id, config, force=False):
                     "/monitoring-mcp/health"       # monitoring_mcp
                 ]
                 
+                api_routes = []
+                for hr_route in health_ready_routes:
+                    api_routes.append(hr_route)
+                    prefix = hr_route.rsplit("/", 1)[0]
+                    # Also check /spec and /docs for each prefix
+                    api_routes.append(f"{prefix}/spec")
+                    api_routes.append(f"{prefix}/docs")
+                
                 def check_route(route):
                     api_url = f"https://{api_dns_name}{route}"
                     req_get = urllib.request.Request(api_url, method="GET")
@@ -1034,12 +1117,9 @@ def deploy(env, base_domain, project_id, config, force=False):
                         resp = urllib.request.urlopen(req_get, timeout=35, context=ctx_to_use)
                         return f"  [+] {route:<15} -> OK (HTTP {resp.status})"
                     except urllib.error.HTTPError as e:
-                        if e.code < 500:
-                            return f"  [+] {route:<15} -> OK (HTTP {e.code} - App Responded)"
-                        else:
-                            err_msg = f"FAIL (HTTP {e.code} Server/Proxy Error) sur {route}"
-                            generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
-                            return f"  [-] {route:<15} -> {err_msg}"
+                        err_msg = f"FAIL (HTTP {e.code} Error) sur {route}"
+                        generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
+                        return f"  [-] {route:<15} -> {err_msg}"
                     except Exception as e:
                         err_msg = f"FAIL ({type(e).__name__}: {e}) sur {route}"
                         generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", "exception"])
@@ -1050,27 +1130,96 @@ def deploy(env, base_domain, project_id, config, force=False):
                     for future in as_completed(futures):
                         logger.info(future.result())
 
+                # --- CHECK 6/8: ZERO-TRUST VALIDATION (HTTP 401 WITHOUT TOKEN) ---
+                logger.info(f"\n[*] Check 6/8: Validating Zero-Trust security (expecting 401 without token)...")
+                protected_url = f"https://{api_dns_name}/api/users/me"
+                req_zt = urllib.request.Request(protected_url, method="GET")
+                try:
+                    urllib.request.urlopen(req_zt, timeout=10, context=ctx_to_use)
+                    err_msg = "Security Breach! Protected endpoint returned 200 OK without a JWT token."
+                    logger.error(f"  [-] {err_msg}")
+                    generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", "zero-trust"])
+                except urllib.error.HTTPError as e:
+                    if e.code == 401:
+                        logger.info("  [+] Zero-Trust OK: Access denied (HTTP 401) without token.")
+                    else:
+                        err_msg = f"Unexpected HTTP status {e.code} during Zero-Trust check."
+                        logger.warning(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", f"HTTP_{e.code}"])
+                except Exception as e:
+                    err_msg = f"Unexpected error during Zero-Trust check: {e}"
+                    logger.warning(f"  [-] {err_msg}")
+                    generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", "exception"])
+
+                # --- CHECK 7/8: DATABASE READ-ONLY CONNECTIVITY WITH TOKEN ---
+                logger.info(f"\n[*] Check 7/8: Validating DB read-only connectivity with JWT token...")
+                if access_token:
+                    req_db = urllib.request.Request(protected_url, method="GET")
+                    req_db.add_header("Authorization", f"Bearer {access_token}")
+                    try:
+                        resp_db = urllib.request.urlopen(req_db, timeout=15, context=ctx_to_use)
+                        if resp_db.status == 200:
+                            logger.info("  [+] Read-Only DB Check OK: Successfully fetched user profile.")
+                        else:
+                            logger.error(f"  [-] Read-Only DB Check FAIL: HTTP {resp_db.status}")
+                    except urllib.error.HTTPError as e:
+                        err_msg = f"FAIL (HTTP {e.code}) when fetching user profile with valid token."
+                        logger.error(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 7/8 : DB Read-Only", err_msg, ["db", "sanity-check", f"HTTP_{e.code}"])
+                    except Exception as e:
+                        err_msg = f"Read-Only DB Check FAIL: {e}"
+                        logger.error(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 7/8 : DB Read-Only", err_msg, ["db", "sanity-check", "exception"])
+                else:
+                    logger.warning("  [!] Skipping Check 7: No access_token available (Check 4 failed).")
+
+                # --- CHECK 8/8: MCP SIDECAR AVAILABILITY ---
+                logger.info(f"\n[*] Check 8/8: Validating MCP Sidecar tools exposure...")
+                # All data APIs and MCP natif expose tools
+                mcp_routes = [
+                    "/api/users/mcp/tools",
+                    "/api/items/mcp/tools",
+                    "/api/prompts/mcp/tools",
+                    "/api/competencies/mcp/tools",
+                    "/api/cv/mcp/tools",
+                    "/api/drive/mcp/tools",
+                    "/api/missions/mcp/tools",
+                    "/api/analytics/mcp/tools",
+                    "/monitoring-mcp/mcp/tools"
+                ]
+                for mcp_route in mcp_routes:
+                    mcp_url = f"https://{api_dns_name}{mcp_route}"
+                    req_mcp = urllib.request.Request(mcp_url, method="GET")
+                    if access_token:
+                        req_mcp.add_header("Authorization", f"Bearer {access_token}")
+                    try:
+                        resp_mcp = urllib.request.urlopen(req_mcp, timeout=15, context=ctx_to_use)
+                        if resp_mcp.status == 200:
+                            mcp_data = json.loads(resp_mcp.read().decode('utf-8'))
+                            if isinstance(mcp_data, list):
+                                tools_count = len(mcp_data)
+                            else:
+                                tools_count = len(mcp_data.get("tools", []))
+                            logger.info(f"  [+] MCP {mcp_route} OK: Found {tools_count} tools.")
+                        else:
+                            err_msg = f"HTTP {resp_mcp.status}"
+                            logger.error(f"  [-] MCP {mcp_route} FAIL: {err_msg}")
+                            generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{resp_mcp.status}"])
+                    except urllib.error.HTTPError as e:
+                        err_msg = f"FAIL (HTTP {e.code}) on {mcp_route}"
+                        logger.error(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{e.code}"])
+                    except Exception as e:
+                        err_msg = f"MCP {mcp_route} FAIL: {e}"
+                        logger.error(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", "exception"])
+
                 # --- CHECK EXTRA DOMAINS: DNS + SSL pour chaque domaine additionnel ---
                 if extra_domains:
                     print(f"\n[*] Check Extra Domains: Validating additional domains DNS + SSL...")
                     for _d in extra_domains:
                         _host = _d.get("dns_name", "").rstrip(".")  # ex: "gen-skillz.znk.io"
                         if not _host:
-                            continue
-                        # DNS check
-                        _resolved = False
-                        for _ in range(12):  # 12 * 10s = 2 mins max
-                            try:
-                                _ip = socket.gethostbyname(_host)
-                                if _ip == lb_ip:
-                                    _resolved = True
-                                    break
-                            except Exception: raise
-                            time.sleep(10)
-                        if _resolved:
-                            print(f"  [+] DNS {_host} -> {lb_ip} OK")
-                        else:
-                            print(f"  [-] DNS {_host} -> FAIL (ne pointe pas vers {lb_ip})")
                             continue
                         # SSL check
                         _ssl_ok = False
@@ -1098,9 +1247,13 @@ def deploy(env, base_domain, project_id, config, force=False):
                             print(f"  [!] SSL {_host} -> not provisioned yet (certificate may take 15-30 mins)")
 
             else:
-                logger.error(f"[-] Sanity Test FAIL: DNS resolution timeout. {front_dns_name} doesn't match {lb_ip}")
+                logger.error(f"[-] Sanity Test FAIL: DNS resolution timeout.")
+                sys.exit(1)
         else:
             logger.warning("[!] Skipping Sanity check. Missing terraform outputs (lb_ip or admin_password).")
+
+        if SANITY_ERROR_COUNT > 0:
+            raise DeploymentError(f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
 
     finally:
         if force:
@@ -1170,6 +1323,9 @@ def destroy(env, project_id, config, force=False):
             if res.returncode != 0:
                 print(f"[!] Echec definitif du destroy.")
                 sys.exit(res.returncode)
+        if SANITY_ERROR_COUNT > 0:
+            raise DeploymentError(f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
+
     finally:
         if force:
             toggle_prevent_destroy(disable=False)
@@ -1240,6 +1396,7 @@ if __name__ == "__main__":
         logger.info(f"[+] {args.env}.auto.tfvars.json généré ({len(final_config)} variables).")
 
         project_id = final_config.get("project_id", "slavayssiere-sandbox-462015")
+        CURRENT_PROJECT_ID = project_id
         base_domain = final_config.get("base_domain", "slavayssiere-zenika.com")
 
         if args.action == "deploy":
@@ -1251,6 +1408,7 @@ if __name__ == "__main__":
             
     except DeploymentError as e:
         logger.error(f"DEPLOYMENT FAILED: {e}")
+        generate_antigravity_error_report("Exécution Terraform / Déploiement infra", str(e), ["terraform", "deployment", "infrastructure"])
         total = elapsed()
         print(f"\n{'='*55}")
         print(f"[!] Script terminé avec erreur en {total}.")

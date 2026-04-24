@@ -107,6 +107,7 @@ resource "google_cloud_run_v2_service" "analytics_mcp" {
     ignore_changes = [
       client,
       client_version,
+      scaling,
 
       template[0].containers[0].resources[0].limits["cpu"]
     ]

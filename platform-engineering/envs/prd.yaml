@@ -19,22 +19,22 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.15"
+agent_router_api_version:   "v0.1.17"
 agent_hr_api_version:       "v0.0.78"
-agent_ops_api_version:      "v0.0.49"
+agent_ops_api_version:      "v0.0.51"
 agent_missions_api_version: "v0.1.25"
-users_api_version:          "v0.0.51"
+users_api_version:          "v0.0.53"
 items_api_version:          "v0.0.39"
-competencies_api_version:   "v0.1.29"
-cv_api_version:             "v0.0.104"
-prompts_api_version:        "v0.0.31"
-drive_api_version:          "v0.0.84"
+competencies_api_version:   "v0.1.30"
+cv_api_version:             "v0.0.105"
+prompts_api_version:        "v0.0.34"
+drive_api_version:          "v0.0.86"
 analytics_mcp_version:      "v0.0.75"
 monitoring_mcp_version:     "v0.0.73"
-db_migrations_version:      "v0.0.19"
+db_migrations_version:      "v0.0.22"
 db_init_version:            "v0.1.1"
-missions_api_version:       "v0.0.62"
-frontend_version:           "v0.0.140"
+missions_api_version:       "v0.0.63"
+frontend_version:           "v0.0.145"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 0
@@ -63,8 +63,7 @@ gemini_embedding_model: "gemini-embedding-001"   # SEC-F06 Semantic Cache
 # "znk-io" dans le projet sandbox et configurez les NS chez le registrar znk.io.
 #
 extra_domains:
-  - zone_name:               "zone-gen-skillz"
+  - zone_name:               "gen-skillz"
     dns_name:                "gen-skillz.znk.io."
-    parent_zone_name:        "znk-io"
-    parent_zone_project_id:  "slavayssiere-sandbox-462015"
+    parent_zone_project_id:  "prod-ia-staffing"
 trace_sampling_rate: 0.1

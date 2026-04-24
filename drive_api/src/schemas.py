@@ -7,6 +7,7 @@ class FolderCreate(BaseModel):
     google_folder_id: str
     tag: str
     folder_name: Optional[str] = None  # Peut être fourni manuellement, sinon récupéré via Drive API
+    excluded_folders: Optional[List[str]] = []
 
 class FolderStats(BaseModel):
     total_files: int = 0
@@ -20,6 +21,7 @@ class FolderStats(BaseModel):
 class FolderResponse(FolderCreate):
     id: int
     folder_name: Optional[str] = None
+    excluded_folders: Optional[List[str]] = []
     created_at: datetime
     stats: Optional[FolderStats] = None
     

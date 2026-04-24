@@ -1634,22 +1634,38 @@ async def get_user_missions(user_id: int, db: AsyncSession = Depends(get_db)):
     if not profiles:
         raise HTTPException(status_code=404, detail="Aucun profil CV trouvé pour cet utilisateur.")
     
-    # On renvoie les missions du CV le plus récent
-    return {"user_id": user_id, "missions": profiles[0].missions or []}
+    merged_missions = []
+    seen_mission_keys = set()
+    
+    for profile in profiles:
+        if not profile.missions:
+            continue
+        for mission in profile.missions:
+            title = mission.get("title", "").strip().lower()
+            company = mission.get("company", "").strip().lower()
+            key = f"{title}|{company}"
+            
+            if key not in seen_mission_keys:
+                seen_mission_keys.add(key)
+                merged_missions.append(mission)
+                
+    return {"user_id": user_id, "missions": merged_missions}
 
 @router.get("/user/{user_id}/details", response_model=CVFullProfileResponse)
 async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """
     Récupère le profil sémantique complet d'un utilisateur (RAG Context).
     """
-    profile = (await db.execute(
+    profiles = (await db.execute(
         select(CVProfile)
         .filter(CVProfile.user_id == user_id)
         .order_by(CVProfile.created_at.desc())
-    )).scalars().first()
+    )).scalars().all()
     
-    if not profile:
+    if not profiles:
         raise HTTPException(status_code=404, detail="Profil sémantique introuvable pour cet utilisateur.")
+        
+    base_profile = profiles[0]
         
     # Fetch user details for anonymity status
     is_anon = False
@@ -1668,7 +1684,7 @@ async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession =
             logger.warning(f"Failed to fetch user anonymity status for {user_id}: {e}")
 
     # Inférer seniority depuis years_of_experience si non stocké directement
-    years = profile.years_of_experience or 0
+    years = base_profile.years_of_experience or 0
     if years >= 8:
         inferred_seniority = "Senior"
     elif years >= 3:
@@ -1678,14 +1694,33 @@ async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession =
     else:
         inferred_seniority = None
 
+    merged_missions = []
+    seen_mission_keys = set()
+    merged_comp_keywords = set()
+    
+    for p in profiles:
+        if p.competencies_keywords:
+            merged_comp_keywords.update(p.competencies_keywords)
+            
+        if not p.missions:
+            continue
+        for mission in p.missions:
+            title = mission.get("title", "").strip().lower()
+            company = mission.get("company", "").strip().lower()
+            key = f"{title}|{company}"
+            
+            if key not in seen_mission_keys:
+                seen_mission_keys.add(key)
+                merged_missions.append(mission)
+
     return CVFullProfileResponse(
-        user_id=profile.user_id,
-        summary=profile.summary,
-        current_role=profile.current_role,
+        user_id=base_profile.user_id,
+        summary=base_profile.summary,
+        current_role=base_profile.current_role,
         seniority=inferred_seniority,
-        years_of_experience=profile.years_of_experience,
-        competencies_keywords=profile.competencies_keywords or [],
-        missions=profile.missions or [],
+        years_of_experience=base_profile.years_of_experience,
+        competencies_keywords=list(merged_comp_keywords),
+        missions=merged_missions,
         is_anonymous=is_anon
     )
 

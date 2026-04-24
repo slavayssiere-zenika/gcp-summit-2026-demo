@@ -194,6 +194,7 @@ resource "google_cloud_run_v2_service" "competencies_api" {
     ignore_changes = [
       client,
       client_version,
+      scaling,
 
       template[0].containers[0].resources[0].limits["cpu"],
       template[0].containers[1].resources[0].limits["cpu"]

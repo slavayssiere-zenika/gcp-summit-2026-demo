@@ -320,12 +320,41 @@ async def create_items_bulk(
             delete_cache_pattern("items:list:*")
             delete_cache_pattern("items:search:*")
         except IntegrityError as e:
-            # Conflict de clé unique (race condition inter-workers) — retourner 409 plutôt que 500
             await db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail=f"Conflit d'intégrité lors de l'insertion en masse (doublon détecté) : {e.orig}"
-            )
+            import logging as _log
+            _log.getLogger(__name__).warning(f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
+            
+            result_items = [] # Reset pour reconstruire de manière idempotente
+            for item in payload.items:
+                existing = (await db.execute(
+                    select(Item).filter(Item.user_id == item.user_id, Item.name == item.name)
+                )).scalars().first()
+                
+                if existing:
+                    result_items.append(existing)
+                else:
+                    db_item = Item(
+                        name=item.name,
+                        description=item.description,
+                        metadata_json=item.metadata_json,
+                        user_id=item.user_id,
+                        categories=[cat_map[cid] for cid in item.category_ids]
+                    )
+                    db.add(db_item)
+                    try:
+                        await db.commit()
+                        await db.refresh(db_item)
+                        result_items.append(db_item)
+                    except IntegrityError:
+                        await db.rollback()
+                        existing = (await db.execute(
+                            select(Item).filter(Item.user_id == item.user_id, Item.name == item.name)
+                        )).scalars().first()
+                        if existing:
+                            result_items.append(existing)
+            
+            delete_cache_pattern("items:list:*")
+            delete_cache_pattern("items:search:*")
         except Exception:
             await db.rollback()
             raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création en masse")
