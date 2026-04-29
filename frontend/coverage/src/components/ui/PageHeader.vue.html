@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">87.5% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>14/16</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">75% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>12/16</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/12</span>
+                <span class='fraction'>12/12</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -260,7 +260,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -271,29 +271,21 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -301,11 +293,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -446,7 +446,7 @@ interface BreadcrumbItem {
   to?: string
 }
 &nbsp;
-const props = <span class="cstat-no" title="statement not covered" >withDefaults(defineProps&lt;{</span>
+const props = withDefaults(defineProps&lt;{
   title: string
   subtitle?: string
   icon?: any
@@ -457,45 +457,45 @@ const props = <span class="cstat-no" title="statement not covered" >withDefaults
   breadcrumb: () =&gt; [],
 })
 &nbsp;
-const <span class="cstat-no" title="statement not covered" >router = useRouter()</span>
+const router = useRouter()
 &nbsp;
-const <span class="cstat-no" title="statement not covered" >userRole = <span class="fstat-no" title="function not covered" >computed(() =&gt; <span class="cstat-no" title="statement not covered" >a</span>uthService.state.user?.role)</span></span>
-const <span class="cstat-no" title="statement not covered" >roleLabel = <span class="fstat-no" title="function not covered" >computed(() =&gt; {</span></span>
-<span class="cstat-no" title="statement not covered" >  if (userRole.value === 'admin') <span class="cstat-no" title="statement not covered" >return 'Admin'</span></span>
-<span class="cstat-no" title="statement not covered" >  if (userRole.value === 'rh') <span class="cstat-no" title="statement not covered" >return 'RH'</span></span>
-<span class="cstat-no" title="statement not covered" >  return null</span>
+const userRole = computed(() =&gt; authService.state.user?.role)
+const roleLabel = computed(() =&gt; {
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (userRole.value === 'admin') <span class="cstat-no" title="statement not covered" >return 'Admin'</span>
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (userRole.value === 'rh') <span class="cstat-no" title="statement not covered" >return 'RH'</span>
+  return null
 })
 &lt;/script&gt;
 &nbsp;
 &lt;template&gt;
-<span class="cstat-no" title="statement not covered" >  &lt;div <span class="cstat-no" title="statement not covered" >class="page-header"&gt;</span></span>
+  &lt;div class="page-header"&gt;
     &lt;!-- Breadcrumb --&gt;
-    &lt;nav v-if="breadcrumb.<span class="branch-0 cbranch-no" title="branch not covered" >length" class="breadcrumb" aria-label="Fil d'Ariane"&gt;</span>
-<span class="cstat-no" title="statement not covered" >      &lt;span</span>
-        v-for="(item, i) in <span class="fstat-no" title="function not covered" >breadcrumb"</span>
+    &lt;nav v-if="breadcrumb.length" class="breadcrumb" aria-label="Fil d'Ariane"&gt;
+      &lt;span
+        v-for="(item, i) in breadcrumb"
         :key="i"
         class="crumb-group"
       &gt;
         &lt;button
           v-if="item.to"
           class="crumb crumb-link"
-          @<span class="fstat-no" title="function not covered" >click=</span>"<span class="cstat-no" title="statement not covered" >router.push(item.to)"</span>
+          @click="router.push(item.to)"
         &gt;{{ item.label }}&lt;/button&gt;
         &lt;span v-else class="crumb crumb-current"&gt;{{ item.label }}&lt;/span&gt;
-        &lt;ChevronRight v-if="i &lt; breadcrumb.length<span class="branch-0 cbranch-no" title="branch not covered" > - 1" size="12" class="crumb-sep" /&gt;</span>
+        &lt;ChevronRight v-if="i &lt; breadcrumb.length - 1" size="12" class="crumb-sep" /&gt;
       &lt;/span&gt;
     &lt;/nav&gt;
 &nbsp;
     &lt;!-- Banner --&gt;
-    &lt;div <span class="cstat-no" title="statement not covered" >class="header-banner"&gt;</span>
-      &lt;div v-if="icon" class="banner-icon"&gt;
+    &lt;div class="header-banner"&gt;
+      &lt;div v-if="<span class="branch-0 cbranch-no" title="branch not covered" >icon" class="banner-icon"&gt;</span>
         &lt;component :is="icon" size="26" /&gt;
       &lt;/div&gt;
-      &lt;div <span class="cstat-no" title="statement not covered" >class="banner-text"&gt;</span>
+      &lt;div class="banner-text"&gt;
         &lt;h1&gt;{{ title }}&lt;/h1&gt;
         &lt;p v-if="subtitle"&gt;{{ subtitle }}&lt;/p&gt;
       &lt;/div&gt;
-      &lt;div v-if="showRole &amp;&amp; roleLabel" class="role-badge"&gt;
+      &lt;div v-if="showRole &amp;&amp; <span class="branch-0 cbranch-no" title="branch not covered" >roleLabel" class="role-badge"&gt;</span>
         &lt;ShieldCheck size="13" /&gt;
         &lt;span&gt;{{ roleLabel }}&lt;/span&gt;
       &lt;/div&gt;
@@ -628,7 +628,7 @@ const <span class="cstat-no" title="statement not covered" >roleLabel = <span cl
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-29T21:28:42.027Z
+                at 2026-04-29T21:30:11.096Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
