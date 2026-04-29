@@ -3,6 +3,12 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import os
+import logging
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google.auth import jwt as google_jwt
+
+logger = logging.getLogger(__name__)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
@@ -10,14 +16,17 @@ if not SECRET_KEY:
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
 ALGORITHM = "HS256"
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
-    # 1. Try Authorization header
+    # 1. Tentative via le Header Authorization
     if credentials:
         try:
-            return jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        except JWTError:
+            return _decode_and_validate(credentials.credentials)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.debug(f"Échec validation via header, tentative via cookie: {e}")
             pass
             
     # 2. Try cookie
@@ -30,11 +39,47 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
         )
         
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
+        return _decode_and_validate(token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur de validation JWT (tout mode): {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalide ou expiré",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+def _decode_and_validate(token: str) -> dict:
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        if unverified_header.get("alg") == "RS256":
+            # Potentiel token OIDC Google (Cloud Scheduler)
+            try:
+                unverified_claims = google_jwt.decode(token, verify=False)
+                token_aud = unverified_claims.get("aud")
+                
+                # Validation complète de la signature OIDC via les serveurs Google
+                payload = id_token.verify_oauth2_token(token, google_requests.Request(), audience=token_aud)
+                
+                # Validation applicative (Zéro-Trust)
+                if payload.get("email") and "sa-cv" in payload.get("email"):
+                    return payload
+                else:
+                    logger.warning(f"Tentative d'accès avec un Service Account non autorisé : {payload.get('email')}")
+                    raise HTTPException(status_code=403, detail="Service Account non autorisé")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.debug(f"Échec de la validation Google OIDC : {e}")
+                raise JWTError("Invalid OIDC Token")
+
+        # Validation JWT applicative classique (HS256)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload.get("sub"):
+            logger.warning("[JWT] Token HS256 valide mais claim 'sub' manquant — accès refusé.")
+            raise HTTPException(status_code=401, detail="Claim 'sub' manquant")
+        return payload
+    except JWTError as e:
+        logger.debug(f"[JWT] Erreur de décodage JWTError: {e}")
+        raise

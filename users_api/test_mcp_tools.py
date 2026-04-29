@@ -123,7 +123,7 @@ async def test_mcp_server_main(mocker):
     mock_context = MagicMock()
     mock_context.__aenter__ = AsyncMock(return_value=("r", "w"))
     mock_context.__aexit__ = AsyncMock(return_value=None)
-    mocker.patch("mcp.server.stdio.stdio_server", return_value=mock_context)
+    mocker.patch("mcp_server.stdio_server", return_value=mock_context)
     
     mock_run = mocker.patch("mcp_server.server.run", new_callable=AsyncMock)
     await main()

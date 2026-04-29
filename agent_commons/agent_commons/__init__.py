@@ -10,8 +10,11 @@ Public modules:
   - guardrails      : check_hallucination_guardrail, check_empty_candidate_guardrail,
                       check_id_invention_guardrail, check_name_grounding_guardrail
   - finops          : log_tokens_to_bq
-  - schemas         : A2ARequest, A2AResponse, AgentStep, TokenUsage  [ADR12-4]
+  - schemas         : QueryRequest, A2ARequest, A2AResponse, AgentStep, TokenUsage,
+                      get_tool_metadata  [ADR12-4]
   - taxonomy_utils  : extract_mid_parents, extract_leaf_names, build_taxonomy_context
+  - jwt_middleware  : verify_jwt_bearer, verify_jwt_request, ALGORITHM  [Zero-Trust §4]
+  - exception_handler: report_exception_to_prompts_api, make_global_exception_handler
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

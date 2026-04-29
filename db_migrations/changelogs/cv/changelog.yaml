@@ -126,3 +126,38 @@ databaseChangeLog:
         - dropColumn:
             tableName: "cv_profiles"
             columnName: "is_anonymous"
+
+  - changeSet:
+      id: "8"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "educations"
+                  type: "jsonb"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "cv_profiles"
+            columnName: "educations"
+
+  - changeSet:
+      id: "9"
+      author: "antigravity"
+      changes:
+        - sql:
+            sql: |
+              -- pgvector HNSW limite les index a 2000 dimensions.
+              -- semantic_embedding est vector(3072) -> cast en halfvec(3072)
+              -- (precision float16, supporte pgvector >= 0.7 / AlloyDB PG17)
+              CREATE INDEX IF NOT EXISTS idx_cv_embedding_hnsw
+              ON cv_profiles
+              USING hnsw ((semantic_embedding::halfvec(3072)) halfvec_cosine_ops)
+              WITH (m = 16, ef_construction = 64);
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_cv_embedding_hnsw;"
+

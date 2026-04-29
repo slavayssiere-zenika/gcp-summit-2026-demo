@@ -88,7 +88,7 @@ async def get_tools():
 async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 1, force: bool = False):
     """Native REST endpoint to fetch infrastructure topology from GCP Cloud Trace with Caching."""
     from mcp_server import get_infrastructure_topology
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/1")
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/9")
     try:
         r = redis.from_url(redis_url, socket_timeout=2.0)
         cache_key = f"cache:metrics:topology:{hours_lookback}"

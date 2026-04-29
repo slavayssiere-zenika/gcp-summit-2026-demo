@@ -96,7 +96,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
     - Stale-While-Revalidate (SWR) : hard TTL 24h, soft TTL 1h.
     - Mutex Redis (SETNX) pour éviter le Cache Stampede.
     """
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/1")
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/7")
     try:
         r = redis.from_url(redis_url, socket_timeout=2.0)
         cache_key = "cache:metrics:aiops"
@@ -178,11 +178,18 @@ async def execute_tool(request: ToolCallRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/admin/finops/detect")
-async def detect_finops_anomalies(http_request: Request):
+async def detect_finops_anomalies(http_request: Request, token_payload: dict = Depends(verify_jwt)):
     """
     Exécute la Requête BigQuery pour détecter les anomalies de consommation,
     et déclenche le Kill-Switch si le seuil est dépassé.
+    Réservé aux administrateurs (action sensible : suspension automatique de comptes).
     """
+    # M2 : Seul un admin peut déclencher le Kill-Switch FinOps
+    if token_payload.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : le Kill-Switch FinOps est réservé aux administrateurs."
+        )
     from mcp_server import client as bq_client, FINOPS_TABLE_REF
     import httpx
     
@@ -235,7 +242,7 @@ async def detect_finops_anomalies(http_request: Request):
     return {"threshold": threshold, "anomalies_detected": len(suspended_users), "details": suspended_users}
 
 app.include_router(mcp_router, prefix="/mcp")
-app.include_router(api_router, prefix="/api")
+app.include_router(api_router)
 
 @app.get("/health")
 @app.get("/api/health")

@@ -128,6 +128,7 @@ async def list_tools() -> list[Tool]:
                     "input_tokens": {"type": "integer", "description": "Nombre de tokens en entrée."},
                     "output_tokens": {"type": "integer", "description": "Nombre de tokens en sortie."},
                     "unit_cost": {"type": "number", "description": "Coût unitaire estimé (optionnel)."},
+                    "is_batch": {"type": "boolean", "description": "Si true, le coût sera divisé par 2 (Vertex AI Batch).", "default": False},
                     "metadata": {"type": "object", "description": "Métadonnées additionnelles au format JSON."}
                 },
                 "required": ["user_email", "action", "model", "input_tokens", "output_tokens"]
@@ -220,6 +221,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "input_tokens": arguments["input_tokens"],
                     "output_tokens": arguments["output_tokens"],
                     "unit_cost": arguments.get("unit_cost"),
+                    "is_batch": arguments.get("is_batch", False),
                     "metadata": json.dumps(arguments.get("metadata", {}))
                 }
             ]
@@ -255,8 +257,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     action,
                     SUM(input_tokens) as total_input,
                     SUM(output_tokens) as total_output,
-                    ROUND(SUM(input_tokens) * 0.000000075 + SUM(output_tokens) * 0.0000003, 6) as estimated_cost_usd
-                FROM `{FINOPS_TABLE_REF}`
+                    ROUND(SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)), 6) as estimated_cost_usd
+                FROM `{FINOPS_TABLE_REF}` t
+                LEFT JOIN `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing` p ON t.model = p.model_name
                 {where_clause}
                 GROUP BY 1, 2, 3
                 ORDER BY 1 DESC, 5 DESC
@@ -294,9 +297,10 @@ async def get_aiops_dashboard_data_internal():
     query_monthly = f"""
         SELECT 
             DATE_TRUNC(DATE(timestamp), MONTH) as month,
-            SUM(input_tokens * 0.000000075 + output_tokens * 0.0000003) as cost,
+            SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)) as cost,
             COUNT(*) as requests
-        FROM `{FINOPS_TABLE_REF}`
+        FROM `{FINOPS_TABLE_REF}` t
+        LEFT JOIN `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing` p ON t.model = p.model_name
         WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
         GROUP BY 1 ORDER BY 1 DESC LIMIT 2
     """
@@ -305,9 +309,10 @@ async def get_aiops_dashboard_data_internal():
     query_daily = f"""
         SELECT 
             DATE(timestamp) as day,
-            SUM(input_tokens * 0.000000075 + output_tokens * 0.0000003) as cost,
+            SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)) as cost,
             COUNT(*) as requests
-        FROM `{FINOPS_TABLE_REF}`
+        FROM `{FINOPS_TABLE_REF}` t
+        LEFT JOIN `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing` p ON t.model = p.model_name
         WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
         GROUP BY 1 ORDER BY 1 ASC
     """
@@ -321,8 +326,9 @@ async def get_aiops_dashboard_data_internal():
     
     # 4. Top Users by Cost
     query_top_cost = f"""
-        SELECT user_email, SUM(input_tokens * 0.000000075 + output_tokens * 0.0000003) as cost
-        FROM `{FINOPS_TABLE_REF}`
+        SELECT user_email, SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)) as cost
+        FROM `{FINOPS_TABLE_REF}` t
+        LEFT JOIN `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing` p ON t.model = p.model_name
         GROUP BY 1 ORDER BY 2 DESC LIMIT 10
     """
 
@@ -340,6 +346,13 @@ async def get_aiops_dashboard_data_internal():
         GROUP BY 1 ORDER BY 2 DESC LIMIT 10
     """
     
+    # 7. Table des Prix (Reference)
+    query_pricing = f"""
+        SELECT model_name, input_cost_per_token, output_cost_per_token
+        FROM `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing`
+        ORDER BY input_cost_per_token DESC, model_name ASC
+    """
+    
     # Helper pour la requête
     def fetch_data(q):
         if not client:
@@ -349,13 +362,14 @@ async def get_aiops_dashboard_data_internal():
     import asyncio
     
     # Exécution parallèle
-    monthly_res, daily_res, top_count_res, top_cost_res, top_actions_res, top_models_res = await asyncio.gather(
+    monthly_res, daily_res, top_count_res, top_cost_res, top_actions_res, top_models_res, pricing_res = await asyncio.gather(
         asyncio.to_thread(fetch_data, query_monthly),
         asyncio.to_thread(fetch_data, query_daily),
         asyncio.to_thread(fetch_data, query_top_count),
         asyncio.to_thread(fetch_data, query_top_cost),
         asyncio.to_thread(fetch_data, query_top_actions),
-        asyncio.to_thread(fetch_data, query_top_models)
+        asyncio.to_thread(fetch_data, query_top_models),
+        asyncio.to_thread(fetch_data, query_pricing)
     )
 
     # Formatting
@@ -371,6 +385,7 @@ async def get_aiops_dashboard_data_internal():
         "top_users_cost": top_cost_res,
         "top_actions": top_actions_res,
         "top_models": top_models_res,
+        "pricing_table": pricing_res,
         "generated_at": datetime.utcnow().isoformat()
     }
 

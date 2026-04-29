@@ -1,0 +1,774 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- /usr/local/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/sebastien.lavayssiere/Code/test-open-code
+plugins: langsmith-0.7.38, mock-3.15.1, Faker-40.15.0, cov-7.1.0, asyncio-1.3.0, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+cv_api/test_main.py::test_import_cv_with_folder_name_zenika_nomenclature FAILED [100%]
+
+=================================== FAILURES ===================================
+_____________ test_import_cv_with_folder_name_zenika_nomenclature ______________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x116e83a10>
+
+    def test_import_cv_with_folder_name_zenika_nomenclature(mocker):
+        """
+        UC1 — Import avec folder_name 'Prénom Nom' : le user_resolve doit réussir
+        et extracted_info doit contenir folder_name.
+        """
+        _make_full_import_mocks(mocker)
+    
+>       response = client.post(
+            "/import",
+            json={
+                "url": "http://docs.google.com/document/d/abc123/edit",
+                "folder_name": "Marie Dupont"
+            },
+            headers={"Authorization": "Bearer token"}
+        )
+
+cv_api/test_main.py:549: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py:546: in post
+    return super().post(
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py:445: in request
+    return super().request(
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py:348: in handle_request
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py:345: in handle_request
+    portal.call(self.app, scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/anyio/from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/anyio/from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/applications.py:1159: in __call__
+    await super().__call__(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/applications.py:107: in __call__
+    await self.middleware_stack(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/opentelemetry/instrumentation/asgi/__init__.py:795: in __call__
+    await self.app(scope, otel_receive, otel_send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/opentelemetry/instrumentation/fastapi/__init__.py:307: in __call__
+    await self.app(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/prometheus_fastapi_instrumentator/middleware.py:177: in __call__
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/prometheus_fastapi_instrumentator/middleware.py:175: in __call__
+    await self.app(scope, receive, send_wrapper)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py:191: in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_utils.py:87: in collapse_excgroups
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cv_api/logger.py:46: in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py:716: in __call__
+    await self.middleware_stack(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py:736: in app
+    await route.handle(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py:290: in handle
+    await self.app(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py:134: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py:120: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py:674: in app
+    raw_response = await run_endpoint_function(
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py:328: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cv_api/src/cvs/router.py:220: in import_and_analyze_cv
+    return await process_cv_core(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+url = 'http://docs.google.com/document/d/abc123/edit'
+google_access_token = None, source_tag = None
+headers = {'Authorization': 'Bearer token', 'traceparent': '00-3ab4b50747a1155a949d1cd0e25aafd2-90d9f3e872affd37-01'}
+token_payload = {'role': 'admin', 'sub': 'test'}
+db = <AsyncMock id='4680040528'>, auth_token = 'token'
+folder_name = 'Marie Dupont'
+background_tasks = <fastapi.background.BackgroundTasks object at 0x116f86f90>
+genai_client = <MagicMock name='client' id='4680044560'>
+
+    async def process_cv_core(
+        url: str,
+        google_access_token: Optional[str],
+        source_tag: Optional[str],
+        headers: dict,
+        token_payload: dict,
+        db: AsyncSession,
+        auth_token: str = None,
+        folder_name: Optional[str] = None,
+        background_tasks: BackgroundTasks = None,
+        genai_client=None,
+    ) -> CVResponse:
+        """
+        Pipeline principal d'ingéstion d'un CV en 8 étapes séquentielles.
+        Retourne un CVResponse enrichi avec les étapes (steps) et les warnings non-bloquants.
+        """
+        pipeline_steps: List[CVImportStep] = []
+        pipeline_warnings: List[str] = []
+    
+        def _step_ok(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
+            s = CVImportStep(step=step, label=label, status="success", duration_ms=duration_ms, detail=detail)
+            pipeline_steps.append(s)
+            logger.info(f"[CV_STEP] {label} — OK", extra={"step": step, "duration_ms": duration_ms, "cv_url": url, "detail": detail})
+            return s
+    
+        def _step_warn(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
+            s = CVImportStep(step=step, label=label, status="warning", duration_ms=duration_ms, detail=detail)
+            pipeline_steps.append(s)
+            pipeline_warnings.append(detail or label)
+            logger.warning(f"[CV_STEP] {label} — WARN: {detail}", extra={"step": step, "duration_ms": duration_ms, "cv_url": url})
+            return s
+    
+        def _step_error(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
+            s = CVImportStep(step=step, label=label, status="error", duration_ms=duration_ms, detail=detail)
+            pipeline_steps.append(s)
+            logger.error(f"[CV_STEP] {label} — ERROR: {detail}", extra={"step": step, "duration_ms": duration_ms, "cv_url": url})
+            return s
+    
+        # ── Étape 1 : Téléchargement du document ─────────────────────────────────
+        t0 = time.monotonic()
+        try:
+            logger.info(f"[CV_STEP] download — start", extra={"step": "download", "cv_url": url})
+            raw_text = await _fetch_cv_content(url, google_access_token)
+            dur = int((time.monotonic() - t0) * 1000)
+            raw_len = len(raw_text)
+            if raw_len > 100000:
+                warn_msg = f"Document tronqué : {raw_len} caractères → limité à 100000 pour l'analyse IA"
+                _step_warn("download", "Téléchargement du document", dur, warn_msg)
+            else:
+                _step_ok("download", "Téléchargement du document", dur, f"{raw_len} caractères")
+        except HTTPException as he:
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_error("download", "Téléchargement du document", dur, he.detail)
+            raise
+        except Exception as e:
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_error("download", "Téléchargement du document", dur, str(e))
+            CV_PROCESSING_TOTAL.labels(status="failure").inc()
+            raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
+    
+        if not genai_client:
+            raise HTTPException(status_code=500, detail="GenAI Client not configured.")
+    
+        # ── Étape 2 : Analyse IA — Extraction du profil ──────────────────────────
+        t0 = time.monotonic()
+        prompt = None
+        if _CV_CACHE["prompt"]["expires"] > datetime.utcnow() and _CV_CACHE["prompt"]["value"]:
+            prompt = _CV_CACHE["prompt"]["value"]
+        else:
+            try:
+                async with httpx.AsyncClient() as http_client:
+                    res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
+                    res_prompt.raise_for_status()
+                    prompt = res_prompt.json()["value"]
+                    _CV_CACHE["prompt"]["value"] = prompt
+                    _CV_CACHE["prompt"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+            except Exception as e:
+                if os.path.exists("cv_api.extract_cv_info.txt"):
+                    with open("cv_api.extract_cv_info.txt", "r", encoding="utf-8") as f:
+                        prompt = f.read()
+                else:
+                    raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
+    
+        tree_context = ""
+        if _CV_CACHE["tree_context"]["expires"] > datetime.utcnow() and _CV_CACHE["tree_context"]["value"]:
+            tree_context = _CV_CACHE["tree_context"]["value"]
+        else:
+            try:
+                async with httpx.AsyncClient() as http_client:
+                    items: list = []
+                    skip = 0
+                    page_size = 100
+                    while True:
+                        page_res = await http_client.get(
+                            f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                            params={"skip": skip, "limit": page_size},
+                            headers=headers, timeout=5.0
+                        )
+                        if page_res.status_code != 200:
+                            break
+                        page_items = page_res.json().get('items', [])
+                        items.extend(page_items)
+                        if len(page_items) < page_size:
+                            break
+                        skip += page_size
+    
+                    if items:
+                        tree_context, nb_parents, nb_leaves = build_taxonomy_context(items)
+                        _CV_CACHE["tree_context"]["value"] = tree_context
+                        _CV_CACHE["tree_context"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+                        _CV_CACHE["tree_items"]["value"] = items
+                        _CV_CACHE["tree_items"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+            except Exception as e:
+                logger.warning(f"Failed to fetch competencies tree for context: {e}")
+    
+        final_prompt = prompt + tree_context
+    
+        try:
+            response = await generate_content_with_retry(
+                genai_client,
+                model=os.getenv("GEMINI_CV_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")),
+                contents=[final_prompt, f"RESUME:\n{raw_text[:100000]}"],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=_CV_RESPONSE_SCHEMA,
+                )
+            )
+            parsed_data = response.text
+            structured_cv = json.loads(parsed_data)
+    
+            user_caller = token_payload.get("sub", "unknown")
+            safe_meta = response.usage_metadata if hasattr(response, 'usage_metadata') else None
+            await log_finops(user_caller, "analyze_cv", os.getenv("GEMINI_CV_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")), safe_meta, {"cv_url": url}, auth_token=auth_token)
+    
+            if not structured_cv.get("is_cv", False):
+                dur = int((time.monotonic() - t0) * 1000)
+                _step_error("llm_parse", "Analyse IA — Extraction du profil", dur, "Document non reconnu comme un CV")
+                raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
+    
+            nb_competencies = len(structured_cv.get("competencies", []))
+            nb_missions = len(structured_cv.get("missions", []))
+            summary_val = structured_cv.get("summary", "")
+            dur = int((time.monotonic() - t0) * 1000)
+    
+            llm_detail = f"{nb_competencies} compétences, {nb_missions} missions détectées"
+            if nb_competencies == 0:
+                warn_cv = "Aucune compétence extraite par l'IA — vérifiez la qualité du document"
+                _step_warn("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
+                pipeline_warnings.append(warn_cv)
+            elif not summary_val or summary_val.strip() == "":
+                warn_cv = "Résumé de profil vide — l'IA n'a pas pu générer de synthèse"
+                _step_warn("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
+                pipeline_warnings.append(warn_cv)
+            else:
+                _step_ok("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
+    
+        except HTTPException:
+            raise
+        except Exception as e:
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_error("llm_parse", "Analyse IA — Extraction du profil", dur, str(e))
+            CV_PROCESSING_TOTAL.labels(status="failure").inc()
+            raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")
+    
+        # ── Étape 3 : Résolution d'identité ──────────────────────────────────────
+        t0 = time.monotonic()
+    
+        def sanitize_field(val: Any) -> Optional[str]:
+            if val is None: return None
+            s = str(val).strip()
+            clean_s = s.lower().strip(",").strip()
+            if clean_s in ("null", "none", "", "unknown", "n/a", "na", "nil"): return None
+            return s
+    
+        def normalize_str(s: str) -> str:
+            if not s: return ""
+            return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
+    
+        NAME_REGEX = r"^[A-Za-zÀ-ÿ\s\-\']+$"
+        EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    
+        def is_valid_name(n: Optional[str]) -> bool:
+            return bool(n and re.match(NAME_REGEX, n))
+        def is_valid_email(e: Optional[str]) -> bool:
+            return bool(e and re.match(EMAIL_REGEX, e))
+    
+        raw_email = sanitize_field(structured_cv.get("email"))
+        llm_first_name = sanitize_field(structured_cv.get("first_name"))
+        llm_last_name = sanitize_field(structured_cv.get("last_name"))
+        is_anonymous = structured_cv.get("is_anonymous", False)
+        trigram = sanitize_field(structured_cv.get("trigram"))
+    
+        if llm_first_name and not is_valid_name(llm_first_name):
+            llm_first_name = None
+        if llm_last_name and not is_valid_name(llm_last_name):
+            llm_last_name = None
+    
+        folder_first_name: Optional[str] = None
+        folder_last_name: Optional[str] = None
+    
+        if folder_name and folder_name.strip():
+            parts = folder_name.strip().split(None, 1)
+            if len(parts) == 2:
+                folder_first_name = sanitize_field(parts[0])
+                folder_last_name = sanitize_field(parts[1])
+                if not is_valid_name(folder_first_name): folder_first_name = None
+                if not is_valid_name(folder_last_name): folder_last_name = None
+    
+        first_name = folder_first_name or llm_first_name
+        last_name = folder_last_name or llm_last_name
+    
+        if folder_first_name and folder_last_name and llm_first_name and llm_last_name:
+            fn_match = normalize_str(folder_first_name) == normalize_str(llm_first_name)
+            ln_match = normalize_str(folder_last_name) == normalize_str(llm_last_name)
+            if not (fn_match and ln_match):
+                warn_folder = f"⚠️ Divergence d'identité — Dossier: '{folder_first_name} {folder_last_name}' / LLM: '{llm_first_name} {llm_last_name}'."
+                _step_warn("folder_identity", "Résolution identité — Divergence dossier vs LLM", 0, warn_folder)
+                first_name, last_name = folder_first_name, folder_last_name
+    
+        if not is_valid_name(first_name): first_name = None
+        if not is_valid_name(last_name): last_name = None
+    
+        if not is_valid_email(raw_email):
+            if first_name and last_name:
+                email = f"{normalize_str(first_name).replace(' ', '')}.{normalize_str(last_name).replace(' ', '')}@zenika.com"
+                pipeline_warnings.append(f"Email absent ou invalide dans le CV — email généré : {email}")
+            else:
+                is_anonymous = True
+                trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
+                first_name, last_name = "Anon", trigram
+                email = f"anon.{trigram.lower()}@anonymous.zenika.com"
+                pipeline_warnings.append("Identité introuvable dans le CV — profil anonymisé automatiquement")
+        else:
+            email = raw_email
+    
+        ext_full_norm = f"{normalize_str(first_name)} {normalize_str(last_name)}"
+    
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            user_id = None
+            importer_id = None
+    
+            try:
+                existing_cv = (await db.execute(select(CVProfile).where(CVProfile.source_url == url))).scalars().first()
+            except AttributeError:
+                existing_cv = (await db.execute(select(CVProfile).where(CVProfile.source_url == url))).first()
+            if existing_cv and existing_cv.user_id:
+                user_id = existing_cv.user_id
+    
+            if not user_id and folder_first_name and folder_last_name:
+                folder_search_q = f"{folder_first_name} {folder_last_name}"
+                fn_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": folder_search_q, "limit": 10}, headers=headers)
+                if fn_res.status_code == 200:
+                    for u in fn_res.json().get("items", []):
+                        if normalize_str(u.get("first_name")) == normalize_str(folder_first_name) and normalize_str(u.get("last_name")) == normalize_str(folder_last_name):
+                            user_id = u["id"]
+                            break
+    
+            if not user_id and email:
+                search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
+                if search_res.status_code == 200:
+                    for u in search_res.json().get("items", []):
+                        if u.get("email", "").lower() == email.lower():
+                            u_full_norm = normalize_str(u.get("full_name") or f"{u.get('first_name')} {u.get('last_name')}")
+                            if ext_full_norm and ext_full_norm not in u_full_norm and u_full_norm not in ext_full_norm:
+                                continue
+                            user_id = u["id"]
+                            break
+    
+            if not user_id and first_name and last_name:
+                search_q = f"{first_name} {last_name}"
+                name_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": search_q, "limit": 10}, headers=headers)
+                if name_res.status_code == 200:
+                    for u in name_res.json().get("items", []):
+                        if normalize_str(u.get("first_name")) == normalize_str(first_name) and normalize_str(u.get("last_name")) == normalize_str(last_name):
+                            user_id = u["id"]
+                            break
+    
+            importer_username = token_payload.get("sub")
+            if importer_username:
+                importer_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": importer_username, "limit": 10}, headers=headers)
+                if importer_res.status_code == 200:
+                    for u in importer_res.json().get("items", []):
+                        if u.get("username", "").lower() == importer_username.lower():
+                            importer_id = u["id"]
+                            break
+    
+            filename = os.path.basename(url).lower()
+            if not is_anonymous and any(x in filename for x in ["annonym", "anon", "abc"]):
+                is_anonymous = True
+                if first_name != "Anon":
+                    trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
+                    first_name, last_name = "Anon", trigram
+                    email = f"anon.{trigram.lower()}@anonymous.zenika.com"
+    
+            if user_id and is_anonymous:
+                user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+                if user_info_res.status_code == 200:
+                    user_data = user_info_res.json()
+                    if not user_data.get("is_anonymous", False):
+                        await task_state_manager.update_progress(new_log=f"🛡️ CV anonyme détecté sur un compte réel (User {user_id}). DÉTACHEMENT du profil.")
+                        user_id = None
+    
+            if not user_id:
+                safe_fn = first_name or "u"
+                safe_ln = last_name or f"user{random.randint(1000,9999)}"
+                new_u = {
+                    "username": f"{safe_fn[0].lower()}{safe_ln.lower().replace(' ', '')}{random.randint(100, 999)}",
+                    "email": email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "full_name": f"{first_name or ''} {last_name or ''}".strip() or "Unknown User",
+                    "password": "zenikacv123",
+                    "is_anonymous": is_anonymous
+                }
+                create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+                if create_res.status_code == 409 or (create_res.status_code >= 400 and "already exists" in create_res.text.lower()):
+                    host = email.split('@')[1] if '@' in email else "zenika.com"
+                    prefix = email.split('@')[0] if '@' in email else "conflict"
+                    conflict_email = f"{prefix}.conflict.{random.randint(1000, 9999)}@{host}"
+                    new_u["email"] = conflict_email
+                    create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+                if create_res.status_code >= 400:
+                    dur = int((time.monotonic() - t0) * 1000)
+                    _step_error("user_resolve", "Résolution & création d'identité", dur, f"Création utilisateur échouée (HTTP {create_res.status_code})")
+                    raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
+                user_id = create_res.json()["id"]
+    
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_ok("user_resolve", "Résolution & création d'identité", dur, f"User ID {user_id}")
+    
+            async def _bg_process_competencies_and_missions(bg_user_id, bg_structured_cv, bg_headers, bg_url):
+                bg_errors = []
+                async with httpx.AsyncClient(timeout=120.0) as bg_http_client:
+                    try:
+                        def normalize_comp(text):
+                            if not text: return ""
+                            text = text.strip().lower()
+                            return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
+    
+                        async def resolve_comp_id(name: str) -> Optional[int]:
+                            try:
+                                res = await bg_http_client.get(
+                                    f"{COMPETENCIES_API_URL.rstrip('/')}/search",
+                                    params={"query": name, "limit": 5},
+                                    headers=bg_headers, timeout=5.0
+                                )
+                                if res.status_code == 200:
+                                    n_norm = normalize_comp(name)
+                                    for item in res.json().get("items", []):
+                                        if normalize_comp(item.get("name", "")) == n_norm:
+                                            return item["id"]
+                                        aliases_raw = item.get("aliases") or ""
+                                        for alias in aliases_raw.split(","):
+                                            if normalize_comp(alias.strip()) == n_norm:
+                                                return item["id"]
+                            except Exception:
+                                pass
+                            return None
+    
+                        async def process_competency(comp):
+                            name = sanitize_field(comp.get("name"))
+                            if not name or not comp.get("practiced", True): return True
+                            parent = sanitize_field(comp.get("parent"))
+                            try:
+                                c_id = await resolve_comp_id(name)
+                                if not c_id:
+                                    p_id = None
+                                    if parent:
+                                        p_id = await resolve_comp_id(parent)
+                                        if not p_id:
+                                            p_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=bg_headers)
+                                            if p_res.status_code < 400: p_id = p_res.json()["id"]
+    
+                                    aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
+                                    leaf_data = {"name": name, "description": "Candidate CV Skill", "aliases": aliases_str}
+                                    if p_id: leaf_data["parent_id"] = p_id
+    
+                                    c_id = await resolve_comp_id(name)
+                                    if not c_id:
+                                        c_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=bg_headers)
+                                        if c_res.status_code < 400: c_id = c_res.json()["id"]
+    
+                                if c_id:
+                                    assign_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/{c_id}", headers=bg_headers)
+                                    if assign_res.status_code < 400: return True
+                                    return f"Échec d'assignation de '{name}'"
+                            except Exception as e:
+                                return f"Erreur inattendue sur '{name}': {e}"
+                            return f"Impossible de résoudre '{name}'"
+    
+                        comp_tasks = [process_competency(c) for c in bg_structured_cv.get("competencies", [])]
+                        comp_results = await asyncio.gather(*comp_tasks, return_exceptions=True)
+                        for res in comp_results:
+                            if res is not True: bg_errors.append(str(res))
+                    except Exception as e:
+                        bg_errors.append(f"Crash compétences: {e}")
+    
+                    try:
+                        missions_list = bg_structured_cv.get("missions", [])
+                        cat_res = await bg_http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=bg_headers)
+                        categories = cat_res.json() if cat_res.status_code == 200 else []
+    
+                        def find_cat_id(name):
+                            for c in categories:
+                                if c["name"].lower() == name.lower(): return c["id"]
+                            return None
+    
+                        mission_cat_id = find_cat_id("Missions")
+                        if not mission_cat_id:
+                            m_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences"}, headers=bg_headers)
+                            if m_res.status_code < 400: mission_cat_id = m_res.json()["id"]
+    
+                        sensitive_cat_id = find_cat_id("Restricted")
+                        if not sensitive_cat_id:
+                            s_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive missions"}, headers=bg_headers)
+                            if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
+    
+                        item_data_list = []
+                        for m in missions_list:
+                            cat_ids = [mission_cat_id] if mission_cat_id else []
+                            if m.get("is_sensitive") and sensitive_cat_id: cat_ids.append(sensitive_cat_id)
+                            item_data_list.append({
+                                "name": m["title"], "description": m.get("description", ""), "user_id": bg_user_id, "category_ids": cat_ids,
+                                "metadata_json": {"company": m.get("company"), "competencies": m.get("competencies", []), "is_sensitive": m.get("is_sensitive", False), "start_date": m.get("start_date"), "end_date": m.get("end_date"), "duration": m.get("duration"), "mission_type": m.get("mission_type", "build"), "source": "CV Analysis"}
+                            })
+    
+                        if item_data_list:
+                            m_post = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/bulk", json={"items": item_data_list}, headers=bg_headers)
+                            if m_post.status_code >= 400: bg_errors.append("Création missions échouée")
+                    except Exception as e:
+                        bg_errors.append(f"Crash missions: {e}")
+    
+                if bg_errors:
+                    try:
+                        drive_api_url = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
+                        doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", bg_url)
+                        if doc_id_match:
+                            async with httpx.AsyncClient(timeout=10.0) as webhook_client:
+                                await webhook_client.patch(f"{drive_api_url.rstrip('/')}/files/{doc_id_match.group(1)}", json={"status": "ERROR", "error_message": " | ".join(list(dict.fromkeys(bg_errors)))}, headers=bg_headers)
+                    except Exception:
+                        pass
+    
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as _score_client:
+                        _score_headers = dict(bg_headers)
+                        from opentelemetry.propagate import inject as _inject
+                        _inject(_score_headers)
+                        await _score_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{bg_user_id}/ai-score-all", headers=_score_headers, timeout=5.0)
+                except Exception:
+                    pass
+    
+            if background_tasks:
+                background_tasks.add_task(_bg_process_competencies_and_missions, user_id, structured_cv, headers, url)
+                _step_ok("competencies_missions", "Mapping RAG et Extraction", 0, "Délégué en Background Task (Asynchrone)")
+                assigned_count = 0
+            else:
+                await _bg_process_competencies_and_missions(user_id, structured_cv, headers, url)
+                assigned_count = 0
+    
+        # ── Étape 6 : Génération des embeddings vectoriels ────────────────────────
+        t0 = time.monotonic()
+        comp_keywords = [c.get("name") for c in structured_cv.get("competencies", []) if c.get("name")]
+        distilled_content = _build_distilled_content(structured_cv)
+        vector_data = None
+        try:
+            emb_res = await embed_content_with_retry(
+                genai_client,
+                model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
+                contents=distilled_content
+            )
+            vector_data = emb_res.embeddings[0].values
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_ok("embedding", "Génération des embeddings vectoriels", dur, f"{len(vector_data)} dimensions")
+        except Exception as e:
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_warn("embedding", "Génération des embeddings vectoriels", dur, f"Embedding échoué : {e}")
+            pipeline_warnings.append("Embedding vectoriel échoué")
+    
+        # ── Étape 7 : Sauvegarde en base de données ───────────────────────────────
+        t0 = time.monotonic()
+        try:
+            await db.execute(sa_delete(CVProfile).where(CVProfile.source_url == url))
+            cv_record = CVProfile(
+                user_id=user_id,
+                source_url=url,
+                source_tag=source_tag,
+                extracted_competencies=structured_cv.get("competencies", []),
+                current_role=structured_cv.get("current_role"),
+                years_of_experience=structured_cv.get("years_of_experience"),
+                summary=_coerce_to_str(structured_cv.get("summary")),
+                competencies_keywords=comp_keywords,
+                missions=structured_cv.get("missions", []),
+                educations=structured_cv.get("educations", []),
+                raw_content=raw_text,
+                semantic_embedding=vector_data,
+                imported_by_id=importer_id
+            )
+            db.add(cv_record)
+            await db.commit()
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_ok("db_save", "Sauvegarde en base de données", dur, f"CV ID utilisateur {user_id}")
+        except Exception as e:
+            dur = int((time.monotonic() - t0) * 1000)
+            _step_error("db_save", "Sauvegarde en base de données", dur, str(e))
+            CV_PROCESSING_TOTAL.labels(status="failure").inc()
+            raise HTTPException(status_code=500, detail=f"Database save failed: {e}")
+    
+        CV_PROCESSING_TOTAL.labels(status="success").inc()
+    
+        response_data = {
+            "status": "success",
+            "user_id": user_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "is_anonymous": is_anonymous,
+            "competencies_assigned": assigned_count,
+            "warnings": pipeline_warnings,
+            "steps": [s.model_dump() for s in pipeline_steps]
+        }
+>       return CVResponse(**response_data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CVResponse
+E       message
+E         Field required [type=missing, input_value={'status': 'success', 'us...CV ID utilisateur 42'}]}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+cv_api/src/services/cv_import_service.py:648: ValidationError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:44:43,246", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] download \u2014 start", "step": "download", "cv_url": "http://docs.google.com/document/d/abc123/edit", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,246", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] T\u00e9l\u00e9chargement du document \u2014 OK", "step": "download", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/abc123/edit", "detail": "21 caract\u00e8res", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,248", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] Analyse IA \u2014 Extraction du profil \u2014 OK", "step": "llm_parse", "duration_ms": 1, "cv_url": "http://docs.google.com/document/d/abc123/edit", "detail": "1 comp\u00e9tences, 0 missions d\u00e9tect\u00e9es", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,248", "levelname": "WARNING", "name": "src.services.cv_import_service", "message": "[CV_STEP] R\u00e9solution identit\u00e9 \u2014 Divergence dossier vs LLM \u2014 WARN: \u26a0\ufe0f Divergence d'identit\u00e9 \u2014 Dossier: 'Marie Dupont' / LLM: 'Jean Dupont'.", "step": "folder_identity", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/abc123/edit", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,248", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] R\u00e9solution & cr\u00e9ation d'identit\u00e9 \u2014 OK", "step": "user_resolve", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/abc123/edit", "detail": "User ID 42", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,248", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] Mapping RAG et Extraction \u2014 OK", "step": "competencies_missions", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/abc123/edit", "detail": "D\u00e9l\u00e9gu\u00e9 en Background Task (Asynchrone)", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,249", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] G\u00e9n\u00e9ration des embeddings vectoriels \u2014 OK", "step": "embedding", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/abc123/edit", "detail": "2 dimensions", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,250", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] Sauvegarde en base de donn\u00e9es \u2014 OK", "step": "db_save", "duration_ms": 1, "cv_url": "http://docs.google.com/document/d/abc123/edit", "detail": "CV ID utilisateur 42", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+{"asctime": "2026-04-29 14:44:43,250", "levelname": "ERROR", "name": "middleware.http", "message": "HTTP Request Failed", "exc_info": "Traceback (most recent call last):\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/logger.py\", line 46, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py\", line 716, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py\", line 736, in app\n    await route.handle(scope, receive, send)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py\", line 290, in handle\n    await self.app(scope, receive, send)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py\", line 134, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py\", line 120, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py\", line 674, in app\n    raw_response = await run_endpoint_function(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n    )\n    ^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py\", line 328, in run_endpoint_function\n    return await dependant.call(**values)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py\", line 220, in import_and_analyze_cv\n    return await process_cv_core(\n           ^^^^^^^^^^^^^^^^^^^^^^\n    ...<9 lines>...\n    )\n    ^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py\", line 648, in process_cv_core\n    return CVResponse(**response_data)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pydantic/main.py\", line 250, in __init__\n    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)\npydantic_core._pydantic_core.ValidationError: 1 validation error for CVResponse\nmessage\n  Field required [type=missing, input_value={'status': 'success', 'us...CV ID utilisateur 42'}]}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing", "http.method": "POST", "http.url": "http://testserver/import", "http.status_code": 500, "http.duration_s": 0.0065, "error": "1 validation error for CVResponse\nmessage\n  Field required [type=missing, input_value={'status': 'success', 'us...CV ID utilisateur 42'}]}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing", "trace_id": "3ab4b50747a1155a949d1cd0e25aafd2", "span_id": "90d9f3e872affd37"}
+------------------------------ Captured log call -------------------------------
+INFO     src.services.cv_import_service:cv_import_service.py:169 [CV_STEP] download — start
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Téléchargement du document — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Analyse IA — Extraction du profil — OK
+WARNING  src.services.cv_import_service:cv_import_service.py:157 [CV_STEP] Résolution identité — Divergence dossier vs LLM — WARN: ⚠️ Divergence d'identité — Dossier: 'Marie Dupont' / LLM: 'Jean Dupont'.
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Résolution & création d'identité — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Mapping RAG et Extraction — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Génération des embeddings vectoriels — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Sauvegarde en base de données — OK
+ERROR    middleware.http:logger.py:61 HTTP Request Failed
+Traceback (most recent call last):
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/logger.py", line 46, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py", line 674, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/routing.py", line 328, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/cvs/router.py", line 220, in import_and_analyze_cv
+    return await process_cv_core(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py", line 648, in process_cv_core
+    return CVResponse(**response_data)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for CVResponse
+message
+  Field required [type=missing, input_value={'status': 'success', 'us...CV ID utilisateur 42'}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+=============================== warnings summary ===============================
+../../../../Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+cv_api/test_main.py::test_import_cv_with_folder_name_zenika_nomenclature
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:194: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    if _CV_CACHE["prompt"]["expires"] > datetime.utcnow() and _CV_CACHE["prompt"]["value"]:
+
+cv_api/test_main.py::test_import_cv_with_folder_name_zenika_nomenclature
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:203: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    _CV_CACHE["prompt"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+
+cv_api/test_main.py::test_import_cv_with_folder_name_zenika_nomenclature
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:212: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    if _CV_CACHE["tree_context"]["expires"] > datetime.utcnow() and _CV_CACHE["tree_context"]["value"]:
+
+cv_api/test_main.py::test_import_cv_with_folder_name_zenika_nomenclature
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:625: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    db.add(cv_record)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED cv_api/test_main.py::test_import_cv_with_folder_name_zenika_nomenclature
+======================== 1 failed, 5 warnings in 0.37s =========================

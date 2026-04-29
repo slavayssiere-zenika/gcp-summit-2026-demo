@@ -1,6 +1,7 @@
 from jose import JWTError, jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
+from typing import Optional
 import os
 
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -9,9 +10,6 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 
 security = HTTPBearer()
-
-from fastapi import Request
-from typing import Optional
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     # 1. Try Authorization header

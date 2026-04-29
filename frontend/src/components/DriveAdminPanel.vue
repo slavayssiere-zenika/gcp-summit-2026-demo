@@ -1,82 +1,6 @@
 <template>
   <div class="drive-admin-panel">
-    <div class="admin-header">
-      <div class="header-content">
-        <h2>Google Drive Scanner</h2>
-        <p class="subtitle">Import automatisé et taggé des CV depuis Google Drive</p>
-      </div>
-      <div class="action-container">
-        <button class="btn-primary" @click="triggerSync" :disabled="isSyncing">
-          <UploadCloud v-if="!isSyncing" class="icon" />
-          <Loader2 v-else class="icon spinning" />
-          {{ isSyncing ? 'Synchronisation...' : 'Forcer Synchronisation' }}
-        </button>
-      </div>
-    </div>
 
-    <!-- Sync errors -->
-    <div class="error-panel fade-in-up auth-alert" v-if="actionError" style="margin-bottom:0.5rem;">
-      <strong>⚠️ Erreur action :</strong> {{ actionError }}
-      <button @click="actionError = ''" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:1rem;">✕</button>
-    </div>
-
-    <!-- Alert for OAuth loss -->
-    <div class="error-panel fade-in-up auth-alert" v-if="syncAuthError">
-      <strong>🚨 Alerte Critique :</strong> {{ syncAuthError }}
-    </div>
-    
-    <!-- Sync loader global -->
-    <div class="global-sync-alert" v-if="isProcessingOrPending">
-      <Radio v-if="syncStatus?.queued > 0" class="icon" />
-      <Loader2 v-else class="icon spinning" />
-      <span>{{ queuedBannerMsg || 'Analyse et import en cours en arrière-plan...' }}</span>
-    </div>
-
-    <!-- Dashboard Widget -->
-    <div class="stats-grid" v-if="syncStatus">
-      <div class="stat-card">
-        <div class="stat-icon pending"><Clock class="icon" /></div>
-        <div class="stat-content">
-          <span class="label">En Attente (PENDING)</span>
-          <span class="value">{{ syncStatus.pending }}</span>
-        </div>
-      </div>
-      <div class="stat-card" :class="{ 'queued-card-active': syncStatus.queued > 0 }">
-        <div class="stat-icon queued"><Radio class="icon" /></div>
-        <div class="stat-content">
-          <span class="label">File Pub/Sub (QUEUED)</span>
-          <span class="value">{{ syncStatus.queued || 0 }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon processing"><Loader2 class="icon spinning" /></div>
-        <div class="stat-content">
-          <span class="label">En cours (PROCESSING)</span>
-          <span class="value">{{ syncStatus.processing }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon imported"><CheckCircle2 class="icon" /></div>
-        <div class="stat-content">
-          <span class="label">CV Importés</span>
-          <span class="value">{{ syncStatus.imported }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon ignored"><FileX class="icon" /></div>
-        <div class="stat-content">
-          <span class="label">Ignorés (Non CV)</span>
-          <span class="value">{{ syncStatus.ignored }}</span>
-        </div>
-      </div>
-      <div class="stat-card error-card-stat">
-        <div class="stat-icon error"><AlertCircle class="icon" /></div>
-        <div class="stat-content">
-          <span class="label">Erreurs d'import</span>
-          <span class="value">{{ syncStatus.errors }}</span>
-        </div>
-      </div>
-    </div>
 
     <div class="main-split">
       <!-- Main Content: Folders -->
@@ -118,38 +42,77 @@
             </thead>
             <tbody>
               <tr v-for="folder in folders" :key="folder.id">
-                <td>
-                  <div class="folder-info">
-                    <span class="folder-name">{{ folder.folder_name || folder.google_folder_id }}</span>
-                    <span class="tag-badge">{{ folder.tag }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div v-if="folder.stats && folder.stats.total_files > 0" class="progress-wrapper">
-                    <div class="progress-bar">
-                      <div class="progress-fill imported" :style="{ width: percent(folder.stats.imported, folder.stats.total_files) }"></div>
-                      <div class="progress-fill ignored" :style="{ width: percent(folder.stats.ignored, folder.stats.total_files) }"></div>
-                      <div class="progress-fill error" :style="{ width: percent(folder.stats.errors, folder.stats.total_files) }"></div>
+                <template v-if="editingFolderId === folder.id">
+                  <td colspan="3">
+                    <div class="edit-folder-form">
+                      <div class="form-group" style="flex: 1;">
+                        <label class="text-sm">Tag</label>
+                        <input v-model="editFolderData.tag" class="w-full" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);" />
+                      </div>
+                      <div class="form-group" style="flex: 2;">
+                        <label class="text-sm">Exclusions (séparées par virgule)</label>
+                        <input v-model="editFolderData.excluded_folders_str" class="w-full" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);" />
+                      </div>
                     </div>
-                    <div class="progress-text text-sm">
-                      {{ folder.stats.imported + folder.stats.errors + folder.stats.ignored }} / {{ folder.stats.total_files }} traités
+                  </td>
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                      <button @click="saveFolder(folder.id)" class="btn-action btn-sync" style="padding: 0.4rem 0.6rem; justify-content: center;" title="Sauvegarder" :disabled="isSaving">
+                        <Loader2 v-if="isSaving" class="icon-sm spin" />
+                        <template v-else>
+                          <Check class="icon-sm" />
+                          <span>Valider</span>
+                        </template>
+                      </button>
+                      <button @click="cancelEdit" class="btn-action btn-retry" style="padding: 0.4rem 0.6rem; justify-content: center;" title="Annuler" :disabled="isSaving">
+                        <X class="icon-sm" />
+                        <span>Annuler</span>
+                      </button>
                     </div>
-                  </div>
-                  <div v-else class="text-sm text-light">En attente de scan...</div>
-                </td>
-                <td>
-                  <div v-if="folder.stats">
-                    <span v-if="folder.stats.processing > 0" class="status-badge processing">En cours ({{ folder.stats.processing }})</span>
-                    <span v-else-if="folder.stats.errors > 0" class="status-badge error">{{ folder.stats.errors }} Erreurs</span>
-                    <span v-else-if="folder.stats.pending > 0" class="status-badge pending">En attente</span>
-                    <span v-else-if="folder.stats.total_files > 0" class="status-badge imported_cv">Terminé</span>
-                  </div>
-                </td>
-                <td>
-                  <button @click="deleteFolder(folder.id)" class="btn-icon btn-danger" title="Supprimer la source">
-                    <Trash2 class="icon-sm" />
-                  </button>
-                </td>
+                  </td>
+                </template>
+                <template v-else>
+                  <td>
+                    <div class="folder-info">
+                      <span class="folder-name">{{ folder.folder_name || folder.google_folder_id }}</span>
+                      <span class="tag-badge">{{ folder.tag }}</span>
+                      <div v-if="folder.excluded_folders?.length" class="text-xs text-light" style="margin-top: 0.25rem;">
+                        Exclus: {{ folder.excluded_folders.join(', ') }}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div v-if="folder.stats && folder.stats.total_files > 0" class="progress-wrapper">
+                      <div class="progress-bar">
+                        <div class="progress-fill imported" :style="{ width: percent(folder.stats.imported, folder.stats.total_files) }"></div>
+                        <div class="progress-fill ignored" :style="{ width: percent(folder.stats.ignored, folder.stats.total_files) }"></div>
+                        <div class="progress-fill error" :style="{ width: percent(folder.stats.errors, folder.stats.total_files) }"></div>
+                      </div>
+                      <div class="progress-text text-sm">
+                        {{ folder.stats.imported + folder.stats.errors + folder.stats.ignored }} / {{ folder.stats.total_files }} traités
+                      </div>
+                    </div>
+                    <div v-else class="text-sm text-light">En attente de scan...</div>
+                  </td>
+                  <td>
+                    <div v-if="folder.stats">
+                      <span v-if="folder.stats.processing > 0" class="status-badge processing">En cours ({{ folder.stats.processing }})</span>
+                      <span v-else-if="folder.stats.errors > 0" class="status-badge error">{{ folder.stats.errors }} Erreurs</span>
+                      <span v-else-if="folder.stats.pending > 0" class="status-badge pending">En attente</span>
+                      <span v-else-if="folder.stats.total_files > 0" class="status-badge imported_cv">Terminé</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div style="display: flex; gap: 0.5rem;">
+                      <button v-if="isAdmin()" @click="startEditFolder(folder)" class="btn-icon btn-secondary" title="Éditer la source">
+                        <Edit2 class="icon-sm" />
+                      </button>
+                      <button v-if="isAdmin()" @click="deleteFolder(folder.id)" class="btn-icon btn-danger" title="Supprimer la source">
+                        <Trash2 class="icon-sm" />
+                      </button>
+                    </div>
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
@@ -185,8 +148,8 @@
               v-if="dlqStatus.message_count > 0"
               class="btn-warning btn-sm"
               @click="replayDlq"
-              :disabled="isReplayingDlq"
-              title="Pull tous les messages DLQ, remet les CVs en PENDING et relance le pipeline"
+              :disabled="isReplayingDlq || !isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Pull tous les messages DLQ, remet les CVs en PENDING et relance le pipeline'"
               aria-label="Rejouer les messages de la Dead Letter Queue"
             >
               <RefreshCcw class="icon-sm" :class="{ 'spinning': isReplayingDlq }" />
@@ -219,6 +182,7 @@
                   {{ file.status }}
                 </span>
                 <button
+                  v-if="isAdmin()"
                   class="btn-icon-danger"
                   @click="deleteDlqMessage(file.google_file_id, '', file.ack_id)"
                   :title="`Supprimer de la DLQ (le CV sera ignoré définitivement)`"
@@ -243,6 +207,7 @@
                     <pre class="dlq-json">{{ typeof unk.raw_data === 'string' ? unk.raw_data : JSON.stringify(unk.raw_data, null, 2) }}</pre>
                   </div>
                   <button
+                    v-if="isAdmin()"
                     class="btn-icon-danger"
                     @click="deleteDlqMessage('', unk.message_id, unk.ack_id)"
                     title="Supprimer ce message de la DLQ"
@@ -274,16 +239,20 @@
               v-if="(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0) > 0"
               class="btn-warning btn-sm"
               @click="forceFlushZombies"
-              :disabled="isFlushingZombies"
-              :title="`Reset immédiat des ${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)} fichier(s) bloqués (QUEUED + PROCESSING) → PENDING`"
+              :disabled="isFlushingZombies || !isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : `Reset immédiat des ${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)} fichier(s) bloqués (QUEUED + PROCESSING) → PENDING`"
               aria-label="Forcer le déblocage des fichiers zombies bloqués en QUEUED ou PROCESSING"
             >
               <Zap class="icon-sm" :class="{ 'spinning': isFlushingZombies }" />
               {{ isFlushingZombies ? 'Déblocage...' : `Forcer Déblocage (${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)})` }}
             </button>
-            <button v-if="errorFiles.length > 0" class="btn-secondary btn-sm" @click="retryErrors" :disabled="isRetrying">
+            <button v-if="errorFiles.length > 0" class="btn-secondary btn-sm" @click="retryErrors" :disabled="isRetrying || !isAdmin()" :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Réessayer Tout'">
               <RefreshCcw class="icon-sm" :class="{ 'spinning': isRetrying }" />
               Réessayer Tout
+            </button>
+            <button v-if="errorFiles.length > 0" class="btn-danger btn-sm" @click="clearErrors" :disabled="isClearing || !isAdmin()" :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Purger toutes les erreurs'">
+              <Trash2 class="icon-sm" />
+              Purger Erreurs
             </button>
           </div>
         </div>
@@ -307,6 +276,9 @@
           <p>Aucune erreur en attente.</p>
         </div>
       </div>
+      
+      <!-- ── Graphe Drive Ingestion ── -->
+      <DriveTreeGraph />
     </div>
   </div>
 </template>
@@ -314,12 +286,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
+import DriveTreeGraph from './DriveTreeGraph.vue'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio, Zap, FileText
+  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio, Zap, FileText, Edit2, X, Check
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
 const authHeader = () => ({ Authorization: `Bearer ${authService.state.token}` })
+const isAdmin = () => authService.state.user?.role === 'admin'
 
 const folders = ref<any[]>([])
 const errorFiles = ref<any[]>([])
@@ -327,11 +301,47 @@ const syncStatus = ref<any>(null)
 const isSyncing = ref(false)
 const isAdding = ref(false)
 const isRetrying = ref(false)
+const isClearing = ref(false)
 const isFlushingZombies = ref(false)
 const newFolder = ref({ google_folder_id: '', tag: '', excluded_folders_str: '' })
 const showAddFolder = ref(false)
+const editingFolderId = ref<number | null>(null)
+const editFolderData = ref({ tag: '', excluded_folders_str: '' })
+const isSaving = ref(false)
+
 const flushResult = ref<{zombies_reset: number, errors_reset: number} | null>(null)
 const actionError = ref('')  // Message d'erreur visible dans l'UI
+
+const startEditFolder = (folder: any) => {
+  editingFolderId.value = folder.id
+  editFolderData.value = {
+    tag: folder.tag,
+    excluded_folders_str: (folder.excluded_folders || []).join(', ')
+  }
+}
+
+const cancelEdit = () => {
+  editingFolderId.value = null
+}
+
+const saveFolder = async (folderId: number) => {
+  if (isSaving.value) return
+  isSaving.value = true
+  try {
+    const excluded = editFolderData.value.excluded_folders_str.split(',').map(s => s.trim()).filter(Boolean)
+    await axios.patch(`/api/drive/folders/${folderId}`, {
+      tag: editFolderData.value.tag,
+      excluded_folders: excluded
+    }, { headers: authHeader() })
+    editingFolderId.value = null
+    await fetchData()
+  } catch (err: any) {
+    actionError.value = "Erreur lors de la sauvegarde : " + (err.response?.data?.detail || err.message)
+    setTimeout(() => actionError.value = '', 5000)
+  } finally {
+    isSaving.value = false
+  }
+}
 
 // ── DLQ State ────────────────────────────────────────────────────────────────
 interface DlqFile {
@@ -397,7 +407,7 @@ const fetchStatus = async () => {
 const fetchErrors = async () => {
   try {
     const res = await axios.get('/api/drive/files?status=ERROR&limit=200')
-    errorFiles.value = res.data
+    errorFiles.value = res.data.files || (Array.isArray(res.data) ? res.data : [])
   } catch (error) {
     console.error("Failed to load error files", error)
   }
@@ -443,6 +453,24 @@ const retryErrors = async () => {
     console.error('Failed to retry errors', err)
   } finally {
     isRetrying.value = false
+  }
+}
+
+const clearErrors = async () => {
+  if (!confirm('Voulez-vous vraiment purger toutes les erreurs ? Les fichiers concernés seront marqués comme ignorés.')) return
+  if (isClearing.value) return
+  isClearing.value = true
+  try {
+    await axios.delete('/api/drive/errors', { headers: authHeader() })
+    await fetchStatus()
+    await fetchFolders()
+    await fetchErrors()
+  } catch (err: any) {
+    const detail = err.response?.data?.detail || err.message || 'Erreur inconnue'
+    actionError.value = `Purge des erreurs échouée : ${detail}`
+    console.error('Failed to clear errors', err)
+  } finally {
+    isClearing.value = false
   }
 }
 
@@ -1003,6 +1031,12 @@ onUnmounted(() => {
   gap: 1rem;
   align-items: flex-start;
   margin-top: 1rem;
+}
+
+.edit-folder-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
 }
 
 .form-group input {

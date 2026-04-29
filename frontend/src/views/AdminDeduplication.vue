@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
-import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge } from 'lucide-vue-next'
+import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge, Search } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
 
@@ -61,6 +61,108 @@ const performMerge = async (candidate: any) => {
     isLoading.value = false
   }
 }
+const activeTab = ref<'doublons' | 'anonymes'>('doublons')
+const anonymousUsers = ref<any[]>([])
+const isLoadingAnon = ref(false)
+
+const fetchAnonymousUsers = async () => {
+  isLoadingAnon.value = true
+  error.value = ''
+  try {
+    const res = await axios.get('/api/users/', {
+      params: { is_anonymous: true, limit: 50 },
+      headers: { Authorization: `Bearer ${authService.state.token}` }
+    })
+    anonymousUsers.value = res.data.items || []
+  } catch (e: any) {
+    error.value = "Erreur de récupération des profils anonymes"
+  } finally {
+    isLoadingAnon.value = false
+  }
+}
+
+watch(activeTab, (val) => {
+  if (val === 'anonymes' && anonymousUsers.value.length === 0) {
+    fetchAnonymousUsers()
+  }
+})
+
+const selectedAnonForMerge = ref<number | null>(null)
+const anonMergeSearchQuery = ref('')
+const anonMergeSearchResults = ref<any[]>([])
+const isSearchingAnonMerge = ref(false)
+const selectedAnonMergeTarget = ref<number | null>(null)
+
+const searchAnonMergeUsers = async () => {
+  if (anonMergeSearchQuery.value.length < 2) return
+  isSearchingAnonMerge.value = true
+  try {
+    const res = await axios.get('/api/users/search', {
+      params: { query: anonMergeSearchQuery.value, limit: 5 },
+      headers: { Authorization: `Bearer ${authService.state.token}` }
+    })
+    anonMergeSearchResults.value = (res.data.items || []).filter((u: any) => !u.is_anonymous)
+  } catch (err) {
+    console.error('Search failed:', err)
+  } finally {
+    isSearchingAnonMerge.value = false
+  }
+}
+
+const performAnonMerge = async () => {
+  if (!selectedAnonForMerge.value || !selectedAnonMergeTarget.value) return
+  
+  isLoading.value = true
+  error.value = ''
+  successResponse.value = ''
+  try {
+    await axios.post('/api/users/merge', {
+      source_id: selectedAnonForMerge.value,
+      target_id: selectedAnonMergeTarget.value
+    }, {
+      headers: { Authorization: `Bearer ${authService.state.token}` }
+    })
+    successResponse.value = `Désanonymisation réussie (ID: ${selectedAnonForMerge.value} -> ID: ${selectedAnonMergeTarget.value})`
+    
+    selectedAnonForMerge.value = null
+    selectedAnonMergeTarget.value = null
+    anonMergeSearchQuery.value = ''
+    anonMergeSearchResults.value = []
+    await fetchAnonymousUsers()
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || "Erreur lors de la fusion."
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const createAnonForm = ref({ first_name: '', last_name: '', email: '' })
+
+const transformAnonToUser = async (userId: number) => {
+  isLoading.value = true
+  error.value = ''
+  successResponse.value = ''
+  try {
+    const updateData = {
+      first_name: createAnonForm.value.first_name,
+      last_name: createAnonForm.value.last_name,
+      email: createAnonForm.value.email,
+      full_name: `${createAnonForm.value.first_name} ${createAnonForm.value.last_name}`,
+      is_anonymous: false
+    }
+    await axios.put(`/api/users/${userId}`, updateData, {
+      headers: { Authorization: `Bearer ${authService.state.token}` }
+    })
+    successResponse.value = `Profil créé avec succès pour ${updateData.full_name}.`
+    selectedAnonForMerge.value = null
+    createAnonForm.value = { first_name: '', last_name: '', email: '' }
+    await fetchAnonymousUsers()
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || "Erreur lors de la création du profil."
+  } finally {
+    isLoading.value = false
+  }
+}
 
 onMounted(() => {
   fetchDuplicates()
@@ -92,7 +194,16 @@ onMounted(() => {
        <strong>Erreur :</strong> {{ error }}
     </div>
 
-    <div class="glass-panel mt-4">
+    <div class="tabs-container">
+      <button class="tab-btn" :class="{ active: activeTab === 'doublons' }" @click="activeTab = 'doublons'">
+        Doublons Automatiques
+      </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'anonymes' }" @click="activeTab = 'anonymes'">
+        Profils Anonymes
+      </button>
+    </div>
+
+    <div v-if="activeTab === 'doublons'" class="glass-panel mt-4">
       <div class="panel-header d-flex-between">
         <h3>Doublons Détectés ({{ duplicates.length }})</h3>
         <button @click="fetchDuplicates" class="action-btn-secondary" :disabled="isLoading">
@@ -110,7 +221,9 @@ onMounted(() => {
         <div class="users-grid">
            <div v-for="user in candidate.users" :key="user.id" class="user-item">
               <div class="user-info">
-                 <strong>{{ user.full_name }}</strong>
+                 <RouterLink :to="'/user/' + user.id" class="text-link">
+                   <strong>{{ user.full_name }}</strong>
+                 </RouterLink>
                  <br/><span class="text-xs text-muted">ID: {{ user.id }} | Email: {{ user.email }} | Actif: {{ user.is_active }} | Créé: {{ new Date(user.created_at).toLocaleDateString() }}</span>
               </div>
            </div>
@@ -143,11 +256,97 @@ onMounted(() => {
       </div>
 
     </div>
+
+    <!-- The new glass-panel for anonymes -->
+    <div v-if="activeTab === 'anonymes'" class="glass-panel mt-4">
+      <div class="panel-header d-flex-between">
+        <h3>Profils Anonymes ({{ anonymousUsers.length }})</h3>
+        <button @click="fetchAnonymousUsers" class="action-btn-secondary" :disabled="isLoadingAnon">
+          <RotateCw :class="{ 'spin': isLoadingAnon }" size="16" /> Rafraîchir
+        </button>
+      </div>
+
+      <div v-if="anonymousUsers.length === 0 && !isLoadingAnon" class="empty-state">
+        <CheckCircle2 size="48" color="#10b981" />
+        <p>Aucun profil anonyme actif trouvé dans la base.</p>
+      </div>
+
+      <div v-for="user in anonymousUsers" :key="user.id" class="duplicate-card">
+         <div class="d-flex-between" style="align-items: flex-start;">
+           <div class="user-info">
+             <RouterLink :to="'/user/' + user.id" class="text-link">
+               <strong>{{ user.full_name }}</strong>
+             </RouterLink>
+             <br/><span class="text-xs text-muted">ID: {{ user.id }} | Email: {{ user.email }} | Créé: {{ new Date(user.created_at).toLocaleDateString() }}</span>
+           </div>
+           <button class="action-btn-secondary" style="border-color: var(--zenika-red); color: var(--zenika-red);" 
+                   @click="selectedAnonForMerge = user.id" 
+                   v-if="selectedAnonForMerge !== user.id">
+             Désanonymiser
+           </button>
+           <button class="action-btn-secondary" @click="selectedAnonForMerge = null" v-else>
+             Annuler
+           </button>
+         </div>
+
+         <!-- Search block for merge -->
+         <div v-if="selectedAnonForMerge === user.id" class="merge-controls mt-4" style="flex-direction: column; align-items: stretch;">
+            <div style="display: flex; gap: 1.5rem; align-items: flex-end;">
+                <div class="control-group" style="flex: 2;">
+                   <label>1. Chercher un vrai profil existant (Cible) :</label>
+                   <div style="display: flex; gap: 10px;">
+                     <input type="text" v-model="anonMergeSearchQuery" placeholder="Nom, email..." class="form-select" @keyup.enter="searchAnonMergeUsers" style="flex:1;">
+                     <button @click="searchAnonMergeUsers" class="action-btn-secondary" :disabled="isSearchingAnonMerge">
+                       <Search size="16" />
+                     </button>
+                   </div>
+                </div>
+                <div class="control-group" v-if="anonMergeSearchResults.length > 0" style="flex: 2;">
+                   <label>2. Sélectionner le profil maître :</label>
+                   <select v-model="selectedAnonMergeTarget" class="form-select">
+                     <option :value="null">-- Choisir --</option>
+                     <option v-for="res in anonMergeSearchResults" :key="res.id" :value="res.id">
+                        {{ res.full_name }} ({{ res.email }})
+                     </option>
+                   </select>
+                </div>
+                <button @click="performAnonMerge" class="action-btn validate-btn" 
+                        :disabled="!selectedAnonMergeTarget || isLoading"
+                        v-if="anonMergeSearchResults.length > 0" style="align-self: flex-end;">
+                   Fusionner
+                </button>
+            </div>
+            
+            <hr style="margin: 1rem 0; border: none; border-top: 1px dashed rgba(227, 25, 55, 0.2);" />
+            
+            <div class="control-group">
+               <label>Ou transformer ce profil anonyme en nouveau collaborateur complet :</label>
+               <div style="display: flex; gap: 10px; align-items: flex-end;">
+                 <div style="flex:1;"><input type="text" v-model="createAnonForm.first_name" placeholder="Prénom" class="form-select" style="width:100%;"></div>
+                 <div style="flex:1;"><input type="text" v-model="createAnonForm.last_name" placeholder="Nom" class="form-select" style="width:100%;"></div>
+                 <div style="flex:1;"><input type="email" v-model="createAnonForm.email" placeholder="Email Zenika" class="form-select" style="width:100%;"></div>
+                 <button @click="transformAnonToUser(user.id)" class="action-btn validate-btn" 
+                         :disabled="!createAnonForm.first_name || !createAnonForm.last_name || !createAnonForm.email || isLoading">
+                    Créer Profil
+                 </button>
+               </div>
+            </div>
+         </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.text-link { color: inherit; text-decoration: none; }
+.text-link:hover strong { color: var(--zenika-red); text-decoration: underline; }
+
 .admin-wrapper { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+.tabs-container { display: flex; gap: 1rem; margin-top: 1rem; }
+.tab-btn { background: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255, 255, 255, 0.4); padding: 0.75rem 1.5rem; border-radius: 12px; cursor: pointer; font-weight: 600; color: #64748b; transition: all 0.2s; backdrop-filter: blur(10px); }
+.tab-btn:hover { background: rgba(255, 255, 255, 0.8); color: #1e293b; }
+.tab-btn.active { background: white; color: var(--zenika-red); border-color: white; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
 .header-banner { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 2.5rem; color: white; display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem; box-shadow: 0 10px 40px rgba(15, 23, 42, 0.2); position: relative; overflow: hidden; }
 .banner-icon { background: rgba(227, 25, 55, 0.2); padding: 1.25rem; border-radius: 16px; color: var(--zenika-red); }
 .banner-text h2 { font-size: 1.8rem; font-weight: 700; margin: 0 0 0.5rem 0; }

@@ -66,7 +66,7 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
       }
       env {
         name  = "GEMINI_MODEL"
-        value = var.gemini_model
+        value = var.gemini_hr_model
       }
       env {
         name  = "ROOT_PATH"

@@ -22,7 +22,8 @@ PROMPTS_MAP = {
     "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
     "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
-    "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
+    "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
+    "cv_api.generate_taxonomy_tree_reduce": "cv_api/cv_api.generate_taxonomy_tree_reduce.txt",
     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
     "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt"
 }

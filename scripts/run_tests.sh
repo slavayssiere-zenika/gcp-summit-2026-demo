@@ -27,6 +27,12 @@ for api in "${apis[@]}"; do
     pids+=("$api:$!")
 done
 
+if [ -d "frontend" ] && grep -q '"test:unit"' "frontend/package.json" 2>/dev/null; then
+    echo "Lancement des tests vitest pour frontend..."
+    (cd frontend && npm run test:unit:run > vitest.log 2>&1) &
+    pids+=("frontend:$!")
+fi
+
 failure=0
 for entry in "${pids[@]}"; do
     api_name="${entry%%:*}"

@@ -9,7 +9,7 @@ from google.api_core.exceptions import DeadlineExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, func
-from src.schemas import FolderCreate, FolderResponse, StatusResponse, FileStateResponse, FileUpdate, FolderStats
+from src.schemas import FolderCreate, FolderResponse, StatusResponse, FileStateResponse, PaginatedFilesResponse, FileUpdate, FolderStats, FolderUpdate
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.google_auth import get_google_access_token, get_drive_service
 from database import get_db
@@ -27,17 +27,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["Drive Admin"], dependencies=[Depends(verify_jwt)])
 
-# Basic pseudo JWT role-check stub. Since frontend calls this via Nginx /api/drive-api
-def verify_admin(request: Request):
-    auth = request.headers.get("Authorization")
-    if not auth:
-        raise HTTPException(status_code=401, detail="Missing Auth")
-    # In production, decode JWT and check role="admin"
-    return True
+def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
+    """Guard : vérifie que l'appelant est administrateur.
+    Utilisé comme dépendance FastAPI sur les endpoints sensibles de drive_api.
+    """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Privilèges administrateur requis pour cette opération Drive."
+        )
+    return token_payload
 
 
 @router.post("/folders", response_model=FolderResponse)
-async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
+async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
     raw_id = folder.google_folder_id.strip()
     match = re.search(r"folders/([a-zA-Z0-9_-]+)", raw_id)
     if match:
@@ -82,6 +85,38 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db)):
 
     return db_f
 
+@router.patch("/folders/{folder_id}", response_model=FolderResponse)
+async def update_folder(folder_id: int, folder_update: FolderUpdate, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
+    folder = (await db.execute(select(DriveFolder).filter(DriveFolder.id == folder_id))).scalars().first()
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    if folder_update.tag is not None:
+        new_tag = folder_update.tag.strip()
+        existing_tag = (await db.execute(select(DriveFolder).filter(DriveFolder.tag == new_tag, DriveFolder.id != folder_id))).scalars().first()
+        if existing_tag:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Tag '{new_tag}' already used by folder '{existing_tag.folder_name or existing_tag.google_folder_id}'. Tags must be unique."
+            )
+        folder.tag = new_tag
+
+    if folder_update.excluded_folders is not None:
+        folder.excluded_folders = folder_update.excluded_folders
+
+    await db.commit()
+    await db.refresh(folder)
+
+    try:
+        get_redis().delete("drive:roots")
+        logger.info(f"[Cache] drive:roots invalidé (folder {folder_id} mis à jour).")
+    except Exception as e_redis:
+        logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
+
+    # Injecting stats as None to respect FolderResponse
+    f_response = FolderResponse.model_validate(folder)
+    return f_response
+
 @router.get("/folders", response_model=list[FolderResponse])
 async def list_folders(db: AsyncSession = Depends(get_db)):
     folders = (await db.execute(select(DriveFolder))).scalars().all()
@@ -121,7 +156,7 @@ async def list_folders(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/folders/reset-sync")
-async def reset_folder_sync(tag: str | None = None, db: AsyncSession = Depends(get_db)):
+async def reset_folder_sync(tag: str | None = None, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
     stmt = update(DriveFolder).values(is_initial_sync_done=False)
     if tag:
         stmt = stmt.where(DriveFolder.tag.ilike(f"%{tag}%"))
@@ -129,8 +164,45 @@ async def reset_folder_sync(tag: str | None = None, db: AsyncSession = Depends(g
     await db.commit()
     return {"status": "success", "rows_updated": res.rowcount}
 
+@router.post("/folders/rebuild-tree")
+async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
+    """
+    Force un scan complet de l'arbre Drive pour réparer les structures parent_folder_name manquantes,
+    SANS repasser les statuts en PENDING pour les fichiers déjà importés et non modifiés.
+    """
+    async def run_rebuild():
+        from src.drive_service import DriveService
+        from database import SessionLocal
+        redis = get_redis()
+        try:
+            redis.set("drive:sync:rebuild_running", "1", ex=1800) # 30 min max
+            async with SessionLocal() as session:
+                service = DriveService(session)
+                await service.discover_files(force_full=True)
+        finally:
+            redis.delete("drive:sync:rebuild_running")
+            
+    background_tasks.add_task(run_rebuild)
+    return {"status": "success", "message": "Reconstruction de l'arbre lancée en arrière-plan"}
+
+@router.post("/folders/invalidate-cache")
+async def invalidate_drive_cache(_: dict = Depends(_require_admin)):
+    redis = get_redis()
+    keys_to_delete = []
+    for pattern in ["drive:graph:*", "drive:oos:*", "drive:name:*"]:
+        for key in redis.scan_iter(pattern):
+            keys_to_delete.append(key)
+            
+    # Supprimer aussi le verrou de reconstruction s'il est bloqué
+    redis.delete("drive:sync:rebuild_running")
+    
+    if keys_to_delete:
+        redis.delete(*keys_to_delete)
+        logger.info(f"Purge du cache Redis Drive : {len(keys_to_delete)} cles supprimees.")
+    return {"status": "success", "keys_deleted": len(keys_to_delete)}
+
 @router.delete("/folders/{folder_id}")
-async def delete_folder(folder_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_folder(folder_id: int, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
     f = (await db.execute(select(DriveFolder).filter(DriveFolder.id == folder_id))).scalars().first()
     if not f:
         raise HTTPException(status_code=404, detail="Not Found")
@@ -191,7 +263,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.get("/files", response_model=list[FileStateResponse])
+@router.get("/files", response_model=PaginatedFilesResponse)
 async def list_files(
     status: str | None = None,
     folder_id: int | None = None,
@@ -205,8 +277,18 @@ async def list_files(
     if folder_id:
         stmt = stmt.filter(DriveSyncState.folder_id == folder_id)
         
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar() or 0
+        
     stmt = stmt.order_by(DriveSyncState.last_processed_at.desc().nullslast()).offset(skip).limit(limit)
-    return (await db.execute(stmt)).scalars().all()
+    files = (await db.execute(stmt)).scalars().all()
+    
+    return {
+        "files": files,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 @router.get("/files/{google_file_id}", response_model=FileStateResponse)
 async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)):
@@ -233,6 +315,22 @@ async def retry_errors(force: bool = False, db: AsyncSession = Depends(get_db)):
     """
     result = await _reset_errors_to_pending(db, force=force)
     return result
+
+@router.delete("/errors")
+async def clear_all_errors(db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
+    """
+    Supprime toutes les erreurs actuelles en basculant leur statut a IGNORED.
+    Utile pour purger les erreurs persistantes du pipeline.
+    """
+    stmt = (
+        update(DriveSyncState)
+        .where(DriveSyncState.status == DriveSyncStatus.ERROR)
+        .values(status=DriveSyncStatus.IGNORED_NOT_CV, error_message="Erreur purgee par un administrateur")
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    logger.info(f"Purge des erreurs : {result.rowcount} fichiers marques comme IGNORED.")
+    return {"status": "success", "cleared_count": result.rowcount}
 
 
 
@@ -365,7 +463,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
     return {"status": "started"}
 
 @router.get("/tokens/google")
-async def get_google_token():
+async def get_google_token(_: dict = Depends(_require_admin)):
     """
     Retourne le token d'accès Google Drive (ADC) pour les opérations de réanalyse.
     Cet endpoint est protégé par verify_jwt sur le router principal.
@@ -511,7 +609,8 @@ async def delete_dlq_message(
     google_file_id: str = "",
     pubsub_message_id: str = "",
     ack_id: str = "",
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
 ):
     """
     Supprime un message spécifique de la DLQ.
@@ -628,7 +727,7 @@ async def delete_dlq_message(
 
 
 @router.post("/dlq/replay")
-async def replay_dlq(db: AsyncSession = Depends(get_db)):
+async def replay_dlq(db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
     """
     Rejoue les messages de la DLQ :
     1. Pull tous les messages de la DLQ subscription
@@ -782,7 +881,409 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
                 logger.warning(f"[Cache] Impossible d'invalider drive:file:known:{file_id}: {e_redis}")
     if update_data.error_message is not None:
         file_state.error_message = update_data.error_message
+    if update_data.processing_duration_ms is not None:
+        file_state.processing_duration_ms = update_data.processing_duration_ms
+    
+    if str(update_data.status) == DriveSyncStatus.IMPORTED_CV.value or update_data.status == DriveSyncStatus.IMPORTED_CV:
+        file_state.imported_at = datetime.utcnow()
         
     await db.commit()
     await db.refresh(file_state)
     return file_state
+
+
+# ── Ingestion KPIs & Quality Gate ─────────────────�
+
+# ── Ingestion KPIs & Quality Gate ─────────────────────────────────────────────
+
+def _compute_kpi_metric(ok: int, total: int, warning_pct: float, critical_pct: float, unit: str = "%") -> dict:
+    """Helper : calcule le statut d'une métrique selon les seuils."""
+    if total == 0:
+        return {"value": 0.0, "pct": 0.0, "ok": 0, "total": 0, "status": "ok", "unit": unit}
+    pct = min(100.0, round((ok / total) * 100, 1))
+    if pct < critical_pct:
+        status = "critical"
+    elif pct < warning_pct:
+        status = "warning"
+    else:
+        status = "ok"
+    return {"value": pct, "pct": pct, "ok": ok, "total": total, "status": status, "unit": unit}
+
+
+@router.get("/ingestion/stats")
+async def get_ingestion_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Retourne les KPIs de data quality pour le pipeline d'ingestion Drive → CV.
+    Utilisé par AdminDriveIngestion pour afficher le grade global et les métriques.
+    """
+    from sqlalchemy import and_, or_
+
+    total = (await db.execute(select(func.count()).select_from(DriveSyncState))).scalar() or 0
+    imported = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.IMPORTED_CV)
+    )).scalar() or 0
+    errors = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.ERROR)
+    )).scalar() or 0
+    pending = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.PENDING)
+    )).scalar() or 0
+    queued = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.QUEUED)
+    )).scalar() or 0
+    processing = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.PROCESSING)
+    )).scalar() or 0
+    ignored = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV)
+    )).scalar() or 0
+
+    kpi_import_rate = _compute_kpi_metric(imported, total, 90.0, 75.0)
+    kpi_error_rate = _compute_kpi_metric(imported, imported + errors, 95.0, 85.0)
+
+    named = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(
+            and_(
+                DriveSyncState.status == DriveSyncStatus.IMPORTED_CV,
+                DriveSyncState.parent_folder_name.isnot(None),
+                DriveSyncState.parent_folder_name != ""
+            )
+        )
+    )).scalar() or 0
+    kpi_naming = _compute_kpi_metric(named, imported, 95.0, 80.0)
+
+    linked = (await db.execute(
+        select(func.count()).select_from(DriveSyncState).where(
+            and_(
+                DriveSyncState.status == DriveSyncStatus.IMPORTED_CV,
+                DriveSyncState.user_id.isnot(None)
+            )
+        )
+    )).scalar() or 0
+    kpi_user_link = _compute_kpi_metric(linked, imported, 95.0, 80.0)
+
+    avg_ms_result = (await db.execute(
+        select(func.avg(DriveSyncState.processing_duration_ms)).where(
+            and_(
+                DriveSyncState.status == DriveSyncStatus.IMPORTED_CV,
+                DriveSyncState.processing_duration_ms.isnot(None)
+            )
+        )
+    )).scalar()
+    avg_ms = round(float(avg_ms_result), 0) if avg_ms_result else None
+    duration_status = "ok"
+    if avg_ms is not None:
+        if avg_ms > 60000:
+            duration_status = "critical"
+        elif avg_ms > 30000:
+            duration_status = "warning"
+    kpi_duration = {
+        "value": round(avg_ms / 1000, 1) if avg_ms else 0.0,
+        "pct": min(100, round((avg_ms or 0) / 60000 * 100, 1)),
+        "ok": int(avg_ms / 1000) if avg_ms else 0,
+        "total": 60,
+        "status": duration_status,
+        "unit": "s"
+    }
+
+    last_imported_at = (await db.execute(
+        select(func.max(DriveSyncState.imported_at)).where(DriveSyncState.imported_at.isnot(None))
+    )).scalar()
+    last_processed = (await db.execute(
+        select(func.max(DriveSyncState.last_processed_at))
+    )).scalar()
+    freshness_hours = None
+    freshness_status = "ok"
+    reference_time = last_imported_at or last_processed
+    if reference_time:
+        diff_hours = (datetime.utcnow() - reference_time).total_seconds() / 3600
+        freshness_hours = round(diff_hours, 1)
+        if diff_hours > 48:
+            freshness_status = "critical"
+        elif diff_hours > 24:
+            freshness_status = "warning"
+
+    scores = [
+        kpi_import_rate["pct"] * 0.25,
+        kpi_user_link["pct"] * 0.30,
+        kpi_naming["pct"] * 0.15,
+        kpi_error_rate["pct"] * 0.15,
+        (100 if freshness_status == "ok" else 50 if freshness_status == "warning" else 0) * 0.15,
+    ]
+    score = round(sum(scores), 1)
+    grade = "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D" if score >= 40 else "F"
+
+    issues = []
+    if kpi_import_rate["status"] != "ok":
+        issues.append(f"Taux d'import {kpi_import_rate['status']} : {kpi_import_rate['pct']}%")
+    if kpi_user_link["status"] != "ok":
+        issues.append(f"Liaison consultant {kpi_user_link['status']} : {kpi_user_link['pct']}%")
+    if kpi_naming["status"] != "ok":
+        issues.append(f"Nommage non résolu : {kpi_naming['pct']}%")
+    if freshness_status != "ok":
+        issues.append(f"Pipeline inactif depuis {freshness_hours}h")
+    if errors > 0 and total > 0 and (errors / total) > 0.1:
+        issues.append(f"{errors} fichiers en erreur ({round(errors/total*100,1)}%) — lancez un Quality Gate Batch")
+
+    recommendation = (
+        "\u2705 Pipeline en bonne santé." if not issues
+        else "\u26a0\ufe0f Lancez un Quality Gate Batch pour corriger les données incomplètes."
+    )
+
+    redis = get_redis()
+    is_rebuilding_tree = bool(redis.get("drive:sync:rebuild_running"))
+
+    return {
+        "total_files": total, "imported": imported, "errors": errors,
+        "pending": pending, "queued": queued, "processing": processing, "ignored": ignored,
+        "freshness_hours": freshness_hours,
+        "is_rebuilding_tree": is_rebuilding_tree,
+        "metrics": {
+            "Taux d'import réussi": kpi_import_rate,
+            "Taux sans erreur": kpi_error_rate,
+            "Nommage résolu": kpi_naming,
+            "Liaison consultant": kpi_user_link,
+            "Durée de traitement": kpi_duration,
+        },
+        "score": score, "grade": grade,
+        "computed_at": datetime.utcnow().isoformat(),
+        "issues": issues, "recommendation": recommendation,
+    }
+
+
+@router.get("/ingestion/folder-kpis")
+async def get_folder_kpis(db: AsyncSession = Depends(get_db)):
+    """
+    Retourne les KPIs d'ingestion par folder/agence.
+    Utilisé par AdminDriveIngestion pour le tableau par agence.
+    """
+    from sqlalchemy import and_, or_
+
+    folders = (await db.execute(select(DriveFolder))).scalars().all()
+    result = []
+
+    for folder in folders:
+        fid = folder.id
+        fid_filter = DriveSyncState.folder_id == fid
+
+        total = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(fid_filter)
+        )).scalar() or 0
+        imported = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter, DriveSyncState.status == DriveSyncStatus.IMPORTED_CV)
+        )).scalar() or 0
+        errors = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter, DriveSyncState.status == DriveSyncStatus.ERROR)
+        )).scalar() or 0
+        pending = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter, DriveSyncState.status == DriveSyncStatus.PENDING)
+        )).scalar() or 0
+        queued = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter, DriveSyncState.status == DriveSyncStatus.QUEUED)
+        )).scalar() or 0
+        processing = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter, DriveSyncState.status == DriveSyncStatus.PROCESSING)
+        )).scalar() or 0
+        ignored = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter, DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV)
+        )).scalar() or 0
+
+        linked = (await db.execute(
+            select(func.count()).select_from(DriveSyncState).where(
+                fid_filter,
+                DriveSyncState.status == DriveSyncStatus.IMPORTED_CV,
+                DriveSyncState.user_id.isnot(None))
+        )).scalar() or 0
+
+        avg_ms_row = (await db.execute(
+            select(func.avg(DriveSyncState.processing_duration_ms)).where(
+                fid_filter, DriveSyncState.processing_duration_ms.isnot(None))
+        )).scalar()
+
+        last_import_row = (await db.execute(
+            select(func.max(DriveSyncState.imported_at)).where(
+                fid_filter, DriveSyncState.imported_at.isnot(None))
+        )).scalar()
+
+        import_rate = round((imported / total * 100), 1) if total > 0 else 0.0
+        error_rate = round((errors / total * 100), 1) if total > 0 else 0.0
+        user_link_rate = round((linked / imported * 100), 1) if imported > 0 else 0.0
+
+        if error_rate > 15 or (imported > 0 and user_link_rate < 80):
+            folder_status = "critical"
+        elif error_rate > 5 or (imported > 0 and user_link_rate < 90) or import_rate < 90:
+            folder_status = "warning"
+        else:
+            folder_status = "ok"
+
+        result.append({
+            "folder_id": fid, "folder_name": folder.folder_name, "tag": folder.tag,
+            "total": total, "imported": imported, "errors": errors,
+            "pending": pending, "queued": queued, "processing": processing, "ignored": ignored,
+            "import_rate_pct": import_rate, "error_rate_pct": error_rate,
+            "user_link_rate_pct": user_link_rate,
+            "avg_processing_ms": round(float(avg_ms_row), 0) if avg_ms_row else None,
+            "last_import_at": last_import_row.isoformat() if last_import_row else None,
+            "status": folder_status,
+        })
+
+    priority = {"critical": 0, "warning": 1, "ok": 2}
+    result.sort(key=lambda x: (priority.get(x["status"], 3), -x["error_rate_pct"]))
+    return result
+
+
+@router.get("/ingestion/history")
+async def get_ingestion_history(limit: int = 50, db: AsyncSession = Depends(get_db)):
+    """Retourne les dernières ingestions réussies avec horodatages."""
+    limit = min(limit, 200)
+    stmt = (
+        select(DriveSyncState)
+        .where(DriveSyncState.status == DriveSyncStatus.IMPORTED_CV)
+        .order_by(DriveSyncState.imported_at.desc().nullslast(), DriveSyncState.last_processed_at.desc())
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "google_file_id": r.google_file_id, "file_name": r.file_name,
+            "parent_folder_name": r.parent_folder_name, "user_id": r.user_id,
+            "queued_at": r.queued_at.isoformat() if r.queued_at else None,
+            "imported_at": r.imported_at.isoformat() if r.imported_at else None,
+            "processing_duration_ms": r.processing_duration_ms,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/ingestion/batch-retry")
+async def ingestion_batch_retry(
+    force: bool = False,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
+):
+    """
+    Retry simple : remet en PENDING les fichiers en ERROR et zombies bloqués,
+    puis déclenche un /sync immédiat pour les republier dans Pub/Sub.
+    """
+    result = await _reset_errors_to_pending(db, force=force)
+
+    async def run_sync_after_retry():
+        from database import SessionLocal
+        async with SessionLocal() as session:
+            try:
+                service = DriveService(session)
+                processed = await service.ingest_batch()
+                logger.info(f"[batch-retry] {processed} fichier(s) republié(s).")
+            except Exception as e:
+                logger.error(f"[batch-retry] Erreur sync post-retry : {e}")
+
+    background_tasks.add_task(run_sync_after_retry)
+    return {
+        **result,
+        "sync_triggered": True,
+        "message": f"{result['total_reset']} fichier(s) remis en PENDING. Sync Pub/Sub déclenché.",
+    }
+
+
+@router.post("/ingestion/quality-gate-batch")
+async def quality_gate_batch(
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
+):
+    """
+    Quality Gate Batch : identifie les CVs avec données incomplètes et les remet
+    en PENDING pour re-traitement ciblé via Pub/Sub.
+
+    Cas traités :
+    1. IMPORTED_CV sans user_id (liaison consultant non résolue)
+    2. IMPORTED_CV sans parent_folder_name (nommage absent — RAG incomplet)
+    3. ERROR persistants > 30 min
+    """
+    from sqlalchemy import and_, or_
+
+    now = datetime.utcnow()
+    reason_breakdown: dict[str, int] = {}
+    all_fixed_ids: list[str] = []
+
+    stmt_no_user = (
+        update(DriveSyncState)
+        .where(and_(DriveSyncState.status == DriveSyncStatus.IMPORTED_CV, DriveSyncState.user_id.is_(None)))
+        .values(status=DriveSyncStatus.PENDING, error_message="Quality Gate: user_id manquant", last_processed_at=now)
+        .returning(DriveSyncState.google_file_id)
+    )
+    ids_no_user = [r[0] for r in (await db.execute(stmt_no_user)).fetchall()]
+    reason_breakdown["user_id_manquant"] = len(ids_no_user)
+    all_fixed_ids.extend(ids_no_user)
+
+    stmt_no_name = (
+        update(DriveSyncState)
+        .where(and_(
+            DriveSyncState.status == DriveSyncStatus.IMPORTED_CV,
+            or_(DriveSyncState.parent_folder_name.is_(None), DriveSyncState.parent_folder_name == ""),
+            DriveSyncState.google_file_id.notin_(ids_no_user)
+        ))
+        .values(status=DriveSyncStatus.PENDING, error_message="Quality Gate: nommage manquant", last_processed_at=now)
+        .returning(DriveSyncState.google_file_id)
+    )
+    ids_no_name = [r[0] for r in (await db.execute(stmt_no_name)).fetchall()]
+    reason_breakdown["nommage_manquant"] = len(ids_no_name)
+    all_fixed_ids.extend(ids_no_name)
+
+    error_threshold = now - timedelta(minutes=30)
+    stmt_errors = (
+        update(DriveSyncState)
+        .where(and_(DriveSyncState.status == DriveSyncStatus.ERROR, DriveSyncState.last_processed_at < error_threshold))
+        .values(status=DriveSyncStatus.PENDING, error_message="Quality Gate: erreur persistante", last_processed_at=now)
+        .returning(DriveSyncState.google_file_id)
+    )
+    ids_errors = [r[0] for r in (await db.execute(stmt_errors)).fetchall()]
+    reason_breakdown["erreur_persistante"] = len(ids_errors)
+    all_fixed_ids.extend(ids_errors)
+
+    await db.commit()
+
+    if all_fixed_ids:
+        try:
+            redis = get_redis()
+            pipe = redis.pipeline()
+            for fid in all_fixed_ids:
+                pipe.delete(f"drive:file:known:{fid}")
+            pipe.execute()
+        except Exception as e_redis:
+            logger.warning(f"[QualityGate] Redis cache invalidation partielle : {e_redis}")
+
+    total_queued = sum(reason_breakdown.values())
+    logger.info(f"[QualityGate] {total_queued} fichiers remis en PENDING — {reason_breakdown}")
+
+    async def run_sync_after_gate():
+        from database import SessionLocal
+        async with SessionLocal() as session:
+            try:
+                service = DriveService(session)
+                processed = await service.ingest_batch()
+                logger.info(f"[QualityGate] {processed} fichier(s) republié(s) dans Pub/Sub.")
+            except Exception as e:
+                logger.error(f"[QualityGate] Erreur sync post-gate : {e}")
+
+    if total_queued > 0:
+        background_tasks.add_task(run_sync_after_gate)
+
+    return {
+        "status": "success",
+        "files_queued_for_retry": total_queued,
+        "reason_breakdown": reason_breakdown,
+        "sync_triggered": total_queued > 0,
+        "message": (
+            f"{total_queued} CV(s) avec données incomplètes republiés dans Pub/Sub."
+            if total_queued > 0
+            else "Aucun CV incomplet détecté — data quality satisfaisante."
+        ),
+    }

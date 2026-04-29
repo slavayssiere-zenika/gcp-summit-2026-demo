@@ -4,7 +4,7 @@ import redis.asyncio as redis
 import httpx
 import logging
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/8")
 logger = logging.getLogger(__name__)
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -28,7 +28,6 @@ async def get_cached_prompt(http_client: httpx.AsyncClient, prompt_key: str, hea
         res.raise_for_status()
         prompt_val = res.json()["value"]
     except Exception as e:
-        is_404 = isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 404
         logger.warning(f"Prompt {prompt_key} indisponible (404 ou erreur connexion: {e}). Fallback sur le ficher local.")
         local_filename = None
         if prompt_key == "missions_api.extract_mission_info":
@@ -59,4 +58,4 @@ async def force_invalidate_prompt(prompt_key: str):
     """Invalide manuellement le cache (Webhook use-case)."""
     try:
         await redis_client.delete(f"mission_prompt_v1:{prompt_key}")
-    except Exception as e: raise
+    except Exception: raise

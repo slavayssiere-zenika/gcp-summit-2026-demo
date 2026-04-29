@@ -18,7 +18,7 @@ import pytest
 from datetime import date
 
 # Import direct des fonctions pures (pas besoin de FastAPI/BDD)
-from src.competencies.router import (
+from src.competencies.helpers import (
     _compute_recency_weight,
     _parse_duration_months,
     _duration_multiplier,

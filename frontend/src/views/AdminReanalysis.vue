@@ -1,48 +1,132 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
-import {
-  Network,
-  ShieldCheck,
-  CheckCircle2,
-  Search,
-  AlertTriangle
-} from 'lucide-vue-next'
-import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
 import TaxonomySuggestions from '../components/TaxonomySuggestions.vue'
+import { Server, Settings, CheckCircle, RefreshCcw, Search, Network, X, Trash2 } from 'lucide-vue-next'
+import { authService } from '../services/auth'
 
-const isLoading = ref(false)
-const error = ref('')
+const isAdmin = () => authService.state.user?.role === 'admin'
+
 const successMessage = ref('')
-const logs = ref<string[]>([])
+const error = ref('')
+const isLoading = ref(false)
 
-const addLog = (msg: string) => {
-  logs.value.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`)
+const logs = ref<string[]>([])
+const logContainer = ref<HTMLElement | null>(null)
+
+const isTreeLoading = ref(false)
+const treeStatus = ref('idle') // idle, running, waiting_for_user, completed, error
+const treeArtifacts = ref<any>({})
+const treePollingInterval = ref<any>(null)
+const treeCost = ref<number | null>(null)
+const batchProgress = ref<any>(null)
+let lastBatchCheck = 0
+
+const batchHistory = ref<any[]>([])
+const isBatchHistoryLoading = ref(false)
+
+const fetchBatchHistory = async () => {
+  isBatchHistoryLoading.value = true
+  try {
+    const resp = await axios.get('/api/cv/recalculate_tree/batch/list')
+    if (resp.data && resp.data.success) {
+      batchHistory.value = resp.data.batches || []
+    }
+  } catch (e) {
+    console.error('Failed to fetch batch history', e)
+  } finally {
+    isBatchHistoryLoading.value = false
+  }
 }
 
-// Reuse logic from Admin.vue for tree recalculation
-const isTreeLoading = ref(false)
-const treeResult = ref<any>(null)
-const treeCost = ref<number | null>(null)
-const treePollingInterval = ref<any>(null)
-
-const triggerRemapping = async () => {
-  if (confirm("Générer la nouvelle taxonomie écrasera votre affichage actuel. Êtes-vous sûr ?")) {
-    isTreeLoading.value = true
-    error.value = ''
-    treeResult.value = null
-    treeCost.value = null
-    addLog("Lancement du calcul de la nouvelle taxonomie via Gemini...")
-    
-    try {
-      await axios.post('/api/cv/recalculate_tree')
-      checkTreeTaskStatus()
-    } catch (e: any) {
-      error.value = e.response?.data?.detail || e.message || "Erreur lors du lancement du calcul de l'arbre"
-      addLog(`ERREUR arbre: ${error.value}`)
-      isTreeLoading.value = false
+const deleteBatchJob = async (jobName: string) => {
+  if (!confirm('Êtes-vous sûr de vouloir supprimer ce job de l\'historique GCP ?')) return;
+  const jobId = jobName.split('/').pop()
+  isBatchHistoryLoading.value = true
+  try {
+    const resp = await axios.delete(`/api/cv/recalculate_tree/batch/${jobId}`)
+    if (resp.data && resp.data.success) {
+      addLog(`Job supprimé: ${jobId}`)
+      await fetchBatchHistory()
+    } else {
+      addLog(`Erreur suppression: ${resp.data?.error}`)
     }
+  } catch (e: any) {
+    console.error('Failed to delete batch job', e)
+    addLog(`Erreur réseau (Suppression): ${e.message}`)
+  } finally {
+    isBatchHistoryLoading.value = false
+  }
+}
+
+const checkBatchProgress = async () => {
+  try {
+    const resp = await axios.post('/api/cv/recalculate_tree/batch/check')
+    if (resp.data && resp.data.progress) {
+      batchProgress.value = resp.data.progress
+      batchProgress.value.step = resp.data.step
+      batchProgress.value.state = resp.data.state
+      batchProgress.value.elapsed = resp.data.elapsed || ''
+    }
+  } catch (e) {
+    console.error('Failed to check batch progress', e)
+  }
+}
+
+const recoverBatch = async () => {
+  try {
+    const resp = await axios.post('/api/cv/recalculate_tree/batch/recover')
+    if (resp.data && resp.data.success) {
+      addLog('Reprise du batch forcée...')
+      await checkTreeTaskStatus()
+    } else {
+      addLog(`Impossible de reprendre le batch: ${resp.data?.error}`)
+    }
+  } catch (e: any) {
+    console.error('Failed to recover batch', e)
+    addLog(`Erreur réseau (Reprise): ${e.message}`)
+  }
+}
+
+const resetBatch = async () => {
+  if (!confirm('⚠️ Réinitialiser l\'interface ? L\'état Redis sera effacé. Le job GCP en cours (s\'il existe) continuera de tourner. Utilisez \'Annuler\' d\'abord si vous voulez l\'arrêter.')) return
+  try {
+    const resp = await axios.post('/api/cv/recalculate_tree/batch/reset')
+    if (resp.data && resp.data.success) {
+      treeStatus.value = 'idle'
+      addLog('✅ État du pipeline réinitialisé. Vous pouvez relancer un nouveau batch.')
+      if (treePollingInterval.value) {
+        clearInterval(treePollingInterval.value)
+        treePollingInterval.value = null
+      }
+    } else {
+      addLog(`Erreur reset: ${resp.data?.error}`)
+    }
+  } catch (e: any) {
+    console.error('Failed to reset batch', e)
+    addLog(`Erreur réseau (Reset): ${e.message}`)
+  }
+}
+
+const addLog = (msg: string) => {
+  const timestamp = new Date().toLocaleTimeString()
+  logs.value.unshift(`[${timestamp}] ${msg}`)
+  if (logs.value.length > 50) logs.value.pop()
+}
+
+const triggerTreeStep = async (step: str, target_pillar?: string) => {
+  isTreeLoading.value = true
+  error.value = ''
+  addLog(`Lancement de l'étape: ${step}...`)
+  
+  try {
+    await axios.post(`/api/cv/recalculate_tree/step`, { step, target_pillar })
+    checkTreeTaskStatus()
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || e.message || `Erreur lors de l'étape ${step}`
+    addLog(`ERREUR: ${error.value}`)
+    isTreeLoading.value = false
   }
 }
 
@@ -51,20 +135,38 @@ const checkTreeTaskStatus = async () => {
     const resp = await axios.get('/api/cv/recalculate_tree/status')
     const data = resp.data
     
-    if (data.status === 'running') {
+    if (data && data.status) {
+        treeStatus.value = data.status
+        treeArtifacts.value = {
+            map_result: data.map_result,
+            res_tree: data.res_tree,
+            sweep_result: data.sweep_result,
+            completed_pillars: data.completed_pillars || [],
+            missing_competencies: data.missing_competencies || []
+        }
+        treeCost.value = data.usage?.estimated_cost_usd || null
+
+        if (data.logs && data.logs.length > 0) {
+            const latestLog = data.logs[data.logs.length - 1]
+            const msg = latestLog.includes('] ') ? latestLog.split('] ')[1] : latestLog
+            if (logs.value.length === 0 || !logs.value[0].includes(msg)) {
+                addLog(msg)
+            }
+        }
+    }
+    
+    if (treeStatus.value === 'running' || treeStatus.value === 'batch_running') {
       isTreeLoading.value = true
-      treeResult.value = null
-      
-      if (data.logs && data.logs.length > 0) {
-          const latestLog = data.logs[data.logs.length - 1]
-          const msg = latestLog.includes('] ') ? latestLog.split('] ')[1] : latestLog
-          if (logs.value.length === 0 || !logs.value[0].includes(msg)) {
-              addLog(msg)
-          }
-      }
-      
       if (!treePollingInterval.value) {
         treePollingInterval.value = setInterval(checkTreeTaskStatus, 3000)
+      }
+      
+      if (treeStatus.value === 'batch_running') {
+        const now = Date.now()
+        if (now - lastBatchCheck > 15000) {
+          lastBatchCheck = now
+          checkBatchProgress()
+        }
       }
     } else {
       isTreeLoading.value = false
@@ -72,17 +174,8 @@ const checkTreeTaskStatus = async () => {
         clearInterval(treePollingInterval.value)
         treePollingInterval.value = null
       }
-      
-      if (data.status === 'completed' && data.tree) {
-        treeResult.value = data.tree
-        treeCost.value = data.usage?.estimated_cost_usd || null
-        if (!successMessage.value.includes('Taxonomie')) {
-            successMessage.value = "Nouvelle taxonomie générée avec succès."
-            addLog("Nouvelle taxonomie générée avec succès.")
-        }
-      } else if (data.status === 'error') {
-        error.value = data.error || "Erreur lors du calcul de l'arbre"
-        addLog(`ERREUR arbre: ${error.value}`)
+      if (treeStatus.value === 'error') {
+        error.value = data.error || "Erreur lors du calcul"
       }
     }
   } catch (e) {
@@ -90,27 +183,75 @@ const checkTreeTaskStatus = async () => {
   }
 }
 
-const applyTree = async () => {
+const startTreeBatch = async () => {
   isTreeLoading.value = true
   error.value = ''
+  lastBatchCheck = 0  // Reset pour que le premier checkBatchProgress() s'exécute immédiatement
+  addLog('Lancement du traitement Batch complet...')
   
   try {
-    addLog("Sauvegarde de la taxonomie en base de données...")
-    await axios.post('/api/competencies/bulk_tree', { tree: treeResult.value })
-    addLog("Taxonomie appliquée et caches vidés.")
-    treeResult.value = null
-    successMessage.value = "Taxonomie officiellement mise à jour sur toute la plateforme."
+    const resp = await axios.post('/api/cv/recalculate_tree/batch/start')
+    if (resp.data && !resp.data.success) {
+      addLog(`⚠️ ${resp.data.message || 'Erreur au lancement'}`)
+      isTreeLoading.value = false
+      return
+    }
+    // Déclencher immédiatement un check de statut qui mettra à jour treeStatus -> batch_running
+    checkTreeTaskStatus()
   } catch (e: any) {
-    error.value = e.response?.data?.detail || e.message || "Erreur de synchro DB"
-    addLog(`ERREUR sauvegarde: ${error.value}`)
-  } finally {
+    error.value = e.response?.data?.detail || e.message || 'Erreur lors du lancement Batch'
+    addLog(`ERREUR: ${error.value}`)
     isTreeLoading.value = false
   }
 }
 
+const cancelTreeBatch = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir interrompre ce traitement Batch ?')) return;
+    
+    try {
+        const resp = await axios.post('/api/cv/recalculate_tree/batch/cancel')
+        if (resp.data && resp.data.success) {
+            treeStatus.value = 'error'
+            addLog('Traitement annulé par l\'utilisateur.')
+            if (treePollingInterval.value) {
+                clearInterval(treePollingInterval.value)
+                treePollingInterval.value = null
+            }
+        } else {
+            addLog(`Erreur annulation: ${resp.data?.error || 'Inconnue'}`)
+        }
+    } catch (e: any) {
+        console.error('Erreur annulation:', e)
+        addLog(`Erreur réseau (Cancel): ${e.message}`)
+    }
+}
+
+const cancelInteractiveTree = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir interrompre ce traitement interactif ? (L\'opération s\'arrêtera à la fin de la requête en cours)')) return;
+    
+    try {
+        const resp = await axios.post('/api/cv/recalculate_tree/cancel')
+        if (resp.data && resp.data.success) {
+            treeStatus.value = 'error'
+            addLog('Annulation demandée. Le processus s\'arrêtera sous peu.')
+            if (treePollingInterval.value) {
+                clearInterval(treePollingInterval.value)
+                treePollingInterval.value = null
+            }
+        } else {
+            addLog(`Erreur annulation: ${resp.data?.error || 'Inconnue'}`)
+        }
+    } catch (e: any) {
+        console.error('Erreur annulation:', e)
+        addLog(`Erreur réseau (Cancel): ${e.message}`)
+    }
+}
+
 onMounted(() => {
   checkTreeTaskStatus()
+  fetchBatchHistory()
 })
+
 onUnmounted(() => {
   if (treePollingInterval.value) {
     clearInterval(treePollingInterval.value)
@@ -136,19 +277,219 @@ onUnmounted(() => {
       <!-- Section 1: Recalcul de l'Arbre -->
       <div class="glass-panel tree-panel">
         <div class="panel-header">
-          <h3><Network size="20" /> Taxonomie & Structure</h3>
+          <h3><Network size="20" /> Taxonomie Interactive (Human-in-the-Loop)</h3>
         </div>
         <div class="panel-content">
-          <p class="section-desc">Générez une nouvelle structure de compétences (Taxonomie) basée sur l'ensemble des données actuelles via Gemini.</p>
-          <div class="actions">
+          <p class="section-desc">Ce processus génère une taxonomie en 4 étapes interactives. Vous pouvez valider chaque étape.</p>
+          
+          <div class="step-wizard" v-if="treeStatus !== 'idle'">
+             <div class="step-status">Status actuel : <strong>{{ treeStatus }}</strong></div>
+             
+             <!-- Étape 1 & 2 : Map & Dedup -->
+             <div class="step-box" v-if="treeArtifacts.map_result && Object.keys(treeArtifacts.res_tree || {}).length === 0">
+                <h4>Étape 1 & 2 : Piliers (Map & Dedup)</h4>
+                <div class="artifact-cards">
+                    <div v-for="(skills, pillar) in treeArtifacts.map_result" :key="pillar" class="artifact-card">
+                        <div class="card-title">{{ pillar }} <span class="badge">{{ skills.length }}</span></div>
+                        <div class="tags-container">
+                            <span v-for="skill in skills" :key="skill" class="skill-tag">{{ skill }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="actions" v-if="treeStatus === 'waiting_for_user' || treeStatus === 'error' || treeStatus === 'cancelled'">
+                    <button class="action-btn secondary-btn" @click="triggerTreeStep('deduplicate')">Relancer la déduplication</button>
+                    <button class="action-btn primary-btn" @click="triggerTreeStep('reduce')">Valider les piliers et passer à Reduce</button>
+                </div>
+             </div>
+
+             <!-- Étape 3 : Reduce -->
+             <div class="step-box" v-if="Object.keys(treeArtifacts.res_tree || {}).length > 0 && (treeArtifacts.sweep_result === undefined || treeArtifacts.sweep_result === null)">
+                <h4>Étape 3 : Arbre (Reduce)</h4>
+                <p>Piliers traités : {{ treeArtifacts.completed_pillars?.join(', ') || 'Aucun' }}</p>
+                <div class="artifact-cards">
+                    <div v-for="(node, pillar) in treeArtifacts.res_tree" :key="pillar" class="artifact-card">
+                        <div class="card-title">{{ node.name || pillar }}</div>
+                        <div class="tree-nodes">
+                            <div v-for="sub in node.sub_competencies" :key="sub.name" class="tree-node">
+                                <strong>{{ sub.name }}</strong>
+                                <span v-if="sub.aliases" style="font-size: 0.75rem; color: #64748b;"> ({{ sub.aliases }})</span>
+                                <div v-if="sub.merge_from && sub.merge_from.length" class="merge-tags">
+                                    <span v-for="m in sub.merge_from" :key="m" class="merge-tag">fusionner: {{ m }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="actions" v-if="treeStatus === 'waiting_for_user' || treeStatus === 'error' || treeStatus === 'cancelled'">
+                    <button class="action-btn secondary-btn" @click="triggerTreeStep('sweep')">Passer au Sweep (Rattrapage)</button>
+                </div>
+             </div>
+
+             <!-- Étape 4 : Sweep -->
+             <div class="step-box" v-if="treeArtifacts.sweep_result !== undefined && treeArtifacts.sweep_result !== null">
+                <h4>Étape 4 : Rattrapage (Sweep)</h4>
+                <p v-if="treeArtifacts.missing_competencies?.length">Orphelines trouvées: {{ treeArtifacts.missing_competencies.length }}</p>
+                <div class="artifact-cards">
+                    <div v-for="item in treeArtifacts.sweep_result" :key="item.name" class="artifact-card">
+                        <div class="card-title"><strong>{{ item.name }}</strong></div>
+                        <div class="tags-container" v-if="item.merge_from && item.merge_from.length">
+                            <span style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">À fusionner depuis :</span>
+                            <span v-for="m in item.merge_from" :key="m" class="merge-tag">← {{ m }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="actions" v-if="treeStatus === 'waiting_for_user' || treeStatus === 'error' || treeStatus === 'cancelled'">
+                    <button class="action-btn primary-btn" @click="triggerTreeStep('apply')">Appliquer et Sauvegarder</button>
+                </div>
+             </div>
+          </div>
+          
+          <div class="actions" v-if="['idle', 'error', 'completed', 'cancelled'].includes(treeStatus)">
             <button 
               class="action-btn secondary-btn" 
-              @click="triggerRemapping"
-              :disabled="isLoading || isTreeLoading"
+              @click="triggerTreeStep('map')"
+              :disabled="isLoading || isTreeLoading || treeStatus === 'batch_running' || !isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Démarrer la taxonomie (Mode Interactif)'"
             >
-              <Network size="20" :class="{ 'pulse-animation': isTreeLoading }" />
-              {{ isTreeLoading ? 'Calcul en cours...' : "Recalculer l'Arbre" }}
+              <Network size="20" :class="{ 'pulse-animation': isTreeLoading && treeStatus !== 'batch_running' }" />
+              {{ isTreeLoading && treeStatus !== 'batch_running' ? 'Calcul en cours...' : "Démarrer la taxonomie (Mode Interactif)" }}
             </button>
+            
+            <button 
+              class="action-btn primary-btn" 
+              @click="startTreeBatch()"
+              :disabled="isLoading || isTreeLoading || treeStatus === 'batch_running' || !isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Planifier un recalcul complet (Mode Batch - Coût Réduit)'"
+              style="margin-top: 1rem; background: #6366f1;"
+            >
+              <Network size="20" :class="{ 'pulse-animation': treeStatus === 'batch_running' }" />
+              {{ treeStatus === 'batch_running' ? 'Processus Batch en cours côté serveur...' : "Planifier un recalcul complet (Mode Batch - Coût Réduit)" }}
+            </button>
+            
+            <button 
+              v-if="treeStatus === 'error'"
+              class="action-btn secondary-btn" 
+              @click="recoverBatch"
+              :disabled="!isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Forcer Reprise du Batch'"
+              style="margin-top: 1rem; border-color: #ef4444; color: #ef4444;"
+            >
+              <RefreshCcw size="20" />
+              Forcer Reprise du Batch (Suite à Erreur/Timeout)
+            </button>
+            <button 
+              v-if="treeStatus !== 'batch_running' && treeStatus !== 'running'"
+              class="action-btn secondary-btn" 
+              @click="resetBatch"
+              :disabled="!isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Réinitialiser état'"
+              style="margin-top: 1rem; border-color: #94a3b8; color: #94a3b8; font-size: 0.8rem;"
+            >
+              🔄 Réinitialiser l'état (Urgence)
+            </button>
+          </div>
+
+          <div class="actions" v-if="treeStatus === 'running'" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; color: #64748b;">
+              <Activity size="20" class="pulse-animation" />
+              <span>Calcul interactif en cours... (Actualisation auto)</span>
+            </div>
+            <button 
+              class="action-btn" 
+              @click="cancelInteractiveTree()"
+              style="background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
+            >
+              <X size="18" style="vertical-align: middle; margin-right: 6px;" /> Interrompre
+            </button>
+          </div>
+          
+          <div v-if="treeStatus === 'batch_running'" class="step-box" style="margin-top: 1.5rem; background: rgba(99, 102, 241, 0.1); border: 1px solid #6366f1;">
+              <h4 style="color: #6366f1;">Processus Batch Asynchrone en cours</h4>
+              <p>Un recalcul automatique (Batch) est actuellement en cours par le système GCP. Cette opération peut prendre plusieurs heures (SLA: 24h). L'arbre sera automatiquement mis à jour à la fin du processus.</p>
+              <p v-if="treeArtifacts.batch_job_id"><strong>ID du Job:</strong> {{ treeArtifacts.batch_job_id }}</p>
+              
+              <div v-if="batchProgress && batchProgress.total > 0" class="batch-progress" style="margin-top: 1rem;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                      <span style="font-weight: 600;">Étape : {{ batchProgress.step?.toUpperCase() || 'Inconnue' }} ({{ batchProgress.state }})</span>
+                      <span>{{ batchProgress.completed }} / {{ batchProgress.total }} ({{ batchProgress.percent }}%)</span>
+                  </div>
+                  <div style="width: 100%; background: #e2e8f0; border-radius: 4px; height: 12px; overflow: hidden;">
+                      <div :style="{ width: batchProgress.percent + '%', background: '#6366f1', height: '100%', transition: 'width 0.3s ease' }"></div>
+                  </div>
+                  <p v-if="batchProgress.failed > 0" style="color: #ef4444; font-size: 0.85rem; margin-top: 0.5rem;">⚠️ {{ batchProgress.failed }} requête(s) en échec</p>
+              </div>
+              <div v-else style="margin-top: 1rem; color: #64748b; font-size: 0.85rem;">
+                  <span v-if="batchProgress?.elapsed">⏱ Temps écoulé : <strong>{{ batchProgress.elapsed }}</strong> — </span>
+                  <span>Vertex AI ne publie pas de compteur pendant l'exécution. Résultat disponible à la fin du job.</span>
+              </div>
+              
+              <div style="margin-top: 1.5rem; text-align: right;">
+                  <button 
+                      class="action-btn" 
+                      @click="cancelTreeBatch()"
+                      :disabled="!isAdmin()"
+                      :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Interrompre le traitement'"
+                      style="background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                  >
+                      <X size="18" style="vertical-align: middle; margin-right: 6px;" /> Interrompre le traitement
+                  </button>
+              </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Historique Batch (Nouveau Dashboard) -->
+      <div class="glass-panel batch-panel">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <h3><Server size="20" /> Historique Jobs Batch GCP</h3>
+          <button @click="fetchBatchHistory" class="action-btn secondary-btn" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;" :disabled="isBatchHistoryLoading">
+             <RefreshCcw size="14" :class="{ 'spin': isBatchHistoryLoading }" /> Actualiser
+          </button>
+        </div>
+        <div class="panel-content" style="flex: 1; overflow-y: auto; max-height: 400px; padding-right: 0.5rem;">
+          <p v-if="batchHistory.length === 0 && !isBatchHistoryLoading" class="section-desc">Aucun job batch enregistré.</p>
+          <div v-else class="batch-list" style="display: flex; flex-direction: column; gap: 1rem;">
+             <div v-for="job in batchHistory" :key="job.name" class="artifact-card" style="position: relative; overflow: hidden;">
+                 <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%;" 
+                      :style="{ background: job.state === 'JOB_STATE_SUCCEEDED' ? '#10b981' : (job.state === 'JOB_STATE_FAILED' ? '#ef4444' : '#3b82f6') }"></div>
+                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                    <div>
+                        <strong style="font-size: 0.95rem;">{{ job.display_name || job.name.split('/').pop() }}</strong>
+                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">ID: {{ job.name.split('/').pop() }}</div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; position: relative; top: 0; right: 0;">
+                        <span class="status-badge"
+                              :style="{ color: job.state === 'JOB_STATE_SUCCEEDED' ? '#10b981' : (job.state === 'JOB_STATE_FAILED' ? '#ef4444' : '#3b82f6'), 
+                                        background: job.state === 'JOB_STATE_SUCCEEDED' ? 'rgba(16, 185, 129, 0.1)' : (job.state === 'JOB_STATE_FAILED' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)'),
+                                        borderColor: 'transparent', margin: 0 }">
+                            {{ job.state.replace('JOB_STATE_', '') }}
+                        </span>
+                        <button v-if="isAdmin()" class="action-btn" @click.stop="deleteBatchJob(job.name)" title="Supprimer ce job"
+                                style="padding: 4px; background: transparent; color: #ef4444; border: none; width: auto; min-width: auto; height: auto; cursor: pointer;">
+                            <Trash2 size="16" />
+                        </button>
+                    </div>
+                 </div>
+                 
+                 <div style="font-size: 0.8rem; color: #475569; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem;">
+                     <div>🕐 Créé: {{ new Date(job.create_time).toLocaleString() }}</div>
+                     <div v-if="job.start_time">▶️ Démarré: {{ new Date(job.start_time).toLocaleString() }}</div>
+                     <div v-else-if="job.update_time">🔄 MàJ: {{ new Date(job.update_time).toLocaleString() }}</div>
+                     <div v-if="job.end_time">✅ Terminé: {{ new Date(job.end_time).toLocaleString() }}</div>
+                     <div v-if="job.model" style="grid-column: span 2; font-size: 0.72rem; color: #94a3b8;">Modèle: {{ job.model }}</div>
+                 </div>
+                 
+                 <div v-if="job.completion_stats && job.completion_stats.total > 0" style="margin-top: 0.8rem;">
+                     <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px;">
+                         <span>✅ {{ job.completion_stats.successful }} réussies / {{ job.completion_stats.total }}</span>
+                         <span v-if="job.completion_stats.failed > 0" style="color: #ef4444;">❌ {{ job.completion_stats.failed }} échec(s)</span>
+                         <span v-if="job.completion_stats.incomplete > 0" style="color: #f59e0b;">⏳ {{ job.completion_stats.incomplete }} incomplet(s)</span>
+                     </div>
+                     <div style="width: 100%; background: #f1f5f9; border-radius: 4px; height: 6px; overflow: hidden;">
+                         <div :style="{ width: job.completion_stats.percent + '%', background: job.completion_stats.failed > 0 ? '#f59e0b' : '#10b981', height: '100%' }"></div>
+                     </div>
+                 </div>
+             </div>
           </div>
         </div>
       </div>
@@ -384,7 +725,7 @@ onUnmounted(() => {
 .input-with-icon input:focus {
   outline: none;
   border-color: var(--zenika-red);
-  box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.1);
+  box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.25);
 }
 
 .user-search-container {
@@ -639,5 +980,105 @@ onUnmounted(() => {
 
 @media (max-width: 900px) {
   .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+/* Artifact Cards Styles */
+.artifact-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.artifact-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.card-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #1e293b;
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.5rem;
+}
+
+.badge {
+  background: #eff6ff;
+  color: #3b82f6;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-tag {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.tree-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tree-node {
+  font-size: 0.85rem;
+  background: #f8fafc;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border-left: 3px solid #6366f1;
+}
+
+.merge-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.merge-tag {
+  background: #fef2f2;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* Custom Scrollbar for artifact cards */
+.artifact-cards::-webkit-scrollbar {
+  width: 6px;
+}
+.artifact-cards::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.artifact-cards::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.artifact-cards::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 </style>

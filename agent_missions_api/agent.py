@@ -96,7 +96,8 @@ async def create_agent(session_id: str | None = None) -> Agent:
     except Exception as e:
         app_logger.warning("[MISSIONS] Error fetching system prompt: %s", e)
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
+    model = os.getenv("GEMINI_MISSIONS_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
     tools_loaded = await get_cached_tools(_MISSIONS_CLIENTS_MAP, "[MISSIONS]", ttl=300, _cache=_MISSIONS_TOOLS_CACHE)
     MISSIONS_TOOLS = tools_loaded
 

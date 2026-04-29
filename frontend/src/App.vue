@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import {
   LogOut, User as UserIcon, Bot, Network, ServerCog, BookOpen,
   ChevronDown, Settings, BarChart3, Cpu, HardDriveUpload,
   Users, GitMerge, CalendarDays, BrainCircuit, RefreshCw,
-  ShieldAlert, Briefcase, ExternalLink
+  ShieldAlert, ShieldCheck, Briefcase, ExternalLink, Menu, X,
+  AlertTriangle
 } from 'lucide-vue-next'
 import { authService } from './services/auth'
 import { useRouter } from 'vue-router'
 import ToastNotification from '@/components/ui/ToastNotification.vue'
+import axios from 'axios'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -25,15 +27,81 @@ const handleLogout = async () => {
 
 const isAdmin = () => authService.state.user?.role === 'admin'
 const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
+
+const isMobileMenuOpen = ref(false)
+const toggleMobileMenu = () => {
+  isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+
+watch(() => router.currentRoute.value.path, () => {
+  isMobileMenuOpen.value = false
+})
+
+// ── Data Quality Banner ───────────────────────────────────────────────────────
+const isDataQualityBad = ref(false)
+let _dqPollingTimer: ReturnType<typeof setInterval> | null = null
+
+const checkDataQuality = async () => {
+  if (!authService.state.isAuthenticated) return
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+    const res = await axios.get('/api/cv/bulk-reanalyse/data-quality', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    const data = res.data
+    // Afficher le bandeau si le grade n'est pas A (score < 85) OU s'il y a des issues
+    isDataQualityBad.value = !!(
+      data && (data.score < 85 || (data.issues && data.issues.length > 0))
+    )
+  } catch (e) {
+    console.error('Data quality check failed', e)
+    // En cas d'erreur réseau : ne pas modifier l'état courant
+  }
+}
+
+// Démarre le polling dès que l'utilisateur est authentifié
+watch(
+  () => authService.state.isAuthenticated,
+  (authenticated) => {
+    if (authenticated) {
+      checkDataQuality()
+      if (!_dqPollingTimer) {
+        _dqPollingTimer = setInterval(checkDataQuality, 60_000)
+      }
+    } else {
+      isDataQualityBad.value = false
+      if (_dqPollingTimer) {
+        clearInterval(_dqPollingTimer)
+        _dqPollingTimer = null
+      }
+    }
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  if (_dqPollingTimer) {
+    clearInterval(_dqPollingTimer)
+    _dqPollingTimer = null
+  }
+})
 </script>
 
 <template>
   <div id="main-app">
     <ToastNotification />
     <div class="header">
-      <div class="logo">ZENIKA</div>
-      <div class="subtitle">Console Intelligent Agent</div>
-      <div class="nav-links">
+      <div class="header-left">
+        <div class="logo">ZENIKA</div>
+        <div class="subtitle hide-on-mobile">Console Intelligent Agent</div>
+      </div>
+      
+      <button class="mobile-menu-btn" @click="toggleMobileMenu" v-if="authService.state.isAuthenticated">
+        <X v-if="isMobileMenuOpen" size="24" />
+        <Menu v-else size="24" />
+      </button>
+
+      <div class="nav-links" :class="{ 'is-open': isMobileMenuOpen }">
         <div class="header-search">
           <input 
             type="text" 
@@ -49,18 +117,20 @@ const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
             <Bot size="16" /> Agent
           </RouterLink>
 
+          <!-- Arbre des compétences -->
+          <RouterLink to="/competencies" class="nav-pill" active-class="active" aria-label="Arbre des compétences">
+            <Network size="16" /> Compétences
+          </RouterLink>
+
           <!-- Hub RH (consultants, compétences) -->
           <div class="dropdown" v-if="isRh()">
-            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/competencies', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }">
+            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }">
               <Users size="16" /> Hub RH <ChevronDown size="14" />
             </button>
             <div class="dropdown-content">
               <div class="dropdown-section-label">Consultants</div>
               <RouterLink to="/" class="nav-pill" aria-label="Rechercher un consultant via l'agent">
                 <Bot size="14" /> Recherche par Agent
-              </RouterLink>
-              <RouterLink to="/competencies" class="nav-pill" active-class="dropdown-active" aria-label="Arbre des compétences">
-                <Network size="14" /> Arbre des Compétences
               </RouterLink>
               <div class="dropdown-section-label">Gestion RH</div>
               <RouterLink to="/admin/availability" class="nav-pill" active-class="dropdown-active" aria-label="Planning des disponibilités">
@@ -96,6 +166,9 @@ const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
               </RouterLink>
               <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" aria-label="Restructuration de la taxonomie par l'IA">
                 <Network size="14" /> Taxonomie & Structure IA
+              </RouterLink>
+              <RouterLink to="/admin/bulk-import" class="nav-pill" active-class="dropdown-active" aria-label="Ré-analyse globale de tous les CVs via Vertex AI Batch">
+                <RefreshCw size="14" /> Ré-analyse Globale Batch
               </RouterLink>
 
               <div class="dropdown-section-label">Configuration Agents</div>
@@ -139,6 +212,9 @@ const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
               </RouterLink>
               <RouterLink to="/registry" class="nav-pill" active-class="dropdown-active">
                 <ServerCog size="14" /> Serveurs MCP
+              </RouterLink>
+              <RouterLink to="/data-quality" class="nav-pill" active-class="dropdown-active" aria-label="Dashboard Data Quality des pipelines">
+                <ShieldCheck size="14" /> Data Quality
               </RouterLink>
 
               <div class="dropdown-section-label" v-if="isAdmin()">API Swagger</div>
@@ -187,6 +263,12 @@ const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
       </div>
     </div>
 
+    <div v-if="isDataQualityBad" class="data-quality-banner">
+      <AlertTriangle size="18" />
+      <span><strong>Attention :</strong> La qualité des données est actuellement dégradée. Une analyse est en cours...</span>
+      <RouterLink to="/data-quality" class="data-quality-link">Voir le détail</RouterLink>
+    </div>
+
     <main class="content">
       <RouterView />
     </main>
@@ -194,24 +276,7 @@ const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
 </template>
 
 <style>
-:root {
-  --zenika-red: #E31937;
-  --bg-gradient: linear-gradient(135deg, #f8f9ff 0%, #f1f4f9 100%);
-  --text-primary: #1a1a1a;
-  --text-secondary: #5a5a5a;
-  --header-bg: rgba(255, 255, 255, 0.9);
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.05);
-
-  /* Shared variables for Admin Panels */
-  --surface-light: #ffffff;
-  --surface-color: #f8f9fa;
-  --border-color: #e2e8f0;
-  --text-light: #64748b;
-  --text-color: #1e293b;
-  --primary-color: var(--zenika-red);
-  --primary-light: #f87171;
-  --bg-color: var(--bg-gradient);
-}
+/* Variables moved to style.css */
 
 * {
   margin: 0;
@@ -242,7 +307,7 @@ body {
   top: 0;
   z-index: 100;
   border-bottom: 2px solid var(--zenika-red);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm-app);
 }
 
 .logo {
@@ -325,8 +390,8 @@ body {
   background: rgba(227, 25, 55, 0.05);
   border: 1px solid rgba(227, 25, 55, 0.1);
   color: var(--zenika-red);
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -425,7 +490,7 @@ body {
 }
 
 .dropdown-section-label {
-  font-size: 0.68rem;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -474,8 +539,8 @@ body {
   background: #f5f5f5;
   border: none;
   color: #666;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -509,16 +574,16 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.8rem !important;
-  color: #666 !important;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
   border: 1px solid transparent;
 }
 
 .swagger-link:hover {
-  background: white !important;
+  background: white;
   border-color: #ddd;
-  box-shadow: var(--shadow-sm);
-  color: var(--zenika-red) !important;
+  box-shadow: var(--shadow-sm-app);
+  color: var(--zenika-red);
 }
 
 .header-search {
@@ -565,5 +630,133 @@ body {
   background: var(--zenika-red);
   color: white;
   border-color: var(--zenika-red);
+}
+
+/* Responsive Styles */
+@media (max-width: 1024px) {
+  .header {
+    padding: 1rem 1.5rem;
+  }
+  .mobile-menu-btn {
+    display: flex;
+    background: transparent;
+    border: none;
+    color: var(--zenika-red);
+    cursor: pointer;
+    padding: 0.5rem;
+    margin-left: auto;
+  }
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    padding: 1.5rem;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    align-items: stretch;
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+  }
+  .nav-links.is-open {
+    display: flex;
+  }
+  .nav-pills {
+    flex-direction: column;
+    width: 100%;
+  }
+  .nav-pill {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 1rem;
+  }
+  .header-search {
+    margin-right: 0;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+  .header-search input {
+    width: 100%;
+  }
+  .header-search input:focus {
+    width: 100%;
+    transform: none;
+  }
+  .dropdown {
+    width: 100%;
+  }
+  .dropdown-btn {
+    width: 100%;
+  }
+  .dropdown:hover .dropdown-content, .dropdown:focus-within .dropdown-content {
+    position: static;
+    box-shadow: none;
+    border: none;
+    margin-top: 0.5rem;
+    background: rgba(0,0,0,0.02);
+    display: flex;
+  }
+  .dropdown-content::before {
+    display: none;
+  }
+  .user-profile {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+  .separator {
+    display: none;
+  }
+  .content {
+    padding: 1rem;
+  }
+}
+
+@media (min-width: 1025px) {
+  .mobile-menu-btn {
+    display: none;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+  }
+}
+
+.data-quality-banner {
+  background: #fffbeb;
+  color: #b45309;
+  padding: 0.75rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #fef3c7;
+  box-shadow: inset 0 -1px 0 rgba(217, 119, 6, 0.1);
+  animation: slideDown 0.3s ease-out;
+}
+
+.data-quality-banner strong {
+  font-weight: 700;
+}
+
+.data-quality-link {
+  color: #b45309;
+  font-weight: 600;
+  text-decoration: underline;
+  margin-left: 0.5rem;
+  transition: color 0.2s;
+}
+
+.data-quality-link:hover {
+  color: #92400e;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 </style>

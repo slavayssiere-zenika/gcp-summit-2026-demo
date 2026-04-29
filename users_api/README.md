@@ -1,43 +1,47 @@
-# Users API
+# users_api
 
-## Code Coverage
+## Rôle
+Gestion des utilisateurs, authentification JWT, et émission de tokens de service pour les background tasks.
 
-```
-Name                    Stmts   Miss  Cover   Missing
------------------------------------------------------
-cache.py                   30     30     0%   1-40
-database.py                15     15     0%   1-22
-main.py                    48     48     0%   1-95
-src/__init__.py             0      0   100%
-src/users/__init__.py       0      0   100%
-src/users/models.py        12     12     0%   1-16
-src/users/router.py        62     62     0%   1-97
-src/users/schemas.py       25     25     0%   1-37
------------------------------------------------------
-TOTAL                     192    192     0%
-```
+## Type
+🔵 API data (producteur MCP)
 
-## Endpoints
+## Fichiers clés
+| Fichier | Lignes | État |
+|---|---|---|
+| `src/users/router.py` | 819 | ⚠️ Zone alerte (> 300) |
+| `src/auth.py` | 117 | ✅ OK |
+| `src/users/schemas.py` | 85 | ✅ OK |
+| `src/users/pubsub.py` | 68 | ✅ OK |
+| `src/users/models.py` | ~40 | ✅ OK |
+| `mcp_server.py` | ~150 | ✅ OK |
+| `main.py` | ~80 | ✅ OK |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /users | List users (paginated) |
-| GET | /users/{id} | Get user by ID |
-| POST | /users | Create user |
-| PUT | /users/{id} | Update user |
-| DELETE | /users/{id} | Delete user |
-| GET | /health | Health check |
-| GET | /metrics | Prometheus metrics |
+## Variables d'environnement
+| Var | Type | Valeur dev |
+|---|---|---|
+| `SECRET_KEY` | Secret | via `.env` |
+| `DATABASE_URL` | Infra | injecté Cloud Run |
+| `MCP_SIDECAR_URL` | Comportement | `http://users_mcp:8000` |
+| `ROOT_PATH` | Comportement | `/users-api` |
 
-## Pagination
+## Redis
+**DB 0** — namespace `users:*`
 
-```
-GET /users?skip=0&limit=10
-```
+## Endpoints clés
+- `POST /auth/login` — émission de JWT utilisateur
+- `POST /auth/internal/service-token` — token de service longue durée (background tasks)
+- `GET /users/me` — profil courant
+- `GET /users/{id}` — profil par ID (protégé)
+- `POST /users/` — création utilisateur (auto-génération password si absent)
 
-## Run
+## MCP tools exposés
+Consommables par les agents via `agent_commons.mcp_client` :
+- `get_user_by_id`, `list_users`, `create_user`, `update_user`, `delete_user`
 
-```bash
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+## Gotchas connus
+- Les routes statiques (`/spec`, `/health`) doivent être enregistrées **avant** les routes wildcard `/{id}` (sinon 422 int_parsing sur `"spec"`)
+- `POST /auth/internal/service-token` est le **seul** mécanisme autorisé pour les tokens de background task — ne jamais utiliser le compte admin
+
+## Dernière modification
+2026-04-29 — Audit sécurité RBAC + renforcement verify_jwt

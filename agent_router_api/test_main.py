@@ -11,7 +11,8 @@ client = TestClient(app)
 # Helper for JWT payload Generation
 def get_auth_token(sub="user_1"):
     from jose import jwt
-    from main import SECRET_KEY, ALGORITHM
+    from router import SECRET_KEY
+    from agent_commons.jwt_middleware import ALGORITHM
     payload = {"sub": sub, "role": "admin"}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -94,7 +95,7 @@ def test_mcp_registry():
     assert "services" in payload
     assert len(payload["services"]) > 0
 
-@patch('main.run_agent_query')
+@patch('router.run_agent_query')
 def test_query_success(mock_run_agent_query):
     mock_run_agent_query.return_value = {"response": "Answer", "source": "gemini"}
     token = get_auth_token()
@@ -103,7 +104,7 @@ def test_query_success(mock_run_agent_query):
     assert response.status_code == 200
     assert response.json()["response"] == "Answer"
 
-@patch('main.run_agent_query')
+@patch('router.run_agent_query')
 def test_query_error(mock_run_agent_query):
     mock_run_agent_query.side_effect = Exception("Agent fail")
     token = get_auth_token()
@@ -141,7 +142,7 @@ def test_get_history_success(mocker):
     mock_session.events = [mock_event_1, mock_event_2]
     mock_svc.get_session.return_value = mock_session
     
-    mocker.patch("agent.get_session_service", return_value=mock_svc)
+    mocker.patch("router.get_session_service", return_value=mock_svc)
     
     token = get_auth_token("test_user_hi")
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})
@@ -154,7 +155,7 @@ def test_get_history_success(mocker):
 def test_get_history_no_session(mocker):
     mock_svc = AsyncMock()
     mock_svc.get_session.return_value = None
-    mocker.patch("agent.get_session_service", return_value=mock_svc)
+    mocker.patch("router.get_session_service", return_value=mock_svc)
     
     token = get_auth_token()
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})

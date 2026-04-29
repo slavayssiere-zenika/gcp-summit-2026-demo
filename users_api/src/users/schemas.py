@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional, Generic, TypeVar, List
+from typing import Optional, Generic, TypeVar, List, Literal
 
 T = TypeVar("T")
 
@@ -12,13 +12,16 @@ class PaginationResponse(BaseModel, Generic[T]):
     limit: int
 
 
+VALID_ROLES = Literal["user", "rh", "commercial", "admin", "service_account"]
+
+
 class UserBase(BaseModel):
     username: str
     email: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     full_name: Optional[str] = None
-    role: str = "user"
+    role: VALID_ROLES = "user"
     seniority: Optional[str] = None  # "Junior", "Mid", "Senior"
     allowed_category_ids: List[int] = []
     picture_url: Optional[str] = None
@@ -43,7 +46,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     username: str
-    role: str = "user"
+    role: VALID_ROLES = "user"
 
 
 class UserUpdate(BaseModel):
@@ -54,7 +57,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
     is_anonymous: Optional[bool] = None
-    role: Optional[str] = None
+    role: Optional[VALID_ROLES] = None
     seniority: Optional[str] = None  # "Junior", "Mid", "Senior"
     allowed_category_ids: Optional[List[int]] = None
     unavailability_periods: Optional[List[dict]] = None

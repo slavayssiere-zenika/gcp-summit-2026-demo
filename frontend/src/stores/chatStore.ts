@@ -49,6 +49,37 @@ export function extractDebugPrompt(markdown: string): string | null {
   return null
 }
 
+/**
+ * Extrait les résultats de recherche sémantique de consultants depuis les steps de l'agent.
+ * Cherche le résultat du dernier appel à search_candidates_multi_criteria ou search_best_candidates.
+ * Retourne null si aucun résultat sémantique trouvé.
+ */
+function extractConsultantCards(steps: any[]): any[] | null {
+  if (!steps || steps.length === 0) return null
+  const semanticTools = ['search_candidates_multi_criteria', 'search_best_candidates']
+  // Parcourir en sens inverse pour prendre le dernier résultat
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]
+    if (step.type === 'result' && i > 0) {
+      const callStep = steps[i - 1]
+      if (callStep?.type === 'call' && semanticTools.includes(callStep.tool)) {
+        const raw = step.data?.result?.[0]?.text
+        if (raw && looksLikeJson(raw)) {
+          try {
+            const parsed = JSON.parse(raw)
+            const arr = Array.isArray(parsed) ? parsed : parsed.items || []
+            // Valider que c'est bien des consultants (user_id + full_name + combined_similarity ou source_tag)
+            if (arr.length > 0 && arr[0].user_id && (arr[0].full_name || arr[0].combined_similarity !== undefined)) {
+              return arr
+            }
+          } catch (_) { /* ignore */ }
+        }
+      }
+    }
+  }
+  return null
+}
+
 function unwrapToolData(toolData: any): any[] {
   if (!toolData) return []
 
@@ -158,6 +189,9 @@ export const useChatStore = defineStore('chat', {
           replyText = replyText.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
         }
 
+        // Extraction des cards consultants depuis les steps sémantiques (dual display)
+        const consultantCards = extractConsultantCards(steps)
+
         if (responseData.response) {
           // ADR12-4 — Alerte si le sous-agent répond en mode dégradé (erreur réseau A2A)
           if (responseData.degraded) {
@@ -173,6 +207,7 @@ export const useChatStore = defineStore('chat', {
             parsedData: parsedData,
             displayType: displayType,
             steps: steps,
+            consultantCards: consultantCards || undefined,
             thoughts: responseData.thoughts || '',
             rawResponse: responseData.response,
             activeTab: 'preview',
@@ -263,6 +298,12 @@ export const useChatStore = defineStore('chat', {
                   msg.content = msg.content.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
                 }
               }
+            }
+
+            // Re-extract consultant cards from steps on history reload
+            if (!msg.consultantCards && msg.steps && msg.steps.length > 0) {
+              const cards = extractConsultantCards(msg.steps)
+              if (cards) msg.consultantCards = cards
             }
 
             if (msg.data && msg.data.dataType === 'competency' && Array.isArray(msg.parsedData) && msg.displayType === 'tree') {

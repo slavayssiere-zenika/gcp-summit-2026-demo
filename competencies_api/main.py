@@ -20,7 +20,10 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from src.competencies.router import router
+from src.competencies.router import router, public_router, analytics_scheduler_router
+
+# Sous-routers spécialisés (chargés depuis router.py dispatcher)
+# L'enregistrement effectif est délégué à router.py qui inclut chaque sous-module.
 import time
 from logger import setup_logging, LoggingMiddleware
 
@@ -99,6 +102,8 @@ async def get_spec():
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 app.include_router(protected_router)  # /spec MUST be registered before /{competency_id} wildcard
+app.include_router(public_router)
+app.include_router(analytics_scheduler_router)  # OIDC Cloud Scheduler — sans JWT applicatif
 app.include_router(router)
 
 import traceback

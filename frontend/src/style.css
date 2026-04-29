@@ -18,9 +18,7 @@
   --font-family-base: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   
   /* Spacing */
-  --space-1: 0.25rem;
   --space-2: 0.5rem;
-  --space-3: 0.75rem;
   --space-4: 1rem;
   --space-6: 1.5rem;
   --space-8: 2rem;
@@ -30,13 +28,25 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   --shadow-glass: 0 8px 32px rgba(227, 25, 55, 0.08);
+  --shadow-sm-app: 0 4px 12px rgba(0, 0, 0, 0.05); /* from App.vue */
+
+  /* Legacy variables from App.vue */
+  --bg-gradient: linear-gradient(135deg, #f8f9ff 0%, #f1f4f9 100%);
+  --text-primary: #1a1a1a;
+  --text-secondary: #5a5a5a;
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --surface-light: #ffffff;
+  --surface-color: #f8f9fa;
+  --border-color: #e2e8f0;
+  --text-light: #64748b;
+  --text-color: #1e293b;
+  --primary-color: var(--zenika-red);
+  --primary-light: #f87171;
+  --bg-color: var(--bg-gradient);
 
   font-family: var(--font-family-base);
   line-height: 1.5;
@@ -112,4 +122,27 @@ a {
 @keyframes pulse {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* Responsive Breakpoints & Utilities */
+@media (max-width: 1024px) {
+  :root {
+    --space-8: 1.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --space-4: 0.75rem;
+    --space-6: 1rem;
+    --space-8: 1rem;
+  }
+  
+  html {
+    font-size: 14px;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
 }

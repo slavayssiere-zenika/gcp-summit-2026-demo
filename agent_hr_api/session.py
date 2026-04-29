@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class RedisSessionService(InMemorySessionService):
     def __init__(self):
         super().__init__()
-        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/1")
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/10")
         self.r = redis.from_url(redis_url)
         # 1 Month TTL requested by user
         self.ttl = 30 * 24 * 60 * 60

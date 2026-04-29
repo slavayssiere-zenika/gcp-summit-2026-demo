@@ -409,7 +409,7 @@ onMounted(() => {
 .search-box input:focus {
   outline: none;
   border-color: var(--zenika-red);
-  box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.1);
+  box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.25);
 }
 
 .filters {
@@ -446,6 +446,7 @@ onMounted(() => {
 .filter-select:focus {
   outline: none;
   border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.25);
 }
 
 .action-btn-small {

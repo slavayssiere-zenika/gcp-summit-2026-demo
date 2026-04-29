@@ -213,6 +213,21 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["items"]
             }
+        ),
+        Tool(
+            name="delete_user_items",
+            description=(
+                "(Admin / Service Account only) Supprime tous les items (missions) d'un utilisateur. "
+                "Utilisé par le pipeline de ré-analyse globale (Vertex AI Batch) avant la "
+                "ré-indexation complète des missions extraites du nouveau prompt LLM."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID de l'utilisateur dont les items doivent être supprimés"}
+                },
+                "required": ["user_id"]
+            }
         )
     ]
 
@@ -336,9 +351,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 items_payload = arguments.get("items", [])
                 if not items_payload:
                     return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'items' manquant ou vide."}))]
-                response = await client.post(f"{API_BASE_URL}/bulk", json=items_payload, timeout=60.0)
+                response = await client.post(f"{API_BASE_URL}/bulk", json={"items": items_payload}, timeout=60.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "delete_user_items":
+                user_id = arguments["user_id"]
+                response = await client.delete(f"{API_BASE_URL}/user/{user_id}/items")
+                response.raise_for_status()
+                return [TextContent(type="text", text=f"All items deleted for user {user_id}")]
 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

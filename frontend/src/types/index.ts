@@ -64,4 +64,7 @@ export interface Message {
   usage?: Usage
   // ADR12-4 — Semantic cache metadata
   semanticCacheHit?: boolean
+  // Résultats sémantiques extraits des steps (search_candidates_multi_criteria)
+  // Permet l'affichage dual : table évaluations + cards consultants
+  consultantCards?: any[]
 }

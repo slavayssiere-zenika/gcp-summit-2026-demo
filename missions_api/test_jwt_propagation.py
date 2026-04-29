@@ -27,8 +27,10 @@ def test_router_source_extracts_sub_not_hardcoded():
     """
     REGRESSION BUG-FINOPS-002 : missions_api/src/missions/router.py doit utiliser
     token_payload.get("sub") comme user_email, pas une valeur hardcodée.
-    """
-    source = (pathlib.Path(__file__).parent / "src" / "missions" / "router.py").read_text()
+        """
+    source_analysis = (pathlib.Path(__file__).parent / "src" / "missions" / "analysis_router.py").read_text()
+    source_crud = (pathlib.Path(__file__).parent / "src" / "missions" / "crud_router.py").read_text()
+    source = source_analysis + "\n" + source_crud
 
     # Le sub doit être extrait du JWT
     assert 'token_payload.get("sub"' in source or "token_payload.get('sub'" in source, \
@@ -45,8 +47,10 @@ def test_router_fallback_is_not_user1():
     """
     Le fallback de user_email doit être une valeur métier (ex: 'unknown@zenika.com'),
     pas 'user_1' qui est une valeur de session interne.
-    """
-    source = (pathlib.Path(__file__).parent / "src" / "missions" / "router.py").read_text()
+        """
+    source_analysis = (pathlib.Path(__file__).parent / "src" / "missions" / "analysis_router.py").read_text()
+    source_crud = (pathlib.Path(__file__).parent / "src" / "missions" / "crud_router.py").read_text()
+    source = source_analysis + "\n" + source_crud
 
     # Chercher les lignes avec user_email = token_payload.get
     lines_with_sub = [l.strip() for l in source.splitlines() if "user_email" in l and "get(" in l]
@@ -68,8 +72,10 @@ def test_status_route_uses_jwt_sub_for_audit():
     """
     PATCH /missions/{id}/status doit utiliser le sub JWT comme changed_by
     dans l'audit trail (StatusHistory). Vérifié structurellement.
-    """
-    source = (pathlib.Path(__file__).parent / "src" / "missions" / "router.py").read_text()
+        """
+    source_analysis = (pathlib.Path(__file__).parent / "src" / "missions" / "analysis_router.py").read_text()
+    source_crud = (pathlib.Path(__file__).parent / "src" / "missions" / "crud_router.py").read_text()
+    source = source_analysis + "\n" + source_crud
 
     # La route status doit extraire le sub
     patch_route_section = ""

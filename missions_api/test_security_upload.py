@@ -120,7 +120,8 @@ def test_upload_rejects_shell_script():
 def test_upload_rejects_file_over_10mb(mocker):
     """Un fichier > 10 MB doit être rejeté avec 413."""
     # Patch task_manager pour éviter les effets de bord
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     large_content = b"%PDF-1.4" + b"A" * (11 * 1024 * 1024)  # 11 MB
     resp = _post_mission_with_file(large_content, "application/pdf", "big.pdf")
     assert resp.status_code == 413
@@ -129,7 +130,8 @@ def test_upload_rejects_file_over_10mb(mocker):
 
 def test_upload_accepts_file_exactly_10mb(mocker):
     """Un fichier de exactement 10 MB doit être accepté (limite incluse)."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     # 10 MB exactement — dans la limite autorisée
     max_content = b"%PDF-1.4" + b"B" * (10 * 1024 * 1024 - 8)
     resp = _post_mission_with_file(max_content, "application/pdf", "exact.pdf")
@@ -139,7 +141,8 @@ def test_upload_accepts_file_exactly_10mb(mocker):
 
 def test_upload_accepts_small_pdf(mocker):
     """Un PDF léger valide doit être accepté."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     small_pdf = b"%PDF-1.4 1 0 obj<</Type/Catalog>>endobj"
     resp = _post_mission_with_file(small_pdf, "application/pdf", "light.pdf")
     assert resp.status_code == 202
@@ -151,7 +154,8 @@ def test_upload_accepts_small_pdf(mocker):
 
 def test_upload_accepts_docx(mocker):
     """Un fichier DOCX (application/vnd.openxmlformats-officedocument...) doit être accepté."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     # Magic bytes DOCX (est un ZIP en réalité)
     docx_content = b"PK\x03\x04" + b"docx_content" * 10
     resp = _post_mission_with_file(
@@ -164,7 +168,8 @@ def test_upload_accepts_docx(mocker):
 
 def test_upload_accepts_txt(mocker):
     """Un fichier text/plain doit être accepté."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     txt_content = b"Mission Java Spring Boot 6 mois Paris."
     resp = _post_mission_with_file(txt_content, "text/plain", "mission.txt")
     assert resp.status_code == 202
@@ -172,7 +177,8 @@ def test_upload_accepts_txt(mocker):
 
 def test_upload_accepts_doc(mocker):
     """Un fichier application/msword (.doc) doit être accepté."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     doc_content = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"  # Magic bytes OLE2 (doc)
     resp = _post_mission_with_file(doc_content, "application/msword", "mission.doc")
     assert resp.status_code == 202
@@ -182,7 +188,8 @@ def test_upload_accepts_doc(mocker):
 
 def test_create_mission_without_file(mocker):
     """POST /missions sans fichier (form data uniquement) doit être accepté."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     resp = client.post(
         "/missions",
         data={"title": "Mission Sans Fichier", "description": "Description longue de la mission."},
@@ -196,7 +203,8 @@ def test_create_mission_without_file(mocker):
 
 def test_create_mission_with_url(mocker):
     """POST /missions avec une URL de document doit être accepté."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     resp = client.post(
         "/missions",
         data={
@@ -225,7 +233,8 @@ def test_upload_415_response_has_detail(mocker):
 
 def test_upload_413_response_has_detail(mocker):
     """La réponse 413 doit contenir une clé 'detail' avec le message de taille."""
-    mocker.patch("src.missions.router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
+    mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
     large_content = b"%PDF-1.4" + b"X" * (11 * 1024 * 1024)
     resp = _post_mission_with_file(large_content, "application/pdf")
     assert resp.status_code == 413

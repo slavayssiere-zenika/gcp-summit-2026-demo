@@ -47,6 +47,15 @@ ENV PROMPTS_API_URL=http://prompts_api:8000
 ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 ENV PUBSUB_INVOKER_SA_EMAIL=sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com
 ENV GCP_PROJECT_ID=your-gcp-project-id
+# Paramètres de parallélisme du pipeline bulk-reanalyse
+# Overridé en prod par Terraform (cr_cv.tf → BULK_APPLY_SEMAPHORE, BULK_EMBED_SEMAPHORE)
+ENV BULK_APPLY_SEMAPHORE=5
+ENV BULK_EMBED_SEMAPHORE=10
+# Instances minimum sur les services cibles (competencies-api, items-api) pendant la phase APPLY.
+# 1 suffit pour 1000 CVs (pool=30 conn/instance > 15 req max). Monter à 2 si SEMAPHORE > 10.
+ENV BULK_SCALE_MIN_INSTANCES=1
+# Workspace Terraform utilisé pour construire les noms de services Cloud Run lors du scale dynamique
+ENV CLOUDRUN_WORKSPACE=dev
 EXPOSE 8004
 
 

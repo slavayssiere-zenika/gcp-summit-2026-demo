@@ -57,11 +57,13 @@ Ce micro-service se base sur :
 - **POST** `/missions/{mission_id}/reanalyze` : Reanalyze Mission
 - **GET** `/missions/task/{task_id}` : Get Mission Task Status
 - **POST** `/cache/invalidate` : Force Invalidate
+- **GET** `/missions/{mission_id}/embedding` : Get Mission Embedding
 - **PATCH** `/missions/{mission_id}/status` : Update Mission Status
 - **GET** `/missions/{mission_id}/status/history` : Get Mission Status History
-- **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **GET** `/missions/{mission_id}` : Get Mission
-- **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/missions/{mission_id}` : Delete Mission
+- **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **PUT** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

@@ -57,7 +57,21 @@ test_env/bin/python scripts/generate_specs.py
 test_env/bin/python scripts/generate_changelog.py
 ```
 
-6. **Formater le code Terraform**
+6. **Mise à jour de la documentation des pipelines (`docs/pipelines.md`)**
+   Régénère la documentation complète des pipelines CI/CD : services déployables, options de versioning, matrice des environnements (`dev/uat/prd`), flux `deploy.sh` et `manage_env.py`.
+// turbo
+```bash
+test_env/bin/python scripts/generate_pipeline_docs.py
+```
+
+7. **Révision des README.md (Services, Agents, APIs)**
+   Met à jour la documentation (fichiers `README.md`) de l'ensemble des microservices, agents et APIs pour s'assurer de leur cohérence avec l'implémentation actuelle.
+// turbo
+```bash
+test_env/bin/python scripts/generate_readmes.py
+```
+
+8. **Formater le code Terraform**
    Applique le formatage standard HashiCorp sur les fichiers d'infrastructure du dossier bootstrap.
 // turbo
 ```bash
@@ -66,7 +80,7 @@ terraform -chdir=bootstrap fmt -recursive
 terraform -chdir=platform-engineering/terraform fmt -recursive
 ```
 
-7. **Nettoyer les fichiers temporaires**
+9. **Nettoyer les fichiers temporaires**
    Supprime les archives, logs et gros exécutables obsolètes avant le commit pour éviter les rejets de push.
    > ⚠️ **ATTENTION** : Ne jamais supprimer les fichiers `test_*.py` —
    > ce sont les tests unitaires, leur suppression serait catastrophique pour la CI.
@@ -77,14 +91,14 @@ rm -f */pytest.log */coverage.json *_test.db
 rm -f *.tar.gz otelcol-contrib output.log *.patch patch_*.py
 ```
 
-8. **Ajouter les fichiers via git add**
-   Ajoute l'ensemble des fichiers modifiés (y compris le nouveau `changelog.md` et les scripts modifiés) au staging Git.
+10. **Ajouter les fichiers via git add**
+   Ajoute l'ensemble des fichiers modifiés (y compris le nouveau `changelog.md`, `docs/pipelines.md` et les scripts modifiés) au staging Git.
 // turbo
 ```bash
 git add .
 ```
 
-9. **Vérifier la non-divulgation des secrets**
+11. **Vérifier la non-divulgation des secrets**
    Parse le fichier `secrets.sh` et s'assure qu'aucune des valeurs des variables secrètes n'est introduite dans les fichiers prêts à être commités. Arrête le script en erreur si une faille est détectée.
 // turbo
 ```bash
@@ -102,7 +116,7 @@ if [ -f "secrets.sh" ]; then
 fi
 ```
 
-10. **Ajouter les fichiers via git commit**
+12. **Ajouter les fichiers via git commit**
    Rédige un message de commit très court résumant la fonctionnalité.
    **Contrainte stricte :** Le texte du commit doit faire **entre 5 et 8 mots maximum**.
 ```bash
@@ -110,6 +124,8 @@ fi
 git commit -m "<MESSAGE>"
 ```
 
-11. **Informer l'utilisateur**
+13. **Informer l'utilisateur**
    Indiquer à l'utilisateur que le commit est prêt et qu'il peut faire `git push` manuellement depuis son terminal (l'agent n'a pas les droits SSH nécessaires).
+
+
 

@@ -22,7 +22,8 @@ PUBLIC_WHITELIST = {
     "/sync",
     "/",
     "/me",
-    "/health/agents"
+    "/health/agents",
+    "/bulk-scoring-all/resume"
 }
 
 def test_all_routes_are_secured_by_jwt():

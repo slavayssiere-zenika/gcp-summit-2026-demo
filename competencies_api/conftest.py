@@ -48,7 +48,7 @@ async def override_get_db():
         await db.close()
 
 def override_verify_jwt():
-    return {"sub": "1", "allowed_category_ids": [1]}
+    return {"sub": "1", "role": "admin", "allowed_category_ids": [1]}
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_jwt] = override_verify_jwt

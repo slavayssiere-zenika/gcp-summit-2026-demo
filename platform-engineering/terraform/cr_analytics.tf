@@ -65,11 +65,15 @@ resource "google_cloud_run_v2_service" "analytics_mcp" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/7"
       }
       env {
         name  = "ROOT_PATH"
         value = ""
+      }
+      env {
+        name  = "PROMPTS_API_URL"
+        value = "http://api.internal.zenika/api/prompts"
       }
       env {
         name  = "APP_VERSION"

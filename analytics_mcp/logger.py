@@ -40,7 +40,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         logger = logging.getLogger("middleware.http")
-        skip_paths = ["/health", "/metrics", "/docs", "/openapi.json"]
         
         try:
             response = await call_next(request)

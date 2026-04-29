@@ -52,25 +52,34 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 
 - **GET** `/metrics` : Metrics
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec
 - **GET** `/health` : Health
 - **GET** `/ready` : Ready
 - **GET** `/version` : Get Version
 - **GET** `/folders` : List Folders
 - **POST** `/folders` : Add Folder
-- **POST** `/folders/reset-sync` : Reset Folder Sync
+- **PATCH** `/folders/{folder_id}` : Update Folder
 - **DELETE** `/folders/{folder_id}` : Delete Folder
+- **POST** `/folders/reset-sync` : Reset Folder Sync
+- **POST** `/folders/rebuild-tree` : Rebuild Folder Tree
+- **POST** `/folders/invalidate-cache` : Invalidate Drive Cache
 - **GET** `/status` : Get Status
 - **GET** `/files` : List Files
 - **GET** `/files/{google_file_id}` : Get File State
 - **POST** `/retry-errors` : Retry Errors
+- **DELETE** `/errors` : Clear All Errors
 - **GET** `/tokens/google` : Get Google Token
 - **GET** `/dlq/status` : Get Dlq Status
 - **DELETE** `/dlq/message` : Delete Dlq Message
 - **POST** `/dlq/replay` : Replay Dlq
 - **PATCH** `/files/{file_id}` : Update File
+- **GET** `/ingestion/stats` : Get Ingestion Stats
+- **GET** `/ingestion/folder-kpis` : Get Folder Kpis
+- **GET** `/ingestion/history` : Get Ingestion History
+- **POST** `/ingestion/batch-retry` : Ingestion Batch Retry
+- **POST** `/ingestion/quality-gate-batch` : Quality Gate Batch
 - **POST** `/scheduled/retry-errors` : Scheduled Retry Errors
 - **POST** `/sync` : Trigger Sync

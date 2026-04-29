@@ -13,7 +13,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
-  Cpu
+  Cpu,
+  Table
 } from 'lucide-vue-next'
 import {
   Chart as ChartJS,
@@ -51,6 +52,7 @@ interface MetricData {
   top_users_cost: Array<{ user_email: string, cost: number }>
   top_actions: Array<{ action: string, count: number }>
   top_models: Array<{ model: string, count: number }>
+  pricing_table: Array<{ model_name: string, input_cost_per_token: number, output_cost_per_token: number }>
   generated_at: string
 }
 
@@ -349,6 +351,37 @@ const doughnutOptions = {
           </div>
         </div>
       </div>
+      
+      <!-- Table des Prix (Reference) -->
+      <div class="section-divider">
+        <span class="section-label">Référentiel des Coûts</span>
+      </div>
+      
+      <div class="pricing-card glass-panel">
+        <div class="chart-header">
+          <h3>Tarification des Modèles</h3>
+          <Table size="18" class="text-secondary" />
+        </div>
+        <p class="chart-subtitle" style="margin-top: 8px;">Coûts unitaires par Token (USD) pour les modèles Gemini enregistrés.</p>
+        <div class="table-container">
+          <table class="pricing-table">
+            <thead>
+              <tr>
+                <th>Modèle API</th>
+                <th>Coût Entrée (1M Tokens)</th>
+                <th>Coût Sortie (1M Tokens)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="price in data?.pricing_table || []" :key="price.model_name">
+                <td class="model-name-cell"><div class="model-badge">{{ price.model_name }}</div></td>
+                <td>${{ (price.input_cost_per_token * 1000000).toFixed(2) }}</td>
+                <td>${{ (price.output_cost_per_token * 1000000).toFixed(2) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="footer-info">
         <RefreshCw size="14" />
@@ -628,4 +661,56 @@ h2 {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 .text-secondary { color: #718096; }
+
+/* Pricing Table */
+.pricing-card {
+  padding: 24px;
+}
+
+.table-container {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.pricing-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.pricing-table th {
+  padding: 12px 16px;
+  color: #718096;
+  font-weight: 600;
+  border-bottom: 1px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+.pricing-table td {
+  padding: 12px 16px;
+  color: #1A1A1A;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+  font-weight: 500;
+}
+
+.pricing-table tbody tr:hover {
+  background: rgba(247, 250, 252, 0.5);
+}
+
+.model-name-cell {
+  width: 50%;
+}
+
+.model-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: rgba(124, 58, 237, 0.1);
+  color: #7C3AED;
+  border-radius: 6px;
+  font-family: monospace;
+  font-weight: 600;
+  font-size: 13px;
+}
 </style>

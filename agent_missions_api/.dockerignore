@@ -16,4 +16,7 @@ htmlcov/
 *.log
 .env
 .env.*
+*.pem
+*.key
+secrets.sh
 wheels/

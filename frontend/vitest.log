@@ -1,0 +1,14 @@
+
+> zenika-mcp-agent@1.0.0 test:unit:run
+> vitest run
+
+
+ RUN  v4.1.5 /Users/sebastien.lavayssiere/Code/test-open-code/frontend
+
+ ✓ src/components/__tests__/CVImportMonitor.spec.ts (1 test) 60ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:11:56
+   Duration  1.94s (transform 147ms, setup 0ms, import 372ms, tests 60ms, environment 1.23s)
+

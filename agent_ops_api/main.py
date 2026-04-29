@@ -1,16 +1,18 @@
+import asyncio
+import inspect
+import json
 import logging
 import os
 import re
-import json
-import inspect
-from typing import Optional
+import traceback
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
 from jose import jwt, JWTError
 
 from opentelemetry import trace
@@ -37,7 +39,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
 from agent import run_agent_query, OPS_TOOLS, get_session_service
 from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.schemas import A2ARequest, A2AResponse
+from agent_commons.schemas import A2ARequest, A2AResponse, QueryRequest, get_tool_metadata
+from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt, ALGORITHM
+from agent_commons.exception_handler import make_global_exception_handler
 from logger import setup_logging, LoggingMiddleware
 from agent_commons.mcp_client import auth_header_var
 
@@ -89,43 +93,13 @@ async def root():
     return {"message": "Ops Agent API - Use /a2a/query for interactions"}
 
 
-class QueryRequest(BaseModel):
-    query: str
-    session_id: Optional[str] = None
-    user_id: Optional[str] = None  # Prb 7: propagated from Router JWT to isolate sessions
-
-
-from agent_commons.mcp_client import auth_header_var
-from fastapi import Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
 security = HTTPBearer()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in environment variables")
-# Purge the secret from environment to prevent Agent/LLM from reading it via os.environ dumps
 os.environ.pop("SECRET_KEY", None)
-ALGORITHM = "HS256"
 
-
-async def verify_jwt(auth: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Validate JWT signature, expiry and mandatory 'sub' claim.
-    Used as dependency on protected_router to enforce Zero-Trust (AGENTS.md §4)."""
-    try:
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        if not payload.get("sub"):
-            raise HTTPException(status_code=401, detail="Token invalide : claim 'sub' manquant")
-        return payload
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token invalide")
-
-
-from fastapi import APIRouter
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @app.get("/spec")
@@ -371,27 +345,7 @@ async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security))
     else:
         return {"message": "Pas d'historique"}
 
-def get_tool_metadata(tools_list):
-    metadata = []
-    for tool in tools_list:
-        # If it's a function, get its details
-        doc = inspect.getdoc(tool) or "No description available"
-        sig = inspect.signature(tool)
-        params = []
-        for name, param in sig.parameters.items():
-            params.append({
-                "name": name,
-                "type": str(param.annotation) if param.annotation != inspect.Parameter.empty else "any",
-                "default": str(param.default) if param.default != inspect.Parameter.empty else None,
-                "required": param.default == inspect.Parameter.empty
-            })
-        
-        metadata.append({
-            "name": tool.__name__,
-            "description": doc,
-            "parameters": params
-        })
-    return metadata
+# get_tool_metadata migré dans agent_commons.schemas
 
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -495,47 +449,7 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
 app.include_router(protected_router)
 
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
-
-async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception: raise
-
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(
-                f"{prompts_api_url}/errors/report",
-                json={
-                    "service_name": service_name,
-                    "error_message": error_msg,
-                    "context": trace_context[:2000]
-                },
-                headers=headers
-            )
-        except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    
-    if token:
-        await report_exception_to_prompts_api("agent_ops_api", error_msg, trace_context, token)
-    
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+app.add_exception_handler(Exception, make_global_exception_handler("agent_ops_api"))
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))

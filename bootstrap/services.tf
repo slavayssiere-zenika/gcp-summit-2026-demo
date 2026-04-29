@@ -20,7 +20,9 @@ locals {
     "drive.googleapis.com",                # Drive
     "documentai.googleapis.com",           # Document AI (OCR / Sandbox RCE PDF)
     "containerscanning.googleapis.com",    # Scanning de vulnérabilités automatique sur chaque push GAR
-    "containeranalysis.googleapis.com"     # Container Analysis (API sous-jacente au vulnerability scanning)
+    "containeranalysis.googleapis.com",    # Container Analysis (API sous-jacente au vulnerability scanning)
+    "aiplatform.googleapis.com",           # Vertex AI (Batch Prediction pour le pipeline Taxonomie)
+    "pubsub.googleapis.com"                # Cloud Pub/Sub (import CV asynchrone)
   ]
 }
 

@@ -89,6 +89,10 @@ resource "google_cloud_run_v2_service" "users_api" {
         value = var.trace_sampling_rate
       }
       env {
+        name  = "PROMPTS_API_URL"
+        value = "http://api.internal.zenika/api/prompts"
+      }
+      env {
         name  = "APP_VERSION"
         value = var.users_api_version
       }

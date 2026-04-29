@@ -35,3 +35,23 @@ resource "google_storage_bucket_iam_member" "frontend_public" {
 #   terraform state rm google_storage_bucket.loki
 #   terraform state rm google_storage_bucket.tempo
 
+# Bucket dédié aux I/O du pipeline Batch Taxonomie (Vertex AI Batch Prediction)
+# Les fichiers JSONL d'entrée et de sortie sont stockés ici temporairement.
+# Un lifecycle rule purge automatiquement les objets après 7 jours.
+resource "google_storage_bucket" "cv_batch" {
+  name          = "cv-batch-${terraform.workspace}-${var.project_id}-${random_id.bucket_suffix.hex}"
+  location      = var.region
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+
+  lifecycle_rule {
+    condition {
+      age = 7 # jours — nettoyage automatique des JSONL temporaires
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+

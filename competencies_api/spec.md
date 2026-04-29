@@ -63,6 +63,8 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/ready` : Ready
 - **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
+- **POST** `/pubsub/user-events` : Handle User Pubsub Events
+- **POST** `/bulk-scoring-all/resume` : Resume Bulk Scoring
 - **GET** `/` : List Competencies
 - **POST** `/` : Create Competency
 - **GET** `/search` : Search Competencies
@@ -75,11 +77,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/{competency_id}/users` : List Competency Users
 - **POST** `/bulk_tree` : Bulk Import Tree
 - **POST** `/stats/counts` : Get Competency Stats
-- **POST** `/user/{user_id}/assign/{competency_id}` : Assign Competency To User
-- **DELETE** `/user/{user_id}/remove/{competency_id}` : Remove Competency From User
-- **GET** `/user/{user_id}` : List User Competencies
-- **POST** `/internal/users/merge` : Merge Users
-- **DELETE** `/user/{user_id}/clear` : Clear User Competencies
 - **POST** `/evaluations/batch/search` : Search Batch Evaluations
 - **POST** `/evaluations/batch/users` : Search Batch Users Evaluations
 - **GET** `/evaluations/user/{user_id}` : List User Evaluations
@@ -87,10 +84,23 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/user-score` : Set User Competency Score
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/ai-score` : Trigger Ai Score Single
 - **POST** `/evaluations/user/{user_id}/ai-score-all` : Trigger Ai Score All
+- **POST** `/evaluations/bulk-scoring-all` : Trigger Bulk Scoring All
+- **GET** `/bulk-scoring-all/status` : Get Bulk Scoring Status
+- **POST** `/bulk-scoring-all/cancel` : Cancel Bulk Scoring
+- **POST** `/bulk-scoring-all/resume/manual` : Resume Bulk Scoring
+- **GET** `/stats/coverage` : Get Competency Coverage
+- **GET** `/evaluations/scoring-stats` : Get Scoring Stats
 - **GET** `/analytics/agency-coverage` : Get Agency Competency Coverage
 - **GET** `/analytics/skill-gaps` : Get Skill Gaps
 - **GET** `/analytics/similar-consultants/{user_id}` : Get Similar Consultants
-- **POST** `/mcp/{path}` : Proxy Mcp
+- **POST** `/user/{user_id}/assign/bulk` : Assign Competencies Bulk
+- **POST** `/user/{user_id}/assign/{competency_id}` : Assign Competency To User
+- **DELETE** `/user/{user_id}/evaluations` : Clear User Evaluations
+- **DELETE** `/user/{user_id}/remove/{competency_id}` : Remove Competency From User
+- **GET** `/user/{user_id}` : List User Competencies
+- **POST** `/internal/users/merge` : Merge Users
+- **DELETE** `/user/{user_id}/clear` : Clear User Competencies
 - **GET** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

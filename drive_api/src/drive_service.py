@@ -163,7 +163,23 @@ class DriveService:
         current_id = start_parent_id
         path_traversed = []
         path_traversed_names = []  # Pour vérifier les exclusions plus tard
-        parent_folder_name = None  # Nom du dossier parent direct du fichier
+        parent_folder_name = self.redis.get(f"drive:name:{start_parent_id}")
+        if parent_folder_name:
+            parent_folder_name = parent_folder_name.decode('utf-8') if isinstance(parent_folder_name, bytes) else parent_folder_name
+            
+        if not parent_folder_name:
+            try:
+                folder_meta = await asyncio.to_thread(
+                    lambda: self.drive.files().get(
+                        fileId=start_parent_id,
+                        fields="name",
+                        supportsAllDrives=True,
+                    ).execute()
+                )
+                parent_folder_name = folder_meta.get("name", "")
+                self.redis.set(f"drive:name:{start_parent_id}", parent_folder_name, ex=REDIS_TTL_GRAPH)
+            except Exception as e:
+                logger.error(f"Erreur Drive API pour folder name {start_parent_id}: {e}")
 
         while current_id:
             logger.info(f"[_resolve_root_and_parent] Évaluation du nœud: {current_id}")
@@ -182,12 +198,13 @@ class DriveService:
                         logger.info(
                             f"[_resolve_root_and_parent] Dossier '{node_name}' exclu (présent dans excluded_folders). Arrêt."
                         )
-                        # Blacklister ce chemin pour les prochaines fois
-                        oos_ids = path_traversed + [current_id]
-                        pipe = self.redis.pipeline()
-                        for oos_id in oos_ids:
-                            pipe.set(f"drive:oos:{oos_id}", "1", ex=REDIS_TTL_OUT_OF_SCOPE)
-                        pipe.execute()
+                        # Blacklister ce chemin pour les prochaines fois, MAIS SURTOUT PAS LE ROOT (current_id) !
+                        oos_ids = path_traversed
+                        if oos_ids:
+                            pipe = self.redis.pipeline()
+                            for oos_id in oos_ids:
+                                pipe.set(f"drive:oos:{oos_id}", "1", ex=REDIS_TTL_OUT_OF_SCOPE)
+                            pipe.execute()
                         return None, None, None
 
                 self._cache_path(path_traversed, root["id"])
@@ -231,28 +248,39 @@ class DriveService:
                         f"[_resolve_root_and_parent] Root {cached_root_id} en cache mais absent en DB. Cache purgé."
                     )
 
-            # 3. Appel API Drive pour remonter d'un niveau
             try:
                 logger.info(f"[_resolve_root_and_parent] Appel Drive API pour: {current_id}")
-                folder_meta = await asyncio.to_thread(
-                    lambda cid=current_id: self.drive.files().get(
-                        fileId=cid,
-                        fields="parents,name",
-                        supportsAllDrives=True,
-                    ).execute()
-                )
+                folder_meta = None
+                for attempt in range(3):
+                    try:
+                        folder_meta = await asyncio.to_thread(
+                            lambda cid=current_id: self.drive.files().get(
+                                fileId=cid,
+                                fields="parents,name",
+                                supportsAllDrives=True,
+                            ).execute()
+                        )
+                        break
+                    except Exception as e:
+                        logger.warning(f"Erreur Drive API get pour {current_id} (attempt {attempt+1}): {e}")
+                        if attempt == 2:
+                            raise
+                        await asyncio.sleep(2 ** attempt)
+
                 folder_name_raw = folder_meta.get("name", "")
                 parents = folder_meta.get("parents", [])
+                
+                path_traversed_names.append(folder_name_raw)
 
                 logger.info(
-                    f"[_resolve_root_and_parent] Nœud '{folder_name_raw}' ({current_id}) — parents: {parents}"
+                    f"[_resolve_root_and_parent] Nœud '{folder_name_raw}' ({current_id}) — parents: {parents} | Chemins traversés (noms): {path_traversed_names}"
                 )
 
-                # Règle d'exclusion : les répertoires commençant par '_' sont ignorés
-                if folder_name_raw.startswith("_"):
+                # Règle d'exclusion : les répertoires commençant par '_' ou se terminant par '_OLD' sont ignorés
+                if folder_name_raw.startswith("_") or folder_name_raw.upper().endswith("_OLD"):
                     logger.info(
                         f"[_resolve_root_and_parent] Dossier '{folder_name_raw}' exclu "
-                        f"(préfixe underscore). Arrêt de la résolution."
+                        f"(règle de nommage: préfixe _ ou suffixe _OLD). Arrêt de la résolution."
                     )
                     return None, None, None
 
@@ -260,6 +288,7 @@ class DriveService:
                 # (premier nœud remontant depuis start_parent_id)
                 if parent_folder_name is None:
                     parent_folder_name = folder_name_raw
+                    self.redis.set(f"drive:name:{start_parent_id}", folder_name_raw, ex=REDIS_TTL_GRAPH)
 
                 if not parents:
                     logger.info(
@@ -289,30 +318,209 @@ class DriveService:
 
         return None, None, None
 
-    # ── Découverte des fichiers (Delta) ──────────────────────────────────────
+    # ── Découverte des fichiers (Delta et Full) ──────────────────────────────
 
-    async def discover_files(self) -> int:
+    async def discover_files(self, force_full: bool = False) -> int:
         """
-        Étape 1 : Delta global — détecte les fichiers nouveaux ou modifiés depuis la dernière sync.
-
-        Optimisations cache Redis :
-        - drive:roots (TTL 5 min) : évite N SELECT DB pour résoudre l'arbre parent.
-        - drive:file:known:{id} : skip immédiat des fichiers déjà IMPORTED_CV (sans hit DB).
-
-        Règle d'exclusion :
-        - Les dossiers dont le nom commence par '_' sont ignorés (et leurs descendants).
+        Orchestrateur de la découverte.
+        - force_full=True : Top-Down récursif sur tous les dossiers (rapide pour reconstruire l'arbre)
+        - force_full=False : Top-Down pour les nouveaux dossiers, puis Bottom-Up (Delta) pour le reste.
         """
-        needs_initial_sync = (
-            await self.db.execute(
-                select(DriveFolder).filter(DriveFolder.is_initial_sync_done == False).limit(1)
-            )
-        ).scalars().first() is not None
+        roots = await self._load_roots()
+        if not roots:
+            logger.warning("[discover_files] Aucun folder racine configuré — sync interrompue.")
+            return 0
+            
+        await self.db.commit()
 
+        total_discovered = 0
+
+        if force_full:
+            logger.info(f"Démarrage sync FULL Top-Down pour {len(roots)} racines.")
+            total_discovered += await self._discover_full_top_down(roots)
+        else:
+            # 1. Nouveaux dossiers (Top-Down)
+            uninitialized_folders = (
+                await self.db.execute(
+                    select(DriveFolder).filter(DriveFolder.is_initial_sync_done == False)
+                )
+            ).scalars().all()
+            
+            uninit_ids = {f.id for f in uninitialized_folders}
+            target_roots = [r for r in roots if r["id"] in uninit_ids]
+            
+            if target_roots:
+                logger.info(f"Démarrage sync Top-Down pour {len(target_roots)} NOUVELLES racines.")
+                total_discovered += await self._discover_full_top_down(target_roots)
+                
+                # Marquer comme initialisé
+                for root_dict in target_roots:
+                    await self.db.execute(
+                        update(DriveFolder).where(DriveFolder.id == root_dict["id"]).values(is_initial_sync_done=True)
+                    )
+                await self.db.commit()
+
+            # 2. Delta sur les dossiers existants (Bottom-Up)
+            logger.info("Démarrage sync Bottom-Up Delta pour les autres fichiers.")
+            total_discovered += await self._discover_delta_bottom_up(roots)
+
+        logger.info(f"Discovery terminé. {total_discovered} fichiers découverts au total.")
+        return total_discovered
+
+    async def _discover_full_top_down(self, roots: list[dict]) -> int:
+        """
+        Parcours descendant (Top-Down BFS) ultra-rapide depuis les racines fournies.
+        """
+        new_discoveries = 0
+        queue = []
+        
+        # Initialiser la queue avec les racines
+        for root in roots:
+            queue.append({
+                "folder_id": root["google_folder_id"],
+                "parent_name": root["tag"], # Au niveau 0, le parent est le nom du tag ou root
+                "root": root
+            })
+            
+        while queue:
+            current = queue.pop(0)
+            folder_id = current["folder_id"]
+            parent_name = current["parent_name"]
+            root = current["root"]
+            
+            q = f"'{folder_id}' in parents and trashed=false"
+            page_token = None
+            
+            logger.info(f"[Top-Down] Traitement du dossier '{parent_name}' ({folder_id})")
+            
+            while True:
+                results = None
+                for attempt in range(3):
+                    try:
+                        results = await asyncio.to_thread(
+                            lambda pt=page_token: self.drive.files().list(
+                                q=q,
+                                spaces="drive",
+                                corpora="allDrives",
+                                includeItemsFromAllDrives=True,
+                                supportsAllDrives=True,
+                                fields="nextPageToken, files(id, name, mimeType, modifiedTime, version)",
+                                pageToken=pt,
+                                pageSize=1000,
+                            ).execute()
+                        )
+                        break
+                    except Exception as e:
+                        logger.warning(f"Erreur Drive API list (Top-Down, attempt {attempt+1}): {e}")
+                        if attempt == 2:
+                            logger.error(f"Echec Drive API list pour {folder_id}, on saute ce dossier.")
+                            break
+                        await asyncio.sleep(2 ** attempt)
+
+                if not results:
+                    break
+                    
+                files = results.get("files", [])
+                
+                cvs_in_page = 0
+                subfolders_in_page = 0
+                
+                for file in files:
+                    file_id = file.get("id")
+                    name = file.get("name", "Unknown")
+                    mime = file.get("mimeType", "")
+                    mod_time_str = file.get("modifiedTime")
+                    version = str(file.get("version", "1"))
+                    
+                    if mime == "application/vnd.google-apps.folder":
+                        # Vérification des exclusions
+                        excluded_list = [e.lower() for e in root.get("excluded_folders", [])]
+                        if name.startswith("_") or name.upper().endswith("_OLD") or name.lower() in excluded_list:
+                            logger.info(f"[Top-Down] Dossier '{name}' exclu. On ne descend pas dedans.")
+                            self.redis.set(f"drive:oos:{file_id}", "1", ex=86400 * 30) # 30 jours
+                            continue
+                        
+                        queue.append({
+                            "folder_id": file_id,
+                            "parent_name": name,
+                            "root": root
+                        })
+                        subfolders_in_page += 1
+                        
+                        # Remplissage proactif du cache du graphe
+                        pipe = self.redis.pipeline()
+                        pipe.set(f"drive:graph:{file_id}", folder_id, ex=86400 * 30)
+                        pipe.set(f"drive:name:{file_id}", name, ex=86400 * 30)
+                        pipe.execute()
+                    
+                    elif mime == "application/vnd.google-apps.document":
+                        try:
+                            # C'est un CV !
+                            mod_time = datetime.fromisoformat(mod_time_str.replace("Z", "+00:00"))
+                            
+                            upsert_stmt = (
+                                pg_insert(DriveSyncState)
+                                .values(
+                                    google_file_id=file_id,
+                                    folder_id=root["id"],
+                                    file_name=name,
+                                    revision_id=version,
+                                    modified_time=mod_time.replace(tzinfo=None),
+                                    status=DriveSyncStatus.PENDING.value,
+                                    parent_folder_name=parent_name,
+                                    last_processed_at=datetime.utcnow(),
+                                )
+                                .on_conflict_do_update(
+                                    index_elements=["google_file_id"],
+                                    set_=dict(
+                                        file_name=name,
+                                        parent_folder_name=parent_name,
+                                        folder_id=root["id"],
+                                        revision_id=version,
+                                        modified_time=mod_time.replace(tzinfo=None),
+                                        status=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(DriveSyncStatus.PENDING.value),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.status,
+                                        ),
+                                        last_processed_at=datetime.utcnow(),
+                                    ),
+                                )
+                            )
+                            await self.db.execute(upsert_stmt)
+                            await self.db.commit()
+                            new_discoveries += 1
+                            cvs_in_page += 1
+                            
+                            # Remplissage proactif du cache "connu" pour le Bottom-Up
+                            self.redis.set(f"drive:file:known:{file_id}", "1", ex=86400 * 30)
+                            
+                            logger.debug(f"[Top-Down] '{name}' enregistré (root: {root['tag']}).")
+                        except Exception as e:
+                            logger.error(f"[Top-Down] Erreur DB/parsing pour le fichier '{name}' ({file_id}): {e}")
+                            await self.db.rollback()
+                
+                if cvs_in_page > 0 or subfolders_in_page > 0:
+                    logger.info(f"[Top-Down] Bilan dossier '{parent_name}' : {cvs_in_page} CV(s) insérés, {subfolders_in_page} sous-dossiers ajoutés à la file d'attente.")
+                
+                page_token = results.get("nextPageToken")
+                if not page_token:
+                    break
+                    
+        return new_discoveries
+
+    async def _discover_delta_bottom_up(self, roots: list[dict]) -> int:
+        """
+        Étape Delta global (Bottom-Up) : détecte uniquement les fichiers modifiés récemment.
+        """
         latest_file = (
             await self.db.execute(select(func.max(DriveSyncState.modified_time)))
         ).scalar()
 
-        if latest_file and not needs_initial_sync:
+        if latest_file:
+            # On recule d'1 minute par sécurité
             safe_time = latest_file - timedelta(minutes=1)
             date_query = f" and modifiedTime > '{safe_time.isoformat()}Z'"
         else:
@@ -323,7 +531,7 @@ class DriveService:
                 lambda: self.drive.about().get(fields="user").execute()
             )
             sa_email = about.get("user", {}).get("emailAddress", "Unknown")
-            logger.info(f"Authentifié sur Google Drive en tant que : {sa_email}")
+            logger.info(f"Authentifié sur Google Drive (Bottom-Up) en tant que : {sa_email}")
         except Exception as e:
             logger.error(f"[DRIVE_API_AUTH_LOSS] Le Service Account a perdu l'accès au Drive: {e}")
             raise e
@@ -331,28 +539,34 @@ class DriveService:
         q = f"mimeType='application/vnd.google-apps.document' and trashed=false{date_query}"
         logger.info(f"Delta Query: {q}")
 
-        # Charger les roots une seule fois (cache Redis ou DB)
-        roots = await self._load_roots()
-        if not roots:
-            logger.warning("[discover_files] Aucun folder racine configuré — sync interrompue.")
-            return 0
-
         new_discoveries = 0
         for corpus in ["allDrives", "user"]:
             page_token = None
             while True:
-                results = await asyncio.to_thread(
-                    lambda pt=page_token: self.drive.files().list(
-                        q=q,
-                        spaces="drive",
-                        corpora=corpus,
-                        includeItemsFromAllDrives=True,
-                        supportsAllDrives=True,
-                        fields="nextPageToken, files(id, name, modifiedTime, version, parents)",
-                        pageToken=pt,
-                        pageSize=100,
-                    ).execute()
-                )
+                results = None
+                for attempt in range(3):
+                    try:
+                        results = await asyncio.to_thread(
+                            lambda pt=page_token: self.drive.files().list(
+                                q=q,
+                                spaces="drive",
+                                corpora=corpus,
+                                includeItemsFromAllDrives=True,
+                                supportsAllDrives=True,
+                                fields="nextPageToken, files(id, name, modifiedTime, version, parents)",
+                                pageToken=pt,
+                                pageSize=1000,
+                            ).execute()
+                        )
+                        break
+                    except Exception as e:
+                        logger.warning(f"Erreur Drive API list (Bottom-Up, attempt {attempt+1}): {e}")
+                        if attempt == 2:
+                            raise
+                        await asyncio.sleep(2 ** attempt)
+
+                if not results:
+                    break
 
                 files = results.get("files", [])
                 logger.info(f"Corpus '{corpus}' — {len(files)} fichiers récupérés.")
@@ -364,111 +578,72 @@ class DriveService:
                     version = str(file.get("version", "1"))
                     parents = file.get("parents", [])
 
-                    logger.info(f"Évaluation: '{name}' ({file_id}) — parents: {parents}")
-
                     if not parents:
-                        logger.info(f"Fichier {file_id} sans parent, ignoré.")
                         continue
 
-                    # Cache hit : fichier déjà importé et version inchangée → skip DB
-                    if self._is_file_known(file_id):
-                        # Vérifier tout de même si la version a changé (nécessite un accès DB minimal)
-                        existing = (
-                            await self.db.execute(
-                                select(DriveSyncState).filter(
-                                    DriveSyncState.google_file_id == file_id
+                    try:
+                        # Cache hit : fichier déjà importé et version inchangée → skip DB
+                        if self._is_file_known(file_id):
+                            existing = (
+                                await self.db.execute(
+                                    select(DriveSyncState).filter(
+                                        DriveSyncState.google_file_id == file_id
+                                    )
                                 )
-                            )
-                        ).scalars().first()
-                        if existing and existing.revision_id == version:
-                            logger.debug(
-                                f"[Cache] Fichier '{name}' ({file_id}) déjà importé et non modifié → skip."
-                            )
-                            continue
-                        # Version changée : invalider le cache et laisser passer
-                        self.redis.delete(f"drive:file:known:{file_id}")
-                        logger.info(
-                            f"[Cache] Fichier '{name}' ({file_id}) mis à jour (v{version}) → réingestion."
+                            ).scalars().first()
+                            if existing and existing.revision_id == version and existing.parent_folder_name is not None:
+                                continue
+                            self.redis.delete(f"drive:file:known:{file_id}")
+    
+                        mod_time = datetime.fromisoformat(mod_time_str.replace("Z", "+00:00"))
+    
+                        root, parent_id, parent_name = await self._resolve_root_and_parent(
+                            parents[0], roots
                         )
-
-                    mod_time = datetime.fromisoformat(mod_time_str.replace("Z", "+00:00"))
-
-                    # Résolution ascendante (avec cache Redis optimisé)
-                    root, parent_id, parent_name = await self._resolve_root_and_parent(
-                        parents[0], roots
-                    )
-
-                    if root:
-                        logger.info(
-                            f"Fichier '{name}' → root tag={root['tag']}, "
-                            f"parent_folder='{parent_name}'"
-                        )
-
-                        # Upsert atomique (INSERT … ON CONFLICT DO UPDATE) :
-                        # - NOUVEAU : évite d'écraser le status courant (QUEUED/PROCESSING/IMPORTED_CV)
-                        #   quand le fichier n'a pas changé de révision.
-                        # - Ne repasse à PENDING que si revision_id a réellement changé.
-                        upsert_stmt = (
-                            pg_insert(DriveSyncState)
-                            .values(
-                                google_file_id=file_id,
-                                folder_id=root["id"],
-                                file_name=name,
-                                revision_id=version,
-                                modified_time=mod_time.replace(tzinfo=None),
-                                status=DriveSyncStatus.PENDING.value,
-                                parent_folder_name=parent_name,
-                                last_processed_at=datetime.utcnow(),
-                            )
-                            .on_conflict_do_update(
-                                index_elements=["google_file_id"],
-                                set_=dict(
-                                    file_name=name,
-                                    parent_folder_name=parent_name,
+    
+                        if root:
+                            upsert_stmt = (
+                                pg_insert(DriveSyncState)
+                                .values(
+                                    google_file_id=file_id,
                                     folder_id=root["id"],
+                                    file_name=name,
                                     revision_id=version,
                                     modified_time=mod_time.replace(tzinfo=None),
-                                    # ⚠️ Préserver le statut courant si la révision n'a pas changé.
-                                    # Seul un changement de révision justifie un retour à PENDING.
-                                    status=case(
-                                        (
-                                            DriveSyncState.__table__.c.revision_id != version,
-                                            literal(DriveSyncStatus.PENDING.value),
-                                        ),
-                                        else_=DriveSyncState.__table__.c.status,
-                                    ),
+                                    status=DriveSyncStatus.PENDING.value,
+                                    parent_folder_name=parent_name,
                                     last_processed_at=datetime.utcnow(),
-                                ),
+                                )
+                                .on_conflict_do_update(
+                                    index_elements=["google_file_id"],
+                                    set_=dict(
+                                        file_name=name,
+                                        parent_folder_name=parent_name,
+                                        folder_id=root["id"],
+                                        revision_id=version,
+                                        modified_time=mod_time.replace(tzinfo=None),
+                                        status=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(DriveSyncStatus.PENDING.value),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.status,
+                                        ),
+                                        last_processed_at=datetime.utcnow(),
+                                    ),
+                                )
                             )
-                        )
-                        await self.db.execute(upsert_stmt)
-                        new_discoveries += 1
-                        logger.info(
-                            f"[Upsert] '{name}' ({file_id}) — version={version} enregistré."
-                        )
-                    else:
-                        logger.info(
-                            f"Fichier '{name}' hors périmètre "
-                            f"(parent: {parents[0]})."
-                        )
-
-                await self.db.commit()
-
+                            await self.db.execute(upsert_stmt)
+                            await self.db.commit()
+                            new_discoveries += 1
+                    except Exception as e:
+                        logger.error(f"[Bottom-Up] Erreur DB/parsing pour le fichier '{name}' ({file_id}): {e}")
+                        await self.db.rollback()
+                        
                 page_token = results.get("nextPageToken")
                 if not page_token:
                     break
 
-        if needs_initial_sync:
-            uninitialized_folders = (
-                await self.db.execute(
-                    select(DriveFolder).filter(DriveFolder.is_initial_sync_done == False)
-                )
-            ).scalars().all()
-            for f in uninitialized_folders:
-                f.is_initial_sync_done = True
-            await self.db.commit()
-
-        logger.info(f"Delta Discovery terminé. {new_discoveries} fichiers en queue.")
         return new_discoveries
 
     # ── Ingestion par batch ───────────────────────────────────────────────────
@@ -544,6 +719,7 @@ class DriveService:
             })
             state.status = DriveSyncStatus.QUEUED
             state.last_processed_at = datetime.utcnow()
+            state.queued_at = datetime.utcnow()
             logger.info(f"[PubSub] Enqueue CV — fichier='{state.file_name}', folder='{state.parent_folder_name}', tag={folder.tag}")
 
         await self.db.commit()

@@ -62,6 +62,17 @@ DEPLOYS_FAILED=()
 DEPLOYS_SKIPPED=()
 CURRENT_DEPLOYING_SERVICE=""
 
+get_display_version() {
+  local raw_name=$1
+  local svc_name=$(echo "$raw_name" | awk '{print $1}')
+  
+  if [ -f "${svc_name}/VERSION" ]; then
+    echo " ($(cat "${svc_name}/VERSION"))"
+  else
+    echo ""
+  fi
+}
+
 print_summary() {
   local exit_code=$?
   # Si le script plante inopinément pendant un service (ex: docker build failed)
@@ -80,22 +91,46 @@ print_summary() {
   if [ ${#DEPLOYS_SUCCESS[@]} -gt 0 ]; then
     echo -e "${GREEN}✅ RÉUSSIS :${RESET}"
     for svc in "${DEPLOYS_SUCCESS[@]}"; do
-      echo -e "   - $svc"
+      local ver=$(get_display_version "$svc")
+      echo -e "   - ${svc}${ver}"
     done
   fi
 
   if [ ${#DEPLOYS_SKIPPED[@]} -gt 0 ]; then
     echo -e "${YELLOW}⏭️ SKIPPÉS (Aucun changement) :${RESET}"
     for svc in "${DEPLOYS_SKIPPED[@]}"; do
-      echo -e "   - $svc"
+      local ver=$(get_display_version "$svc")
+      echo -e "   - ${svc}${ver}"
     done
   fi
   
   if [ ${#DEPLOYS_FAILED[@]} -gt 0 ]; then
-    echo -e "${RED}❌ ÉCHOUÉS :${RESET}"
+    local build_failures=()
+    local deploy_failures=()
+    
     for svc in "${DEPLOYS_FAILED[@]}"; do
-      echo -e "   - $svc"
+      if [[ "$svc" == *"Build error"* ]]; then
+        build_failures+=("$svc")
+      else
+        deploy_failures+=("$svc")
+      fi
     done
+    
+    if [ ${#build_failures[@]} -gt 0 ]; then
+      echo -e "${RED}❌ ÉCHECS DE BUILD (Docker/Local) :${RESET}"
+      for svc in "${build_failures[@]}"; do
+        local ver=$(get_display_version "$svc")
+        echo -e "   - ${svc}${ver}"
+      done
+    fi
+    
+    if [ ${#deploy_failures[@]} -gt 0 ]; then
+      echo -e "${RED}❌ ÉCHECS DE DÉPLOIEMENT (Cloud Run/GCP) :${RESET}"
+      for svc in "${deploy_failures[@]}"; do
+        local ver=$(get_display_version "$svc")
+        echo -e "   - ${svc}${ver}"
+      done
+    fi
   fi
   echo -e "${GREY}============================================================${RESET}\n"
   
@@ -158,13 +193,6 @@ get_service_tag() {
   local NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
   echo "$NEW_TAG" > "$VERSION_FILE"
   
-  # Création du tag Git spécifique au service
-  local GIT_TAG="${SERVICE}-${NEW_TAG}"
-  if ! git rev-parse "$GIT_TAG" >/dev/null 2>&1; then
-    git tag "$GIT_TAG"
-    echo "-> Tag Git $GIT_TAG créé." >&2
-  fi
-  
   echo "$NEW_TAG"
 }
 
@@ -172,26 +200,34 @@ get_service_tag() {
 # Git Diff Helper
 # ==============================================================================
 
-has_changes() {
+compute_service_hash() {
   local SERVICE=$1
-  if [ ! -f "${SERVICE}/VERSION" ]; then
-    return 0 # Pas de fichier VERSION -> Nouveau service -> on build
-  fi
-  
-  local CURRENT_VERSION=$(cat "${SERVICE}/VERSION")
-  local OLD_TAG="${SERVICE}-${CURRENT_VERSION}"
-  
-  if ! git rev-parse "$OLD_TAG" >/dev/null 2>&1; then
-    return 0 # Tag Git introuvable localement -> on build par sécurité
-  fi
-
   local DIRS_TO_CHECK=("./${SERVICE}")
   if [[ "$SERVICE" == "agent_hr_api" || "$SERVICE" == "agent_ops_api" || "$SERVICE" == "agent_missions_api" ]]; then
     DIRS_TO_CHECK+=("./agent_commons")
   fi
 
-  # git diff --quiet retourne 0 si AUCUNE différence, 1 si différence trouvée
-  if git diff --quiet "$OLD_TAG" HEAD -- "${DIRS_TO_CHECK[@]}"; then
+  # Compute a SHA1 hash of all files in the relevant directories
+  # Exclude VERSION and HASH files, and common ignore paths
+  find "${DIRS_TO_CHECK[@]}" -type f ! -name "VERSION" ! -name "HASH" ! -path "*/__pycache__/*" ! -path "*/.venv/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/.DS_Store" -exec shasum {} + | sort | shasum | awk '{print $1}'
+}
+
+save_service_hash() {
+  local SERVICE=$1
+  compute_service_hash "$SERVICE" > "${SERVICE}/HASH"
+}
+
+has_changes() {
+  local SERVICE=$1
+  
+  if [ ! -f "${SERVICE}/HASH" ]; then
+    return 0 # Pas de fichier HASH -> on build
+  fi
+  
+  local SAVED_HASH=$(cat "${SERVICE}/HASH")
+  local CURRENT_HASH=$(compute_service_hash "$SERVICE")
+  
+  if [ "$SAVED_HASH" == "$CURRENT_HASH" ]; then
     return 1 # Pas de changement
   else
     return 0 # Changements détectés
@@ -276,7 +312,8 @@ show_progress() {
     fi
   done
   
-  echo -e "\n${GREY}------------------------------------------------------------${RESET}"
+  echo -e "
+${GREY}------------------------------------------------------------${RESET}"
   echo -e "${RED}🚀 BUILDING: ${CURRENT}${RESET}"
   
   if [ ${#DONE_TASKS[@]} -gt 0 ]; then
@@ -286,7 +323,8 @@ show_progress() {
   if [ ${#TODO_TASKS[@]} -gt 0 ]; then
     echo -e "${GREY}⏳ REMAINING: ${TODO_TASKS[*]}${RESET}"
   fi
-  echo -e "${GREY}------------------------------------------------------------${RESET}\n"
+  echo -e "${GREY}------------------------------------------------------------${RESET}
+"
 }
 
 build_and_push_standard() {
@@ -318,6 +356,7 @@ build_and_push_standard() {
     if [ "$SERVICE" != "db_migrations" ]; then
       if update_cloudrun "$SERVICE" "$TAG"; then
         DEPLOYS_SUCCESS+=("$SERVICE")
+    save_service_hash "$SERVICE"
       else
         DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
       fi
@@ -341,6 +380,7 @@ build_and_push_standard() {
           --project "$PROJECT_ID" \
           --wait; then
           DEPLOYS_SUCCESS+=("$SERVICE")
+    save_service_hash "$SERVICE"
         else
           DEPLOYS_FAILED+=("$SERVICE (Job execution failed)")
         fi
@@ -378,6 +418,7 @@ build_and_push_agent() {
   else
     if update_cloudrun "$SERVICE" "$TAG"; then
       DEPLOYS_SUCCESS+=("$SERVICE")
+    save_service_hash "$SERVICE"
     else
       DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
     fi
@@ -432,6 +473,7 @@ build_and_upload_frontend() {
     echo "-> Invalidation du cache CDN (Google Cloud CDN)..."
     gcloud compute url-maps invalidate-cdn-cache "lb-dev" --path "/*" --async --project "$PROJECT_ID" || echo "/!\ Attention: impossible d'invalider le cache CDN"
     DEPLOYS_SUCCESS+=("frontend")
+    save_service_hash "frontend"
   else
     echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform."
     DEPLOYS_FAILED+=("frontend (Bucket introuvable)")
@@ -439,7 +481,8 @@ build_and_upload_frontend() {
 }
 
 sync_system_prompts() {
-  echo -e "\n${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
+  echo -e "
+${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
   
   # 1. Récupération des infos via Terraform
   echo "[*] Récupération du mot de passe admin et de la configuration..."
@@ -542,6 +585,7 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
     if [ "$SKIP_CLOUDRUN" = true ]; then
       echo "--- Skipping update_cloudrun/jobs for db_init ---"
       DEPLOYS_SUCCESS+=("db_init (Docker only)")
+      save_service_hash "db_init"
     else
       JOB_NAME="db-init-job-dev"
       if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
@@ -553,12 +597,14 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
         
         if run_db_init_job; then
           DEPLOYS_SUCCESS+=("db_init")
+          save_service_hash "db_init"
         else
           DEPLOYS_FAILED+=("db_init (Job failed)")
         fi
       else
         echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
         DEPLOYS_SUCCESS+=("db_init (Docker only)")
+      save_service_hash "db_init"
       fi
     fi
   elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
