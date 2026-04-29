@@ -9,7 +9,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    include: ['src/**/*.spec.{js,ts,jsx,tsx}']
+    include: ['src/**/*.spec.{js,ts,jsx,tsx}'],
+    coverage: {
+      provider: 'v8',
+      all: true,
+      include: ['src/**/*.vue', 'src/**/*.ts']
+    }
   },
   resolve: {
     alias: {
