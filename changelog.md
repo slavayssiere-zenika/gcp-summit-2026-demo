@@ -1,3 +1,70 @@
+## Mise à jour automatique - 2026-04-30 00:17:55
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1177  | 510  |  57% |
+| agent_hr_api     | 1302  | 233  |  82% |
+| agent_missions_api | 1094  | 293  |  73% |
+| agent_ops_api    | 1272  | 198  |  84% |
+| agent_router_api | 2172  | 370  |  83% |
+| analytics_mcp    | 685   | 289  |  58% |
+| competencies_api | 3114  | 1343 |  57% |
+| cv_api           | 5246  | 2229 |  58% |
+| drive_api        | 1998  | 1230 |  38% |
+| items_api        | 1477  | 422  |  71% |
+| missions_api     | 1812  | 509  |  72% |
+| monitoring_mcp   | 824   | 462  |  44% |
+| platform-engineering | 1240  | 970  |  22% |
+| prompts_api      | 1091  | 388  |  64% |
+| users_api        | 1628  | 564  |  65% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- 129 tests - CompetencyNode SystemHealthCard Types
+- 101 tests unitaires frontend - MissionsList FinopsBadge AvailabilityCard
+- Ajout tests ItemCard ConsultantCard PageHeader Toast
+- Augmente couverture agentApi MissionCard Login
+- Stores et composants 33 tests
+- Augmentation couverture tests unitaires Vue
+- Mise en place Vitest
+
+#### Fichiers (non commités)
+- `gent_hr_api/agent_hr_api.system_instruction.txt` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/mcp_server.py` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/requirements.txt` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `cv_api/src/services/cv_import_service.py` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/drive_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/src/schemas.py` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/components/DriveTreeGraph.vue` (M)
+- `frontend/src/stores/chatStore.ts` (M)
+- `frontend/src/views/Home.vue` (M)
+- `frontend/vitest.log` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-04-29 23:12:14
 
 ### Couverture de Code

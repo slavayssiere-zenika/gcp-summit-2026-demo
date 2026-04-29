@@ -73,17 +73,22 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="search_competencies",
             description=(
-                "Search for competencies by name or alias in the competency tree. "
-                "IMPORTANT: Use specific terms of at least 3 characters (e.g. 'AWS', 'React', 'Python', 'Data Engineering'). "
-                "DO NOT use single letters like 'C', 'R', 'J' as they match every competency containing that letter and return useless results. "
-                "For the 'C language' or 'C programming', search for 'langage C' or 'C language' or 'systems programming'. "
-                "For semantic/staffing searches, prefer search_best_candidates (cv_api) instead."
+                "Recherche des compétences par nom OU par alias dans l'arbre taxonomique. "
+                "⚠️ LA RECHERCHE COUVRE DÉJÀ LES ALIASES : si 'Google Cloud Platform' a pour alias 'GCP', "
+                "une recherche 'GCP' retournera LES DEUX nœuds. "
+                "RÈGLE ANTI-FRAGMENTATION OBLIGATOIRE : la réponse peut contenir PLUSIEURS items représentant "
+                "la même technologie sous des labels différents (ex: 'GCP' ID 10053 ET 'Google Cloud Platform' ID 12). "
+                "Tu DOIS collecter TOUS les IDs retournés — ne jamais t'arrêter au premier résultat. "
+                "Ces IDs seront ensuite passés individuellement à list_competency_users puis les pools d'users fusionnés. "
+                "IMPORTANT : Utilise des termes spécifiques d'au moins 3 caractères (ex: 'AWS', 'React', 'Python'). "
+                "NE PAS utiliser des lettres seules comme 'C', 'R', 'J' — elles matchent toutes les compétences contenant cette lettre. "
+                "Pour les recherches sémantiques de staffing, préférer search_best_candidates (cv_api)."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "The search term (minimum 3 meaningful characters). Examples: 'AWS', 'Kubernetes', 'React', 'Data Engineering'"},
-                    "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10}
+                    "query": {"type": "string", "description": "Le terme de recherche (minimum 3 caractères significatifs). Exemples: 'AWS', 'Kubernetes', 'React', 'GCP'"},
+                    "limit": {"type": "integer", "description": "Nombre maximum de résultats (augmenter à 20 si la technologie peut avoir plusieurs labels)", "default": 20}
                 },
                 "required": ["query"]
             }
@@ -191,15 +196,24 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Retourne la liste des IDs d'utilisateurs qui possèdent une compétence spécifique. "
                 "⚠️ RETOURNE DES IDs BRUTS — pas des noms. "
-                "TOUJOURS enchaîner avec get_users_bulk (users_api) pour résoudre les IDs en noms complets. "
-                "NE PAS utiliser list_users : trop coûteux et incomplet (limit=100 max). "
-                "Pour scorer les candidats sur cette compétence, passer les IDs à batch_evaluate_competencies_users "
-                "par lots de 50 maximum, et filtrer directement les scores ≥ 3.0 dans la réponse."
+                "⚠️ RÈGLE ANTI-FRAGMENTATION (OBLIGATOIRE) : Une même technologie peut exister sous plusieurs "
+                "nœuds taxonomiques distincts (ex: 'GCP' ID 10053 ET 'Google Cloud Platform' ID 12). "
+                "Si search_competencies a retourné N items, tu DOIS appeler list_competency_users N fois "
+                "(une fois par ID) et faire l'UNION des listes — un consultant peut être indexé sous n'importe lequel des labels. "
+                "Ne jamais conclure 'liste exhaustive' sans avoir interrogé TOUS les IDs retournés par search_competencies. "
+                "FLUX OBLIGATOIRE pour 'qui maîtrise X ?' : "
+                "1) search_competencies(query='X', limit=20) → liste de N items avec leurs IDs, "
+                "2) list_competency_users pour CHAQUE ID → N listes d'user_ids, "
+                "3) UNION des N listes (set() en Python / dédoublonnage), "
+                "4) batch_evaluate_competencies_users(competency_ids=[TOUS les IDs], user_ids=[pool unifié]) → scores, "
+                "5) filtrer ai_score ≥ seuil demandé, "
+                "6) get_users_bulk → noms complets. "
+                "NE PAS utiliser list_users : trop coûteux et incomplet (limit=100 max)."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "competency_id": {"type": "integer", "description": "The competency ID"}
+                    "competency_id": {"type": "integer", "description": "L'ID de la compétence (un appel par ID retourné par search_competencies)"}
                 },
                 "required": ["competency_id"]
             }

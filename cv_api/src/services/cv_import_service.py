@@ -57,12 +57,15 @@ from datetime import datetime, timedelta, timezone
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str:
+async def _fetch_cv_content(
+    url: str,
+    google_token: Optional[str] = None,
+    file_type: str = "google_doc",
+) -> str:
     """Download the CV content.
 
-    Pour les Google Docs, utilise l'API Drive v3 officielle (files.export) avec
-    le google_access_token OAuth2. L'ancien endpoint /export?format=txt est abandonné
-    par Google et retourne 410 Gone.
+    - google_doc : export texte via Drive v3 /files/{id}/export?mimeType=text/plain
+    - docx       : download binaire via /files/{id}?alt=media + extraction python-docx
     """
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.hostname or ""
@@ -74,6 +77,60 @@ async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str
     if hostname in forbidden_hosts or hostname.endswith(".local") or hostname.endswith("_api"):
         raise HTTPException(status_code=400, detail="Internal URLs are not allowed")
 
+    # ── Branche DOCX ──────────────────────────────────────────────────────────
+    if file_type == "docx":
+        file_id_match = re.search(r"/file/d/([a-zA-Z0-9_-]+)", url)
+        file_id = file_id_match.group(1) if file_id_match else None
+        if not file_id:
+            raise HTTPException(
+                status_code=400,
+                detail="DOCX URL invalide : impossible d'extraire le file_id depuis l'URL Drive.",
+            )
+        if not google_token:
+            raise HTTPException(
+                status_code=400,
+                detail="DOCX Drive : google_access_token OAuth2 requis pour télécharger le fichier.",
+            )
+        download_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+        async with httpx.AsyncClient(timeout=60.0) as http_client:
+            resp = await http_client.get(
+                download_url,
+                headers={"Authorization": f"Bearer {google_token}"},
+                follow_redirects=True,
+            )
+            if resp.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Accès refusé pour le DOCX Drive (HTTP {resp.status_code}). "
+                        "Vérifiez les scopes OAuth2 du Service Account (drive.readonly minimum requis)."
+                    ),
+                )
+            resp.raise_for_status()
+
+            from io import BytesIO
+            import docx as python_docx
+            doc = python_docx.Document(BytesIO(resp.content))
+
+            # Extraction paragraphes (corps du CV)
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            # Extraction tables (missions en tableau, expériences, compétences tabulées)
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = " | ".join(c.text.strip() for c in row.cells if c.text.strip())
+                    if row_text:
+                        paragraphs.append(row_text)
+
+            text = "\n".join(paragraphs)
+            if not text.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail="Le fichier DOCX est vide ou illisible (aucun texte extrait).",
+                )
+            logger.info(f"[_fetch_cv_content] DOCX extrait — {len(text)} chars, file_id={file_id}")
+            return text
+
+    # ── Branche Google Doc natif ───────────────────────────────────────────────
     if "docs.google.com/document/d/" in url:
         doc_id = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
         if doc_id:
@@ -134,6 +191,7 @@ async def process_cv_core(
     db: AsyncSession,
     auth_token: str = None,
     folder_name: Optional[str] = None,
+    file_type: str = "google_doc",
     background_tasks: BackgroundTasks = None,
     genai_client=None,
 ) -> CVResponse:
@@ -166,8 +224,8 @@ async def process_cv_core(
     # ── Étape 1 : Téléchargement du document ─────────────────────────────────
     t0 = time.monotonic()
     try:
-        logger.info(f"[CV_STEP] download — start", extra={"step": "download", "cv_url": url})
-        raw_text = await _fetch_cv_content(url, google_access_token)
+        logger.info(f"[CV_STEP] download — start (file_type={file_type})", extra={"step": "download", "cv_url": url})
+        raw_text = await _fetch_cv_content(url, google_access_token, file_type=file_type)
         dur = int((time.monotonic() - t0) * 1000)
         raw_len = len(raw_text)
         if raw_len > 100000:

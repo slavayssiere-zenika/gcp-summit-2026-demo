@@ -65,5 +65,5 @@ Ce micro-service se base sur :
 - **GET** `/missions/user/{user_id}/active` : Get Active Missions For User
 - **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp

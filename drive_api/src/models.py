@@ -40,4 +40,7 @@ class DriveSyncState(Base):
     queued_at = Column(DateTime, nullable=True)          # Horodatage du passage en QUEUED (publication Pub/Sub)
     imported_at = Column(DateTime, nullable=True)        # Horodatage du passage en IMPORTED_CV (cv_api callback)
     processing_duration_ms = Column(Integer, nullable=True)  # Durée de traitement LLM mesurée par cv_api (ms)
+    file_type = Column(String, nullable=True, default="google_doc")
+    # Valeurs : "google_doc" (Google Docs natif) | "docx" (fichier Word .docx)
+
 

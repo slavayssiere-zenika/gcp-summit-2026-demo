@@ -17,6 +17,18 @@ function looksLikeJson(s: string): boolean {
 }
 
 /**
+ * Détecte un objet dont TOUTES les clés sont des entiers (ex: mapping userId→ville).
+ * Ces objets sont des données de contexte interne qui ne doivent pas être affichées
+ * sous forme de cards dans l'interface (ex: résultat de get_tags_map).
+ */
+function isNumericKeyMap(obj: any): boolean {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false
+  const keys = Object.keys(obj)
+  if (keys.length < 5) return false // trop petit pour être un vrai mapping de masse
+  return keys.every(k => /^\d+$/.test(k))
+}
+
+/**
  * Détecte si un tableau de données correspond à des logs Cloud Run structurés.
  * Un log Cloud Run a: timestamp + cloud_run_service + (message | severity)
  */
@@ -94,6 +106,10 @@ function unwrapToolData(toolData: any): any[] {
           // Paginated MCP responses: { items: [...], total, skip, limit }
           if (!Array.isArray(parsed) && parsed.items && Array.isArray(parsed.items)) {
             return parsed.items
+          }
+          // Mapping userId→tag (ex: get_tags_map) — données internes, pas d'affichage visuel
+          if (!Array.isArray(parsed) && isNumericKeyMap(parsed)) {
+            return []
           }
           return Array.isArray(parsed) ? parsed : [parsed]
         } catch (e) {

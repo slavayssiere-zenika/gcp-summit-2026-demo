@@ -22,6 +22,13 @@ MAX_DRIVE_CV_IMPORT = int(os.getenv("MAX_DRIVE_CV_IMPORT", "15"))
 PUBSUB_CV_IMPORT_TOPIC = os.getenv("PUBSUB_CV_IMPORT_TOPIC", "")
 _GCP_PROJECT_ID_ENV = os.getenv("GCP_PROJECT_ID", "")
 
+# Mapping MIME type Drive → label file_type stocké en base et transmis dans le payload Pub/Sub.
+# Ajouter ici tout nouveau format à supporter (PDF exclut : nécessite OCR externe).
+_SUPPORTED_CV_MIME_TYPES: dict[str, str] = {
+    "application/vnd.google-apps.document": "google_doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+}
+
 
 def _resolve_gcp_project_id() -> str:
     """
@@ -453,11 +460,12 @@ class DriveService:
                         pipe.set(f"drive:name:{file_id}", name, ex=86400 * 30)
                         pipe.execute()
                     
-                    elif mime == "application/vnd.google-apps.document":
+                    elif mime in _SUPPORTED_CV_MIME_TYPES:
+                        file_type = _SUPPORTED_CV_MIME_TYPES[mime]
                         try:
-                            # C'est un CV !
+                            # C'est un CV (Google Doc natif ou DOCX) !
                             mod_time = datetime.fromisoformat(mod_time_str.replace("Z", "+00:00"))
-                            
+
                             upsert_stmt = (
                                 pg_insert(DriveSyncState)
                                 .values(
@@ -469,6 +477,7 @@ class DriveService:
                                     status=DriveSyncStatus.PENDING.value,
                                     parent_folder_name=parent_name,
                                     last_processed_at=datetime.utcnow(),
+                                    file_type=file_type,
                                 )
                                 .on_conflict_do_update(
                                     index_elements=["google_file_id"],
@@ -478,6 +487,7 @@ class DriveService:
                                         folder_id=root["id"],
                                         revision_id=version,
                                         modified_time=mod_time.replace(tzinfo=None),
+                                        file_type=file_type,
                                         status=case(
                                             (
                                                 DriveSyncState.__table__.c.revision_id != version,
@@ -493,11 +503,11 @@ class DriveService:
                             await self.db.commit()
                             new_discoveries += 1
                             cvs_in_page += 1
-                            
+
                             # Remplissage proactif du cache "connu" pour le Bottom-Up
                             self.redis.set(f"drive:file:known:{file_id}", "1", ex=86400 * 30)
-                            
-                            logger.debug(f"[Top-Down] '{name}' enregistré (root: {root['tag']}).")
+
+                            logger.debug(f"[Top-Down] '{name}' ({file_type}) enregistré (root: {root['tag']}).")
                         except Exception as e:
                             logger.error(f"[Top-Down] Erreur DB/parsing pour le fichier '{name}' ({file_id}): {e}")
                             await self.db.rollback()
@@ -701,7 +711,13 @@ class DriveService:
                 state.error_message = f"Dossier racine introuvable (folder_id={state.folder_id})"
                 continue
 
-            doc_url = f"https://docs.google.com/document/d/{state.google_file_id}"
+            # URL selon le type de fichier
+            ft = state.file_type or "google_doc"
+            if ft == "docx":
+                doc_url = f"https://drive.google.com/file/d/{state.google_file_id}"
+            else:
+                doc_url = f"https://docs.google.com/document/d/{state.google_file_id}"
+
             payloads_to_publish.append({
                 "state": state,
                 "message": {
@@ -710,6 +726,7 @@ class DriveService:
                     "source_tag": folder.tag,
                     "folder_name": state.parent_folder_name or folder.folder_name or "",
                     "google_access_token": google_access_token,
+                    "file_type": ft,
                     # Fix #4 : OIDC token (validité 1h, non expirable pendant le backoff Pub/Sub)
                     # En prod : oidc_token contient un token frais, jwt = ""
                     # En local : oidc_token = "", jwt = MOCK_M2M_JWT

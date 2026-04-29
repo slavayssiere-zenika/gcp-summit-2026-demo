@@ -40,11 +40,19 @@ const techKeys = [
   'usage', 'thoughts', 'steps', 'dataType', 'displayType', 'parsedData', 'activeTab',
   'result', 'nodes', 'links'
 ];
+// Détecte un mapping purement numérique (userId→valeur, ex: get_tags_map) — pas de rendu visuel
+const isNumericKeyMap = (obj: any): boolean => {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false
+  const keys = Object.keys(obj)
+  if (keys.length < 5) return false
+  return keys.every(k => /^\d+$/.test(k))
+};
 const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
 const isProfileObj = (obj: any) => obj && !obj.email && (obj.user_id || obj.summary) && (obj.missions || obj.competencies_keywords || obj.current_role)
 const isAvailabilityObj = (obj: any) => obj && obj.summary && obj.active_missions !== undefined && obj.is_available !== undefined;
 const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj) || isAvailabilityObj(obj) || isEvaluationObj(obj);
-const hasBusinessData = (obj: any) => filteredKeys(obj).length > 0 || isBusinessObj(obj);
+// Un objet à clés numériques (mapping de masse) n'est pas une donnée business affichable
+const hasBusinessData = (obj: any) => !isNumericKeyMap(obj) && (filteredKeys(obj).length > 0 || isBusinessObj(obj));
 const hasAnyBusinessData = (msg: any) => {
   if (msg.displayType === 'text_only') return false;
   if (msg.displayType === 'cloudrun_logs') return false; // géré par CloudRunLogsViewer
