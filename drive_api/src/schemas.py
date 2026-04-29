@@ -59,8 +59,10 @@ class FileStateResponse(BaseModel):
     error_message: Optional[str]
     user_id: Optional[int]
     processing_duration_ms: Optional[int]
+    file_type: Optional[str] = "google_doc"
 
     model_config = {"from_attributes": True}
+
 
 
 class PaginatedFilesResponse(BaseModel):

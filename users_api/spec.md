@@ -80,7 +80,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/{user_id}` : Get User
 - **PUT** `/{user_id}` : Update User
 - **DELETE** `/{user_id}` : Delete User
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

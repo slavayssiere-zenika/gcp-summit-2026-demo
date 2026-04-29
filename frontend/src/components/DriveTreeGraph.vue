@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import { authService } from '../services/auth'
-import { Folder, File, AlertCircle, ChevronRight, ChevronDown, CheckCircle2, User, Loader2, Network } from 'lucide-vue-next'
+import { Folder, File, AlertCircle, ChevronRight, ChevronDown, CheckCircle2, User, Loader2, Network, Search, X } from 'lucide-vue-next'
 
 const folders = ref<any[]>([])
 const files = ref<any[]>([])
@@ -124,10 +124,82 @@ const expandAllErrorNodes = () => {
     expandedNodes.value = newSet
 }
 
+const searchQuery = ref('')
+
+// Arbre filtré par la recherche
+const filteredTree = computed(() => {
+    const q = searchQuery.value.trim().toLowerCase()
+    if (!q) return tree.value
+
+    const result: Record<string, any> = {}
+    for (const tag in tree.value) {
+        const agency = tree.value[tag]
+        const filteredFolders: Record<string, any> = {}
+        for (const fid in agency.folders) {
+            const folder = agency.folders[fid]
+            const filteredConsultants: Record<string, any> = {}
+            for (const cname in folder.consultants) {
+                if (cname.toLowerCase().includes(q)) {
+                    filteredConsultants[cname] = folder.consultants[cname]
+                }
+            }
+            if (Object.keys(filteredConsultants).length > 0) {
+                filteredFolders[fid] = { ...folder, consultants: filteredConsultants }
+            }
+        }
+        if (Object.keys(filteredFolders).length > 0) {
+            result[tag] = { ...agency, folders: filteredFolders }
+        }
+    }
+    return result
+})
+
+const searchResultCount = computed(() => {
+    let count = 0
+    for (const tag in filteredTree.value) {
+        for (const fid in filteredTree.value[tag].folders) {
+            count += Object.keys(filteredTree.value[tag].folders[fid].consultants).length
+        }
+    }
+    return count
+})
+
+// Auto-déplier les résultats quand la recherche change
+watch(searchQuery, (q) => {
+    if (!q.trim()) return
+    const newSet = new Set(expandedNodes.value)
+    for (const tag in filteredTree.value) {
+        newSet.add(`agency_${tag}`)
+        for (const fid in filteredTree.value[tag].folders) {
+            newSet.add(`folder_${fid}`)
+        }
+    }
+    expandedNodes.value = newSet
+})
+
 onMounted(async () => {
     await fetchTree()
     expandAllErrorNodes()
 })
+
+// Helper : découpe le nom en segments match/non-match pour le surlignage
+const highlightName = (name: string, query: string): { text: string, match: boolean }[] => {
+    if (!query) return [{ text: name, match: false }]
+    const q = query.toLowerCase()
+    const parts: { text: string, match: boolean }[] = []
+    let i = 0
+    while (i < name.length) {
+        const idx = name.toLowerCase().indexOf(q, i)
+        if (idx === -1) {
+            parts.push({ text: name.slice(i), match: false })
+            break
+        }
+        if (idx > i) parts.push({ text: name.slice(i, idx), match: false })
+        parts.push({ text: name.slice(idx, idx + q.length), match: true })
+        i = idx + q.length
+    }
+    return parts
+}
 </script>
 
 <template>
@@ -147,18 +219,41 @@ onMounted(async () => {
         </button>
       </div>
     </div>
-    
+
+    <!-- Barre de recherche consultant -->
+    <div class="search-bar-wrapper">
+      <Search class="search-icon" />
+      <input
+        id="drive-tree-search"
+        v-model="searchQuery"
+        type="text"
+        class="search-input"
+        placeholder="Rechercher un consultant..."
+        autocomplete="off"
+      />
+      <span v-if="searchQuery" class="search-count">
+        {{ searchResultCount }} résultat{{ searchResultCount !== 1 ? 's' : '' }}
+      </span>
+      <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''" title="Effacer">
+        <X class="icon-sm" />
+      </button>
+    </div>
+
     <div v-if="isLoading" class="loading-state">
       <Loader2 class="icon-lg spin text-muted" />
       <p>Chargement de l'arborescence...</p>
     </div>
     
     <div v-else class="tree-container">
-      <div v-if="Object.keys(tree).length === 0" class="text-muted text-center" style="padding: 2rem;">
+      <div v-if="Object.keys(filteredTree).length === 0 && searchQuery" class="text-muted text-center" style="padding: 2rem;">
+        <Search style="width:32px;height:32px;margin:0 auto 0.5rem;display:block;color:#cbd5e1" />
+        Aucun consultant trouvé pour "{{ searchQuery }}"
+      </div>
+      <div v-else-if="Object.keys(filteredTree).length === 0" class="text-muted text-center" style="padding: 2rem;">
         Aucune donnée disponible.
       </div>
       
-      <div v-for="(agency, tag) in tree" :key="tag" class="tree-node">
+      <div v-for="(agency, tag) in filteredTree" :key="tag" class="tree-node">
         <div class="node-header" @click="toggleNode('agency_'+tag)">
           <component :is="expandedNodes.has('agency_'+tag) ? ChevronDown : ChevronRight" class="tree-toggle" />
           <div class="node-content agency-node">
@@ -185,7 +280,12 @@ onMounted(async () => {
                   <div class="node-content consultant-node" :class="{'has-error': consultant.hasNommageError || consultant.hasErrors}">
                     <User class="icon-sm" :class="consultant.hasNommageError ? 'text-danger' : 'text-gray'" />
                     <span class="node-label" :class="{'text-danger fw-bold': consultant.hasNommageError}">
-                      {{ consultant.name }}
+                      <!-- Highlight du terme recherché -->
+                      <template v-if="searchQuery">
+                        <span v-for="(part, i) in highlightName(cname as string, searchQuery)" :key="i"
+                          :class="part.match ? 'search-highlight' : ''">{{ part.text }}</span>
+                      </template>
+                      <template v-else>{{ consultant.name }}</template>
                     </span>
                     <span v-if="consultant.hasNommageError" class="badge-error" title="Le nom du dossier devrait être 'Prénom Nom'">
                       ⚠️ Problème de nommage
@@ -414,5 +514,63 @@ onMounted(async () => {
   padding: 3rem;
   color: #64748b;
   gap: 12px;
+}
+
+/* Barre de recherche */
+.search-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px 12px;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+}
+.search-bar-wrapper:focus-within {
+  border-color: #6366f1;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+}
+.search-icon {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: #334155;
+}
+.search-input::placeholder { color: #cbd5e1; }
+.search-count {
+  font-size: 0.75rem;
+  color: #6366f1;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.search-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.15s;
+}
+.search-clear:hover { color: #ef4444; }
+
+/* Surlignage du terme recherché */
+.search-highlight {
+  background: #fef08a;
+  color: #713f12;
+  border-radius: 2px;
+  font-weight: 700;
 }
 </style>

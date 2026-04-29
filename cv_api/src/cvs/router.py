@@ -316,6 +316,7 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
     source_tag = payload.get("source_tag", "")
     folder_name = payload.get("folder_name", "")
     google_access_token = payload.get("google_access_token")
+    file_type = payload.get("file_type", "google_doc")  # "google_doc" | "docx"
     oidc_token = payload.get("oidc_token", "")   # Production: OIDC ID Token Google (RS256, 1h)
     jwt = payload.get("jwt", "")                  # Local dev: MOCK_M2M_JWT fallback
 
@@ -418,6 +419,7 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
         bg_jwt: str,
         bg_token_payload: dict,
         bg_drive_api_url: str,
+        bg_file_type: str = "google_doc",
     ):
         """Pipeline complet exécuté en arrière-plan après ACK Pub/Sub."""
         pipeline_start_time = time.monotonic()  # Chrono pour KPI processing_duration_ms
@@ -433,7 +435,8 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
                     token_payload=bg_token_payload,
                     db=bg_db,
                     auth_token=bg_jwt,
-                    background_tasks=local_bg_tasks, genai_client=client  # BackgroundTasks locales pour competencies/missions
+                    file_type=bg_file_type,
+                    background_tasks=local_bg_tasks, genai_client=client
                 )
                 
                 # IMPORTANT: Starlette's BackgroundTasks are not automatically executed 
@@ -493,7 +496,8 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
         background_tasks.add_task(
             _run_cv_pipeline_bg,
             google_file_id, url, google_access_token, source_tag, folder_name,
-            headers, jwt, token_payload, drive_api_url
+            headers, jwt, token_payload, drive_api_url,
+            file_type,
         )
     except Exception as setup_err:
         logger.error(f"[PubSub] Impossible de planifier le BackgroundTask pour {google_file_id}: {setup_err}", exc_info=True)

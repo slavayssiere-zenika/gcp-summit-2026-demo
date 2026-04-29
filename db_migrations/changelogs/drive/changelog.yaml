@@ -254,3 +254,22 @@ databaseChangeLog:
             columnName: "processing_duration_ms"
 
 
+
+  - changeSet:
+      id: "13"
+      author: "antigravity"
+      comment: "Ajout colonne file_type pour distinguer Google Docs natifs et fichiers DOCX dans le pipeline d ingestion"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "file_type"
+                  type: "varchar(64)"
+                  defaultValue: "google_doc"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "file_type"
