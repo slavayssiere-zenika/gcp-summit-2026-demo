@@ -70,17 +70,17 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/internal/service-token` : Create Service Token
 - **POST** `/suspend/{email}` : Suspend User
 - **GET** `/stats` : Get User Stats
+- **GET** `/duplicates` : Get Duplicates
+- **POST** `/merge` : Merge Users
 - **GET** `/` : List Users
 - **POST** `/` : Create User
 - **GET** `/search` : Search Users
 - **POST** `/bulk` : Get Users Bulk
 - **GET** `/me` : Get Me
-- **GET** `/duplicates` : Get Duplicates
-- **POST** `/merge` : Merge Users
 - **GET** `/{user_id}` : Get User
 - **PUT** `/{user_id}` : Update User
 - **DELETE** `/{user_id}` : Delete User
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp

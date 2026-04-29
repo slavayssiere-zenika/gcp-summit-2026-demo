@@ -3,7 +3,7 @@ import json
 import redis.asyncio as redis
 from datetime import datetime, timedelta
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/4")
 # Si la tâche n'a pas été mise à jour depuis ce délai, elle est considérée comme morte (crash/timeout)
 REANALYSIS_STALE_TIMEOUT_MINUTES = int(os.getenv("REANALYSIS_STALE_TIMEOUT_MINUTES", "30"))
 # TTL de sécurité absolu sur la clé Redis (4h) : garantit le nettoyage même sans mise à jour
@@ -136,12 +136,21 @@ class TreeTaskState:
             "updated_at": datetime.now().isoformat(),
             "tree": None,
             "usage": None,
-            "error": None
+            "error": None,
+            "map_result": None,
+            "res_tree": {},
+            "completed_pillars": [],
+            "sweep_result": None,
+            "missing_competencies": [],
+            "mode": "interactive",
+            "batch_job_id": None,
+            "batch_step": None,
+            "service_token": None,  # Token longue durée stocké à t0 (batch/start) — JWT original expiré bien avant la fin du pipeline
         }
         await self._redis.set(self._latest_key, json.dumps(task_data), ex=self._ttl)
         return task_data
 
-    async def update_progress(self, new_log=None, tree=None, usage=None, error=None, status=None):
+    async def update_progress(self, new_log=None, tree=None, usage=None, error=None, status=None, map_result=None, res_tree=None, completed_pillar=None, sweep_result=None, missing_competencies=None, mode=None, batch_job_id=None, batch_step=None, completed_pillars=None, service_token=None):
         """Met à jour l'état d'avancement du calcul de l'arbre."""
         raw_data = await self._redis.get(self._latest_key)
         if not raw_data:
@@ -149,6 +158,15 @@ class TreeTaskState:
             
         data = json.loads(raw_data)
         
+        if mode is not None:
+            data["mode"] = mode
+            
+        if batch_job_id is not None:
+            data["batch_job_id"] = batch_job_id
+            
+        if batch_step is not None:
+            data["batch_step"] = batch_step
+            
         if new_log:
             data["logs"].append(f"[{datetime.now().isoformat()}] {new_log}")
             if len(data["logs"]) > 100:
@@ -162,6 +180,30 @@ class TreeTaskState:
             
         if error:
             data["error"] = error
+            
+        if map_result is not None:
+            data["map_result"] = map_result
+
+        if res_tree is not None:
+            data["res_tree"] = res_tree
+
+        if completed_pillar is not None:
+            if "completed_pillars" not in data:
+                data["completed_pillars"] = []
+            if completed_pillar not in data["completed_pillars"]:
+                data["completed_pillars"].append(completed_pillar)
+                
+        if completed_pillars is not None:
+            data["completed_pillars"] = completed_pillars
+                
+        if sweep_result is not None:
+            data["sweep_result"] = sweep_result
+            
+        if missing_competencies is not None:
+            data["missing_competencies"] = missing_competencies
+
+        if service_token is not None:
+            data["service_token"] = service_token
             
         if status:
             data["status"] = status

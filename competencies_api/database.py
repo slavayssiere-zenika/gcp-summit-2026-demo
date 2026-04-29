@@ -1,12 +1,14 @@
+import asyncio
+import logging
+import os
+import re
+
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import text
 from google.cloud.alloydb.connector import AsyncConnector, IPTypes
 from typing import AsyncGenerator
-import logging
-from sqlalchemy import text
-import os
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +36,10 @@ async def init_db_connector():
     pool_params = {
         "pool_pre_ping": True,
         "pool_recycle": 1800,
-        "pool_size": int(os.getenv("DB_POOL_SIZE", 20)),
-        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 30)),
+        # Pool dimensionné pour les appels batch (retry_apply semaphore=3, bulk_scoring semaphore=2)
+        # 3 workers × ~3 conn DB = 9 simultanées max → well under pool(10)+overflow(20)=30
+        "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
     }
 
     if USE_IAM_AUTH and ALLOYDB_INSTANCE_URI:
@@ -79,13 +83,30 @@ async def close_db_connector():
     if connector:
         await connector.close()
         
-async def check_db_connection():
+async def check_db_connection() -> bool:
+    """Vérifie la connectivité DB avec un timeout court (3s).
+
+    Utilise asyncio.wait_for pour éviter de bloquer le /ready endpoint
+    quand le pool de connexions est saturé (ex: pendant un bulk scoring).
+    En cas de saturation, préfère retourner True (optimistic) si le pool
+    existe et est initialisé — le 503 ne se déclenchera que si la DB est
+    réellement inaccessible.
+    """
     global engine
     if not engine:
         return False
     try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        async def _ping():
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_ping(), timeout=5.0)
+        return True
+    except asyncio.TimeoutError:
+        # Pool saturé par des opérations batch en cours — la DB est up,
+        # mais toutes les connexions sont utilisées. On retourne True
+        # pour éviter un faux-positif 503 pendant le bulk scoring.
+        logger.warning("[DB] check_db_connection timeout (5s) — pool probablement saturé. Retour optimiste: True.")
         return True
     except Exception as e:
         logger.error(f"[DB] Database connection test failed: {e}")

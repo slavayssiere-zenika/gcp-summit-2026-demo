@@ -26,7 +26,23 @@ def get_recent_changes():
         
     return "\n\n".join(changes)
 
-apis = ["agent_api", "competencies_api", "cv_api", "drive_api", "items_api", "prompts_api", "users_api"]
+def get_test_dirs():
+    dirs = []
+    for entry in os.scandir("."):
+        if entry.is_dir() and entry.name not in ["test_env", "frontend", "bootstrap"] and not entry.name.startswith("."):
+            has_tests = False
+            for root, _, files in os.walk(entry.path):
+                # Don't go too deep, 3 levels max
+                if root.count(os.sep) - entry.path.count(os.sep) > 3:
+                    continue
+                if any((f.startswith("test_") or f.endswith("_test.py")) and f.endswith(".py") for f in files) or "pytest.ini" in files:
+                    has_tests = True
+                    break
+            if has_tests:
+                dirs.append(entry.name)
+    return sorted(dirs)
+
+apis = get_test_dirs()
 table_rows = []
 
 for api in apis:

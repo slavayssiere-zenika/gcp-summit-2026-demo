@@ -56,7 +56,8 @@ const router = createRouter({
     {
       path: '/import-cv',
       name: 'import-cv',
-      component: () => import('../views/ImportCV.vue')
+      component: () => import('../views/ImportCV.vue'),
+      meta: { adminOnly: true }
     },
     {
       path: '/admin',
@@ -80,7 +81,7 @@ const router = createRouter({
       path: '/admin/deduplication',
       name: 'admin-deduplication',
       component: () => import('../views/AdminDeduplication.vue'),
-      meta: { adminOnly: true }
+      meta: { adminOnly: true, rhAllowed: true }
     },
     {
       path: '/admin/reanalysis',
@@ -89,10 +90,17 @@ const router = createRouter({
       meta: { adminOnly: true }
     },
     {
+      path: '/admin/bulk-import',
+      name: 'admin-bulk-import',
+      component: () => import('../views/AdminBulkImport.vue'),
+      meta: { adminOnly: true }
+    },
+
+    {
       path: '/admin/availability',
       name: 'admin-availability',
       component: () => import('../views/AdminAvailability.vue'),
-      meta: { adminOnly: true }
+      meta: { adminOnly: true, rhAllowed: true }
     },
     {
       path: '/admin/finops',
@@ -114,6 +122,11 @@ const router = createRouter({
       path: '/aiops',
       name: 'aiops',
       component: () => import('../views/AiOps.vue')
+    },
+    {
+      path: '/data-quality',
+      name: 'data-quality',
+      component: () => import('../views/DataQuality.vue')
     },
     {
       path: '/missions',
@@ -143,11 +156,10 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
   } else if (to.meta.adminOnly) {
     const role = authService.state.user?.role
     if (role === 'admin') {
+      // Admin a accès à tout
       next()
-    } else if (role === 'rh' && (to.path === '/admin' || to.path === '/admin/deduplication' || to.path === '/admin/availability')) {
-      next()
-    } else if (role === 'commercial' && (to.path === '/missions' || to.path.startsWith('/missions/'))) {
-      // Les commerciaux accèdent aux missions mais pas au panneau admin complet
+    } else if (role === 'rh' && to.meta.rhAllowed) {
+      // RH accède uniquement aux routes marquées rhAllowed: true
       next()
     } else {
       next({ name: 'home' })

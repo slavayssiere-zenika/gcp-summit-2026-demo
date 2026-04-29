@@ -10,6 +10,7 @@ from database import get_db
 from . import models, schemas
 from cache import get_cache, set_cache, delete_cache
 from jose import jwt, JWTError
+from .analyzer import generate_test_cases, run_promptfoo_analysis, improve_prompt_with_gemini, generate_error_correction_prompt
 
 security = HTTPBearer()
 
@@ -144,7 +145,6 @@ async def create_prompt(payload: schemas.PromptCreate, db: AsyncSession = Depend
     await delete_cache(f"prompts:{payload.key}")
     return prompt
 
-from .analyzer import generate_test_cases, run_promptfoo_analysis, improve_prompt_with_gemini, generate_error_correction_prompt
 
 @router.post("/{key}/analyze", response_model=schemas.AnalysisResponse)
 async def analyze_prompt(key: str, db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
@@ -279,3 +279,16 @@ async def read_compiled_prompt(key: str, db: AsyncSession = Depends(get_db)):
     compiled_prompt = schemas.Prompt(key=prompt.key, value=compiled_value)
     return compiled_prompt
 
+@router.delete("/{key}", summary="Supprime un prompt existant", dependencies=[Depends(verify_jwt)])
+async def delete_prompt(key: str, db: AsyncSession = Depends(get_db)):
+    """
+    Supprime un prompt de la base de données. Utilisé principalement pour le nettoyage des error_correction.
+    """
+    db_prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
+    if not db_prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+        
+    await db.delete(db_prompt)
+    await db.commit()
+    await delete_cache(f"prompts:{key}")
+    return {"success": True, "message": f"Prompt {key} supprimé avec succès"}

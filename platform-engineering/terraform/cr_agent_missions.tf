@@ -83,7 +83,7 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
       # ── Comportement applicatif ────────────────────────────────────────────
       env {
         name  = "GEMINI_MODEL"
-        value = var.gemini_model
+        value = var.gemini_missions_model
       }
       env {
         name  = "ROOT_PATH"

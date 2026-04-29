@@ -1,5 +1,8 @@
 import json
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 def safe_get(obj, key, default=None):
     """Robustly fetch from both object attributes and dictionary keys."""
@@ -52,9 +55,11 @@ def extract_metadata_from_session(session):
                 for call in calls:
                     name = safe_get(call, 'name', 'unknown')
                     args = safe_get(call, 'args', {})
-                    if isinstance(args, str): 
-                        try: args = json.loads(args)
-                        except: pass
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (json.JSONDecodeError, ValueError) as e:
+                            logger.debug(f"[metadata] args non-parseable en JSON, conservé brut: {e}")
                     
                     sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
                     if sig not in seen_steps:
@@ -90,8 +95,10 @@ def extract_metadata_from_session(session):
                 
                 # Unwrap MCP 'result' string if present
                 if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
-                    try: res_data = json.loads(res_data["result"])
-                    except: pass
+                    try:
+                        res_data = json.loads(res_data["result"])
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.debug(f"[metadata] result non-parseable en JSON, conservé brut: {e}")
                 
                 sig = f"result:{json.dumps(res_data, sort_keys=True)}"
                 if sig not in seen_steps:

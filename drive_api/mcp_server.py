@@ -208,7 +208,7 @@ async def list_tools() -> list[Tool]:
             name="update_drive_file",
             description=(
                 "Met à jour l'état ou les métadonnées d'un fichier Drive suivi par le scanner. "
-                "Permet de forcer un statut (ex: 'PENDING' pour re-tenter l'ingestion) "
+                "Permet de forcer un statut (ex: 'PENDING' pour re-tenter l'ingéstion) "
                 "ou de corriger des métadonnées incorrectes."
             ),
             inputSchema={
@@ -230,8 +230,41 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["file_id"]
             }
+        ),
+        Tool(
+            name="get_ingestion_kpis",
+            description=(
+                "Retourne les KPIs de data quality du pipeline d'ingéstion Drive → CV. "
+                "Inclut le grade global (A/B/C/D/F), les métriques de couverture (taux d'import, "
+                "liaison consultant, nommage résolu, durée de traitement, fraîcheur du pipeline) "
+                "et les recommandations d'actions correctives. "
+                "Appeler avant de décider de lancer un Quality Gate Batch."
+            ),
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="get_folder_ingestion_kpis",
+            description=(
+                "Retourne les KPIs d'ingéstion par folder/agence. "
+                "Permet d'identifier quelles agences ont des problèmes d'import, "
+                "de liaison consultant ou de durée de traitement anormale. "
+                "Chaque folder est classé avec un statut ok/warning/critical."
+            ),
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="run_quality_gate_batch",
+            description=(
+                "Déclenche un Quality Gate Batch sur le pipeline Drive : identifie les CVs importés "
+                "avec des données incomplètes (user_id manquant, nommage absent, erreurs persistantes) "
+                "et les remet en PENDING pour re-traitement ciblé via Pub/Sub. "
+                "Plus fin qu'un retry global : ne re-traite que les CVs avec des problèmes identifiés. "
+                "Retourne le nombre de CVs remis en queue et la ventilation par raison."
+            ),
+            inputSchema={"type": "object", "properties": {}}
         )
     ]
+
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -327,6 +360,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'file_id' manquant."}))]
                     body = {k: v for k, v in arguments.items() if k != "file_id" and v is not None}
                     res = await client.patch(f"{API_BASE_URL}/files/{file_id}", json=body, headers=headers, timeout=10.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "get_ingestion_kpis":
+                    res = await client.get(f"{API_BASE_URL}/ingestion/stats", headers=headers, timeout=30.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "get_folder_ingestion_kpis":
+                    res = await client.get(f"{API_BASE_URL}/ingestion/folder-kpis", headers=headers, timeout=30.0)
+                    res.raise_for_status()
+                    return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
+
+                elif name == "run_quality_gate_batch":
+                    res = await client.post(f"{API_BASE_URL}/ingestion/quality-gate-batch", headers=headers, timeout=60.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 

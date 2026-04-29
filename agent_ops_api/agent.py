@@ -94,7 +94,8 @@ async def create_agent(session_id: str | None = None) -> Agent:
         f"Exemple : `DATE(timestamp) = '{_dt.utcnow().strftime('%Y-%m-%d')}'`"
     )
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
+    model = os.getenv("GEMINI_OPS_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
     tools_loaded = await get_cached_tools(_OPS_CLIENTS_MAP, "[Ops]", ttl=300, _cache=_OPS_TOOLS_CACHE)
     OPS_TOOLS = tools_loaded
 
@@ -103,6 +104,9 @@ async def create_agent(session_id: str | None = None) -> Agent:
         name="assistant_zenika_ops",
         model=model,
         generate_content_config=types.GenerateContentConfig(
+            tool_config=types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode="AUTO")
+            ),
             http_options=types.HttpOptions(
                 retry_options=types.HttpRetryOptions(initial_delay=1, attempts=2),
             ),

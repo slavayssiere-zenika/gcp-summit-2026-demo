@@ -26,13 +26,49 @@ Usage (Router — appel sortant) :
 
 from __future__ import annotations
 
+import inspect
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Request
+# QueryRequest — Entrée du endpoint /query (utilisateur → agent)
+# ---------------------------------------------------------------------------
+
+
+class QueryRequest(BaseModel):
+    """Payload envoyé par le frontend ou le Router au endpoint POST /query d'un agent.
+
+    Différent de A2ARequest (communication inter-agents) : QueryRequest est destiné
+    aux appels initiés par un utilisateur humain via le frontend.
+    """
+
+    query: str = Field(..., description="La requête en langage naturel.", min_length=1)
+    session_id: Optional[str] = Field(
+        None,
+        description=(
+            "Identifiant de session ADK. Si absent, le sub JWT est utilisé comme "
+            "session_id (comportement par défaut)."
+        ),
+    )
+    user_id: Optional[str] = Field(
+        None,
+        description=(
+            "Identifiant utilisateur propagé depuis le JWT sub. "
+            "Utilisé pour l'isolation des sessions et le tracking FinOps."
+        ),
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {"query": "Quels consultants sont disponibles ?"}
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# A2ARequest — Communication inter-agents (Router → sous-agent)
 # ---------------------------------------------------------------------------
 
 
@@ -90,7 +126,7 @@ class TokenUsage(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Response
+# A2AResponse — Réponse d'un sous-agent
 # ---------------------------------------------------------------------------
 
 
@@ -114,7 +150,6 @@ class A2AResponse(BaseModel):
         default_factory=TokenUsage,
         description="Consommation de tokens pour le tracking FinOps.",
     )
-    # Champs facultatifs pour la compatibilité descendante et le cache
     source: Optional[str] = Field(None, description="Source de la réponse : 'adk_agent', 'semantic_cache', 'error'…")
     session_id: Optional[str] = Field(None, description="Session ADK utilisée pour cette requête.")
     semantic_cache_hit: Optional[bool] = Field(None, description="True si la réponse a été servie depuis le cache sémantique.")
@@ -132,3 +167,44 @@ class A2AResponse(BaseModel):
             }
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# Tool metadata helper (introspection des tools ADK)
+# ---------------------------------------------------------------------------
+
+
+def get_tool_metadata(tools_list: list) -> list[dict]:
+    """Retourne les métadonnées d'introspection d'une liste de tools ADK.
+
+    Utilisé par le endpoint GET /mcp/registry pour exposer la liste des tools
+    disponibles avec leurs signatures et docstrings.
+
+    Args:
+        tools_list: Liste de callables (fonctions ou instances ADK).
+
+    Returns:
+        Liste de dicts {name, description, parameters}.
+    """
+    metadata = []
+    for tool in tools_list:
+        doc = inspect.getdoc(tool) or "No description available"
+        try:
+            sig = inspect.signature(tool)
+            params = [
+                {
+                    "name": name,
+                    "type": str(param.annotation) if param.annotation != inspect.Parameter.empty else "any",
+                    "default": str(param.default) if param.default != inspect.Parameter.empty else None,
+                    "required": param.default == inspect.Parameter.empty,
+                }
+                for name, param in sig.parameters.items()
+            ]
+        except (ValueError, TypeError):
+            params = []
+        metadata.append({
+            "name": getattr(tool, "__name__", str(tool)),
+            "description": doc,
+            "parameters": params,
+        })
+    return metadata

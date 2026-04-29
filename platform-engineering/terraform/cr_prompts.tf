@@ -66,6 +66,23 @@ resource "google_cloud_run_v2_service" "prompts_api" {
         value = "/api/prompts"
       }
       env {
+        name = "GOOGLE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.gemini_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "GEMINI_MODEL"
+        value = var.gemini_model
+      }
+      env {
+        name  = "GEMINI_PRO_MODEL"
+        value = var.gemini_pro_model
+      }
+      env {
         name  = "USE_IAM_AUTH"
         value = "true"
       }
@@ -75,7 +92,7 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/5"
       }
       env {
         name  = "TRACE_EXPORTER"
@@ -141,8 +158,8 @@ resource "google_cloud_run_v2_service" "prompts_api" {
       client,
       client_version,
       scaling,
-
-      template[0].containers[0].resources[0].limits["cpu"]
+      template[0].containers[0].resources[0].limits["cpu"],
+      template[0].containers[1].resources[0].limits["cpu"]
     ]
   }
 
@@ -162,6 +179,13 @@ resource "google_service_account" "prompts_sa" {
 resource "google_secret_manager_secret_iam_member" "prompts_jwt_access" {
   project   = data.google_secret_manager_secret.jwt_secret.project
   secret_id = data.google_secret_manager_secret.jwt_secret.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.prompts_sa.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "prompts_gemini_access" {
+  project   = data.google_secret_manager_secret.gemini_api_key.project
+  secret_id = data.google_secret_manager_secret.gemini_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.prompts_sa.email}"
 }

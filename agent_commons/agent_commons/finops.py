@@ -41,6 +41,7 @@ def log_tokens_to_bq(
     query: str,
     analytics_url: str | None = None,
     auth_header: str | None = None,
+    is_batch: bool = False,
 ) -> None:
     """Schedule a fire-and-forget async task to log AI consumption to BigQuery.
 
@@ -57,6 +58,7 @@ def log_tokens_to_bq(
         query:         First 100 chars of the user query (for BigQuery metadata).
         analytics_url: Base URL of analytics_mcp (defaults to ANALYTICS_MCP_URL env var).
         auth_header:   ``Authorization: Bearer <token>`` string for OTel propagation.
+        is_batch:      True si l'appel a été réalisé via Vertex AI Batch.
     """
     if input_tokens <= 0 and output_tokens <= 0:
         return
@@ -77,6 +79,7 @@ def log_tokens_to_bq(
             "model": model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "is_batch": is_batch,
             "metadata": {"query": query[:100]},
         },
     }

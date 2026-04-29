@@ -71,6 +71,12 @@ resource "google_bigquery_table" "ai_usage" {
     "type": "JSON",
     "mode": "NULLABLE",
     "description": "Données additionnelles au format JSON"
+  },
+  {
+    "name": "is_batch",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Indique si l'appel a ete realise via Vertex AI Batch"
   }
 ]
 EOF
@@ -87,4 +93,34 @@ resource "google_project_iam_member" "analytics_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.analytics_sa.email}"
+}
+
+resource "google_bigquery_table" "model_pricing" {
+  dataset_id = google_bigquery_dataset.finops.dataset_id
+  table_id   = "model_pricing"
+
+  deletion_protection = false
+
+  schema = <<EOF
+[
+  {
+    "name": "model_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nom exact du modele (ex: gemini-3.1-pro-preview)"
+  },
+  {
+    "name": "input_cost_per_token",
+    "type": "FLOAT",
+    "mode": "REQUIRED",
+    "description": "Cout unitaire d'un token en entree"
+  },
+  {
+    "name": "output_cost_per_token",
+    "type": "FLOAT",
+    "mode": "REQUIRED",
+    "description": "Cout unitaire d'un token en sortie"
+  }
+]
+EOF
 }

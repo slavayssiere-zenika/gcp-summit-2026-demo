@@ -206,16 +206,3 @@ async def global_exception_handler(request: Request, exc: Exception):
     except Exception as fallback_e:
         logging.error(f"Failed to process exception reporting: {fallback_e}")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
-
-        
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    
-    if token:
-        import asyncio
-        await report_exception_to_prompts_api("prompts_api", error_msg, trace_context, token)
-    
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})

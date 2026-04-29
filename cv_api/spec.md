@@ -67,12 +67,33 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/user/{user_id}/missions` : Get User Missions
 - **GET** `/user/{user_id}/details` : Get User Cv Details
 - **GET** `/ranking/experience` : Get Consultants Experience Ranking
+- **POST** `/recalculate_tree/step` : Recalculate Competencies Tree Step
 - **POST** `/recalculate_tree` : Recalculate Competencies Tree
 - **GET** `/recalculate_tree/status` : Get Recalculate Tree Status
+- **POST** `/reindex-embeddings` : Reindex Embeddings
+- **GET** `/user/{user_id}/similar` : Find Similar Consultants
+- **POST** `/search/multi-criteria` : Search Candidates Multi Criteria
+- **GET** `/user/{user_id}/rag-snippet` : Get Rag Snippet
 - **GET** `/reanalyze/status` : Get Reanalyze Status
+- **POST** `/search/mission-match` : Match Mission To Candidates
+- **GET** `/analytics/skills-coverage` : Get Skills Coverage
 - **POST** `/reanalyze` : Reanalyze Cvs
 - **POST** `/internal/users/merge` : Merge Users
+- **POST** `/recalculate_tree/batch/start` : Lance le processus batch asynchrone (Map)
+- **POST** `/recalculate_tree/batch/check` : Vérifie l'état du batch et avance la machine à états
+- **GET** `/recalculate_tree/batch/list` : Liste l'historique des jobs batch de taxonomie
+- **DELETE** `/recalculate_tree/batch/{job_id}` : Supprime un job batch GCP de l'historique
+- **POST** `/recalculate_tree/cancel` : Annule le traitement interactif en cours
+- **POST** `/recalculate_tree/batch/cancel` : Annule le batch en cours
+- **POST** `/recalculate_tree/batch/recover` : Tente de récupérer un batch bloqué en erreur
+- **POST** `/recalculate_tree/batch/reset` : Réinitialise forcé l'état Redis du batch (déblocage d'urgence)
+- **POST** `/bulk-reanalyse/start` : Start Bulk Reanalyse
+- **GET** `/bulk-reanalyse/status` : Get Bulk Reanalyse Status
+- **POST** `/bulk-reanalyse/cancel` : Cancel Bulk Reanalyse
+- **POST** `/bulk-reanalyse/reset` : Reset Bulk Reanalyse
+- **GET** `/bulk-reanalyse/data-quality` : Get Data Quality Report
+- **POST** `/bulk-reanalyse/retry-apply` : Retry Bulk Apply
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp

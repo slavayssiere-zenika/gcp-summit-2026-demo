@@ -120,7 +120,7 @@ async def test_pubsub_handler_nominal_success():
     mock_result.user_id = 42
     
     with (
-        patch("src.cvs.router._process_cv_core", new=AsyncMock(return_value=mock_result)),
+        patch("src.cvs.router.process_cv_core", new=AsyncMock(return_value=mock_result)),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
@@ -151,7 +151,7 @@ async def test_pubsub_handler_pipeline_failure_triggers_500():
     from main import app
     
     with (
-        patch("src.cvs.router._process_cv_core", new=AsyncMock(side_effect=HTTPException(status_code=500, detail="Gemini timeout"))),
+        patch("src.cvs.router.process_cv_core", new=AsyncMock(side_effect=HTTPException(status_code=500, detail="Gemini timeout"))),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
@@ -177,7 +177,7 @@ async def test_pubsub_handler_non_cv_returns_200_ack():
     from main import app
     
     with (
-        patch("src.cvs.router._process_cv_core", new=AsyncMock(side_effect=HTTPException(status_code=400, detail="Not a CV - LLM Parsing failed"))),
+        patch("src.cvs.router.process_cv_core", new=AsyncMock(side_effect=HTTPException(status_code=400, detail="Not a CV - LLM Parsing failed"))),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):
@@ -218,7 +218,7 @@ async def test_pubsub_handler_oidc_exchange_success():
     mock_patch_response.status_code = 200
 
     with (
-        patch("src.cvs.router._process_cv_core", new=AsyncMock(return_value=mock_result)),
+        patch("src.cvs.router.process_cv_core", new=AsyncMock(return_value=mock_result)),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.cvs.router.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
     ):

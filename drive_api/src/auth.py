@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException, status, Request
 import os
 import logging
+from typing import Optional
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from google.auth import jwt as google_jwt
@@ -16,7 +17,7 @@ ALGORITHM = "HS256"
 
 security = HTTPBearer(auto_error=False)
 
-from typing import Optional
+
 
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:

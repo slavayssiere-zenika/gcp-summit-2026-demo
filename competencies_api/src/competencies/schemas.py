@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
@@ -63,12 +63,28 @@ class MergeInstruction(BaseModel):
     merge_from: List[str]   # Noms des doublons à absorber (ex: ["python", "Python3"])
 
 
+class SweepAssignment(BaseModel):
+    """Assignation d'une compétence orpheline vers un pilier existant.
+    
+    Générée par le LLM lors de la phase Sweep du recalcul de la taxonomie.
+    Permet de reclassifier les compétences absentes du Reduce dans un pilier existant
+    plutôt que de les laisser tomber dans les 'Archives / Non classées'.
+    """
+    competency: str  # Nom de la compétence orpheline
+    pillar: str      # Nom du pilier cible (doit exister dans le tree)
+
+
 class TreeImportRequest(BaseModel):
     tree: Union[Dict[str, Any], List[Any]]
     merges: Optional[List[MergeInstruction]] = []
     """Liste des fusions sémantiques à exécuter après l'upsert de l'arbre.
     Chaque fusion re-assigne user_competency + evaluations vers le canonique
     puis supprime les doublons, de façon atomique dans la même transaction.
+    """
+    sweep_assignments: Optional[List[SweepAssignment]] = []
+    """Assignments du Sweep : compétences orphelines à rattacher à un pilier.
+    Traitées AVANT la gestion des orphelins (Archives) pour minimiser les
+    compétences non classées.
     """
 
 
@@ -110,15 +126,47 @@ class UserScoreRequest(BaseModel):
     comment: Optional[str] = Field(None, max_length=500)
 
 class BatchEvaluationRequest(BaseModel):
+    """Évaluations d'un consultant pour plusieurs compétences.
+    Accepte 'user_id' (int) ou 'user_ids' (list → premier élément utilisé).
+    Accepte 'competency_ids' (list).
+    """
     user_id: int
     competency_ids: List[int]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_fields(cls, data: dict) -> dict:
+        # Tolérance : user_ids=[641] → user_id=641
+        if "user_id" not in data and "user_ids" in data:
+            ids = data["user_ids"]
+            data["user_id"] = ids[0] if isinstance(ids, list) and ids else ids
+        # Tolérance : competency_id=126 → competency_ids=[126]
+        if "competency_ids" not in data and "competency_id" in data:
+            data["competency_ids"] = [data["competency_id"]]
+        return data
 
 class BatchEvaluationResponse(BaseModel):
     evaluations: Dict[int, CompetencyEvaluationResponse]
 
 class BatchUsersEvaluationRequest(BaseModel):
+    """Évaluations de plusieurs consultants pour une compétence.
+    Accepte 'competency_id' (int) ou 'competency_ids' (list → premier élément utilisé).
+    Accepte 'user_ids' (list).
+    """
     competency_id: int
     user_ids: List[int]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_fields(cls, data: dict) -> dict:
+        # Tolérance : competency_ids=[126] → competency_id=126
+        if "competency_id" not in data and "competency_ids" in data:
+            ids = data["competency_ids"]
+            data["competency_id"] = ids[0] if isinstance(ids, list) and ids else ids
+        # Tolérance : user_id=641 → user_ids=[641]
+        if "user_ids" not in data and "user_id" in data:
+            data["user_ids"] = [data["user_id"]]
+        return data
 
 
 class AiScoreAllResponse(BaseModel):

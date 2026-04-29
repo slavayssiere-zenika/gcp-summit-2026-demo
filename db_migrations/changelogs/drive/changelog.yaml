@@ -219,3 +219,38 @@ databaseChangeLog:
             tableName: "drive_folders"
             columnName: "excluded_folders"
 
+  - changeSet:
+      id: "12"
+      author: "antigravity"
+      comment: "Ajout colonnes de timing pour les KPIs data quality de l'ingestion Drive (queued_at, imported_at, processing_duration_ms)"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "queued_at"
+                  type: "datetime"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "imported_at"
+                  type: "datetime"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "processing_duration_ms"
+                  type: "integer"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "queued_at"
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "imported_at"
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "processing_duration_ms"
+
+

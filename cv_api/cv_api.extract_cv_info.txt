@@ -8,7 +8,7 @@ The JSON object must contain the following top-level keys:
 4.  **"email"**: (string) Extract the ACTUAL personal email address found in the resume. If no email is explicitly written in the text, return `null`. Do not make up or construct fake emails.
 5.  **"summary"**: (string) A synthesized professional summary of the candidate in 2-3 sentences max.
 6.  **"current_role"**: (string) The candidate's current or last professional title.
-7.  **"years_of_experience"**: (integer) The derived total professional experience in years. If the exact number cannot be confidently calculated from the dates, return `null` instead of guessing.
+7.  **"years_of_experience"**: (integer) The derived total professional experience in years. If the exact number cannot be confidently calculated from the dates, please provide a reasonable estimation based on the overall career timeline. Do not return null if an estimation is possible.
 8.  **"competencies"**: (array of objects) A list of all identified technical and methodological skills. Each object in the array must contain:
     *   **"name"**: (string) The specific competency name. **TAXONOMY NORMALIZATION IS MANDATORY**: The existing taxonomy is provided below. If the competency you identify matches or is semantically equivalent to an entry in this taxonomy (or one of its known aliases), you MUST use the EXACT canonical name from the taxonomy — not the variant written in the CV. Examples: CV says "Python3" → taxonomy has "Python" → output "Python". CV says "K8s" → taxonomy has "Kubernetes" → output "Kubernetes". CV says "Framework Python" → taxonomy has "Python" → output "Python". Only use a name NOT in the taxonomy if the competency is genuinely absent. **Use EXCLUSIVELY the singular form** (e.g., 'Service', 'Container', 'System').
     *   **"parent"**: (string) A generic category for the competency (e.g., 'Programming Languages').
@@ -34,6 +34,12 @@ The JSON object must contain the following top-level keys:
 
 10. **"is_anonymous"**: (boolean) Detect if the CV is anonymous. A CV is anonymous if the real name is replaced by a trigram (e.g., ABC, XYZ) or if no identifying name is provided. Set to true if anonymous, false otherwise.
 11. **"trigram"**: (string) If "is_anonymous" is true and a 3-letter trigram (e.g., ABC) is found instead of a name, extract it. Otherwise, return `null`.
+12. **"educations"**: (array of objects) Academic background. Each object must contain:
+    *   **"degree"**: (string) The degree, diploma or certification obtained (e.g., "Master Informatique", "Titre Professionnel Développeur", "Licence Pro"). If not found, use `null`.
+    *   **"school"**: (string) The institution or school name (e.g., "INSA Lyon", "AFPA Brest", "EPITA"). If not found, use `null`.
 
 ** Strict Output Requirements:**
-*   Output the JSON object and ensure the JSON is valid. Do not include conversational text.
+*   Output ONLY the JSON object with the exact keys listed above. Do NOT use any other key names.
+*   Do NOT include markdown code fences (```json), comments, or any text outside the JSON object.
+*   Every field listed in the schema MUST be present in the output, even if its value is `null` or an empty array `[]`.
+*   Ensure the JSON is valid. Do not include conversational text.

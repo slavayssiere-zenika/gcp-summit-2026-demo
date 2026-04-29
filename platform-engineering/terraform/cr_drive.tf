@@ -87,7 +87,11 @@ resource "google_cloud_run_v2_service" "drive_api" {
       }
       env {
         name  = "USERS_API_URL"
-        value = "http://api.internal.zenika/api/users/"
+        value = "http://api.internal.zenika/api/users"
+      }
+      env {
+        name  = "PROMPTS_API_URL"
+        value = "http://api.internal.zenika/api/prompts"
       }
       env {
         name  = "PUBSUB_CV_IMPORT_TOPIC"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
-import { Briefcase, ChevronLeft, ArrowRight, Loader2, User as UserIcon, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Target, History, ChevronDown, XCircle, Send, Trophy, TrendingDown, Ban, FileText } from 'lucide-vue-next'
+import { Briefcase, ChevronLeft, ArrowRight, Loader2, User as UserIcon, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Target, History, ChevronDown, XCircle, Send, Trophy, TrendingDown, Ban, FileText, Trash2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
 import { useRouter } from 'vue-router'
 import ConsultantProfile from '@/components/ConsultantProfile.vue'
@@ -142,6 +142,21 @@ const reanalyzeMission = async () => {
     alert("Impossible de relancer l'analyse (Erreur serveur)")
     loading.value = false
     pollingTask.value = false
+  }
+}
+
+const deleteMission = async () => {
+  if (!mission.value) return
+  if (!confirm('Voulez-vous vraiment supprimer cette mission définitivement ?')) return
+  
+  loading.value = true
+  try {
+    await axios.delete(`/api/missions/missions/${mission.value.id}`)
+    router.replace('/missions')
+  } catch (error: any) {
+    console.error('Erreur suppression:', error)
+    alert('Erreur lors de la suppression : ' + (error.response?.data?.detail || error.message))
+    loading.value = false
   }
 }
 
@@ -304,6 +319,11 @@ const statusText = computed(() => {
           <!-- Audit history -->
           <button class="btn-history" @click="openHistory" aria-label="Historique des statuts">
             <History size="15" /> Historique
+          </button>
+
+          <!-- Delete mission -->
+          <button v-if="canUpdateStatus" class="btn-delete" @click="deleteMission" aria-label="Supprimer la mission" :disabled="loading">
+            <Trash2 size="15" /> Supprimer
           </button>
 
           <!-- Status dropdown (commercial / admin only) -->
@@ -528,6 +548,29 @@ const statusText = computed(() => {
 }
 .back-nav:hover {
   color: var(--zenika-red);
+}
+
+.btn-delete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #fca5a5;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-delete:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+.btn-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .page-header {
@@ -965,7 +1008,7 @@ h1 { font-size: 1.8rem; font-weight: 800; color: #1a1a1a; margin-bottom: 4px; }
   font-size: 0.9rem;
   resize: vertical;
 }
-.modal-card textarea:focus { outline: none; border-color: var(--zenika-red); box-shadow: 0 0 0 3px rgba(227,25,55,0.1); }
+.modal-card textarea:focus { outline: none; border-color: var(--zenika-red); box-shadow: 0 0 0 3px rgba(227,25,55,0.25); }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.25rem; }
 .btn-cancel  { background: #f1f5f9; color: #64748b; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; }
 .btn-cancel:hover { background: #e2e8f0; }

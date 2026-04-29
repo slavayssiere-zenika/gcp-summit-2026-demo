@@ -16,7 +16,7 @@ from google.adk.agents import Agent
 from google.adk.runners import Runner
 
 from agent_commons.mcp_client import MCPHttpClient, auth_header_var
-from agent_commons.session import RedisSessionService
+from agent_commons.session import RedisSessionService, store_hr_candidates_pool, get_hr_candidates_pool
 from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.runner import run_agent_and_collect
@@ -41,6 +41,10 @@ CANDIDATE_SEARCH_TOOLS: set[str] = {
     "search_users",
     "list_users",
     "get_users_by_tag",
+    # Sprint A — nouveaux outils RAG (guardrail COM-006 s'applique aussi)
+    "find_similar_consultants",
+    "search_candidates_multi_criteria",
+    "match_mission_to_candidates",
 }
 
 # ---------------------------------------------------------------------------
@@ -105,7 +109,8 @@ async def create_agent(session_id: str | None = None) -> Agent:
     except Exception as e:
         app_logger.warning("Error fetching system prompt for HR: %s", e)
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
+    model = os.getenv("GEMINI_HR_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
     tools_loaded = await get_cached_tools(_HR_CLIENTS_MAP, "[HR]", ttl=300, _cache=_HR_TOOLS_CACHE)
     HR_TOOLS = tools_loaded
 
@@ -159,6 +164,22 @@ async def run_agent_query(
     # COM-006 : accumule les résultats des outils de recherche de candidats
     candidate_search_results: list[dict] = []
 
+    # B1c — Injecter le pool de candidats de la session précédente dans l'état initial
+    # Permet au LLM d'exploiter "parmi ceux trouvés" sans refaire un appel RAG
+    prior_pool = get_hr_candidates_pool(session_service.r, session_id or ephemeral_session_id)
+    if prior_pool:
+        app_logger.info("[HR] Pool de session récupéré : %d candidats", len(prior_pool))
+        try:
+            # Injecter dans l'état de la session ADK (app_state accessible par l'agent)
+            s = await session_service.get_session(
+                app_name="zenika_hr_assistant", user_id=user_id, session_id=ephemeral_session_id
+            )
+            if s:
+                s.state["candidates_pool"] = prior_pool
+                session_service._save_all(ephemeral_session_id)
+        except Exception as pool_err:
+            app_logger.warning("[HR] Injection pool session échouée (non bloquant): %s", pool_err)
+
     # Run the ADK loop
     response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data = (
         await run_agent_and_collect(runner, user_id, ephemeral_session_id, query, "hr", "[HR]")
@@ -211,6 +232,24 @@ async def run_agent_query(
         last_tool_data = None
     elif last_tool_data_override is not None:
         last_tool_data = last_tool_data_override
+
+    # --- B1c : Persistance du pool de candidats dans Redis (TTL 1h) ---
+    # On collecte tous les candidats trouvés par les tools RAG pour les requêtes de suivi
+    if candidate_search_results:
+        flat_candidates: list[dict] = []
+        for r in candidate_search_results:
+            raw = r.get("result", [])
+            if isinstance(raw, list):
+                flat_candidates.extend(raw)
+            elif isinstance(raw, dict) and raw:
+                flat_candidates.append(raw)
+        if flat_candidates:
+            store_hr_candidates_pool(
+                session_service.r,
+                session_id or ephemeral_session_id,
+                flat_candidates
+            )
+            app_logger.info("[HR] Pool de %d candidats persisté en session Redis.", len(flat_candidates))
 
     # --- Guardrail 3 : invention d'ID ---
     steps = check_id_invention_guardrail(steps, "[HR]")

@@ -19,26 +19,26 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.17"
-agent_hr_api_version:       "v0.0.78"
-agent_ops_api_version:      "v0.0.51"
-agent_missions_api_version: "v0.1.25"
-users_api_version:          "v0.0.53"
-items_api_version:          "v0.0.39"
-competencies_api_version:   "v0.1.30"
-cv_api_version:             "v0.0.105"
-prompts_api_version:        "v0.0.34"
-drive_api_version:          "v0.0.86"
-analytics_mcp_version:      "v0.0.75"
-monitoring_mcp_version:     "v0.0.73"
-db_migrations_version:      "v0.0.22"
+agent_router_api_version:   "v0.1.23"
+agent_hr_api_version:       "v0.0.85"
+agent_ops_api_version:      "v0.0.52"
+agent_missions_api_version: "v0.1.28"
+users_api_version:          "v0.0.62"
+items_api_version:          "v0.0.46"
+competencies_api_version:   "v0.1.55"
+cv_api_version:             "v0.0.192"
+prompts_api_version:        "v0.0.50"
+drive_api_version:          "v0.0.105"
+analytics_mcp_version:      "v0.0.82"
+monitoring_mcp_version:     "v0.0.74"
+db_migrations_version:      "v0.0.27"
 db_init_version:            "v0.1.1"
-missions_api_version:       "v0.0.63"
-frontend_version:           "v0.0.145"
+missions_api_version:       "v0.0.70"
+frontend_version:           "v0.0.196"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 0
-cloudrun_max_instances: 5
+cloudrun_max_instances: 50
 
 # ── AlloyDB ───────────────────────────────────────────────
 alloydb_cpu: 2   # 2 vCPU (downscale optimisation coûts)
@@ -50,9 +50,16 @@ waf_rate_limit: 10000
 admin_user:               "sebastien.lavayssiere@zenika.com"
 finops_anomaly_threshold: 500000
 
-# ── IA / Modèles ──────────────────────────────────────────
-gemini_model:           "gemini-3.1-flash-lite-preview"
-gemini_embedding_model: "gemini-embedding-001"   # SEC-F06 Semantic Cache
+# ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
+# Chaque agent dispose de son propre modèle pour optimiser coût/qualité.
+gemini_router_model:       "gemini-3.1-pro-preview"         # Orchestrateur : raisonnement complexe
+gemini_hr_model:           "gemini-3.1-flash-lite-preview"  # RH : RAG + MCP
+gemini_ops_model:          "gemini-3.1-flash-lite-preview"  # Ops : SQL + logs
+gemini_missions_model:     "gemini-3.1-flash-lite-preview"  # Missions : matching staffing
+gemini_cv_model:           "gemini-3.1-flash-lite-preview"  # CV API : extraction JSON contrainte
+gemini_pro_model:          "gemini-2.5-pro"                 # Taxonomy Reduce (Vertex AI Batch — ID stable requis)
+gemini_model:              "gemini-3.1-flash-lite-preview"  # [LEGACY] fallback uniquement
+gemini_embedding_model:    "gemini-embedding-001"           # SEC-F06 Semantic Cache
 
 # ── DNS additionnels (prd uniquement) ─────────────────────
 # La zone gen-skillz.znk.io est persistante et déléguée depuis

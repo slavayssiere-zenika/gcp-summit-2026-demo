@@ -78,7 +78,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/4"
       }
       env {
         name  = "TRACE_EXPORTER"
@@ -120,6 +120,14 @@ resource "google_cloud_run_v2_service" "cv_api" {
         }
       }
       env {
+        name  = "GEMINI_CV_MODEL"
+        value = var.gemini_cv_model
+      }
+      env {
+        name  = "GEMINI_PRO_MODEL"
+        value = var.gemini_pro_model
+      }
+      env {
         name  = "PROMPTS_API_URL"
         value = "http://api.internal.zenika/api/prompts/"
       }
@@ -153,6 +161,39 @@ resource "google_cloud_run_v2_service" "cv_api" {
       env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
+      }
+      env {
+        name  = "VERTEX_LOCATION"
+        value = var.region
+      }
+      env {
+        name  = "BATCH_GCS_BUCKET"
+        value = google_storage_bucket.cv_batch.name
+      }
+      env {
+        name  = "GEMINI_EMBEDDING_MODEL"
+        value = var.gemini_embedding_model
+      }
+      env {
+        name  = "BULK_APPLY_SEMAPHORE"
+        value = var.bulk_apply_semaphore
+      }
+      env {
+        name  = "BULK_EMBED_SEMAPHORE"
+        value = var.bulk_embed_semaphore
+      }
+      env {
+        # Utilisé par _scale_bulk_dependencies pour construire les noms de services Cloud Run.
+        # Format attendu : le workspace Terraform (ex: "prd", "dev", "uat").
+        name  = "CLOUDRUN_WORKSPACE"
+        value = terraform.workspace
+      }
+      env {
+        # Min instances à injecter sur competencies-api et items-api pendant la phase APPLY.
+        # Défaut 1 (suffisant pour BULK_APPLY_SEMAPHORE≤10, pool DB=30 conn/instance).
+        # Monter à 2 si BULK_APPLY_SEMAPHORE > 10 pour absorber le cold-start burst.
+        name  = "BULK_SCALE_MIN_INSTANCES"
+        value = var.bulk_scale_min_instances
       }
     }
 
@@ -332,6 +373,29 @@ resource "google_secret_manager_secret_iam_member" "cv_gemini_access" {
   secret_id = data.google_secret_manager_secret.gemini_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cv_sa.email}"
+}
+
+# Vertex AI Batch Prediction : cv_sa doit pouvoir soumettre des jobs Batch
+resource "google_project_iam_member" "cv_vertex_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
+}
+
+# GCS : cv_sa doit lire/écrire les JSONL I/O du bucket batch taxonomie
+resource "google_storage_bucket_iam_member" "cv_batch_storage" {
+  bucket = google_storage_bucket.cv_batch.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cv_sa.email}"
+}
+
+# Cloud Run Admin API : cv_sa peut patcher min_instances sur les services cibles
+# pendant la phase APPLY du pipeline bulk-reanalyse (scale-up / scale-down dynamique).
+# roles/run.developer permet run.services.get + run.services.update sans accès admin complet.
+resource "google_project_iam_member" "cv_run_developer" {
+  project = var.project_id
+  role    = "roles/run.developer"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
 }
 
 # ==============================================================

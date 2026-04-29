@@ -370,7 +370,7 @@ label { font-weight: 600; color: #333; }
   background: #fdfdfd; font-size: 15px; transition: all 0.2s; color: #1A1A1A;
   box-sizing: border-box;
 }
-.glass-input:focus { outline: none; border-color: #E31937; background: #fff; box-shadow: 0 0 0 4px rgba(227,25,55,0.1); }
+.glass-input:focus { outline: none; border-color: #E31937; background: #fff; box-shadow: 0 0 0 4px rgba(227,25,55,0.25); }
 .glass-input:disabled { opacity: 0.6; cursor: not-allowed; }
 .hint { color: #777; font-size: 13px; }
 

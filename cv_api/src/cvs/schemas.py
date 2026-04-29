@@ -24,6 +24,10 @@ class ExtractedMission(BaseModel):
     competencies: List[str]
     is_sensitive: Optional[bool] = False
 
+class ExtractedEducation(BaseModel):
+    degree: Optional[str] = None
+    school: Optional[str] = None
+
 class ExtractedProfile(BaseModel):
     is_cv: bool
     first_name: Optional[str] = None
@@ -34,6 +38,7 @@ class ExtractedProfile(BaseModel):
     years_of_experience: Optional[int] = None
     competencies: List[ExtractedCompetency]
     missions: List[ExtractedMission]
+    educations: List[ExtractedEducation] = []
 
 class CVImportStep(BaseModel):
     """Représente une étape du pipeline d'ingestion CV avec son statut et sa durée."""
@@ -55,6 +60,7 @@ class SearchCandidateRequest(BaseModel):
     query: str
     limit: int = 5
     skills: Optional[List[str]] = None
+    agency: Optional[str] = None
 
 class SearchCandidateResponse(BaseModel):
     user_id: int
@@ -70,6 +76,9 @@ class CVProfileResponse(BaseModel):
     source_tag: Optional[str] = None
     imported_by_id: Optional[int] = None
     is_anonymous: bool = False
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    username: Optional[str] = None
 
 class CVFullProfileResponse(BaseModel):
     user_id: int
@@ -79,6 +88,7 @@ class CVFullProfileResponse(BaseModel):
     years_of_experience: Optional[int] = None
     competencies_keywords: List[str] = []
     missions: List[ExtractedMission] = []
+    educations: List[ExtractedEducation] = []
     is_anonymous: bool = False
 
 class UserMergeRequest(BaseModel):
@@ -91,4 +101,5 @@ class RankedExperienceResponse(BaseModel):
     full_name: Optional[str] = None
     email: Optional[str] = None
     current_role: Optional[str] = None
+    agency: Optional[str] = None
     is_anonymous: bool = False

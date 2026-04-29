@@ -74,3 +74,82 @@ resource "google_cloud_scheduler_job" "drive_sync_job" {
     }
   }
 }
+
+# ==============================================================
+# Taxonomie - Mode Asynchrone (Batch)
+# ==============================================================
+resource "google_cloud_scheduler_job" "taxonomy_batch_weekly_trigger" {
+  name             = "taxonomy-batch-trigger-${terraform.workspace}"
+  description      = "Déclenchement hebdomadaire (samedi 12h00) du recalcul complet de l'arbre de compétences via Gemini Batch API."
+  schedule         = "0 12 * * 6" # Chaque samedi à 12h00 (heure de Paris)
+  time_zone        = "Europe/Paris"
+  attempt_deadline = "320s"
+  region           = var.region
+  project          = var.project_id
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.cv_api.uri}/recalculate_tree/batch/start"
+
+    oidc_token {
+      service_account_email = google_service_account.cv_sa.email
+      audience              = google_cloud_run_v2_service.cv_api.uri
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "taxonomy_batch_polling" {
+  name             = "taxonomy-batch-polling-${terraform.workspace}"
+  description      = "Polling régulier pour la machine à état du recalcul asynchrone (vérifie les jobs batch en cours)."
+  schedule         = "*/15 * * * *"
+  time_zone        = "Europe/Paris"
+  attempt_deadline = "320s"
+  region           = var.region
+  project          = var.project_id
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.cv_api.uri}/recalculate_tree/batch/check"
+
+    oidc_token {
+      service_account_email = google_service_account.cv_sa.email
+      audience              = google_cloud_run_v2_service.cv_api.uri
+    }
+  }
+}
+
+# ==============================================================
+# Scoring IA Compétences — Keepalive Vertex Batch (scale-to-zero résilient)
+# Toutes les 2 min : poll l'état du job Vertex en cours.
+# Si Cloud Run était mort (scale-to-zero), le cold start reprend
+# l'apply automatiquement grâce au batch_job_id stocké en Redis.
+# No-op si aucun batch en cours (idle → retour 200 immédiat).
+# ==============================================================
+resource "google_cloud_scheduler_job" "scoring_batch_polling" {
+  name             = "scoring-batch-polling-${terraform.workspace}"
+  description      = "Keepalive résilient au scale-to-zero : poll Vertex Batch scoring toutes les 2 min et déclenche l'apply dès JOB_STATE_SUCCEEDED. Activé/pausé dynamiquement par le pipeline."
+  schedule         = "*/2 * * * *"
+  time_zone        = "Europe/Paris"
+  attempt_deadline = "120s"
+  region           = var.region
+  project          = var.project_id
+
+  # Créé en état pausé — activé/désactivé dynamiquement par le pipeline via Cloud Scheduler API.
+  # lifecycle.ignore_changes garantit que terraform apply ne réactive jamais le job
+  # si le pipeline l'a mis en pause entre deux déploiements (idempotence runtime).
+  paused = true
+
+  lifecycle {
+    ignore_changes = [paused]
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.competencies_api.uri}/api/competencies/bulk-scoring-all/resume"
+
+    oidc_token {
+      service_account_email = google_service_account.competencies_sa.email
+      audience              = google_cloud_run_v2_service.competencies_api.uri
+    }
+  }
+}

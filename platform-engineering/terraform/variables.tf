@@ -35,13 +35,34 @@ variable "admin_user" {
 }
 
 variable "cloudrun_min_instances" {
-  description = "Nombre minimum d'instances Cloud Run"
+  description = "Nombre minimum d'instances Cloud Run (global)"
   type        = number
 }
 
 variable "cloudrun_max_instances" {
   description = "Nombre maximum d'instances Cloud Run"
   type        = number
+}
+
+# =========================================================
+# Scaling per-service pour le pipeline Bulk Reanalyse CVs
+# Ces APIs reçoivent jusqu'à 15 requêtes simultanées depuis
+# cv_api pendant la phase APPLY (BULK_APPLY_SEMAPHORE=5).
+# En prod : min_instances=0 globalement (optimisation coûts),
+# mais ces services doivent être warm pour éviter les cold starts
+# (AlloyDB IAM auth ~15s) qui déclenchent des retries en cascade.
+# Valeur recommandée en prd : 1 (coût fixe : ~2 instances actives).
+# =========================================================
+variable "competencies_api_min_instances" {
+  description = "Min instances pour competencies_api. Override cloudrun_min_instances pendant le bulk reanalyse."
+  type        = number
+  default     = 1
+}
+
+variable "items_api_min_instances" {
+  description = "Min instances pour items_api. Override cloudrun_min_instances pendant le bulk reanalyse."
+  type        = number
+  default     = 1
 }
 
 variable "alloydb_cpu" {
@@ -130,10 +151,52 @@ variable "image_db_init" {
 }
 
 
+# =========================================================
+# Modèles Gemini — Configuration per-agent (AGENTS.md §1.4)
+# Chaque agent peut utiliser un modèle distinct pour optimiser
+# le coût FinOps et la qualité de raisonnement.
+# =========================================================
+
 variable "gemini_model" {
-  description = "Modèle Gemini par défaut à utiliser"
+  description = "[LEGACY] Modèle Gemini par défaut — utilisé uniquement comme fallback si la variable per-agent est absente."
   type        = string
   default     = "gemini-3.1-flash-lite-preview"
+}
+
+variable "gemini_router_model" {
+  description = "Modèle Gemini pour agent_router_api — orchestration complexe, raisonnement ambigu. Recommandé : gemini-3.1-pro-preview."
+  type        = string
+  default     = "gemini-3.1-pro-preview"
+}
+
+variable "gemini_hr_model" {
+  description = "Modèle Gemini pour agent_hr_api — RAG multi-outils, coaching CV. Recommandé : gemini-3.1-flash-lite-preview."
+  type        = string
+  default     = "gemini-3.1-flash-lite-preview"
+}
+
+variable "gemini_ops_model" {
+  description = "Modèle Gemini pour agent_ops_api — SQL BigQuery, logs Cloud. Recommandé : gemini-3.1-flash-lite-preview."
+  type        = string
+  default     = "gemini-3.1-flash-lite-preview"
+}
+
+variable "gemini_missions_model" {
+  description = "Modèle Gemini pour agent_missions_api — matching staffing. Recommandé : gemini-3.1-flash-lite-preview."
+  type        = string
+  default     = "gemini-3.1-flash-lite-preview"
+}
+
+variable "gemini_cv_model" {
+  description = "Modèle Gemini pour cv_api — extraction JSON contrainte (CV parsing + taxonomy). Recommandé : gemini-3.1-flash-lite-preview."
+  type        = string
+  default     = "gemini-3.1-flash-lite-preview"
+}
+
+variable "gemini_pro_model" {
+  description = "Modèle Gemini Pro (pour les tâches complexes comme Taxonomy Reduce)"
+  type        = string
+  default     = "gemini-3.1-pro-preview"
 }
 
 # Les objectifs SLO (disponibilité, latence) sont définis
@@ -169,6 +232,29 @@ variable "gemini_embedding_model" {
   description = "Modèle Gemini Embedding pour le cache sémantique (agent_router_api)"
   type        = string
   default     = "gemini-embedding-001"
+}
+
+# =========================================================
+# Parallélisme du pipeline Bulk Reanalyse CVs
+# Contrôle la vitesse de la phase APPLY (post-Vertex AI Batch).
+# À ajuster selon le pool AlloyDB et les quotas Gemini Embedding.
+# =========================================================
+variable "bulk_apply_semaphore" {
+  description = "Nombre de CVs appliqués simultanément (phase APPLY du pipeline bulk-reanalyse). Défaut 5 pour AlloyDB pool_size=20."
+  type        = number
+  default     = 5
+}
+
+variable "bulk_embed_semaphore" {
+  description = "Nombre d'appels Gemini Embedding API simultanés lors du pré-calcul batch. Défaut 10 (conservative vs 600 QPM Vertex AI)."
+  type        = number
+  default     = 10
+}
+
+variable "bulk_scale_min_instances" {
+  description = "Min instances injectées sur competencies-api et items-api pendant la phase APPLY du bulk-reanalyse. Défaut 1 (suffit pour BULK_APPLY_SEMAPHORE≤10). Monter à 2 si SEMAPHORE>10."
+  type        = number
+  default     = 1
 }
 
 # =========================================================

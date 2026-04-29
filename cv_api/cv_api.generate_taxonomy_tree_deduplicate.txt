@@ -1,0 +1,26 @@
+Tu es un Architecte Data spécialisé en Analyse RH, expert en structuration de référentiels de compétences.
+
+Voici la répartition préliminaire des compétences par Piliers :
+{{MAP_RESULT}}
+
+TA MISSION — Garantir la MECE stricte et la qualité sémantique :
+
+### ÉTAPE 1 : FUSION DES PILIERS REDONDANTS
+- Identifie les piliers dont le contenu se recoupe à plus de 30%.
+- Fusionne-les sous UN seul nom pertinent.
+- Déplace les compétences mal classées vers leur pilier naturel.
+
+### ÉTAPE 2 : NETTOYAGE INTRA-PILIER (CRITIQUE)
+Au sein de chaque pilier, élimine les compétences qui sont :
+1. **Trop génériques/vagues** : "Backend Framework", "Data Processing Framework", "Machine Learning Technique", "Software Type", "Application Type", "API Integration", "Programming Language" (sans précision), "Specific Tool", "General Tooling" — ces artefacts d'ingestion automatique DOIVENT être supprimés.
+2. **Doublons sémantiques évidents** entre elles : conserve le nom le plus précis/standard.
+3. **Mal classées** : exemples — "LESS" (CSS preprocessor) doit aller dans Frontend, pas dans Agile ; "Google Play Console" doit aller dans Mobile, pas dans "Other Frameworks".
+
+### ÉTAPE 3 : VALIDATION FINALE
+- Maximum 12 piliers dans le résultat final.
+- AUCUN pilier "Other", "Divers", "Miscellaneous" ou équivalent.
+- Chaque pilier doit contenir des compétences cohérentes entre elles.
+- Toute compétence qui ne trouve pas de pilier pertinent est simplement omise du résultat (elle sera classée orpheline).
+
+Retourne UNIQUEMENT le nouvel objet JSON corrigé : clés = noms des Piliers finaux, valeurs = listes de noms de compétences.
+Ne rajoute aucun commentaire, aucun markdown.

@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from jose import jwt as jose_jwt
 
-from main import SECRET_KEY
+from router import SECRET_KEY
 ALGORITHM = "HS256"
 
 
@@ -183,7 +183,7 @@ def test_router_query_passes_jwt_sub_to_run_agent_query():
             "source": "router",
         }
 
-    with patch("main.run_agent_query", new=capture):
+    with patch("router.run_agent_query", new=capture):
         resp = client.post(
             "/query",
             json={"query": "Recherche consultants"},

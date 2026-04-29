@@ -663,8 +663,10 @@ def deploy(env, base_domain, project_id, config, force=False):
         except Exception:
             target_bucket = ""
         if not target_bucket:
-            print("[!] Could not retrieve frontend_bucket_name from terraform outputs.")
-            return
+            err_msg = "Could not retrieve frontend_bucket_name from terraform outputs."
+            print(f"[!] {err_msg}")
+            generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "terraform"])
+            sys.exit(1)
 
         SOURCE_ARCHIVES_BUCKET = "z-gcp-summit-frontend"
 
@@ -672,101 +674,106 @@ def deploy(env, base_domain, project_id, config, force=False):
         print(f"[*] Looking for the latest archive in gs://{SOURCE_ARCHIVES_BUCKET}/...")
         raw_ls = subprocess.run(["gcloud", "storage", "ls", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
         if raw_ls.returncode != 0:
-            print(f"[!] Failed to list gs://{SOURCE_ARCHIVES_BUCKET}/")
-            return
+            err_msg = f"Failed to list gs://{SOURCE_ARCHIVES_BUCKET}/"
+            print(f"[!] {err_msg}")
+            generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "gcloud"])
+            sys.exit(1)
             
         lines = [l.strip() for l in raw_ls.stdout.split('\n') if l.strip()]
         urls = [line for line in lines if line.startswith("gs://")]
         if not urls:
             print(f"[*] No archives found in gs://{SOURCE_ARCHIVES_BUCKET}/. Skipping frontend sync.")
-            return
+        else:
+            # Sort by filename
+            urls.sort()
+            latest_archive_url = urls[-1]
             
-        # Sort by filename
-        urls.sort()
-        latest_archive_url = urls[-1]
-        
-        print(f"[*] Latest archive identified: {latest_archive_url}")
-        
-        # 3. Télécharger et extraire
-        with tempfile.TemporaryDirectory() as tmpdir:
-            archive_path = os.path.join(tmpdir, "archive")
-            print(f"[*] Downloading {latest_archive_url}...")
-            subprocess.run(["gcloud", "storage", "cp", latest_archive_url, archive_path], check=True)
+            print(f"[*] Latest archive identified: {latest_archive_url}")
             
-            extract_dir = os.path.join(tmpdir, "extracted")
-            os.makedirs(extract_dir, exist_ok=True)
-            
-            print("[*] Extracting archive...")
-            try:
-                if latest_archive_url.endswith(".zip"):
-                    with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                        zip_ref.extractall(extract_dir)
-                else: # Fallback to tar
-                    with tarfile.open(archive_path, 'r:*') as tar_ref:
-                        tar_ref.extractall(extract_dir, filter='data')
-            except Exception as e:
-                print(f"[!] Extraction failed: {e}. Is it a valid tar/zip archive?")
-                return
+            # 3. Télécharger et extraire
+            with tempfile.TemporaryDirectory() as tmpdir:
+                archive_path = os.path.join(tmpdir, "archive")
+                print(f"[*] Downloading {latest_archive_url}...")
+                subprocess.run(["gcloud", "storage", "cp", latest_archive_url, archive_path], check=True)
                 
-            # Gérer la structure de l'archive (parfois zippée avec un dossier parent comme dist/ ou app/dist/)
-            # La stratégie infaillible est de localiser le dossier contenant 'index.html' le plus haut possible.
-            sync_dir = extract_dir
-            min_depth = 999
-            found_index = False
-            
-            for root, dirs, files in os.walk(extract_dir):
-                # On évite d'aller chercher dans d'éventuels node_modules
-                if "node_modules" in dirs:
-                    dirs.remove("node_modules")
+                extract_dir = os.path.join(tmpdir, "extracted")
+                os.makedirs(extract_dir, exist_ok=True)
+                
+                print("[*] Extracting archive...")
+                try:
+                    if latest_archive_url.endswith(".zip"):
+                        with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                            zip_ref.extractall(extract_dir)
+                    else: # Fallback to tar
+                        with tarfile.open(archive_path, 'r:*') as tar_ref:
+                            tar_ref.extractall(extract_dir, filter='data')
+                except Exception as e:
+                    err_msg = f"Extraction failed: {e}. Is it a valid tar/zip archive?"
+                    print(f"[!] {err_msg}")
+                    generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "extraction"])
+                    sys.exit(1)
                     
-                if "index.html" in files:
-                    depth = root.count(os.sep)
-                    if depth < min_depth:
-                        min_depth = depth
-                        sync_dir = root
-                        found_index = True
+                # Gérer la structure de l'archive (parfois zippée avec un dossier parent comme dist/ ou app/dist/)
+                # La stratégie infaillible est de localiser le dossier contenant 'index.html' le plus haut possible.
+                sync_dir = extract_dir
+                min_depth = 999
+                found_index = False
+                
+                for root, dirs, files in os.walk(extract_dir):
+                    # On évite d'aller chercher dans d'éventuels node_modules
+                    if "node_modules" in dirs:
+                        dirs.remove("node_modules")
+                        
+                    if "index.html" in files:
+                        depth = root.count(os.sep)
+                        if depth < min_depth:
+                            min_depth = depth
+                            sync_dir = root
+                            found_index = True
 
-            if found_index:
-                relative_path = sync_dir.replace(extract_dir, "").lstrip("/")
-                print(f"[*] Found frontend root directory at: '{relative_path}'")
-            else:
-                print(f"[!] Warning: No index.html found. Will sync root extracted folder.")
-                
-            # 4. Upload vers le bucket du Load Balancer
-            print(f"[*] Uploading assets to gs://{target_bucket}...")
-            
-            # Le chemin sync_dir doit être terminé par '/' pour rsync pour garantir 
-            # de ne copier que le contenu ("ce qu'il y a dans le dossier")
-            if not sync_dir.endswith("/"):
-                sync_dir += "/"
-                
-            rsync_res = subprocess.run(
-                ["gcloud", "storage", "rsync", sync_dir, f"gs://{target_bucket}/", "--recursive", "--delete-unmatched-destination-objects"],
-                capture_output=True, text=True
-            )
-            
-            if rsync_res.returncode != 0:
-                print(f"[!] Frontend sync failed:\\n{rsync_res.stderr}")
-                return
-                
-            print(rsync_res.stderr.strip()) # gsutil logs mostly to stderr
-            
-            output_lower = (rsync_res.stdout + rsync_res.stderr).lower()
-            
-            # Simple heuristic: if 'copying' or 'removing' is in the output, something was actually synced
-            if "copying " in output_lower or "removing " in output_lower:
-                print("[*] Frontend changes synced successfully!")
-                print("[*] Invalidating Cloud CDN Cache to serve the new Frontend immediately...")
-                res_cdn = subprocess.run([
-                    "gcloud", "compute", "url-maps", "invalidate-cdn-cache",
-                    f"lb-{env}", "--path", "/*", "--async", "--project", project_id
-                ], capture_output=True, text=True)
-                if res_cdn.returncode == 0:
-                    print("    -> Cache invalidation request submitted successfully.")
+                if found_index:
+                    relative_path = sync_dir.replace(extract_dir, "").lstrip("/")
+                    print(f"[*] Found frontend root directory at: '{relative_path}'")
                 else:
-                    print(f"    -> [!] Could not invalidate cache: {res_cdn.stderr.strip()}")
-            else:
-                print("[*] No frontend changes detected. CDN cache invalidation skipped.")
+                    print(f"[!] Warning: No index.html found. Will sync root extracted folder.")
+                    
+                # 4. Upload vers le bucket du Load Balancer
+                print(f"[*] Uploading assets to gs://{target_bucket}...")
+                
+                # Le chemin sync_dir doit être terminé par '/' pour rsync pour garantir 
+                # de ne copier que le contenu ("ce qu'il y a dans le dossier")
+                if not sync_dir.endswith("/"):
+                    sync_dir += "/"
+                    
+                rsync_res = subprocess.run(
+                    ["gcloud", "storage", "rsync", sync_dir, f"gs://{target_bucket}/", "--recursive", "--delete-unmatched-destination-objects"],
+                    capture_output=True, text=True
+                )
+                
+                if rsync_res.returncode != 0:
+                    err_msg = f"Frontend sync failed:\\n{rsync_res.stderr}"
+                    print(f"[!] {err_msg}")
+                    generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "rsync"])
+                    sys.exit(1)
+                    
+                print(rsync_res.stderr.strip()) # gsutil logs mostly to stderr
+                
+                output_lower = (rsync_res.stdout + rsync_res.stderr).lower()
+                
+                # Simple heuristic: if 'copying' or 'removing' is in the output, something was actually synced
+                if "copying " in output_lower or "removing " in output_lower:
+                    print("[*] Frontend changes synced successfully!")
+                    print("[*] Invalidating Cloud CDN Cache to serve the new Frontend immediately...")
+                    res_cdn = subprocess.run([
+                        "gcloud", "compute", "url-maps", "invalidate-cdn-cache",
+                        f"lb-{env}", "--path", "/*", "--async", "--project", project_id
+                    ], capture_output=True, text=True)
+                    if res_cdn.returncode == 0:
+                        print("    -> Cache invalidation request submitted successfully.")
+                    else:
+                        print(f"    -> [!] Could not invalidate cache: {res_cdn.stderr.strip()}")
+                else:
+                    print("[*] No frontend changes detected. CDN cache invalidation skipped.")
 
             
         print("\n=======================================================")
@@ -968,7 +975,10 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
                                     "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
                                     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
-                                    "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
+                                    "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
+                                    "cv_api.generate_taxonomy_tree_deduplicate": "cv_api/cv_api.generate_taxonomy_tree_deduplicate.txt",
+                                    "cv_api.generate_taxonomy_tree_reduce": "cv_api/cv_api.generate_taxonomy_tree_reduce.txt",
+                                    "cv_api.generate_taxonomy_tree_sweep": "cv_api/cv_api.generate_taxonomy_tree_sweep.txt",
                                     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
                                     "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
                                     "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"
@@ -1114,7 +1124,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                     api_url = f"https://{api_dns_name}{route}"
                     req_get = urllib.request.Request(api_url, method="GET")
                     try:
-                        resp = urllib.request.urlopen(req_get, timeout=35, context=ctx_to_use)
+                        resp = urllib.request.urlopen(req_get, timeout=90, context=ctx_to_use)
                         return f"  [+] {route:<15} -> OK (HTTP {resp.status})"
                     except urllib.error.HTTPError as e:
                         err_msg = f"FAIL (HTTP {e.code} Error) sur {route}"
@@ -1214,6 +1224,31 @@ def deploy(env, base_domain, project_id, config, force=False):
                         logger.error(f"  [-] {err_msg}")
                         generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", "exception"])
 
+                # --- CHECK 9/9: AIOPS METRICS ---
+                logger.info(f"\n[*] Check 9/9: Validating AIOps metrics endpoint...")
+                if access_token:
+                    aiops_url = f"https://{api_dns_name}/api/analytics/metrics/aiops?force=true"
+                    req_aiops = urllib.request.Request(aiops_url, method="GET")
+                    req_aiops.add_header("Authorization", f"Bearer {access_token}")
+                    try:
+                        resp_aiops = urllib.request.urlopen(req_aiops, timeout=30, context=ctx_to_use)
+                        if resp_aiops.status == 200:
+                            logger.info(f"  [+] AIOps Metrics OK: {aiops_url}")
+                        else:
+                            err_msg = f"HTTP {resp_aiops.status}"
+                            logger.error(f"  [-] AIOps Metrics FAIL: {err_msg}")
+                            generate_antigravity_error_report("Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{resp_aiops.status}"])
+                    except urllib.error.HTTPError as e:
+                        err_msg = f"FAIL (HTTP {e.code}) on /api/analytics/metrics/aiops"
+                        logger.error(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{e.code}"])
+                    except Exception as e:
+                        err_msg = f"AIOps Metrics FAIL: {e}"
+                        logger.error(f"  [-] {err_msg}")
+                        generate_antigravity_error_report("Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", "exception"])
+                else:
+                    logger.warning("  [!] Skipping Check 9: No access_token available (Check 4 failed).")
+
                 # --- CHECK EXTRA DOMAINS: DNS + SSL pour chaque domaine additionnel ---
                 if extra_domains:
                     print(f"\n[*] Check Extra Domains: Validating additional domains DNS + SSL...")
@@ -1245,6 +1280,25 @@ def deploy(env, base_domain, project_id, config, force=False):
                             print(f"  [+] SSL {_host} -> ACTIVE")
                         else:
                             print(f"  [!] SSL {_host} -> not provisioned yet (certificate may take 15-30 mins)")
+
+                # --- INIT: FINOPS PRICING SEEDING ---
+                print(f"\n[*] Post-Deploy: Seeding FinOps Pricing Data (BigQuery)...")
+                try:
+                    init_pricing_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "analytics_mcp", "init_pricing.py")
+                    if os.path.exists(init_pricing_path):
+                        env_copy = os.environ.copy()
+                        env_copy["GCP_PROJECT_ID"] = project_id
+                        env_copy["BQ_LOCATION"] = config.get("bq_location", "europe-west1")
+                        env_copy["FINOPS_DATASET_ID"] = f"finops_{env}"
+                        res = subprocess.run([sys.executable, init_pricing_path], env=env_copy, capture_output=True, text=True)
+                        if res.returncode == 0:
+                            print("  [+] FinOps Pricing seeded successfully.")
+                        else:
+                            print(f"  [-] Failed to seed FinOps Pricing: {res.stderr.strip()[:200]}")
+                    else:
+                        print(f"  [-] init_pricing.py not found at {init_pricing_path}")
+                except Exception as e:
+                    print(f"  [-] Error running init_pricing.py: {e}")
 
             else:
                 logger.error(f"[-] Sanity Test FAIL: DNS resolution timeout.")
@@ -1331,6 +1385,11 @@ def destroy(env, project_id, config, force=False):
             toggle_prevent_destroy(disable=False)
 
 if __name__ == "__main__":
+    # Nettoyage de l'ancien rapport d'erreurs
+    report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "antigravity_sanity_error.md")
+    if os.path.exists(report_file):
+        os.remove(report_file)
+
     parser = argparse.ArgumentParser(description="Platform Engineering - Manage Environments")
     parser.add_argument("action", choices=["deploy", "destroy", "plan"], help="Action to perform")
     parser.add_argument("--env", required=True, help="Environment name (dev, uat, prd)")

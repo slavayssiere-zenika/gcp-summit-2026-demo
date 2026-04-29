@@ -61,6 +61,7 @@ def mock_genai(mocker):
 def test_get_user_cv(mocker):
     # Mocking db.query
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_profile = MagicMock(user_id=1, source_url="http://test.com/cv.pdf", source_tag=None, imported_by_id=None)
     mock_result = MagicMock()
     mock_scalars = MagicMock()
@@ -83,6 +84,7 @@ def test_get_user_cv(mocker):
 
 def test_search_candidates(mock_genai, mock_httpx, mocker):
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     # Mock Gemini embedding
     emb_res = MagicMock()
     emb_res.embeddings = [MagicMock(values=[0.1, 0.2, 0.3])]
@@ -111,6 +113,9 @@ def test_search_candidates(mock_genai, mock_httpx, mocker):
 def test_import_and_analyze_cv(mocker):
     # Setup Mocks
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.execute.return_value = MagicMock()
+    mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
     
     mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
@@ -118,7 +123,7 @@ def test_import_and_analyze_cv(mocker):
     mock_httpx.return_value.__aenter__.return_value = client_instance
     
     # Mocking _fetch_cv_content
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Dummy CV Text")
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Dummy CV Text")
 
     # Mocking Gemini Client
     mock_genai = mocker.patch("src.cvs.router.client")
@@ -168,7 +173,7 @@ def test_import_and_analyze_cv(mocker):
     
     assert response.status_code == 200
     data = response.json()
-    assert "Success" in data["message"]
+    assert "succès" in data["message"]
     assert data["user_id"] == 1
 
     # ── Vérification des nouvelles propriétés steps / warnings ──
@@ -193,10 +198,13 @@ def test_import_and_analyze_cv(mocker):
 def test_import_cv_steps_on_truncated_document(mocker):
     """Un CV de plus de 100000 chars doit déclencher un warning 'download' + statut warning."""
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.execute.return_value = MagicMock()
+    mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
 
     long_text = "A" * 101000  # dépasse le seuil réel de 100000 caractères du router
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value=long_text)
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value=long_text)
 
     mock_genai = mocker.patch("src.cvs.router.client")
     mock_genai.aio.models.generate_content = AsyncMock()
@@ -241,9 +249,12 @@ def test_import_cv_steps_on_truncated_document(mocker):
 def test_import_cv_steps_on_zero_competencies(mocker):
     """Quand le LLM extrait 0 compétences, llm_parse doit être en warning."""
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.execute.return_value = MagicMock()
+    mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Short legal document")
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Short legal document")
 
     mock_genai = mocker.patch("src.cvs.router.client")
     mock_genai.aio.models.generate_content = AsyncMock()
@@ -322,7 +333,7 @@ def test_recalculate_tree(mocker):
     
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
-    assert response.json()["message"] == "Calcul de l'arbre lancé"
+    assert response.json()["message"] == "Calcul interactif de l'arbre lancé"
 
 
 def test_fetch_cv_content_internal_url(mocker):
@@ -348,7 +359,7 @@ def test_import_cv_no_auth(mocker):
 def test_import_cv_genai_not_configured(mocker):
     # force client to None
     mocker.patch("src.cvs.router.client", None)
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="text")
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="text")
     mocker.patch("os.path.exists", return_value=False)
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
@@ -370,13 +381,13 @@ def test_import_cv_prompt_fail(mocker):
     # Le GET vers prompts_api lève une exception réseau
     client_instance.get.side_effect = Exception("HTTP fetch failed")
 
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="text")
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="text")
     # Pas de fichier fallback disponible
     mocker.patch("os.path.exists", return_value=False)
     # Vider le cache prompt pour forcer le fetching HTTP
-    import src.cvs.router as cv_router
-    cv_router._CV_CACHE["prompt"]["value"] = None
-    cv_router._CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min
+    import src.services.cv_import_service as cv_import_service
+    cv_import_service._CV_CACHE["prompt"]["value"] = None
+    cv_import_service._CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min.replace(tzinfo=__import__('datetime').timezone.utc)
 
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
@@ -440,13 +451,16 @@ def test_recalculate_tree_already_running(mocker):
 def test_import_cv_not_a_cv_boolean_check(mocker):
     # Setup Mocks
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.execute.return_value = MagicMock()
+    mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
     
     mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
     
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="This is a cake recipe, not a resume.")
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="This is a cake recipe, not a resume.")
 
     # Mocking Gemini Client to return is_cv false
     mock_genai = mocker.patch("src.cvs.router.client")
@@ -479,9 +493,13 @@ def test_import_cv_not_a_cv_boolean_check(mocker):
 def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email="jean.dupont@zenika.com"):
     """Helper : configure tous les mocks nécessaires pour un import CV complet."""
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.execute.return_value = MagicMock()
+    mock_db.execute.return_value.scalars.return_value.first.return_value = None
+    mock_db.add = MagicMock()
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    mocker.patch("src.cvs.router._fetch_cv_content", return_value="Contenu du CV de test")
+    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Contenu du CV de test")
 
     mock_genai = mocker.patch("src.cvs.router.client")
     mock_genai.aio.models.generate_content = AsyncMock()
@@ -685,6 +703,7 @@ def test_import_cv_schema_folder_name_optional():
 def _make_reanalyze_mocks(mocker, source_url="https://docs.google.com/document/d/GFILE123/edit"):
     """Helper : prépare un CVProfile en base et retourne le mock_db."""
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_cv = MagicMock()
     mock_cv.id = 1
     mock_cv.user_id = 10
@@ -851,6 +870,7 @@ def test_reanalyze_no_cvs_in_db(mocker):
     qu'une re-découverte Drive a été ordonnée.
     """
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = []  # Aucun CV
     mock_db.execute.return_value = mock_result

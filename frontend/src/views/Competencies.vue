@@ -113,6 +113,15 @@ const onSelectLeaf = async (node: any) => {
       })
       const evalsDict = res.data.evaluations || {}
       evaluations.value = Object.values(evalsDict)
+
+      // Trier les utilisateurs par le meilleur score (IA en priorité, sinon Auto-évaluation)
+      associatedUsers.value.sort((a, b) => {
+        const evalA = evaluations.value.find((e: any) => e.user_id === a.id)
+        const evalB = evaluations.value.find((e: any) => e.user_id === b.id)
+        const scoreA = evalA?.ai_score ?? evalA?.user_score ?? -1
+        const scoreB = evalB?.ai_score ?? evalB?.user_score ?? -1
+        return scoreB - scoreA
+      })
     } catch (err) {
       console.error('Failed to fetch evaluations batch', err)
       // Fallback in case of error

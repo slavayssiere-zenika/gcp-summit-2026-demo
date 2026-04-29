@@ -3,7 +3,7 @@ import json
 import redis.asyncio as redis
 from datetime import datetime
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/8")
 
 class MissionTaskState:
     def __init__(self, redis_url: str = REDIS_URL):

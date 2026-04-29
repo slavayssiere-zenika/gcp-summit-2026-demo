@@ -1,25 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 import json
+import math
+import tempfile
 import time
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, delete as sa_delete, text as sa_text, update as sa_update, JSON
 import httpx
 import os
 import re
 import unicodedata
 from typing import Any, Optional, List
+from pydantic import BaseModel
 from google import genai
 from google.genai import types
+from google.cloud import storage as gcs_storage
+from google.cloud import run_v2 as cloudrun_v2
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 from opentelemetry.propagate import inject
 from jose import jwt as jose_jwt
-from jose.exceptions import JWTError
+import asyncio
 import base64
+from datetime import datetime, timedelta, timezone
+from jose.exceptions import JWTError
 import random
 import string
+import traceback
 import urllib.parse
 import logging
 
@@ -29,27 +37,92 @@ from src.auth import verify_jwt, security, SECRET_KEY as _AUTH_SECRET_KEY
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportRequest, CVImportStep, CVResponse, SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse, CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse
 from .task_state import task_state_manager, tree_task_manager
+from .bulk_task_state import bulk_reanalyse_manager
 from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
 from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
-def build_taxonomy_context(items: list[dict]) -> tuple[str, int, int]:
-    parents = [item for item in items if not item.get("parent_id")]
-    lines = []
-    nb_leaves = 0
-    for p in parents:
-        lines.append(f"- {p['name']}")
-        leaves = [item for item in items if item.get("parent_id") == p.get('id')]
-        nb_leaves += len(leaves)
-        if leaves:
-            leaf_parts = []
-            for l in leaves:
-                entry = l['name']
-                # Inclure les alias pour que le LLM reconnaisse les formes alternatives
-                # Ex: "Kubernetes (aka: K8s, kube)" → le LLM sait que K8s = Kubernetes
-                if l.get('aliases'):
-                    entry += f" (aka: {l['aliases']})"
-                leaf_parts.append(entry)
-            lines.append(f"  └─ {', '.join(leaf_parts)}")
-    return "\n".join(lines), len(parents), nb_leaves
+
+# --- SERVICES IMPORTS ---
+from src.services.cv_import_service import process_cv_core
+from src.services.search_service import execute_search, scale_bulk_dependencies
+from src.services.config import client, vertex_batch_client
+from src.services.taxonomy_service import (
+    run_taxonomy_step,
+    fetch_prompt,
+    get_existing_competencies,
+)
+from src.services.finops import log_finops
+from src.services.embedding_service import reindex_embeddings_bg
+from src.services.bulk_service import bg_bulk_reanalyse, _acquire_service_token, bg_retry_apply
+from src.services.utils import _build_distilled_content, _clean_llm_json, _chunk_text
+
+# Aliases underscore — maintenus pour la compatibilité avec les appels existants dans ce router
+_fetch_prompt = fetch_prompt
+_get_existing_competencies = get_existing_competencies
+_bg_retry_apply = bg_retry_apply
+# ------------------------
+
+# ── Schéma JSON partagé entre route unitaire ET batch Vertex ─────────────────
+# Toute modification ici s'applique automatiquement aux deux pipelines.
+_CV_RESPONSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "is_cv": {"type": "boolean"},
+        "first_name": {"type": "string"},
+        "last_name": {"type": "string"},
+        "email": {"type": "string"},
+        "summary": {"type": "string"},
+        "current_role": {"type": "string"},
+        "years_of_experience": {"type": "integer"},
+        "competencies": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "parent": {"type": "string"},
+                    "aliases": {"type": "array", "items": {"type": "string"}},
+                    "practiced": {
+                        "type": "boolean",
+                        "description": "True if the consultant has actively used this skill in at least one mission."
+                    }
+                },
+                "required": ["name", "practiced"]
+            }
+        },
+        "missions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "company": {"type": "string"},
+                    "description": {"type": "string"},
+                    "start_date": {"type": "string", "description": "YYYY-MM or YYYY, null if unknown"},
+                    "end_date": {"type": "string", "description": "YYYY-MM, YYYY, 'present', or null"},
+                    "duration": {"type": "string", "description": "Explicit duration from CV text, null if not stated"},
+                    "mission_type": {"type": "string", "description": "One of: audit, conseil, accompagnement, formation, expertise, build"},
+                    "is_sensitive": {"type": "boolean"},
+                    "competencies": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["title", "competencies", "is_sensitive", "mission_type"]
+            }
+        },
+        "educations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "degree": {"type": "string"},
+                    "school": {"type": "string"}
+                }
+            }
+        },
+        "is_anonymous": {"type": "boolean"},
+        "trigram": {"type": "string"}
+    },
+    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role",
+                 "years_of_experience", "competencies", "missions", "educations", "is_anonymous"]
+}
 
 
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])
@@ -69,6 +142,35 @@ ADMIN_SERVICE_PASSWORD = os.getenv("ADMIN_SERVICE_PASSWORD", "")
 
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 ANALYTICS_MCP_URL = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
+VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "europe-west1")
+BATCH_GCS_BUCKET = os.getenv("BATCH_GCS_BUCKET", "")
+
+# ── Parallélisme du pipeline bulk-reanalyse (configurable via env) ────────────
+# BULK_APPLY_SEMAPHORE : nombre de CVs appliqués simultanément (DB + HTTP).
+#   Défaut 5 — safe pour AlloyDB avec pool_size=20 (5 workers × 3 conn max = 15).
+# BULK_EMBED_SEMAPHORE : nombre d'appels Gemini Embedding API simultanés.
+#   Défaut 10 — conservative vs quota Gemini Embedding (600 QPM Vertex AI).
+BULK_APPLY_SEMAPHORE: int = int(os.getenv("BULK_APPLY_SEMAPHORE", "5"))
+BULK_EMBED_SEMAPHORE: int = int(os.getenv("BULK_EMBED_SEMAPHORE", "10"))
+
+# ── Scaling dynamique des Cloud Run cibles pendant le Bulk Apply ─────────
+# CLOUDRUN_WORKSPACE : workspace Terraform (ex: "prd", "dev") — injecté via cr_cv.tf.
+# BULK_SCALE_SERVICES : noms logiques des services à scaler (sans workspace suffix).
+CLOUDRUN_WORKSPACE: str = os.getenv("CLOUDRUN_WORKSPACE", "")
+BULK_SCALE_SERVICES: list[str] = ["competencies-api", "items-api"]
+# Nombre d'instances minimum à maintenir PENDANT la phase APPLY.
+# Défaut 1 : évite les cold starts AlloyDB IAM (~15s) sans sur-provisionner.
+# Augmenter à 2+ si Cloud Run auto-scale trop lentement sous charge.
+# MATH pour 1000 CVs (BULK_APPLY_SEMAPHORE=5) :
+#   competencies_api : 5×3=15 req simultanées, pool=30/instance → 1 instance ok
+#   items_api        : 5×2=10 req simultanées, pool=30/instance → 1 instance ok
+# Si BULK_APPLY_SEMAPHORE passe à 10, augmenter BULK_SCALE_MIN_INSTANCES à 2.
+BULK_SCALE_MIN_INSTANCES: int = int(os.getenv("BULK_SCALE_MIN_INSTANCES", "1"))
+
+# ------------------------
+
+
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
 
 if not GEMINI_API_KEY:
     print("WARNING: GOOGLE_API_KEY is missing. RAG embeddings will fail.")
@@ -76,10 +178,19 @@ if not GEMINI_API_KEY:
 else:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-logger = logging.getLogger(__name__)
+# Client Vertex AI dédié au pipeline Batch Taxonomie (IAM/ADC, pas d'API key)
+# Distinct du client 'client' utilisé pour les embeddings (api_key).
+if GCP_PROJECT_ID and VERTEX_LOCATION:
+    vertex_batch_client = genai.Client(
+        vertexai=True,
+        project=GCP_PROJECT_ID,
+        location=VERTEX_LOCATION
+    )
+else:
+    vertex_batch_client = None
+    print("WARNING: GCP_PROJECT_ID ou VERTEX_LOCATION manquant. Vertex AI Batch indisponible.")
 
-import asyncio
-from datetime import datetime, timedelta
+logger = logging.getLogger(__name__)
 
 # Note : plus de lock global ici.
 # competencies_api gère l'idempotence nativement : POST avec un nom existant
@@ -101,121 +212,16 @@ async def force_invalidate_taxonomy_cache(_: dict = Depends(verify_jwt)):
     logger.info("Cache de taxonomie purgé avec succès (Event-driven).")
     return {"message": "Cache de taxonomie invalidé"}
 
-async def _log_finops(user_email: str, action: str, model: str, usage_metadata: Any, metadata: dict = None, auth_token: str = None):
-    """Utility to log consumption to BigQuery via Analytics MCP sidecar."""
-    if not usage_metadata:
-        return
-    
-    try:
-        # Robust token extraction (handles objects or dicts)
-        if hasattr(usage_metadata, 'prompt_token_count'):
-            input_tokens = getattr(usage_metadata, 'prompt_token_count', 0)
-        else:
-            input_tokens = usage_metadata.get('prompt_token_count', 0) if isinstance(usage_metadata, dict) else 0
-
-        if hasattr(usage_metadata, 'candidates_token_count'):
-            output_tokens = getattr(usage_metadata, 'candidates_token_count', 0)
-        else:
-            output_tokens = usage_metadata.get('candidates_token_count', 0) if isinstance(usage_metadata, dict) else 0
-        
-        async with httpx.AsyncClient() as http_client:
-            payload = {
-                "name": "log_ai_consumption",
-                "arguments": {
-                    "user_email": user_email,
-                    "action": action,
-                    "model": model,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "metadata": metadata or {}
-                }
-            }
-            # We don't want FinOps logging to block or fail the main request if Market is down
-            try:
-                headers = {}
-                inject(headers)
-                if auth_token:
-                    headers["Authorization"] = f"Bearer {auth_token}"
-                await http_client.post(f"{ANALYTICS_MCP_URL.rstrip('/')}/mcp/call", json=payload, headers=headers, timeout=2.0)
-            except Exception as ex:
-                logger.warning(f"Analytics MCP unreachable for FinOps: {ex}")
-    except Exception as e:
-        logger.error(f"FinOps logging analysis failed: {e}")
-
-async def _fetch_cv_content(url: str, google_token: Optional[str] = None) -> str:
-    """Download the CV content.
-
-    Pour les Google Docs, utilise l'API Drive v3 officielle (files.export) avec
-    le google_access_token OAuth2. L'ancien endpoint /export?format=txt est abandonné
-    par Google et retourne 410 Gone.
-    Ref: https://developers.google.com/drive/api/guides/manage-downloads#export_a_google_workspace_document
-    """
-    parsed = urllib.parse.urlparse(url)
-    hostname = parsed.hostname or ""
-
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="Invalid URL scheme")
-
-    forbidden_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
-    if hostname in forbidden_hosts or hostname.endswith(".local") or hostname.endswith("_api"):
-        raise HTTPException(status_code=400, detail="Internal URLs are not allowed")
-
-    if "docs.google.com/document/d/" in url:
-        # L'endpoint /export?format=txt est non-officiel et retourne 410 Gone.
-        # Migration vers l'API Drive v3 files.export (authentifiée).
-        doc_id = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
-        if doc_id:
-            file_id = doc_id.group(1)
-            if not google_token:
-                logger.error(
-                    f"[_fetch_cv_content] Aucun google_access_token pour le fichier Drive '{file_id}'. "
-                    "L'API Drive v3 requiert un token OAuth2 valide (scope drive.readonly minimum)."
-                )
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Document Google Docs privé : un google_access_token OAuth2 est requis. "
-                        "Vérifiez que drive_api transmet bien le token dans le payload Pub/Sub."
-                    ),
-                )
-            export_url = f"https://www.googleapis.com/drive/v3/files/{file_id}/export"
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
-                resp = await http_client.get(
-                    export_url,
-                    params={"mimeType": "text/plain"},
-                    headers={"Authorization": f"Bearer {google_token}"},
-                    follow_redirects=True,
-                )
-                if resp.status_code in (401, 403):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Accès refusé par l'API Drive (HTTP {resp.status_code}). "
-                            "Vérifiez les scopes OAuth2 du Service Account "
-                            "(drive.readonly ou drive.file minimum requis)."
-                        ),
-                    )
-                resp.raise_for_status()
-                return resp.text
-
-    # URL non-Google Docs : téléchargement direct
-    req_headers = {}
-    if google_token:
-        req_headers["Authorization"] = f"Bearer {google_token}"
-
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
-        resp = await http_client.get(url, headers=req_headers, follow_redirects=True)
-        if resp.status_code in (401, 403):
-            raise HTTPException(
-                status_code=400,
-                detail="Accès refusé. Vérifiez que le document est accessible.",
-            )
-        resp.raise_for_status()
-        return resp.text
-
-
 @router.post("/import", response_model=CVResponse)
 async def import_and_analyze_cv(req: CVImportRequest, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
+    # M1 : Seuls rh, admin et service_account peuvent importer et analyser un CV
+    # (protection FinOps : chaque import déclenche un appel Gemini + embedding Vertex AI)
+    user_role = token_payload.get("role", "user")
+    if user_role not in ("admin", "rh", "service_account"):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : l'import de CV est réservé aux rôles rh, admin et service_account."
+        )
     # 1. Capture Authorization Context (Crucial per RULES[AGENTS.md])
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -224,7 +230,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, backgrou
     headers = {"Authorization": auth_header}
     inject(headers)  # Mandatory Trace Span Propagation (Agent.md Rule 4)
 
-    return await _process_cv_core(
+    return await process_cv_core(
         url=req.url,
         google_access_token=req.google_access_token,
         source_tag=req.source_tag,
@@ -233,7 +239,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, backgrou
         token_payload=token_payload,
         db=db,
         auth_token=auth_header.replace("Bearer ", "") if "Bearer " in auth_header else auth_header,
-        background_tasks=background_tasks
+        background_tasks=background_tasks, genai_client=client
     )
 
 
@@ -256,10 +262,6 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
     Sécurité : si le token OIDC est absent ou invalide → 401 (Pub/Sub va retenter).
     Idempotence : si le CV existe déjà (même email), mise à jour au lieu de création.
     """
-    import base64
-    from datetime import datetime
-    from google.oauth2 import id_token as google_id_token
-    from google.auth.transport import requests as google_requests
 
     # ── 1. Validation OIDC ───────────────────────────────────────────────────
     invoker_sa_email = os.getenv("PUBSUB_INVOKER_SA_EMAIL", "")
@@ -386,7 +388,7 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
 
     # ── 4. Décoder le JWT applicatif pour obtenir token_payload compatible ────
     # Le JWT a été obtenu via échange OIDC (prod) ou MOCK_M2M_JWT (local).
-    # Il est nécessaire pour que _process_cv_core puisse appeler les services internes
+    # Il est nécessaire pour que process_cv_core puisse appeler les services internes
     # (users_api, competencies_api, missions_api) avec une identité valide.
     # _AUTH_SECRET_KEY est la constante chargée au démarrage par src.auth (avant purge env)
     if not _AUTH_SECRET_KEY:
@@ -418,10 +420,11 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
         bg_drive_api_url: str,
     ):
         """Pipeline complet exécuté en arrière-plan après ACK Pub/Sub."""
+        pipeline_start_time = time.monotonic()  # Chrono pour KPI processing_duration_ms
         async with database.SessionLocal() as bg_db:
             try:
                 local_bg_tasks = BackgroundTasks()
-                result = await _process_cv_core(
+                result = await process_cv_core(
                     url=bg_url,
                     google_access_token=bg_google_access_token,
                     source_tag=bg_source_tag,
@@ -430,24 +433,30 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
                     token_payload=bg_token_payload,
                     db=bg_db,
                     auth_token=bg_jwt,
-                    background_tasks=local_bg_tasks  # BackgroundTasks locales pour competencies/missions
+                    background_tasks=local_bg_tasks, genai_client=client  # BackgroundTasks locales pour competencies/missions
                 )
                 
                 # IMPORTANT: Starlette's BackgroundTasks are not automatically executed 
                 # when not returned in an HTTP response. We must execute them manually.
                 await local_bg_tasks()
-                # Notification succès → drive_api
+                # Notification succès → drive_api (avec durée de traitement pour KPIs)
+                pipeline_duration_ms = int((time.monotonic() - pipeline_start_time) * 1000)
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as patch_client:
                         res = await patch_client.patch(
                             f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
-                            json={"status": "IMPORTED_CV", "user_id": result.user_id, "error_message": None},
+                            json={
+                                "status": "IMPORTED_CV",
+                                "user_id": result.user_id,
+                                "error_message": None,
+                                "processing_duration_ms": pipeline_duration_ms,
+                            },
                             headers=bg_headers
                         )
                         if res.is_error:
                             logger.error(f"[PubSub/BG] Échec PATCH IMPORTED_CV: HTTP {res.status_code}")
                         else:
-                            logger.info(f"[PubSub/BG] Import réussi {bg_google_file_id} → user_id={result.user_id}")
+                            logger.info(f"[PubSub/BG] Import réussi {bg_google_file_id} → user_id={result.user_id} duration={pipeline_duration_ms}ms")
                 except Exception as e:
                     logger.warning(f"[PubSub/BG] Impossible de notifier drive_api (IMPORTED_CV): {e}")
 
@@ -505,1020 +514,6 @@ async def handle_pubsub_cv_import(request: Request, background_tasks: Background
     return {"status": "accepted", "google_file_id": google_file_id}
 
 
-async def _process_cv_core(url: str, google_access_token: Optional[str], source_tag: Optional[str], headers: dict, token_payload: dict, db: AsyncSession, auth_token: str = None, folder_name: Optional[str] = None, background_tasks: BackgroundTasks = None) -> CVResponse:
-    """
-    Pipeline principal d'ingéstion d'un CV en 8 étapes séquentielles.
-    Retourne un CVResponse enrichi avec les étapes (steps) et les warnings non-bloquants.
-
-    folder_name: nom du dossier Drive parent direct (ex: "Marie Dupont"), transmis par drive_api
-    selon la nomenclature Zenika («Prénom Nom»). Fait foi pour la résolution d'identité si
-    divergence avec l'analyse LLM.
-    """
-    pipeline_steps: List[CVImportStep] = []
-    pipeline_warnings: List[str] = []
-
-    def _step_ok(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
-        s = CVImportStep(step=step, label=label, status="success", duration_ms=duration_ms, detail=detail)
-        pipeline_steps.append(s)
-        logger.info(
-            f"[CV_STEP] {label} — OK",
-            extra={"step": step, "duration_ms": duration_ms, "cv_url": url, "detail": detail}
-        )
-        return s
-
-    def _step_warn(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
-        s = CVImportStep(step=step, label=label, status="warning", duration_ms=duration_ms, detail=detail)
-        pipeline_steps.append(s)
-        pipeline_warnings.append(detail or label)
-        logger.warning(
-            f"[CV_STEP] {label} — WARN: {detail}",
-            extra={"step": step, "duration_ms": duration_ms, "cv_url": url}
-        )
-        return s
-
-    def _step_error(step: str, label: str, duration_ms: int, detail: str = None) -> CVImportStep:
-        s = CVImportStep(step=step, label=label, status="error", duration_ms=duration_ms, detail=detail)
-        pipeline_steps.append(s)
-        logger.error(
-            f"[CV_STEP] {label} — ERROR: {detail}",
-            extra={"step": step, "duration_ms": duration_ms, "cv_url": url}
-        )
-        return s
-
-    # ── Étape 1 : Téléchargement du document ─────────────────────────────────
-    t0 = time.monotonic()
-    try:
-        logger.info(f"[CV_STEP] download — start", extra={"step": "download", "cv_url": url})
-        raw_text = await _fetch_cv_content(url, google_access_token)
-        dur = int((time.monotonic() - t0) * 1000)
-        raw_len = len(raw_text)
-        if raw_len > 100000:
-            warn_msg = f"Document tronqué : {raw_len} caractères → limité à 100000 pour l'analyse IA"
-            _step_warn("download", "Téléchargement du document", dur, warn_msg)
-        else:
-            _step_ok("download", "Téléchargement du document", dur, f"{raw_len} caractères")
-    except HTTPException as he:
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_error("download", "Téléchargement du document", dur, he.detail)
-        logger.error(f"HTTPException while downloading CV: {he.detail}")
-        raise
-    except Exception as e:
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_error("download", "Téléchargement du document", dur, str(e))
-        logger.error(f"Failed downloading CV content: {e}", exc_info=True)
-        CV_PROCESSING_TOTAL.labels(status="failure").inc()
-        raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
-
-    if not client:
-        logger.error("GenAI Client not configured.")
-        raise HTTPException(status_code=500, detail="GenAI Client not configured.")
-
-    # ── Étape 2 : Analyse IA — Extraction du profil ──────────────────────────
-    t0 = time.monotonic()
-    
-    prompt = None
-    if _CV_CACHE["prompt"]["expires"] > datetime.utcnow() and _CV_CACHE["prompt"]["value"]:
-        logger.debug("[CV_STEP] llm_parse — fetching prompt from CACHE")
-        prompt = _CV_CACHE["prompt"]["value"]
-    else:
-        try:
-            logger.info("[CV_STEP] llm_parse — fetching prompt", extra={"step": "llm_parse", "cv_url": url})
-            async with httpx.AsyncClient() as http_client:
-                res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
-                res_prompt.raise_for_status()
-                prompt = res_prompt.json()["value"]
-                _CV_CACHE["prompt"]["value"] = prompt
-                _CV_CACHE["prompt"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
-        except Exception as e:
-            logger.warning(f"Prompt cv_api.extract_cv_info indisponible (erreur: {e}). Fallback local.")
-            if os.path.exists("cv_api.extract_cv_info.txt"):
-                with open("cv_api.extract_cv_info.txt", "r", encoding="utf-8") as f:
-                    prompt = f.read()
-            else:
-                logger.error("No fallback file cv_api.extract_cv_info.txt found.")
-                raise HTTPException(status_code=500, detail=f"Cannot fetch generic prompt: {e}")
-
-    tree_context = ""
-    if _CV_CACHE["tree_context"]["expires"] > datetime.utcnow() and _CV_CACHE["tree_context"]["value"]:
-        logger.debug("[CV_STEP] llm_parse — taxonomy context from CACHE")
-        tree_context = _CV_CACHE["tree_context"]["value"]
-    else:
-        try:
-            async with httpx.AsyncClient() as http_client:
-                # Pagination scalable : pages de 100 nœuds racines jusqu'à épuisement
-                items: list = []
-                skip = 0
-                page_size = 100
-                while True:
-                    page_res = await http_client.get(
-                        f"{COMPETENCIES_API_URL.rstrip('/')}/",
-                        params={"skip": skip, "limit": page_size},
-                        headers=headers, timeout=5.0
-                    )
-                    if page_res.status_code != 200:
-                        break
-                    page_data = page_res.json()
-                    page_items = page_data.get('items', [])
-                    items.extend(page_items)
-                    if len(page_items) < page_size:
-                        break  # dernière page
-                    skip += page_size
-
-                if items:
-                    tree_context, nb_parents, nb_leaves = build_taxonomy_context(items)
-                    logger.info(
-                        f"[CV_STEP] llm_parse — taxonomy context injected",
-                        extra={"step": "llm_parse", "categories_count": nb_parents, "leaf_count": nb_leaves, "cv_url": url}
-                    )
-                    _CV_CACHE["tree_context"]["value"] = tree_context
-                    _CV_CACHE["tree_context"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
-                    _CV_CACHE["tree_items"]["value"] = items
-                    _CV_CACHE["tree_items"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
-        except Exception as e:
-            logger.warning(f"Failed to fetch competencies tree for context: {e}")
-
-    final_prompt = prompt + tree_context
-
-    try:
-        response = await generate_content_with_retry(
-            client,
-            model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
-            contents=[final_prompt, f"RESUME:\n{raw_text[:100000]}"],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "is_cv": {"type": "boolean"},
-                        "first_name": {"type": "string"},
-                        "last_name": {"type": "string"},
-                        "email": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "current_role": {"type": "string"},
-                        "years_of_experience": {"type": "integer"},
-                        "competencies": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {"type": "string"},
-                                    "parent": {"type": "string"},
-                                    "aliases": {
-                                        "type": "array",
-                                        "items": {"type": "string"}
-                                    },
-                                    "practiced": {
-                                        "type": "boolean",
-                                        "description": "True if the consultant has actively used this skill in at least one mission. False if only mentioned contextually (e.g., as an alternative or comparison)."
-                                    }
-                                },
-                                "required": ["name", "practiced"]
-                            }
-                        },
-                        "missions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "title": {"type": "string"},
-                                    "company": {"type": "string"},
-                                    "description": {"type": "string"},
-                                    "start_date": {"type": "string", "description": "Start date YYYY-MM or YYYY, null if unknown"},
-                                    "end_date": {"type": "string", "description": "End date YYYY-MM, YYYY, or 'present', null if unknown"},
-                                    "duration": {"type": "string", "description": "Explicit duration from CV text (e.g. '2 ans', '18 mois'), null if not stated"},
-                                    "mission_type": {"type": "string", "description": "One of: audit, conseil, accompagnement, formation, expertise, build"},
-                                    "is_sensitive": {"type": "boolean", "description": "True if the project involves sensitive sectors like Defense, High Finance or confidential clients"},
-                                    "competencies": {
-                                        "type": "array",
-                                        "items": {"type": "string"}
-                                    }
-                                },
-                                "required": ["title", "competencies", "is_sensitive", "mission_type"]
-                            }
-                        },
-                        "is_anonymous": {"type": "boolean"},
-                        "trigram": {"type": "string"}
-                    },
-                    "required": ["is_cv", "first_name", "last_name", "email", "summary", "current_role", "years_of_experience", "competencies", "missions", "is_anonymous"]
-                }
-            )
-        )
-        parsed_data = response.text
-        structured_cv = json.loads(parsed_data)
-
-        # FinOps
-        user_caller = token_payload.get("sub", "unknown")
-        safe_meta = None
-        try:
-            safe_meta = response.usage_metadata
-        except Exception as e:
-            logger.warning(f"Metadata access failed for analyze_cv: {e}")
-        await _log_finops(user_caller, "analyze_cv", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), safe_meta, {"cv_url": url}, auth_token=auth_token)
-
-        if not structured_cv.get("is_cv", False):
-            dur = int((time.monotonic() - t0) * 1000)
-            _step_error("llm_parse", "Analyse IA — Extraction du profil", dur, "Document non reconnu comme un CV")
-            logger.warning("Document is not recognized as a CV")
-            raise HTTPException(status_code=400, detail="Not a CV: The document does not appear to be a resume.")
-
-        # Vérifications qualité IA
-        nb_competencies = len(structured_cv.get("competencies", []))
-        nb_missions = len(structured_cv.get("missions", []))
-        summary_val = structured_cv.get("summary", "")
-        dur = int((time.monotonic() - t0) * 1000)
-
-        llm_detail = f"{nb_competencies} compétences, {nb_missions} missions détectées"
-        input_tokens = getattr(safe_meta, 'prompt_token_count', None) if safe_meta else None
-        if input_tokens:
-            llm_detail += f", {input_tokens} tokens en entrée"
-
-        if nb_competencies == 0:
-            warn_cv = "Aucune compétence extraite par l'IA — vérifiez la qualité du document"
-            _step_warn("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
-            pipeline_warnings.append(warn_cv)
-            logger.warning(f"[CV_STEP] llm_parse — zero competencies extracted", extra={"cv_url": url})
-        elif not summary_val or summary_val.strip() == "":
-            warn_cv = "Résumé de profil vide — l'IA n'a pas pu générer de synthèse"
-            _step_warn("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
-            pipeline_warnings.append(warn_cv)
-        else:
-            _step_ok("llm_parse", "Analyse IA — Extraction du profil", dur, llm_detail)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_error("llm_parse", "Analyse IA — Extraction du profil", dur, str(e))
-        logger.error(f"LLM Parsing failed: {e}", exc_info=True)
-        CV_PROCESSING_TOTAL.labels(status="failure").inc()
-        raise HTTPException(status_code=500, detail=f"LLM Parsing failed: {e}")
-
-    # ── Étape 3 : Résolution d'identité ──────────────────────────────────────
-    t0 = time.monotonic()
-
-    def sanitize_field(val: Any) -> Optional[str]:
-        if val is None: return None
-        s = str(val).strip()
-        clean_s = s.lower().strip(",").strip()
-        if clean_s in ("null", "none", "", "unknown", "n/a", "na", "nil"): return None
-        return s
-
-    def normalize_str(s: str) -> str:
-        if not s: return ""
-        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
-
-    NAME_REGEX = r"^[A-Za-zÀ-ÿ\s\-\']+$"
-
-    def is_valid_name(n: Optional[str]) -> bool:
-        return bool(n and re.match(NAME_REGEX, n))
-
-    EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    def is_valid_email(e: Optional[str]) -> bool:
-        return bool(e and re.match(EMAIL_REGEX, e))
-
-    raw_email = sanitize_field(structured_cv.get("email"))
-    llm_first_name = sanitize_field(structured_cv.get("first_name"))
-    llm_last_name = sanitize_field(structured_cv.get("last_name"))
-    is_anonymous = structured_cv.get("is_anonymous", False)
-    trigram = sanitize_field(structured_cv.get("trigram"))
-
-    # STAFF-SEC : Valider les noms LLM (rejet si format invalide — anti hallucination)
-    if llm_first_name and not is_valid_name(llm_first_name):
-        logger.warning(f"Invalid first_name format rejected from LLM: {llm_first_name}")
-        llm_first_name = None
-    if llm_last_name and not is_valid_name(llm_last_name):
-        logger.warning(f"Invalid last_name format rejected from LLM: {llm_last_name}")
-        llm_last_name = None
-
-    # ── Résolution prioritaire via folder_name (nomenclature Zenika "Prénom Nom") ──
-    # Le folder_name transmis par drive_api fait foi.
-    folder_first_name: Optional[str] = None
-    folder_last_name: Optional[str] = None
-
-    if folder_name and folder_name.strip():
-        parts = folder_name.strip().split(None, 1)  # Split sur le premier espace
-        if len(parts) == 2:
-            folder_first_name = sanitize_field(parts[0])
-            folder_last_name = sanitize_field(parts[1])
-            if not is_valid_name(folder_first_name):
-                folder_first_name = None
-            if not is_valid_name(folder_last_name):
-                folder_last_name = None
-            logger.info(
-                f"[folder_name] Nomenclature Zenika détectée : "
-                f"'{folder_first_name}' '{folder_last_name}' (depuis '{folder_name}')"
-            )
-        elif len(parts) == 1:
-            # Dossier avec un seul mot (ex: trigramme ou alias) — ignorer pour identité
-            logger.info(f"[folder_name] Nom de dossier mono-composant '{folder_name}' — ignoré pour résolution identité.")
-
-    # Détection de divergence LLM vs folder_name (folder fait foi)
-    first_name = folder_first_name or llm_first_name
-    last_name = folder_last_name or llm_last_name
-
-    if folder_first_name and folder_last_name:
-        if llm_first_name and llm_last_name:
-            fn_match = normalize_str(folder_first_name) == normalize_str(llm_first_name)
-            ln_match = normalize_str(folder_last_name) == normalize_str(llm_last_name)
-            if not (fn_match and ln_match):
-                warn_folder = (
-                    f"⚠️ Divergence d'identité — Dossier Drive : '{folder_first_name} {folder_last_name}' "
-                    f"/ LLM : '{llm_first_name} {llm_last_name}'. "
-                    f"Le nom du dossier fait foi."
-                )
-                logger.warning(warn_folder)
-                # Warning visible dans l'UI de synchronisation ET de resynchronisation
-                _step_warn(
-                    "folder_identity",
-                    "Résolution identité — Divergence dossier vs LLM",
-                    0,
-                    warn_folder
-                )
-                pipeline_warnings.append(warn_folder)
-                # Le folder_name fait foi → on utilise folder_first/last_name
-                first_name = folder_first_name
-                last_name = folder_last_name
-
-    if not is_valid_name(first_name):
-        first_name = None
-    if not is_valid_name(last_name):
-        last_name = None
-
-    if not is_valid_email(raw_email):
-        if first_name and last_name:
-            clean_f = normalize_str(first_name).replace(" ", "")
-            clean_l = normalize_str(last_name).replace(" ", "")
-            email = f"{clean_f}.{clean_l}@zenika.com"
-            logger.info(f"Email absent/invalide dans le CV. Généré : {email}")
-            pipeline_warnings.append(f"Email absent ou invalide dans le CV — email généré : {email}")
-        else:
-            is_anonymous = True
-            trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
-            first_name = "Anon"
-            last_name = trigram
-            email = f"anon.{trigram.lower()}@anonymous.zenika.com"
-            logger.warning(f"Identité totalement absente. Profil anonymisé : {email}")
-            pipeline_warnings.append("Identité introuvable dans le CV — profil anonymisé automatiquement")
-    else:
-        email = raw_email
-
-    ext_full_norm = f"{normalize_str(first_name)} {normalize_str(last_name)}"
-
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
-        user_id = None
-        importer_id = None
-
-        # Recherche prioritaire par folder_name (nomenclature Zenika) si disponible
-        if folder_first_name and folder_last_name:
-            folder_search_q = f"{folder_first_name} {folder_last_name}"
-            logger.info(f"[folder_name] Recherche utilisateur prioritaire par dossier : '{folder_search_q}'")
-            fn_res = await http_client.get(
-                f"{USERS_API_URL.rstrip('/')}/search",
-                params={"query": folder_search_q, "limit": 10},
-                headers=headers
-            )
-            if fn_res.status_code == 200:
-                for u in fn_res.json().get("items", []):
-                    if (
-                        normalize_str(u.get("first_name")) == normalize_str(folder_first_name)
-                        and normalize_str(u.get("last_name")) == normalize_str(folder_last_name)
-                    ):
-                        user_id = u["id"]
-                        logger.info(
-                            f"[folder_name] Utilisateur trouvé par dossier Drive : "
-                            f"'{folder_search_q}' → ID {user_id}"
-                        )
-                        break
-
-        # Fallback : recherche par email (si pas trouvé par folder_name)
-        if not user_id and email:
-            search_res = await http_client.get(
-                f"{USERS_API_URL.rstrip('/')}/search",
-                params={"query": email, "limit": 10},
-                headers=headers
-            )
-            if search_res.status_code == 200:
-                for u in search_res.json().get("items", []):
-                    if u.get("email", "").lower() == email.lower():
-                        u_full_norm = normalize_str(
-                            u.get("full_name") or f"{u.get('first_name')} {u.get('last_name')}"
-                        )
-                        if ext_full_norm and ext_full_norm.strip():
-                            if ext_full_norm not in u_full_norm and u_full_norm not in ext_full_norm:
-                                logger.warning(
-                                    f"Email {email} trouvé mais nom divergent : "
-                                    f"extrait='{ext_full_norm}' / système='{u_full_norm}'. Détachement."
-                                )
-                                continue
-                        user_id = u["id"]
-                        logger.info(f"Utilisateur trouvé par email : {email} → ID {user_id}")
-                        break
-
-        # Fallback sémantique par nom LLM (si ni folder_name ni email n'ont matchés)
-        if not user_id and first_name and last_name:
-            logger.info(
-                f"Identité non trouvée. Fallback sémantique LLM : '{first_name} {last_name}'."
-            )
-            search_q = f"{first_name} {last_name}"
-            name_res = await http_client.get(
-                f"{USERS_API_URL.rstrip('/')}/search",
-                params={"query": search_q, "limit": 10},
-                headers=headers
-            )
-            if name_res.status_code == 200:
-                for u in name_res.json().get("items", []):
-                    if (
-                        normalize_str(u.get("first_name")) == normalize_str(first_name)
-                        and normalize_str(u.get("last_name")) == normalize_str(last_name)
-                    ):
-                        user_id = u["id"]
-                        logger.info(f"Utilisateur trouvé par nom sémantique → ID {user_id}")
-                        break
-
-        importer_username = token_payload.get("sub")
-        if importer_username:
-            importer_res = await http_client.get(
-                f"{USERS_API_URL.rstrip('/')}/search",
-                params={"query": importer_username, "limit": 10},
-                headers=headers
-            )
-            if importer_res.status_code == 200:
-                for u in importer_res.json().get("items", []):
-                    if u.get("username", "").lower() == importer_username.lower():
-                        importer_id = u["id"]
-                        break
-
-        filename = os.path.basename(url).lower()
-        if not is_anonymous:
-            if "annonym" in filename or "anon" in filename or "abc" in filename:
-                logger.info("Anonymité détectée d'après le nom du fichier.")
-                is_anonymous = True
-                if first_name != "Anon":
-                    trigram = trigram or ''.join(random.choices(string.ascii_uppercase, k=3))
-                    first_name = "Anon"
-                    last_name = trigram
-                    email = f"anon.{trigram.lower()}@anonymous.zenika.com"
-
-        extracted_info = {
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": email,
-            "is_anonymous": is_anonymous,
-            "folder_name": folder_name,
-        }
-
-        if user_id and is_anonymous:
-            user_info_res = await http_client.get(
-                f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers
-            )
-            if user_info_res.status_code == 200:
-                user_data = user_info_res.json()
-                if not user_data.get("is_anonymous", False):
-                    warn_msg = f"🛡️ CV anonyme détecté sur un compte réel (User {user_id}). DÉTACHEMENT du profil."
-                    logger.info(warn_msg)
-                    await task_state_manager.update_progress(new_log=warn_msg)
-                    user_id = None
-                else:
-                    logger.info(f"CV anonyme sur User déjà anonyme {user_id}. Maintenu.")
-
-        if not user_id:
-            logger.info(f"Utilisateur non trouvé — création {'anonyme ' if is_anonymous else ''}...")
-            new_u = {
-                "username": f"{first_name[0].lower()}{last_name.lower()}{random.randint(100, 999)}",
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-                "full_name": f"{first_name} {last_name}",
-                "password": "zenikacv123",
-                "is_anonymous": is_anonymous
-            }
-            create_res = await http_client.post(
-                f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers
-            )
-
-            if create_res.status_code == 409 or (
-                create_res.status_code >= 400 and "already exists" in create_res.text.lower()
-            ):
-                host = email.split('@')[1] if '@' in email else "zenika.com"
-                prefix = email.split('@')[0] if '@' in email else "conflict"
-                conflict_email = f"{prefix}.conflict.{random.randint(1000, 9999)}@{host}"
-                logger.warning(f"Conflit email {email}. Détachement vers {conflict_email}")
-                pipeline_warnings.append(f"Conflit d'email ({email}) — identité détachée vers {conflict_email}")
-                new_u["email"] = conflict_email
-                create_res = await http_client.post(
-                    f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers
-                )
-
-            if create_res.status_code >= 400:
-                dur = int((time.monotonic() - t0) * 1000)
-                err_detail = f"Création utilisateur échouée (HTTP {create_res.status_code})"
-                _step_error("user_resolve", "Résolution & création d'identité", dur, err_detail)
-                logger.error(f"User creation failed: status={create_res.status_code}, detail={create_res.text}")
-                raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
-
-            user_id = create_res.json()["id"]
-            logger.info(f"[user_resolve] Utilisateur créé avec ID {user_id}")
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_ok("user_resolve", "Résolution & création d'identité", dur, f"User ID {user_id}")
-        # ── Étapes 4 & 5 : Traitement asynchrone (Background Task) ─────────────────
-        # On délègue la création des compétences et des missions pour ne pas bloquer
-        # le timeout de la réponse HTTP vers `drive_api`.
-        async def _bg_process_competencies_and_missions(bg_user_id, bg_structured_cv, bg_headers, bg_url):
-            logger.info(f"[BG_TASK] Démarrage traitement asynchrone pour CV {bg_url}")
-            bg_errors = []
-            async with httpx.AsyncClient(timeout=120.0) as bg_http_client:
-                # ── Étape 4 : Mapping des compétences (scalable via /search) ──────────
-                # Ancien anti-pattern supprimé : GET /?limit=1000 + find_comp_id local.
-                # Nouveau pattern : appel /search?query=<name>&limit=1 par compétence,
-                # ce qui est stateless, scalable et évite tout chargement bulk.
-                try:
-                    def normalize_comp(text):
-                        if not text: return ""
-                        text = text.strip().lower()
-                        return "".join(c for c in unicodedata.normalize('NFKD', text) if unicodedata.category(c) != 'Mn')
-
-                    async def resolve_comp_id(name: str) -> int | None:
-                        """Recherche une compétence par nom exact OU par alias via /search.
-
-                        La route /search cherche déjà dans name ET aliases (OR ilike).
-                        On teste donc d'abord le nom canonique, puis les alias retournés
-                        pour éviter de créer des doublons (ex: GCP → Google Cloud Platform).
-                        """
-                        try:
-                            res = await bg_http_client.get(
-                                f"{COMPETENCIES_API_URL.rstrip('/')}/search",
-                                params={"query": name, "limit": 5},
-                                headers=bg_headers, timeout=5.0
-                            )
-                            if res.status_code == 200:
-                                n_norm = normalize_comp(name)
-                                for item in res.json().get("items", []):
-                                    # 1. Match sur le nom canonique
-                                    if normalize_comp(item.get("name", "")) == n_norm:
-                                        return item["id"]
-                                    # 2. Match sur les alias (ex: "GCP" matche "Google Cloud Platform")
-                                    aliases_raw = item.get("aliases") or ""
-                                    for alias in aliases_raw.split(","):
-                                        if normalize_comp(alias.strip()) == n_norm:
-                                            logger.debug(
-                                                f"[BG_TASK] '{name}' résolu via alias "
-                                                f"→ '{item['name']}' (id={item['id']})",
-                                                extra={"cv_url": bg_url}
-                                            )
-                                            return item["id"]
-                        except Exception as e:
-                            logger.warning(f"[BG_TASK] resolve_comp_id('{name}') search failed: {e}")
-                        return None
-
-                    async def process_competency(comp):
-                        name = sanitize_field(comp.get("name"))
-                        if not name:
-                            return True
-                        parent = sanitize_field(comp.get("parent"))
-                        # ne pas assigner les compétences non pratiquées
-                        # practiced=False = mentionnée contextuellement, non maîtrisée
-                        if not comp.get("practiced", True):
-                            logger.info(
-                                f"[BG_TASK] Skipping non-practiced competency '{name}' (practiced=False)",
-                                extra={"cv_url": bg_url}
-                            )
-                            return True
-                        try:
-                            # 1. Résolution via /search (sans bulk load)
-                            c_id = await resolve_comp_id(name)
-                            if not c_id:
-                                p_id = None
-                                if parent:
-                                    # competencies_api est idempotent :
-                                    # HTTP 200 si doublon exact, HTTP 409 si variante grammaticale.
-                                    p_id = await resolve_comp_id(parent)
-                                    if not p_id:
-                                        p_res = await bg_http_client.post(
-                                            f"{COMPETENCIES_API_URL.rstrip('/')}/",
-                                            json={"name": parent, "description": "Auto-identified from CV"},
-                                            headers=bg_headers
-                                        )
-                                        if p_res.status_code < 400:
-                                            p_id = p_res.json()["id"]
-
-                                aliases_str = ", ".join(comp.get("aliases", [])) if comp.get("aliases") else None
-                                leaf_data = {"name": name, "description": "Candidate CV Skill", "aliases": aliases_str}
-                                if p_id:
-                                    leaf_data["parent_id"] = p_id
-
-                                # 2. Double-check avant création (race condition entre CVs concurrents)
-                                c_id = await resolve_comp_id(name)
-                                if not c_id:
-                                    c_res = await bg_http_client.post(
-                                        f"{COMPETENCIES_API_URL.rstrip('/')}/",
-                                        json=leaf_data, headers=bg_headers
-                                    )
-                                    if c_res.status_code < 400:
-                                        c_id = c_res.json()["id"]
-
-                            if c_id:
-                                assign_res = await bg_http_client.post(
-                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/{c_id}",
-                                    headers=bg_headers
-                                )
-                                if assign_res.status_code < 400:
-                                    return True
-                                return f"Échec d'assignation de '{name}' (HTTP {assign_res.status_code}: {assign_res.text})"
-                        except Exception as e:
-                            logger.warning(f"[BG_TASK] failed to assign '{name}': {e}", extra={"cv_url": bg_url})
-                            return f"Erreur inattendue sur '{name}': {e}"
-                        return f"Impossible de résoudre ou de créer la compétence '{name}'"
-
-                    comp_tasks = [process_competency(c) for c in bg_structured_cv.get("competencies", [])]
-                    comp_results = await asyncio.gather(*comp_tasks, return_exceptions=True)
-                    for res in comp_results:
-                        if res is not True:
-                            if isinstance(res, str):
-                                bg_errors.append(res)
-                            elif isinstance(res, Exception):
-                                bg_errors.append(f"Exception asynchrone (compétence): {res}")
-                            else:
-                                bg_errors.append("Erreur inconnue lors d'une assignation de compétence.")
-                except Exception as e:
-                    logger.error(f"[BG_TASK] Erreur critique compétences: {e}")
-                    bg_errors.append(f"Crash module compétences: {e}")
-
-                # ── Étape 5 : Extraction des missions ─────────────────────────────────
-                try:
-                    missions_list = bg_structured_cv.get("missions", [])
-                    cat_res = await bg_http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=bg_headers)
-                    categories = cat_res.json() if cat_res.status_code == 200 else []
-
-                    def find_cat_id(name):
-                        for c in categories:
-                            if c["name"].lower() == name.lower(): return c["id"]
-                        return None
-
-                    mission_cat_id = find_cat_id("Missions")
-                    if not mission_cat_id:
-                        m_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences extracted from CVs"}, headers=bg_headers)
-                        if m_res.status_code < 400: mission_cat_id = m_res.json()["id"]
-
-                    sensitive_cat_id = find_cat_id("Restricted")
-                    if not sensitive_cat_id:
-                        s_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive or confidential missions"}, headers=bg_headers)
-                        if s_res.status_code < 400: sensitive_cat_id = s_res.json()["id"]
-                    
-                    item_data_list = []
-                    for m in missions_list:
-                        cat_ids = [mission_cat_id] if mission_cat_id else []
-                        if m.get("is_sensitive") and sensitive_cat_id:
-                            cat_ids.append(sensitive_cat_id)
-
-                        item_data_list.append({
-                            "name": m["title"],
-                            "description": m.get("description", ""),
-                            "user_id": bg_user_id,
-                            "category_ids": cat_ids,
-                            "metadata_json": {
-                                "company": m.get("company"),
-                                "competencies": m.get("competencies", []),
-                                "is_sensitive": m.get("is_sensitive", False),
-                                "start_date": m.get("start_date"),
-                                "end_date": m.get("end_date"),
-                                "duration": m.get("duration"),
-                                "mission_type": m.get("mission_type", "build"),
-                                "source": "CV Analysis"
-                            }
-                        })
-                        
-                    if item_data_list:
-                        bulk_payload = {"items": item_data_list}
-                        m_post = await bg_http_client.post(
-                            f"{ITEMS_API_URL.rstrip('/')}/bulk",
-                            json=bulk_payload,
-                            headers=bg_headers
-                        )
-                        if m_post.status_code >= 400:
-                            logger.warning(f"[BG_TASK] missions — failed to bulk create items: HTTP {m_post.status_code} — {m_post.text[:300]}")
-                            bg_errors.append(f"Création en masse des missions échouée (HTTP {m_post.status_code}: {m_post.text})")
-                except Exception as e:
-                    logger.error(f"[BG_TASK] Erreur critique missions: {e}")
-                    bg_errors.append(f"Crash module missions: {e}")
-            
-            if bg_errors:
-                try:
-                    import re, os
-                    drive_api_url = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
-                    doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", bg_url)
-                    if doc_id_match:
-                        doc_id = doc_id_match.group(1)
-                        # Remove duplicates in errors for concise message
-                        unique_errors = list(dict.fromkeys(bg_errors))
-                        err_str = " | ".join(unique_errors)
-                        logger.warning(f"[BG_TASK] Notification webhook d'erreur drive_api pour {doc_id}: {err_str}")
-                        async with httpx.AsyncClient(timeout=10.0) as webhook_client:
-                            await webhook_client.patch(
-                                f"{drive_api_url.rstrip('/')}/files/{doc_id}",
-                                json={"status": "ERROR", "error_message": err_str},
-                                headers=bg_headers
-                            )
-                except Exception as patch_e:
-                    logger.error(f"[BG_TASK] Impossible d'alerter drive_api: {patch_e}")
-
-            # ── Hook : Scoring IA des compétences (déclenché ICI, après assignation) ──
-            # IMPORTANT : ce hook DOIT être appelé à l'intérieur de la background task,
-            # APRÈS que toutes les compétences ont été assignées dans user_competency.
-            # L'appeler depuis le handler HTTP (avant le return) provoque une race condition :
-            # ai-score-all lit user_competency encore vide → 0 compétences traitées.
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as _score_client:
-                    _score_headers = dict(bg_headers)
-                    from opentelemetry.propagate import inject as _inject
-                    _inject(_score_headers)
-                    score_res = await _score_client.post(
-                        f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{bg_user_id}/ai-score-all",
-                        headers=_score_headers,
-                        timeout=5.0
-                    )
-                    logger.info(
-                        f"[BG_TASK] ai_scoring_triggered — user_id={bg_user_id} "
-                        f"status={score_res.status_code} text={score_res.text}"
-                    )
-            except Exception as _score_e:
-                logger.warning(f"[BG_TASK] ai_scoring_trigger_failed — user_id={bg_user_id} error={_score_e} (non-bloquant)")
-
-            logger.info(f"[BG_TASK] Fin traitement asynchrone pour CV {bg_url}")
-
-        if background_tasks:
-            background_tasks.add_task(_bg_process_competencies_and_missions, user_id, structured_cv, headers, url)
-            _step_ok("competencies_missions", "Mapping RAG et Extraction", 0, "Délégué en Background Task (Asynchrone)")
-            assigned_count = 0  # Sera calculé en arrière-plan
-        else:
-            # Fallback synchrone classique si appelé sans BackgroundTasks
-            await _bg_process_competencies_and_missions(user_id, structured_cv, headers, url)
-            assigned_count = 0
-            
-    # hors du bloc httpx
-    # ── Étape 6 : Génération des embeddings vectoriels ────────────────────────
-    t0 = time.monotonic()
-    comp_keywords = [c.get("name") for c in structured_cv.get("competencies", []) if c.get("name")]
-
-    distilled_content = (
-        f"Role: {structured_cv.get('current_role', 'Unknown')}\n"
-        f"Experience: {structured_cv.get('years_of_experience', 0)} years\n"
-        f"Summary: {structured_cv.get('summary', '')}\n"
-        f"Competencies: {', '.join(comp_keywords)}\n\n"
-        f"--- RAW CV CONTENT ---\n"
-        f"{raw_text[:6000]}"
-    )
-
-    vector_data = None
-    try:
-        emb_res = await embed_content_with_retry(
-            client,
-            model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
-            contents=distilled_content
-        )
-        vector_data = emb_res.embeddings[0].values
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_ok("embedding", "Génération des embeddings vectoriels", dur, f"{len(vector_data)} dimensions")
-    except Exception as e:
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_warn("embedding", "Génération des embeddings vectoriels", dur, f"Embedding échoué : {e} — profil non recherchable")
-        pipeline_warnings.append("Embedding vectoriel échoué — ce profil ne sera pas retrouvable par recherche sémantique")
-        logger.error(f"Embedding failed: {e}", exc_info=True)
-
-    # ── Étape 7 : Sauvegarde en base de données ───────────────────────────────
-    t0 = time.monotonic()
-    try:
-        from sqlalchemy import delete
-        await db.execute(delete(CVProfile).where(CVProfile.source_url == url))
-
-        cv_record = CVProfile(
-            user_id=user_id,
-            source_url=url,
-            source_tag=source_tag,
-            extracted_competencies=structured_cv.get("competencies", []),
-            current_role=structured_cv.get("current_role"),
-            years_of_experience=structured_cv.get("years_of_experience"),
-            summary=structured_cv.get("summary"),
-            competencies_keywords=comp_keywords,
-            missions=structured_cv.get("missions", []),
-            raw_content=raw_text,
-            semantic_embedding=vector_data,
-            imported_by_id=importer_id
-        )
-        db.add(cv_record)
-        await db.commit()
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_ok("db_save", "Sauvegarde en base de données", dur, f"CV ID utilisateur {user_id}")
-    except Exception as e:
-        dur = int((time.monotonic() - t0) * 1000)
-        _step_error("db_save", "Sauvegarde en base de données", dur, str(e))
-        logger.error(f"DB save failed: {e}", exc_info=True)
-        CV_PROCESSING_TOTAL.labels(status="failure").inc()
-        raise HTTPException(status_code=500, detail=f"Database save failed: {e}")
-
-    logger.info(
-        f"[CV_STEP] pipeline_complete — success",
-        extra={
-            "step": "pipeline_complete",
-            "cv_url": url,
-            "user_id": user_id,
-            "competencies_assigned": assigned_count,
-            "warnings_count": len(pipeline_warnings),
-            "steps_count": len(pipeline_steps)
-        }
-    )
-    CV_PROCESSING_TOTAL.labels(status="success").inc()
-
-    # NOTE : le hook ai-score-all est maintenant déclenché à la FIN de
-    # _bg_process_competencies_and_missions (après assignation des compétences).
-    # NE PAS rappeler ici pour éviter la race condition décrite dans le ticket.
-
-    return CVResponse(
-        message=f"Success! Processed '{structured_cv['first_name']}' and mapped {assigned_count} RAG competencies.",
-        user_id=user_id,
-        competencies_assigned=assigned_count,
-        extracted_info=extracted_info,
-        steps=pipeline_steps,
-        warnings=pipeline_warnings
-    )
-
-async def _execute_search(
-    request: Request,
-    response: Response,
-    query: str, 
-    limit: int, 
-    skills: List[str],
-    db: AsyncSession,
-    token_payload: dict,
-    credentials: HTTPAuthorizationCredentials
-):
-    """
-    Recherche sémantique (RAG) du meilleur candidat via pgvector cosine distance.
-    L'agent interroge cette route lorsqu'il cherche des consultants par mots-clés ou description de projet.
-    """
-    if not client:
-        raise HTTPException(status_code=500, detail="GenAI Client not configured.")
-        
-    # 0. Pre-filtrage AI (uniquement si non fourni par l'API appelante): Extract mandatory skills from query
-    filter_res = None
-    if skills is not None and len(skills) > 0:
-        required_skills = skills
-    else:
-        try:
-            filter_prompt = f"Extract a JSON list of strictly required technical competencies from this search query. Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are strictly required.\nQuery: '{query}'"
-            filter_res = await generate_content_with_retry(
-                client,
-                model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
-                contents=filter_prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-            required_skills = json.loads(filter_res.text)
-            if not isinstance(required_skills, list):
-                required_skills = []
-        except Exception as e:
-            logger.warning(f"Skill extraction failed, proceeding without pre-filter: {e}")
-            required_skills = []
-
-    try:
-        # 1. Convert Prompt Query into 3072-D Matrix
-        safe_embed_query = query[:3000] if query and len(query) > 3000 else query
-        emb_res = await embed_content_with_retry(
-            client,
-            model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
-            contents=safe_embed_query
-        )
-        search_vector = emb_res.embeddings[0].values
-        
-        # FinOps Logging (Filter + Embedding) - Safe access to metadata
-        user_caller = token_payload.get("sub", "unknown")
-        
-        # Log generation tokens from filter (Safely)
-        f_meta = None
-        try:
-            if filter_res:
-                f_meta = filter_res.usage_metadata
-        except Exception as e:
-            logger.warning(f"Metadata access failed for search filter: {e}")
-        if filter_res:
-            await _log_finops(user_caller, "search_filter_extraction", os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"), f_meta, {"query": query}, auth_token=credentials.credentials)
-        
-        # Log embedding (rough estimate)
-        # We use a simple dict to avoid Pydantic validation issues with the official UsageMetadata type
-        await _log_finops(user_caller, "search_embedding", os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"), {"prompt_token_count": len(query)//4, "candidates_token_count": 0}, auth_token=credentials.credentials)
-    except Exception as e:
-        logger.error(f"Erreur d'embedding API Gemini (query length={len(query)}): {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Embedding search query failed: {e}")
-
-    # 2. Vector Postgres Search Operator (Cosine Distance <=>)
-    stmt = select(
-        CVProfile, 
-        CVProfile.semantic_embedding.cosine_distance(search_vector).label('distance')
-    ).filter(CVProfile.semantic_embedding.is_not(None))
-    
-    # Check missing embeddings anomaly
-    try:
-        missing_count_stmt = select(func.count(CVProfile.user_id)).filter(CVProfile.semantic_embedding.is_(None))
-        missing_count = (await db.execute(missing_count_stmt)).scalar() or 0
-        CV_MISSING_EMBEDDINGS.set(missing_count)
-        
-        if missing_count > 0:
-            logger.warning(f"Data Anomaly: {missing_count} CV profiles ignored due to missing embeddings!")
-            if response:
-                response.headers["X-Missing-Embeddings-Count"] = str(missing_count)
-    except Exception as e:
-        logger.error(f"Failed to calculate missing embeddings: {e}")
-    
-    fallback_scan = False
-    
-    if required_skills:
-        approved_user_ids = set()
-        auth_header = f"Bearer {credentials.credentials}" if credentials else ""
-        headers_downstream = {"Authorization": auth_header} if auth_header else {}
-        
-        try:
-            async with httpx.AsyncClient() as http_client:
-                for skill in required_skills:
-                    # 1. Search for this skill canonically
-                    search_res = await http_client.get(
-                        f"{COMPETENCIES_API_URL.rstrip('/')}/search", 
-                        params={"query": skill, "limit": 1}, 
-                        headers=headers_downstream
-                    )
-                    
-                    if search_res.status_code == 200:
-                        items = search_res.json().get("items", [])
-                        if items:
-                            canonical_id = items[0]["id"]
-                            # 2. Get users holding this skill OR any sub-skill
-                            users_res = await http_client.get(
-                                f"{COMPETENCIES_API_URL.rstrip('/')}/{canonical_id}/users",
-                                headers=headers_downstream
-                            )
-                            if users_res.status_code == 200:
-                                user_ids = users_res.json()
-                                approved_user_ids.update(user_ids)
-        except Exception as e:
-            logger.warning(f"Canonical competencies resolution failed: {e}")
-            
-        if approved_user_ids:
-            stmt_filtered = stmt.filter(CVProfile.user_id.in_(list(approved_user_ids)))
-            query_results = (await db.execute(stmt_filtered.order_by('distance').limit(limit * 2))).all()
-            if not query_results:
-                fallback_scan = True
-                query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
-        else:
-            fallback_scan = True
-            query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
-    else:
-        query_results = (await db.execute(stmt.order_by('distance').limit(limit * 2))).all()
-
-    if response:
-        response.headers["X-Fallback-Full-Scan"] = str(fallback_scan).lower()
-                
-    mapped_results = []
-    seen_users = set()
-    
-    for row, distance in query_results:
-        if row.user_id not in seen_users:
-            seen_users.add(row.user_id)
-            score = 1.0 - (distance if distance is not None else 0.0)
-            mapped_results.append({
-                "user_id": row.user_id,
-                "similarity_score": round(score, 4)
-            })
-            if len(mapped_results) >= limit:
-                break
-
-    # 3. Enrich Candidates with Users API properties (Composition Pattern)
-    auth_header = request.headers.get("Authorization") if request else None
-    headers_downstream = {"Authorization": auth_header} if auth_header else {}
-    inject(headers_downstream)  # Mandatory Trace Span Propagation (Agent.md Rule 4)
-    
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
-        async def fetch_user(res):
-            try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)
-                if u_res.status_code == 200:
-                    u_data = u_res.json()
-                    res["full_name"] = u_data.get("full_name")
-                    res["email"] = u_data.get("email")
-                    res["username"] = u_data.get("username")
-                    res["is_active"] = u_data.get("is_active")
-                    res["is_anonymous"] = u_data.get("is_anonymous", False)
-            except Exception as e:
-                print(f"HTTP Enrichment failed for user {res['user_id']}: {e}")
-
-        # Run all users_api fetches concurrently
-        import asyncio
-        await asyncio.gather(*(fetch_user(res) for res in mapped_results))
-    
-    if not mapped_results:
-        raise HTTPException(
-            status_code=404, 
-            detail="Aucun collaborateur correspondant à ces critères (compétences/expérience) n'a été trouvé dans la base de CVs Zenika."
-        )
-
-    return mapped_results
-
 @router.get("/search", response_model=List[SearchCandidateResponse])
 async def search_candidates(
     request: Request,
@@ -1526,11 +521,12 @@ async def search_candidates(
     query: str, 
     limit: int = 5, 
     skills: List[str] = Query(default=None),
+    agency: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     token_payload: dict = Depends(verify_jwt),
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    return await _execute_search(request, response, query, limit, skills, db, token_payload, credentials)
+    return await execute_search(request, response, query, limit, skills, db, token_payload, credentials, client, agency)
 
 @router.post("/search", response_model=List[SearchCandidateResponse])
 async def search_candidates_post(
@@ -1541,7 +537,7 @@ async def search_candidates_post(
     token_payload: dict = Depends(verify_jwt),
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    return await _execute_search(request, response, req_body.query, req_body.limit, req_body.skills, db, token_payload, credentials)
+    return await execute_search(request, response, req_body.query, req_body.limit, req_body.skills, db, token_payload, credentials, client, req_body.agency)
 
 @router.get("/user/{user_id}", response_model=List[CVProfileResponse])
 async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = Depends(get_db)):
@@ -1562,7 +558,8 @@ async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = 
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
             if u_res.status_code == 200:
                 is_anon = u_res.json().get("is_anonymous", False)
-        except: pass
+        except Exception as e:
+            logger.warning(f"Failed to fetch user {user_id} for is_anonymous check: {e}")
 
     return [
         CVProfileResponse(
@@ -1581,8 +578,13 @@ async def get_all_user_tags(db: AsyncSession = Depends(get_db)):
     Pratique pour afficher l'agence dans la liste des utilisateurs du panel admin
     sans problème de N+1 requêtes.
     """
-    profiles = (await db.execute(select(CVProfile.user_id, CVProfile.source_tag).filter(CVProfile.source_tag.is_not(None)))).all()
-    # On renvoie le tag sous la forme du tag le plus récent si multiples (ici l'ordre n'est pas garanti mais en prod on a 1 CV/user)
+    # Pour garantir le bon tag, on trie par date ascendante, 
+    # de sorte que le dernier CV écrase les précédents dans le dictionnaire.
+    profiles = (await db.execute(
+        select(CVProfile.user_id, CVProfile.source_tag)
+        .filter(CVProfile.source_tag.is_not(None))
+        .order_by(CVProfile.created_at.asc())
+    )).all()
     return {str(p.user_id): p.source_tag for p in profiles}
 
 @router.get("/users/tag/{tag}", response_model=List[CVProfileResponse])
@@ -1591,18 +593,25 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
     Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
     Sans redondance par utilisateur (déduplication).
     """
-    profiles = (await db.execute(select(CVProfile).filter(CVProfile.source_tag.ilike(tag)).order_by(CVProfile.created_at.desc()))).scalars().all()
+    # On utilise DISTINCT ON pour récupérer uniquement le CV le plus récent par utilisateur
+    profiles = (await db.execute(
+        select(CVProfile)
+        .distinct(CVProfile.user_id)
+        .order_by(CVProfile.user_id, CVProfile.created_at.desc())
+    )).scalars().all()
     
     seen_users = set()
     unique_profiles = []
     
     for p in profiles:
-        if p.user_id not in seen_users:
-            seen_users.add(p.user_id)
-            unique_profiles.append(p)
+        # On ne garde que les utilisateurs dont le CV le plus récent correspond au tag
+        if p.source_tag and tag.lower() in p.source_tag.lower():
+            if p.user_id not in seen_users:
+                seen_users.add(p.user_id)
+                unique_profiles.append(p)
     # Group by user for bulk enrichment
     user_ids = list(seen_users)
-    user_anon_map = {}
+    user_enrich_map = {}
     auth_header = request.headers.get("Authorization") if request else None
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
@@ -1612,8 +621,9 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
             try:
                 u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers_downstream)
                 if u_res.status_code == 200:
-                    user_anon_map[u_id] = u_res.json().get("is_anonymous", False)
-            except: pass
+                    user_enrich_map[u_id] = u_res.json()
+            except Exception as e:
+                logger.warning(f"Failed to fetch user {u_id} for enrichment: {e}")
 
     return [
         CVProfileResponse(
@@ -1621,7 +631,10 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
             source_url=p.source_url,
             source_tag=p.source_tag,
             imported_by_id=p.imported_by_id,
-            is_anonymous=user_anon_map.get(p.user_id, False)
+            is_anonymous=user_enrich_map.get(p.user_id, {}).get("is_anonymous", False),
+            full_name=user_enrich_map.get(p.user_id, {}).get("full_name"),
+            email=user_enrich_map.get(p.user_id, {}).get("email"),
+            username=user_enrich_map.get(p.user_id, {}).get("username")
         ) for p in unique_profiles
     ]
 
@@ -1698,9 +711,21 @@ async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession =
     seen_mission_keys = set()
     merged_comp_keywords = set()
     
+    merged_educations = []
+    seen_edu_keys = set()
+    
     for p in profiles:
         if p.competencies_keywords:
             merged_comp_keywords.update(p.competencies_keywords)
+            
+        if p.educations:
+            for edu in p.educations:
+                degree = edu.get("degree", "").strip().lower()
+                school = edu.get("school", "").strip().lower()
+                key = f"{degree}|{school}"
+                if key not in seen_edu_keys:
+                    seen_edu_keys.add(key)
+                    merged_educations.append(edu)
             
         if not p.missions:
             continue
@@ -1721,11 +746,12 @@ async def get_user_cv_details(user_id: int, request: Request, db: AsyncSession =
         years_of_experience=base_profile.years_of_experience,
         competencies_keywords=list(merged_comp_keywords),
         missions=merged_missions,
+        educations=merged_educations,
         is_anonymous=is_anon
     )
 
 @router.get("/ranking/experience", response_model=List[RankedExperienceResponse])
-async def get_consultants_experience_ranking(limit: int = 5, request: Request = None, db: AsyncSession = Depends(get_db)):
+async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[str] = None, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
     Retourne la liste des consultants les plus expérimentés basés sur les années d'expérience extraites des CVs.
     """
@@ -1733,9 +759,12 @@ async def get_consultants_experience_ranking(limit: int = 5, request: Request = 
     stmt = (
         select(CVProfile)
         .filter(CVProfile.years_of_experience.is_not(None))
-        .order_by(CVProfile.years_of_experience.desc())
-        .limit(limit)
     )
+    
+    if agency:
+        stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
+        
+    stmt = stmt.order_by(CVProfile.years_of_experience.desc()).limit(limit)
     
     profiles = (await db.execute(stmt)).scalars().all()
     
@@ -1745,210 +774,409 @@ async def get_consultants_experience_ranking(limit: int = 5, request: Request = 
     inject(headers_downstream)
     
     results = []
+    seen_users = set()
+    for p in profiles:
+        if p.user_id in seen_users:
+            continue
+        seen_users.add(p.user_id)
+        results.append({
+            "user_id": p.user_id,
+            "years_of_experience": p.years_of_experience,
+            "agency": p.source_tag
+        })
+        
     async with httpx.AsyncClient(timeout=10.0) as http_client:
-        for p in profiles:
-            item = {
-                "user_id": p.user_id,
-                "years_of_experience": p.years_of_experience,
-            }
-            results.append(item)
+        async def fetch_user(res):
+            try:
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)
+                if u_res.status_code == 200:
+                    u_data = u_res.json()
+                    res["full_name"] = u_data.get("full_name")
+                    res["email"] = u_data.get("email")
+                    res["is_anonymous"] = u_data.get("is_anonymous", False)
+            except Exception as e:
+                logger.warning(f"Failed to fetch user details for {res['user_id']}: {e}")
+
+        await asyncio.gather(*(fetch_user(res) for res in results))
+
     return results
 
-async def _recalculate_bg(auth_header: str, user_caller: str):
-    try:
-        if not client:
-            await tree_task_manager.update_progress(error="Gemini SDK non configuré (Google API Key manquante).", status="error")
-            return
+class RecalculateStepRequest(BaseModel):
+    step: str
+    target_pillar: Optional[str] = None
 
-        await tree_task_manager.update_progress(new_log="Extraction des CVs de la base de données...")
-        async with database.SessionLocal() as db:
-            profiles = (await db.execute(select(CVProfile))).scalars().all()
-            
-        if not profiles:
-            await tree_task_manager.update_progress(error="Aucun CV dans la base pour générer un arbre.", status="error")
-            return
-
-        combined_text = "\n\n--- CV SUIVANT ---\n\n".join([p.raw_content for p in profiles])
+@router.post("/recalculate_tree/step")
+async def recalculate_competencies_tree_step(
+    request: Request,
+    req_body: RecalculateStepRequest,
+    background_tasks: BackgroundTasks,
+    token_payload: dict = Depends(verify_jwt)
+):
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    
+    auth_header = request.headers.get("Authorization")
+    user_caller = token_payload.get("sub", "unknown")
+    
+    if req_body.step == "map":
+        await tree_task_manager.initialize_task()
+    else:
+        await tree_task_manager.update_progress(status="running", new_log=f"Lancement de l'étape: {req_body.step}")
         
-        await tree_task_manager.update_progress(new_log="Récupération du prompt de taxonomie...")
-        try:
-            async with httpx.AsyncClient() as http_client:
-                headers_downstream = {"Authorization": auth_header}
-                res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.generate_taxonomy_tree", headers=headers_downstream, timeout=5.0)
-                res_prompt.raise_for_status()
-                instruction = res_prompt.json()["value"]
-        except Exception as e:
-            logger.warning(f"Prompt cv_api.generate_taxonomy_tree indisponible (erreur: {e}). Fallback local.")
-            if os.path.exists("cv_api.generate_taxonomy_tree.txt"):
-                with open("cv_api.generate_taxonomy_tree.txt", "r", encoding="utf-8") as f:
-                    instruction = f.read()
-            else:
-                await tree_task_manager.update_progress(error=f"Cannot fetch taxonomy prompt and no fallback: {e}", status="error")
-                return
-
-        await tree_task_manager.update_progress(new_log="Récupération des compétences existantes...")
-        try:
-            async with httpx.AsyncClient() as http_client:
-                headers = {"Authorization": auth_header}
-                inject(headers)  # OTel trace propagation (AGENTS.md §4) + JWT requis pour competencies-api
-                all_comps = []
-                skip = 0
-                limit = 100
-                while True:
-                    comp_res = await http_client.get(
-                        f"{COMPETENCIES_API_URL.rstrip('/')}/", 
-                        params={"skip": skip, "limit": limit}, 
-                        headers=headers,
-                        timeout=10.0
-                    )
-                    comp_res.raise_for_status()
-                    comp_data = comp_res.json()
-                    
-                    items = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
-                    all_comps.extend(items)
-                    
-                    if isinstance(comp_data, dict) and "total" in comp_data:
-                        if len(all_comps) >= comp_data["total"]:
-                            break
-                    elif len(items) < limit:
-                        break
-                    skip += limit
-                
-                def get_all_names(nodes):
-                    names = []
-                    for n in nodes:
-                        names.append(n["name"])
-                        if "sub_competencies" in n and n["sub_competencies"]:
-                            names.extend(get_all_names(n["sub_competencies"]))
-                    return names
-                
-                existing_names = get_all_names(all_comps)
-                skills_str = ", ".join(existing_names) if existing_names else "Aucune compétence existante"
-                instruction = instruction.replace("{{EXISTING_COMPETENCIES}}", skills_str)
-        except Exception as e:
-            msg = f"Failed to inject existing competencies: {e}"
-            logger.warning(msg, exc_info=True)  # WARNING visible dans Cloud Logging (remplace print)
-            await tree_task_manager.update_progress(new_log=msg)
-
-        await tree_task_manager.update_progress(new_log="Lancement du modèle Gemini...")
-        response = await generate_content_with_retry(
-            client,
-            model=os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"),
-            contents=[instruction, combined_text],
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                response_mime_type="application/json",
-            )
-        )
-        
-        # FinOps Logging
-        r_meta = None
-        try:
-            r_meta = response.usage_metadata
-        except Exception as e:
-            logger.warning(f"Metadata access failed for recalculate_tree: {e}")
-        auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
-        await _log_finops(user_caller, "recalculate_tree", os.getenv("GEMINI_PRO_MODEL", "gemini-3-pro-preview"), r_meta, auth_token=auth_token)
-
-        estimated_cost_usd = 0
-        if r_meta:
-            input_tokens = getattr(r_meta, 'prompt_token_count', 0)
-            output_tokens = getattr(r_meta, 'candidates_token_count', 0)
-            estimated_cost_usd = (input_tokens * 1.25 + output_tokens * 5.0) / 1000000
-
-        res_tree = json.loads(response.text)
-
-        # Extraire les instructions de fusion depuis les feuilles du JSON généré par Gemini
-        def extract_merge_instructions(node: Any, merges: list | None = None) -> list:
-            """Parcours récursif du JSON pour collecter les champs merge_from."""
-            if merges is None:
-                merges = []
-            if isinstance(node, dict):
-                merge_from = node.get("merge_from", [])
-                name = node.get("name")
-                if name and merge_from:
-                    merges.append({"canonical": name, "merge_from": merge_from})
-                for v in node.values():
-                    if isinstance(v, (dict, list)):
-                        extract_merge_instructions(v, merges)
-            elif isinstance(node, list):
-                for item in node:
-                    extract_merge_instructions(item, merges)
-            return merges
-
-        merge_instructions = extract_merge_instructions(res_tree)
-        nb_merges = len(merge_instructions)
-
-        if nb_merges > 0:
-            await tree_task_manager.update_progress(
-                new_log=f"Calcul terminé. {nb_merges} fusion(s) sémantique(s) identifiée(s) — application en cours..."
-            )
-
-        # POST vers competencies_api/bulk_tree avec les instructions de fusion
-        bulk_merge_result = []
-        try:
-            async with httpx.AsyncClient() as http_client:
-                bulk_headers = {"Authorization": auth_header}
-                inject(bulk_headers)
-                bulk_res = await http_client.post(
-                    f"{COMPETENCIES_API_URL.rstrip('/')}/bulk_tree",
-                    json={"tree": res_tree, "merges": merge_instructions},
-                    headers=bulk_headers,
-                    timeout=120.0
-                )
-                if bulk_res.status_code == 200:
-                    bulk_data = bulk_res.json()
-                    bulk_merge_result = bulk_data.get("merges", [])
-                    logger.info(
-                        f"[recalculate_tree] bulk_tree appliqué avec succès. "
-                        f"Fusions: {bulk_merge_result}"
-                    )
-                else:
-                    logger.warning(
-                        f"[recalculate_tree] bulk_tree HTTP {bulk_res.status_code}: {bulk_res.text[:200]}"
-                    )
-        except Exception as e:
-            logger.warning(f"[recalculate_tree] Erreur lors de l'appel bulk_tree: {e}", exc_info=True)
-
-        await tree_task_manager.update_progress(
-            new_log=f"Terminé. {len(bulk_merge_result)} doublon(s) fusionné(s).",
-            tree=res_tree,
-            usage={"estimated_cost_usd": estimated_cost_usd, "merges_applied": len(bulk_merge_result)},
-            status="completed"
-        )
-    except Exception as e:
-        await tree_task_manager.update_progress(error=f"Erreur Gemini: {str(e)}", status="error")
+    background_tasks.add_task(run_taxonomy_step, auth_header, user_caller, req_body.step, client, req_body.target_pillar)
+    return {"message": f"Étape {req_body.step} lancée", "status": "running"}
 
 @router.post("/recalculate_tree")
 async def recalculate_competencies_tree(
     request: Request,
     background_tasks: BackgroundTasks,
+    resume: bool = False,
     token_payload: dict = Depends(verify_jwt)
 ):
-    """
-    (Admin Only) Lance le recalcul asynchrone de l'arbre de compétences.
-    """
     if token_payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Opération refusée: privilèges administrateur requis.")
-    
+        
     if await tree_task_manager.is_task_running():
         return {"message": "Un calcul de l'arbre est déjà en cours", "status": "running"}
-
+        
     auth_header = request.headers.get("Authorization")
     user_caller = token_payload.get("sub", "unknown")
     
-    await tree_task_manager.initialize_task()
-    background_tasks.add_task(_recalculate_bg, auth_header, user_caller)
+    if not resume:
+        await tree_task_manager.initialize_task()
+        background_tasks.add_task(run_taxonomy_step, auth_header, user_caller, "map", client)
+    else:
+        background_tasks.add_task(run_taxonomy_step, auth_header, user_caller, "reduce", client)
 
-    return {"message": "Calcul de l'arbre lancé", "status": "running"}
+    return {"message": "Calcul interactif de l'arbre lancé", "status": "running"}
 
 @router.get("/recalculate_tree/status")
 async def get_recalculate_tree_status():
-    """Récupère le statut du recalcul de l'arbre."""
+    """Récupère le statut du recalcul de l'arbre.
+    
+    Synthètise 'batch_running' quand mode=batch && status=running pour que
+    le frontend déclenche checkBatchProgress() et fasse avancer le pipeline.
+    """
     status = await tree_task_manager.get_latest_status()
     if not status:
         return {"status": "idle", "message": "Aucune tâche lancée récemment."}
+    # Synthèse du status composé pour le frontend
+    if status.get("mode") == "batch" and status.get("status") == "running":
+        status = dict(status)
+        status["status"] = "batch_running"
     return status
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 0 — Re-indexation des embeddings (embeddings-only, sans re-extraction LLM)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/reindex-embeddings")
+async def reindex_embeddings(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    tag: Optional[str] = Query(default=None, description="Filtre par tag (agence)"),
+    user_id: Optional[int] = Query(default=None, description="Filtre par user_id"),
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+):
+    """(Admin Only) Re-calcule les embeddings vectoriels de tous les CVs avec le nouveau
+    distilled_content structuré (missions + compétences), SANS relancer l'extraction LLM.
+    Traitement en arrière-plan — retour immédiat. Suivre via GET /reanalyze/status.
+    """
+    if token_payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    auth_token = request.headers.get("Authorization")
+    inject({"Authorization": auth_token} if auth_token else {})
+    background_tasks.add_task(reindex_embeddings_bg, tag, user_id, auth_token)
+    return {"message": "Re-indexation des embeddings lancée", "filter": {"tag": tag, "user_id": user_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint A1 — Consultants similaires (0 LLM, SQL pur pgvector)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/user/{user_id}/similar")
+async def find_similar_consultants(
+    user_id: int,
+    limit: int = Query(default=5, le=20),
+    agency: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+    request: Request = None,
+):
+    """Retourne les N consultants dont le profil sémantique est le plus proche d'un consultant donné.
+    Utile pour : cloner un profil de staffing, trouver des remplaçants potentiels, constituer une équipe.
+    Zéro appel LLM — résultat O(log N) grâce à l'index HNSW pgvector.
+    """
+    # Récupère l'embedding du profil source
+    source_result = await db.execute(
+        select(CVProfile.semantic_embedding).filter(CVProfile.user_id == user_id)
+    )
+    source_embedding = source_result.scalar_one_or_none()
+    if source_embedding is None:
+        raise HTTPException(status_code=404, detail=f"Profil introuvable ou embedding manquant pour user_id={user_id}")
+
+    stmt = (
+        select(CVProfile, CVProfile.semantic_embedding.cosine_distance(source_embedding).label("distance"))
+        .filter(CVProfile.user_id != user_id)
+        .filter(CVProfile.semantic_embedding.is_not(None))
+    )
+    if agency:
+        stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
+
+    stmt = stmt.order_by("distance").limit(limit)
+    rows = (await db.execute(stmt)).all()
+
+    auth_header = request.headers.get("Authorization") if request else None
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+
+    results = []
+    async with httpx.AsyncClient(timeout=8.0) as http_client:
+        for profile, distance in rows:
+            entry = {
+                "user_id": profile.user_id,
+                "similarity_score": round(max(0.0, 1.0 - distance), 4),
+                "current_role": profile.current_role,
+                "years_of_experience": profile.years_of_experience,
+                "source_tag": profile.source_tag,
+            }
+            try:
+                u_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/{profile.user_id}", headers=headers_downstream
+                )
+                if u_res.status_code == 200:
+                    u_data = u_res.json()
+                    entry["full_name"] = u_data.get("full_name")
+                    entry["email"] = u_data.get("email")
+            except Exception as e:
+                logger.warning(f"[SIMILAR] Enrichissement user {profile.user_id} échoué: {e}")
+            results.append(entry)
+
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint A2 — Recherche multi-critères (N vecteurs pondérés, 1 requête SQL)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class MultiCriteriaSearchRequest(BaseModel):
+    queries: List[str]
+    weights: Optional[List[float]] = None
+    limit: int = 10
+    agency: Optional[str] = None
+
+
+@router.post("/search/multi-criteria")
+async def search_candidates_multi_criteria(
+    req_body: MultiCriteriaSearchRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """Recherche sémantique multi-critères : trouve les consultants correspondant à
+    PLUSIEURS dimensions simultanément via une moyenne pondérée de distances cosine.
+    Remplace N appels search_best_candidates séquentiels par une seule requête SQL.
+    Exemple : queries=["expert GCP", "migration legacy"], weights=[0.7, 0.3]
+    """
+    if not client:
+        raise HTTPException(status_code=500, detail="Client Gemini non configuré.")
+    if not req_body.queries:
+        raise HTTPException(status_code=400, detail="Au moins une query est requise.")
+    if len(req_body.queries) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 critères simultanés.")
+
+    weights = req_body.weights or [1.0 / len(req_body.queries)] * len(req_body.queries)
+    if len(weights) != len(req_body.queries):
+        raise HTTPException(status_code=400, detail="Nombre de weights ≠ nombre de queries.")
+
+    # Normaliser les weights pour que leur somme = 1
+    total_w = sum(weights)
+    weights = [w / total_w for w in weights]
+
+    # Calculer un embedding par query
+    embeddings = []
+    for q in req_body.queries:
+        try:
+            emb_res = await embed_content_with_retry(
+                client,
+                model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+                contents=q[:3000]
+            )
+            embeddings.append(emb_res.embeddings[0].values)
+        except Exception as e:
+            logger.error(f"[MULTI-SEARCH] Embedding échoué pour query '{q}': {e}")
+            raise HTTPException(status_code=400, detail=f"Embedding échoué pour: {q}")
+
+    # Score combiné = somme pondérée des distances cosine
+    combined_distance = sum(
+        CVProfile.semantic_embedding.cosine_distance(emb) * w
+        for emb, w in zip(embeddings, weights)
+    )
+
+    stmt = (
+        select(CVProfile, combined_distance.label("combined_distance"))
+        .filter(CVProfile.semantic_embedding.is_not(None))
+    )
+    if req_body.agency:
+        stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{req_body.agency}%"))
+    stmt = stmt.order_by("combined_distance").limit(req_body.limit * 2)
+
+    rows = (await db.execute(stmt)).all()
+
+    user_caller = token_payload.get("sub", "unknown")
+    for q in req_body.queries:
+        await log_finops(
+            user_caller, "multi_criteria_embedding",
+            os.getenv("GEMINI_EMBEDDING_MODEL"),
+            {"prompt_token_count": len(q) // 4, "candidates_token_count": 0},
+            auth_token=credentials.credentials
+        )
+
+    auth_header = request.headers.get("Authorization")
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+
+    results, seen = [], set()
+    async with httpx.AsyncClient(timeout=8.0) as http_client:
+        for profile, dist in rows:
+            if profile.user_id in seen:
+                continue
+            seen.add(profile.user_id)
+            score = round(max(0.0, 1.0 - float(dist)), 4)
+            entry = {
+                "user_id": profile.user_id,
+                "combined_similarity": score,
+                "current_role": profile.current_role,
+                "years_of_experience": profile.years_of_experience,
+                "source_tag": profile.source_tag,
+            }
+            try:
+                u_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/{profile.user_id}", headers=headers_downstream
+                )
+                if u_res.status_code == 200:
+                    u_data = u_res.json()
+                    entry["full_name"] = u_data.get("full_name")
+                    entry["email"] = u_data.get("email")
+            except Exception as e:
+                logger.warning(f"[MULTI-SEARCH] Enrichissement user {profile.user_id} échoué: {e}")
+            results.append(entry)
+            if len(results) >= req_body.limit:
+                break
+
+    if not results:
+        raise HTTPException(status_code=404, detail="Aucun candidat correspondant à ces critères combinés.")
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint A3 — RAG Snippet (passages les plus pertinents d'un CV pour une query)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/user/{user_id}/rag-snippet")
+async def get_rag_snippet(
+    user_id: int,
+    query: str = Query(..., description="La requête pour laquelle chercher les passages pertinents"),
+    top_k: int = Query(default=3, le=5),
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """Retourne les passages les plus pertinents du CV d'un consultant pour une query donnée.
+    Utilise un chunking du distilled_content + re-ranking par similarité cosine.
+    Permet de JUSTIFIER une recommandation avec des preuves textuelles précises.
+    Timeout MCP : 30s (embedding de la query + N passages).
+    """
+    if not client:
+        raise HTTPException(status_code=500, detail="Client Gemini non configuré.")
+
+    profile = (await db.execute(
+        select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc())
+    )).scalars().first()
+
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"Profil introuvable pour user_id={user_id}")
+
+    # Reconstituer le distilled_content depuis les champs structurés en base
+    structured_cv = {
+        "current_role": profile.current_role or "Unknown",
+        "years_of_experience": profile.years_of_experience or 0,
+        "summary": profile.summary or "",
+        "competencies": [{"name": k} for k in (profile.competencies_keywords or [])],
+        "educations": profile.educations or [],
+        "missions": profile.missions or [],
+    }
+    distilled = _build_distilled_content(structured_cv)
+
+    # Chunking du contenu distillé
+    passages = _chunk_text(distilled, chunk_size=150, overlap=20)
+    if not passages:
+        return {"user_id": user_id, "snippets": [], "message": "Aucun contenu disponible pour ce profil."}
+
+    # Embedding de la query
+    try:
+        query_emb_res = await embed_content_with_retry(
+            client,
+            model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+            contents=query[:3000]
+        )
+        query_vector = query_emb_res.embeddings[0].values
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Embedding de la query échoué: {e}")
+
+    # Embedding de chaque passage (parallèle, max 10 passages)
+    passages_to_rank = passages[:10]
+
+    async def embed_passage(p: str):
+        try:
+            res = await embed_content_with_retry(
+                client,
+                model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+                contents=p
+            )
+            return res.embeddings[0].values
+        except Exception:
+            return None
+
+    passage_embeddings = await asyncio.gather(*[embed_passage(p) for p in passages_to_rank])
+
+    # Cosine similarity inline (pgvector non dispo ici — calcul Python sur N<10 passages)
+
+    def cosine_sim(a, b):
+        if not a or not b:
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a))
+        norm_b = math.sqrt(sum(y * y for y in b))
+        return dot / (norm_a * norm_b + 1e-9)
+
+    ranked = sorted(
+        [(passages_to_rank[i], cosine_sim(query_vector, passage_embeddings[i]))
+         for i in range(len(passages_to_rank)) if passage_embeddings[i] is not None],
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    await log_finops(
+        token_payload.get("sub", "unknown"),
+        "rag_snippet",
+        os.getenv("GEMINI_EMBEDDING_MODEL"),
+        {"prompt_token_count": (len(query) + len(distilled)) // 4, "candidates_token_count": 0},
+        auth_token=credentials.credentials
+    )
+
+    return {
+        "user_id": user_id,
+        "query": query,
+        "snippets": [
+            {"text": text, "relevance_score": round(score, 4)}
+            for text, score in ranked[:top_k]
+        ]
+    }
+
+
 @router.get("/reanalyze/status")
 async def get_reanalyze_status(
     tag: Optional[str] = None,
@@ -1971,6 +1199,145 @@ async def get_reanalyze_status(
             return {"status": "unavailable", "message": f"drive_api /status HTTP {res.status_code}"}
     except Exception as e:
         return {"status": "unavailable", "message": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint B2 — Matching inversé Mission → CVs
+# ─────────────────────────────────────────────────────────────────────────────
+
+MISSIONS_API_URL = os.getenv("MISSIONS_API_URL", "http://missions_api:8000")
+
+
+@router.post("/search/mission-match")
+async def match_mission_to_candidates(
+    request: Request,
+    mission_id: int = Query(..., description="ID de la mission à staffer"),
+    limit: int = Query(default=10, le=50),
+    agency: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+):
+    """Matching direct mission → candidats via le semantic_embedding de la mission.
+    Plus précis que search_best_candidates pour le staffing car utilise le contexte
+    complet de la mission (description + compétences extraites). Zéro appel LLM.
+    Requiert que la mission ait été analysée par l'IA (semantic_embedding alimenté).
+    """
+    auth_header = request.headers.get("Authorization")
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+
+    # 1. Récupérer l'embedding de la mission depuis missions_api
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            mission_res = await http_client.get(
+                f"{MISSIONS_API_URL.rstrip('/')}/missions/{mission_id}",
+                headers=headers_downstream
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"missions_api inaccessible: {e}")
+
+    if mission_res.status_code == 404:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} introuvable.")
+    if mission_res.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"missions_api erreur HTTP {mission_res.status_code}")
+
+    # Récupérer l'embedding directement en base (missions_api ne l'expose pas via l'API REST)
+    # On requête cv_api's DB pour la mission via missions_api internal
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        emb_res = await http_client.get(
+            f"{MISSIONS_API_URL.rstrip('/')}/missions/{mission_id}/embedding",
+            headers=headers_downstream
+        )
+
+    mission_embedding = None
+    if emb_res.status_code == 200:
+        mission_embedding = emb_res.json().get("embedding")
+
+    if not mission_embedding:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La mission {mission_id} n'a pas d'embedding vectoriel. Lancez une ré-analyse via missions_api d'abord."
+        )
+
+    # 2. Cosine search dans cv_profiles
+    stmt = (
+        select(CVProfile, CVProfile.semantic_embedding.cosine_distance(mission_embedding).label("distance"))
+        .filter(CVProfile.semantic_embedding.is_not(None))
+    )
+    if agency:
+        stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
+    stmt = stmt.order_by("distance").limit(limit)
+
+    rows = (await db.execute(stmt)).all()
+
+    results = []
+    async with httpx.AsyncClient(timeout=8.0) as http_client:
+        for profile, distance in rows:
+            entry = {
+                "user_id": profile.user_id,
+                "similarity_score": round(max(0.0, 1.0 - distance), 4),
+                "current_role": profile.current_role,
+                "years_of_experience": profile.years_of_experience,
+                "source_tag": profile.source_tag,
+            }
+            try:
+                u_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/{profile.user_id}", headers=headers_downstream
+                )
+                if u_res.status_code == 200:
+                    u_data = u_res.json()
+                    entry["full_name"] = u_data.get("full_name")
+                    entry["email"] = u_data.get("email")
+            except Exception as e:
+                logger.warning(f"[MISSION-MATCH] Enrichissement user {profile.user_id} échoué: {e}")
+            results.append(entry)
+
+    if not results:
+        raise HTTPException(status_code=404, detail=f"Aucun candidat trouvé pour la mission {mission_id}.")
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint C1 — Analytics : couverture des compétences corpus
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/analytics/skills-coverage")
+async def get_skills_coverage(
+    agency: Optional[str] = Query(default=None, description="Filtre par agence/tag"),
+    top_n: int = Query(default=50, le=200),
+    db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt),
+):
+    """Analyse la couverture de compétences du corpus de consultants Zenika.
+    Retourne les N compétences les plus représentées et le nombre de consultants.
+    Zéro appel LLM — agrégation SQL sur la colonne competencies_keywords[] (ARRAY).
+    Réponse < 200ms. Idéal pour les requêtes stratégiques de couverture.
+    """
+    raw_query = sa_text("""
+        SELECT unnest(competencies_keywords) AS skill,
+               COUNT(DISTINCT user_id)       AS consultant_count
+        FROM cv_profiles
+        WHERE semantic_embedding IS NOT NULL
+          AND competencies_keywords IS NOT NULL
+          AND cardinality(competencies_keywords) > 0
+          AND (CAST(:agency AS TEXT) IS NULL OR COALESCE(source_tag, '') ILIKE '%' || CAST(:agency AS TEXT) || '%')
+        GROUP BY skill
+        ORDER BY consultant_count DESC
+        LIMIT :top_n
+    """)
+
+    try:
+        result = await db.execute(raw_query, {"agency": agency, "top_n": top_n})
+        rows = result.fetchall()
+    except Exception as e:
+        logger.error(f"[get_skills_coverage] SQL error: {e}")
+        return []
+
+    return [
+        {"skill": row.skill, "consultant_count": row.consultant_count}
+        for row in rows
+        if row.skill
+    ]
 
 
 @router.post("/reanalyze")
@@ -2140,11 +1507,10 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
     if not auth_header:
         raise HTTPException(status_code=401, detail="Missing Authorization via CV merge")
         
-    from sqlalchemy import update
-    stmt = update(CVProfile).where(CVProfile.user_id == req.source_id).values(user_id=req.target_id)
+    stmt = sa_update(CVProfile).where(CVProfile.user_id == req.source_id).values(user_id=req.target_id)
     await db.execute(stmt)
     
-    stmt2 = update(CVProfile).where(CVProfile.imported_by_id == req.source_id).values(imported_by_id=req.target_id)
+    stmt2 = sa_update(CVProfile).where(CVProfile.imported_by_id == req.source_id).values(imported_by_id=req.target_id)
     await db.execute(stmt2)
 
     await db.commit()
@@ -2171,13 +1537,11 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
             source_id = data.get("source_id")
             target_id = data.get("target_id")
             if source_id and target_id:
-                from sqlalchemy import update
-                # Update profiles owned by the user
-                stmt = update(CVProfile).where(CVProfile.user_id == source_id).values(user_id=target_id)
+                stmt = sa_update(CVProfile).where(CVProfile.user_id == source_id).values(user_id=target_id)
                 await db.execute(stmt)
                 
                 # Update profiles imported BY the user
-                stmt2 = update(CVProfile).where(CVProfile.imported_by_id == source_id).values(imported_by_id=target_id)
+                stmt2 = sa_update(CVProfile).where(CVProfile.imported_by_id == source_id).values(imported_by_id=target_id)
                 await db.execute(stmt2)
                 
                 await db.commit()
@@ -2186,3 +1550,866 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
     except Exception as e:
         logger.error(f"Error processing Pub/Sub event: {e}")
         return {"status": "error", "detail": str(e)}
+
+
+@router.post("/recalculate_tree/batch/start", summary="Lance le processus batch asynchrone (Map)")
+async def recalculate_tree_batch_start(request: Request, user: dict = Depends(verify_jwt)):
+    auth_header = request.headers.get("Authorization")
+    latest_status = await tree_task_manager.get_latest_status()
+    if latest_status and latest_status.get("status") == "running" and latest_status.get("batch_job_id"):
+        # Vérifier l'état réel sur Vertex AI pour éviter un Redis bloqué à 'running'
+        # si le job est déjà terminé (SUCCEEDED/FAILED) côté GCP.
+        job_id_check = latest_status.get("batch_job_id")
+        try:
+            live_job = await asyncio.to_thread(vertex_batch_client.batches.get, name=job_id_check)
+            live_state = live_job.state.name if hasattr(live_job.state, "name") else str(live_job.state)
+            if live_state in ("JOB_STATE_RUNNING", "JOB_STATE_PENDING", "JOB_STATE_QUEUED"):
+                return {"success": False, "message": f"Batch déjà en cours ({live_state}). Attendez la fin ou annulez."}
+            # État terminal côté GCP mais Redis pas encore mis à jour → on débloque
+            logger.info(f"[batch-start] Job {job_id_check} déjà terminé ({live_state}) mais Redis bloqué — déblocage automatique.")
+        except Exception as e_check:
+            # Si on ne peut pas joindre Vertex AI, on reste conservateur
+            logger.warning(f"[batch-start] Impossible de vérifier l'état Vertex AI : {e_check} — blocage conservateur.")
+            return {"success": False, "message": "Batch en cours (impossible de vérifier Vertex AI). Utilisez 'Réinitialiser' si bloqué."}
+        
+    await tree_task_manager.initialize_task()
+    await tree_task_manager.update_progress(batch_step="map", new_log="Démarrage du processus Batch (Map)...")
+
+    # AGENTS.md §4 : obtenir le service-token MAINTENANT (JWT valide) et le stocker en Redis.
+    # Tous les batch/check suivants (dedup, reduce, sweep) arriveront 1h+ plus tard JWT expiré.
+    auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
+    _start_service_token: str = auth_token
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as _svc_start:
+            _res_start = await _svc_start.post(
+                f"{USERS_API_URL.rstrip('/')}/internal/service-token",
+                headers={"Authorization": auth_header},
+                timeout=10.0,
+            )
+            if _res_start.status_code == 200:
+                _fresh = _res_start.json().get("access_token")
+                if _fresh:
+                    _start_service_token = _fresh
+                    logger.info("[batch-start] Service token 90 min stocké en Redis.")
+            else:
+                logger.warning(f"[batch-start] /internal/service-token HTTP {_res_start.status_code} — fallback JWT court.")
+    except Exception as _e_start:
+        logger.warning(f"[batch-start] Impossible d'obtenir le service-token: {_e_start} — fallback JWT court.")
+    await tree_task_manager.update_progress(service_token=_start_service_token)
+
+    existing_names = await _get_existing_competencies(auth_header)
+    logger.info(f"[batch-start] {len(existing_names)} compétences récupérées pour le Map.")
+    if not existing_names:
+        error_msg = "Aucune compétence trouvée dans competencies_api. Vérifiez que l'API est démarrée et que des compétences existent en base avant de lancer le batch."
+        await tree_task_manager.update_progress(status="error", error=error_msg)
+        return {"success": False, "error": error_msg}
+        
+    instruction_map = await _fetch_prompt("cv_api.generate_taxonomy_tree_map", "cv_api.generate_taxonomy_tree_map.txt", auth_header)
+    
+    chunk_size = 500
+    existing_names_chunks = [existing_names[i:i + chunk_size] for i in range(0, len(existing_names), chunk_size)]
+    
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".jsonl") as f:
+        for i, chunk in enumerate(existing_names_chunks):
+            skills_str = ", ".join(chunk)
+            map_instruction = instruction_map.replace("{{EXISTING_COMPETENCIES}}", skills_str)
+            req = {
+                "id": f"chunk-{i}",
+                "request": {
+                    "contents": [{"role": "user", "parts": [{"text": map_instruction}]}],
+                    "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
+                }
+            }
+            f.write(json.dumps(req) + "\n")
+        temp_path = f.name
+        
+    try:
+        if not vertex_batch_client:
+            raise ValueError("Vertex AI client non initialisé (GCP_PROJECT_ID ou VERTEX_LOCATION manquant).")
+        if not BATCH_GCS_BUCKET:
+            raise ValueError("BATCH_GCS_BUCKET non configuré.")
+
+        # Upload du JSONL vers GCS
+        gcs_client = gcs_storage.Client()
+        timestamp = int(datetime.utcnow().timestamp())
+        blob_name = f"taxonomy/input/map-{timestamp}.jsonl"
+        bucket = gcs_client.bucket(BATCH_GCS_BUCKET)
+        blob = bucket.blob(blob_name)
+        blob.upload_from_filename(temp_path, content_type="application/jsonl")
+        src_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_name}"
+        dest_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/map-{timestamp}/"
+
+        batch_job = await asyncio.to_thread(
+            vertex_batch_client.batches.create,
+            model=os.environ["GEMINI_PRO_MODEL"],
+            src=src_uri,
+            config={"display_name": "taxonomy-map-batch", "dest": dest_uri}
+        )
+        await tree_task_manager.update_progress(batch_job_id=batch_job.name, batch_step="map", new_log=f"Job Batch Map créé (ID: {batch_job.name}). En attente de Vertex AI...")
+        os.unlink(temp_path)
+        return {"success": True, "batch_job_id": batch_job.name}
+    except Exception as e:
+        logger.error(f"Erreur création batch Map: {e}")
+        await tree_task_manager.update_progress(status="error", error=str(e))
+        os.unlink(temp_path)
+        return {"success": False, "error": str(e)}
+
+@router.post("/recalculate_tree/batch/check", summary="Vérifie l'état du batch et avance la machine à états")
+async def recalculate_tree_batch_check(request: Request, user: dict = Depends(verify_jwt)):
+    auth_header = request.headers.get("Authorization")
+    auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
+    user_caller = user.get("sub", "scheduler")
+    
+    latest_status = await tree_task_manager.get_latest_status()
+    if not latest_status or latest_status.get("status") != "running" or not latest_status.get("batch_job_id"):
+        return {"success": True, "message": "Aucun batch en cours"}
+        
+    batch_job_id = latest_status.get("batch_job_id")
+    batch_step = latest_status.get("batch_step")
+
+    # Lire le service-token persisté à batch/start (JWT encore valide à l'époque).
+    # Ne PAS tenter de ré-acquérir via /internal/service-token : le JWT est expiré depuis longtemps.
+    _persisted_svc_token = latest_status.get("service_token") or auth_token
+    if not latest_status.get("service_token"):
+        logger.warning(
+            "[batch-check] service_token absent du state Redis (ancien batch pré-migration) —"
+            " tentative de ré-acquisition avec le JWT courant."
+        )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as _svc_compat:
+                _res_compat = await _svc_compat.post(
+                    f"{USERS_API_URL.rstrip('/')}/internal/service-token",
+                    headers={"Authorization": auth_header},
+                    timeout=10.0,
+                )
+                if _res_compat.status_code == 200:
+                    _fresh = _res_compat.json().get("access_token")
+                    if _fresh:
+                        _persisted_svc_token = _fresh
+                        await tree_task_manager.update_progress(service_token=_fresh)
+        except Exception as _e_compat:
+            logger.warning(f"[batch-check] Ré-acquisition échouée: {_e_compat}")
+
+    try:
+        batch_job = await asyncio.to_thread(vertex_batch_client.batches.get, name=batch_job_id)
+        if batch_job.state.name != "JOB_STATE_SUCCEEDED":
+            if batch_job.state.name == "JOB_STATE_FAILED":
+                try:
+                    await asyncio.to_thread(vertex_batch_client.batches.delete, name=batch_job_id)
+                except Exception as e:
+                    logger.error(f"Impossible de supprimer le batch échoué: {e}")
+                
+                error_msg = f"Le job Batch a échoué côté GCP (Status: {batch_job.state.name})"
+                await tree_task_manager.update_progress(status="error", error=error_msg)
+                return {"success": False, "error": error_msg}
+
+            # ── Auto-healing : PENDING timeout ────────────────────────────────
+            # Si le batch est bloqué en PENDING trop longtemps (file GCP saturée),
+            # on le cancelle et on repart de zéro automatiquement.
+            if batch_job.state.name == "JOB_STATE_PENDING":
+                timeout_hours = float(os.environ.get("BATCH_PENDING_TIMEOUT_HOURS", "3"))
+                create_time = getattr(batch_job, "create_time", None)
+                if create_time:
+                    elapsed_hours = (datetime.now(timezone.utc) - create_time).total_seconds() / 3600
+                    if elapsed_hours >= timeout_hours:
+                        logger.warning(
+                            f"[batch-check] Batch {batch_job_id} bloqué en PENDING depuis "
+                            f"{elapsed_hours:.1f}h (seuil={timeout_hours}h) — cancel + restart automatique."
+                        )
+                        try:
+                            await asyncio.to_thread(vertex_batch_client.batches.cancel, name=batch_job_id)
+                        except Exception as e_cancel:
+                            logger.warning(f"[batch-check] Impossible d'annuler le batch: {e_cancel}")
+                        # Reset complet de l'état Redis pour forcer un nouveau /batch/start
+                        await tree_task_manager.update_progress(
+                            status="error",
+                            error=(
+                                f"Batch {batch_job_id} annulé automatiquement après {elapsed_hours:.1f}h en PENDING "
+                                f"(file GCP saturée). Un nouveau batch sera déclenché au prochain trigger du scheduler."
+                            )
+                        )
+                        return {
+                            "success": True,
+                            "action": "auto_restart",
+                            "message": f"Batch annulé après {elapsed_hours:.1f}h — prochain trigger relancera le pipeline.",
+                        }
+            # ── Fin auto-healing ───────────────────────────────────────────────
+
+            # Monitoring : completion_stats (Vertex AI) ou fallback vide
+            progress_data = {}
+            cs = getattr(batch_job, "completion_stats", None)
+            if cs:
+                successful = int(getattr(cs, "success_count", None) or getattr(cs, "successful_count", 0) or 0)
+                failed = int(getattr(cs, "failed_count", None) or getattr(cs, "error_count", 0) or 0)
+                incomplete = int(getattr(cs, "incomplete_count", 0) or 0)
+                total = int(getattr(cs, "total_count", None) or 0) or (successful + failed + incomplete)
+                progress_data = {
+                    "completed": successful,
+                    "total": total,
+                    "failed": failed,
+                    "percent": int((successful / total) * 100) if total > 0 else 0
+                }
+                
+            # Temps écoulé depuis création
+            elapsed_info = ""
+            if getattr(batch_job, "create_time", None):
+                from datetime import timezone
+                elapsed_s = (datetime.now(timezone.utc) - batch_job.create_time).total_seconds()
+                elapsed_info = f"{int(elapsed_s // 3600)}h{int((elapsed_s % 3600) // 60)}m"
+
+            return {
+                "success": True,
+                "state": batch_job.state.name,
+                "step": batch_step,
+                "progress": progress_data,
+                "elapsed": elapsed_info
+            }
+
+            
+        # Téléchargement du résultat depuis GCS (Vertex AI stocke dans dest)
+        # batch_job.dest est un objet BatchJobDestination, pas une string — utiliser .gcs_uri
+        dest_obj = batch_job.dest
+        if not dest_obj or not dest_obj.gcs_uri:
+            raise ValueError("batch_job.dest.gcs_uri est vide — le résultat n'est pas encore disponible.")
+
+        dest_uri = dest_obj.gcs_uri  # ex: gs://bucket/taxonomy/output/map-xxx/
+        # Normalise le préfixe GCS
+        gcs_dest = dest_uri.replace(f"gs://{BATCH_GCS_BUCKET}/", "")
+        gcs_client = gcs_storage.Client()
+        output_bucket = gcs_client.bucket(BATCH_GCS_BUCKET)
+        blobs = list(output_bucket.list_blobs(prefix=gcs_dest))
+        output_blob = next((b for b in blobs if b.name.endswith(".jsonl")), None)
+        if not output_blob:
+            raise ValueError(f"Aucun fichier .jsonl trouvé dans {dest_uri}")
+        file_content = output_blob.download_as_text()
+
+        total_prompt_tokens = 0
+        total_candidates_tokens = 0
+        parsed_results = []
+        
+        for line in file_content.splitlines():
+            resp = json.loads(line)
+            if "response" in resp and "usageMetadata" in resp["response"]:
+                total_prompt_tokens += resp["response"]["usageMetadata"].get("promptTokenCount", 0)
+                total_candidates_tokens += resp["response"]["usageMetadata"].get("candidatesTokenCount", 0)
+            
+            # Text content
+            if "response" in resp and "candidates" in resp["response"] and len(resp["response"]["candidates"]) > 0:
+                parts = resp["response"]["candidates"][0].get("content", {}).get("parts", [])
+                if parts:
+                    parsed_results.append(parts[0].get("text", ""))
+                    
+        usage = {"prompt_token_count": total_prompt_tokens, "candidates_token_count": total_candidates_tokens}
+        
+        if batch_step == "map":
+            await log_finops(user_caller, "recalculate_tree_batch_map", os.environ["GEMINI_MODEL"], usage, auth_token=auth_token)
+            
+            map_result = {}
+            for i, text in enumerate(parsed_results):
+                try:
+                    cleaned = text.strip()
+                    if cleaned.startswith("```json"): cleaned = cleaned[7:]
+                    if cleaned.startswith("```"): cleaned = cleaned[3:]
+                    if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                    
+                    raw_map, _ = json.JSONDecoder().raw_decode(cleaned)
+                    if isinstance(raw_map, dict) and "items" in raw_map:
+                        raw_map = raw_map["items"]
+                    parsed_chunk = {}
+                    if isinstance(raw_map, list):
+                        for item in raw_map:
+                            if isinstance(item, dict):
+                                parsed_chunk.update(item)
+                    elif isinstance(raw_map, dict):
+                        parsed_chunk.update(raw_map)
+                        
+                    for pillar, skills in parsed_chunk.items():
+                        if not isinstance(skills, list): continue
+                        if pillar not in map_result: map_result[pillar] = []
+                        map_result[pillar].extend(skills)
+                except Exception as e:
+                    logger.error(f"Erreur de parsing sur le chunk {i} du Map (ignoré): {e}")
+                    continue
+                    
+            if not map_result:
+                return {"success": False, "error": "Aucun chunk JSONL n'a pu être parsé correctement."}
+                
+            await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")
+            
+            # Service token lu depuis Redis (stocké à batch/start quand le JWT était encore valide).
+            dedup_service_token: str = _persisted_svc_token
+
+            # Lancement en tâche de fond pour éviter le timeout HTTP
+            async def run_dedup(svc_token: str = dedup_service_token):
+                _svc_auth_header = f"Bearer {svc_token}"
+                try:
+                    instruction_dedup = await _fetch_prompt("cv_api.generate_taxonomy_tree_deduplicate", "cv_api.generate_taxonomy_tree_deduplicate.txt", _svc_auth_header)
+                    # map_json_str = map_result complet, injecté dans Dedup ET Reduce
+                    map_json_str = json.dumps(map_result, ensure_ascii=False)
+                    # Dedup utilise GEMINI_PRO_MODEL (contexte 1M tokens) pour traiter
+                    # le map_result complet sans troncature ni perte de qualité.
+                    dedup_instruction = instruction_dedup.replace("{{MAP_RESULT}}", map_json_str)
+
+                    response_dedup = await generate_content_with_retry(
+                        client,
+                        model=os.environ["GEMINI_PRO_MODEL"],
+                        contents=[dedup_instruction],
+                        config=types.GenerateContentConfig(
+                            temperature=0.1,
+                            response_mime_type="application/json",
+                            max_output_tokens=65536,
+                        )
+                    )
+                    await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ["GEMINI_PRO_MODEL"], response_dedup.usage_metadata, auth_token=svc_token)
+
+                    # Vérifier que la réponse n'est pas tronquée
+                    finish_reason = None
+                    if response_dedup.candidates:
+                        finish_reason = str(getattr(response_dedup.candidates[0], "finish_reason", "")).upper()
+                    if finish_reason and "MAX_TOKEN" in finish_reason:
+                        raise ValueError(
+                            f"La réponse Deduplicate a été tronquée par le LLM (finish_reason={finish_reason}). "
+                            "Augmentez max_output_tokens ou réduisez le prompt."
+                        )
+
+                    cleaned = response_dedup.text.strip()
+                    if cleaned.startswith("```json"): cleaned = cleaned[7:]
+                    if cleaned.startswith("```"): cleaned = cleaned[3:]
+                    if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                    try:
+                        raw_dedup, _ = json.JSONDecoder().raw_decode(cleaned)
+                    except json.JSONDecodeError as json_err:
+                        raise ValueError(
+                            f"Erreur Deduplicate: {json_err} — "
+                            f"Réponse LLM (premiers 500 chars): {cleaned[:500]!r}"
+                        )
+
+                    
+                    pillars_list = []
+                    if isinstance(raw_dedup, dict) and "pillars" in raw_dedup:
+                        pillars_list = raw_dedup["pillars"]
+                    elif isinstance(raw_dedup, list):
+                        pillars_list = raw_dedup
+                    elif isinstance(raw_dedup, dict) and len(raw_dedup) > 0:
+                        pillars_list = [{"name": k} for k in raw_dedup.keys()]
+                        
+                    completed_pillars = []
+                    for p in pillars_list:
+                        if isinstance(p, dict) and "name" in p:
+                            completed_pillars.append(p)
+                        elif isinstance(p, str):
+                            completed_pillars.append({"name": p, "description": ""})
+                            
+                    if not completed_pillars:
+                        raise ValueError(f"Le LLM a retourné un résultat vide ou non reconnu pour la déduplication : {str(raw_dedup)[:200]}")
+                            
+                    await tree_task_manager.update_progress(completed_pillars=completed_pillars, new_log="Deduplicate terminé. Lancement du Batch Reduce...")
+                    
+                    # Start Reduce Batch
+                    instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", "cv_api.generate_taxonomy_tree_reduce.txt", _svc_auth_header)
+                    
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".jsonl") as f:
+                        for i, p in enumerate(completed_pillars):
+                            p_name = p.get("name", "")
+                            reduce_prompt = instruction_reduce.replace("{{CURRENT_PILLAR}}", p_name).replace("{{MAP_RESULT}}", map_json_str)
+                            req = {
+                                "id": f"pillar-{i}",
+                                "request": {
+                                    "contents": [{"role": "user", "parts": [{"text": reduce_prompt}]}],
+                                    "generationConfig": {
+                                        "temperature": 0.1,
+                                        "responseMimeType": "application/json",
+                                        "maxOutputTokens": 65536
+                                    }
+                                }
+                            }
+                            f.write(json.dumps(req) + "\n")
+                        temp_path = f.name
+                        
+                    # Init GCS client avant usage
+                    gcs_client_reduce = gcs_storage.Client()
+                    ts_reduce = int(datetime.utcnow().timestamp())
+                    blob_reduce_name = f"taxonomy/input/reduce-{ts_reduce}.jsonl"
+                    reduce_bucket = gcs_client_reduce.bucket(BATCH_GCS_BUCKET)
+                    blob_reduce = reduce_bucket.blob(blob_reduce_name)
+                    blob_reduce.upload_from_filename(temp_path, content_type="application/jsonl")
+                    src_reduce_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_reduce_name}"
+                    dest_reduce_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/reduce-{ts_reduce}/"
+
+                    reduce_batch_job = await asyncio.to_thread(
+                        vertex_batch_client.batches.create,
+                        model=os.environ["GEMINI_PRO_MODEL"],
+                        src=src_reduce_uri,
+                        config={"display_name": "taxonomy-reduce-batch", "dest": dest_reduce_uri}
+                    )
+                    await tree_task_manager.update_progress(batch_job_id=reduce_batch_job.name, batch_step="reduce", new_log=f"Job Batch Reduce créé (ID: {reduce_batch_job.name}). En attente Vertex AI...")
+                    os.unlink(temp_path)
+                except Exception as e:
+                    logger.error(f"Erreur background dedup: {e}")
+                    await tree_task_manager.update_progress(status="error", error=f"Erreur Deduplicate: {str(e)}")
+            
+            asyncio.create_task(run_dedup())
+            return {"success": True, "state": "PROCESSING_DEDUP"}
+            
+        elif batch_step == "reduce":
+            await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
+            
+            res_tree = {}
+            for i, text in enumerate(parsed_results):
+                try:
+                    cleaned = text.strip()
+                    if cleaned.startswith("```json"): cleaned = cleaned[7:]
+                    if cleaned.startswith("```"): cleaned = cleaned[3:]
+                    if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                    
+                    raw_res, _ = json.JSONDecoder().raw_decode(cleaned)
+                    if isinstance(raw_res, dict):
+                        res_tree.update(raw_res)
+                except Exception as e:
+                    logger.error(f"Erreur de parsing de chunk JSONL Reduce {i} (ignoré): {e}")
+                    continue
+                    
+            if not res_tree:
+                return {"success": False, "error": "Aucun chunk JSONL du Reduce n'a pu être parsé."}
+                
+            await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")
+
+            # --- Garde-fou : détecter un res_tree corrompu (placeholder non substitué) ---
+            if "{{CURRENT_PILLAR}}" in res_tree or "{{PILLAR_NAME}}" in res_tree:
+                error_msg = (
+                    "res_tree corrompu : la clef '{{CURRENT_PILLAR}}' est présente, "
+                    "le prompt Reduce n'a pas substitué le placeholder. "
+                    "Relancez un nouveau batch depuis zéro (Recover ne suffit pas)."
+                )
+                await tree_task_manager.update_progress(status="error", error=error_msg)
+                return {"success": False, "error": error_msg}
+
+            # Service token lu depuis Redis (stocké à batch/start quand le JWT était encore valide).
+            sweep_service_token: str = _persisted_svc_token
+
+            # Lancement en tâche de fond pour Sweep
+            async def run_sweep(service_token: str = sweep_service_token):
+                try:
+                    from google.genai import types
+                    instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", "cv_api.generate_taxonomy_tree_sweep.txt", f"Bearer {service_token}")
+                    existing_names = await _get_existing_competencies(f"Bearer {service_token}")
+                    def get_all_used_names(node, used=None):
+                        if used is None: used = set()
+                        if isinstance(node, dict):
+                            if "name" in node:
+                                used.add(node["name"])
+                            if "merge_from" in node and isinstance(node["merge_from"], list):
+                                for m in node["merge_from"]: used.add(m)
+                            for v in node.values():
+                                if isinstance(v, (dict, list)):
+                                    get_all_used_names(v, used)
+                        elif isinstance(node, list):
+                            for item in node:
+                                get_all_used_names(item, used)
+                        return used
+        
+                    used_names = get_all_used_names(res_tree)
+                    missing = list(set(existing_names) - used_names)
+                            
+                    sweep_instruction = instruction_sweep.replace("{{MISSING_COMPETENCIES}}", ", ".join(missing) if missing else "Aucune").replace("{{CURRENT_TREE}}", json.dumps(res_tree, ensure_ascii=False))
+                    response_sweep = await generate_content_with_retry(
+                        client,
+                        model=os.environ["GEMINI_PRO_MODEL"],
+                        contents=[sweep_instruction],
+                        config=types.GenerateContentConfig(
+                            temperature=0.1,
+                            response_mime_type="application/json",
+                            max_output_tokens=16384,  # liste d'assignments, peut être longue
+                        )
+                    )
+                    await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], response_sweep.usage_metadata, auth_token=service_token)
+                    
+                    cleaned = _clean_llm_json(response_sweep.text or "")
+
+                    # Guard : réponse vide ou non-JSON (LLM dit "Aucune" ou rend du texte libre)
+                    sweep_result = []
+                    if cleaned and cleaned[0] in ("{", "["):
+                        try:
+                            sweep_raw, _ = json.JSONDecoder().raw_decode(cleaned)
+                            if isinstance(sweep_raw, dict) and "assignments" in sweep_raw:
+                                sweep_result = sweep_raw["assignments"]
+                            elif isinstance(sweep_raw, list):
+                                sweep_result = sweep_raw
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"[sweep] JSON invalide même après nettoyage : {e} — sweep ignoré.")
+                    else:
+                        logger.info(
+                            f"[sweep] Réponse LLM vide ou non-JSON ('{cleaned[:80]}') "
+                            "— aucun assignment Sweep à appliquer."
+                        )
+
+                    await tree_task_manager.update_progress(sweep_result=sweep_result, missing_competencies=missing, new_log="Sweep terminé. Application en base de données...")
+
+                    # Utilisation du service_token obtenu AVANT le lancement de la tâche
+                    competencies_api_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8000")
+                    apply_headers = {"Authorization": f"Bearer {service_token}"}
+                    from opentelemetry.propagate import inject
+                    inject(apply_headers)
+                    async with httpx.AsyncClient() as http_client:
+                        res = await http_client.post(
+                            f"{competencies_api_url}/bulk_tree",
+                            json={"tree": res_tree, "sweep_assignments": sweep_result},
+                            headers=apply_headers,
+                            timeout=180.0
+                        )
+                        if res.status_code == 200:
+                            await tree_task_manager.update_progress(status="completed", new_log="Taxonomie appliquée avec succès !")
+                        else:
+                            await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
+                except Exception as e:
+                    logger.error(f"Erreur background sweep: {e}")
+                    await tree_task_manager.update_progress(status="error", error=f"Erreur Sweep: {str(e)}")
+                    
+            asyncio.create_task(run_sweep())
+            return {"success": True, "state": "PROCESSING_SWEEP"}
+            
+    except Exception as e:
+        logger.error(f"Erreur check batch: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/recalculate_tree/batch/list", summary="Liste l'historique des jobs batch de taxonomie")
+async def recalculate_tree_batch_list(request: Request, user: dict = Depends(verify_jwt)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    try:
+        batches = []
+        all_batches = await asyncio.to_thread(lambda: list(vertex_batch_client.batches.list()))
+        for b in all_batches:
+            display_name = "batch_job"
+            if hasattr(b, "display_name") and b.display_name:
+                display_name = b.display_name
+            elif hasattr(b, "config") and hasattr(b.config, "display_name") and b.config.display_name:
+                display_name = b.config.display_name
+            
+            if hasattr(b, "name") and hasattr(b, "state"):
+                # Vertex AI expose completion_stats (pas request_counts)
+                cs = getattr(b, "completion_stats", None)
+                completion_stats = None
+                if cs:
+                    successful = int(getattr(cs, "success_count", None) or getattr(cs, "successful_count", 0) or 0)
+                    failed = int(getattr(cs, "failed_count", None) or getattr(cs, "error_count", 0) or 0)
+                    incomplete = int(getattr(cs, "incomplete_count", 0) or 0)
+                    total = int(getattr(cs, "total_count", None) or 0) or (successful + failed + incomplete)
+                    if total > 0:
+                        completion_stats = {
+                            "successful": successful,
+                            "failed": failed,
+                            "incomplete": incomplete,
+                            "total": total,
+                            "percent": int((successful / total) * 100)
+                        }
+
+                batches.append({
+                    "name": b.name,
+                    "display_name": display_name,
+                    "state": b.state.name if hasattr(b.state, "name") else str(b.state),
+                    "create_time": str(b.create_time) if hasattr(b, "create_time") else None,
+                    "start_time": str(b.start_time) if getattr(b, "start_time", None) else None,
+                    "end_time": str(b.end_time) if getattr(b, "end_time", None) else None,
+                    "update_time": str(b.update_time) if hasattr(b, "update_time") else None,
+                    "model": getattr(b, "model", None),
+                    "completion_stats": completion_stats
+                })
+        batches.sort(key=lambda x: x["create_time"] or "", reverse=True)
+        return {"success": True, "batches": batches}
+    except Exception as e:
+        logger.error(f"Erreur listage batch GCP: {e}")
+        return {"success": False, "error": str(e)}
+
+@router.delete("/recalculate_tree/batch/{job_id}", summary="Supprime un job batch GCP de l'historique")
+async def recalculate_tree_batch_delete(job_id: str, request: Request, user: dict = Depends(verify_jwt)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    try:
+        # Vertex AI utilise un chemin complet : projects/.../batchPredictionJobs/ID
+        # Si le frontend envoie juste l'ID numérique, on reconstruit le chemin complet.
+        if "/" in job_id:
+            full_job_id = job_id  # déjà un chemin complet
+        else:
+            full_job_id = f"projects/{GCP_PROJECT_ID}/locations/{VERTEX_LOCATION}/batchPredictionJobs/{job_id}"
+        await asyncio.to_thread(vertex_batch_client.batches.delete, name=full_job_id)
+        return {"success": True, "message": f"Job {job_id} supprimé avec succès."}
+    except Exception as e:
+        logger.error(f"Erreur suppression batch GCP: {e}")
+        return {"success": False, "error": str(e)}
+
+@router.post("/recalculate_tree/cancel", summary="Annule le traitement interactif en cours")
+async def recalculate_tree_cancel(request: Request, user: dict = Depends(verify_jwt)):
+    await tree_task_manager.update_progress(status="cancelled", error="Traitement interactif annulé par l'utilisateur.")
+    return {"success": True, "message": "Traitement annulé"}
+
+@router.post("/recalculate_tree/batch/cancel", summary="Annule le batch en cours")
+async def recalculate_tree_batch_cancel(request: Request, user: dict = Depends(verify_jwt)):
+    latest_status = await tree_task_manager.get_latest_status()
+    if latest_status and latest_status.get("batch_job_id"):
+        try:
+            await asyncio.to_thread(vertex_batch_client.batches.cancel, name=latest_status.get("batch_job_id"))
+        except Exception as e:
+            logger.warning(f"Impossible d'annuler le batch Vertex AI (déjà terminé ou inexistant) : {e}")
+            
+    await tree_task_manager.update_progress(status="error", error="Annulé par l'utilisateur")
+    return {"success": True, "message": "Batch annulé"}
+
+@router.post("/recalculate_tree/batch/recover", summary="Tente de récupérer un batch bloqué en erreur")
+async def recalculate_tree_batch_recover(request: Request, user: dict = Depends(verify_jwt)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    latest_status = await tree_task_manager.get_latest_status()
+    if latest_status and latest_status.get("batch_job_id"):
+        # On le remet en running pour que le frontend reprenne le polling
+        # On efface l'erreur et on repart sur l'étape map si c'était planté au parsing
+        # ou deduplicating si on a perdu l'étape. Pour être safe, on remet "map" 
+        # car deduplicate est idempotent.
+        step = latest_status.get("batch_step")
+        if step == "deduplicating": step = "map"
+        elif step == "sweeping": step = "reduce"
+        
+        await tree_task_manager.update_progress(status="running", batch_step=step, error="")
+        return {"success": True, "message": "État du batch forcé à 'running'. L'interface va reprendre le relais."}
+    return {"success": False, "error": "Aucun job batch récent en mémoire."}
+
+
+
+@router.post("/recalculate_tree/batch/reset", summary="Réinitialise forcé l'état Redis du batch (déblocage d'urgence)")
+async def recalculate_tree_batch_reset(request: Request, user: dict = Depends(verify_jwt)):
+    """Efface l'état Redis du pipeline Batch pour permettre un nouveau démarrage.
+    A utiliser quand l'interface est bloquée et que Cancel/Recover ne suffisent pas.
+    Le job GCP en cours n'est PAS annulé — utilisez Cancel d'abord si nécessaire.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privileges administrateur requis.")
+    await tree_task_manager.initialize_task()
+    await tree_task_manager.update_progress(status="idle", error="Reinitialise manuellement par l'admin.")
+    return {"success": True, "message": "Etat du pipeline reinitialise. Vous pouvez lancer un nouveau batch."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BULK RE-ANALYSE — Vertex AI Batch (Option B — Full Quality)
+# Pipeline : Build JSONL → GCS Upload → Vertex Batch → Auto-Apply complet
+# Chaque CV : UPDATE cv_profiles + purge évals + purge comps + bulk assign
+#             + purge missions + ré-indexation + scoring IA + FinOps
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/bulk-reanalyse/start", status_code=202)
+async def start_bulk_reanalyse(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(verify_jwt),
+):
+    """
+    (Admin only) Lance la ré-analyse globale de tous les CVs via Vertex AI Batch.
+    Retourne immédiatement 202 — le traitement est asynchrone.
+    Utiliser GET /bulk-reanalyse/status pour suivre la progression.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+
+    if await bulk_reanalyse_manager.is_running():
+        raise HTTPException(
+            status_code=409,
+            detail="Une ré-analyse est déjà en cours. Utiliser /bulk-reanalyse/status pour suivre.",
+        )
+
+    total = (await db.execute(select(func.count()).select_from(CVProfile))).scalar_one()
+
+    # Service token longue durée (AGENTS.md §4 — jamais le JWT utilisateur pour tâche longue)
+    auth_header = request.headers.get("Authorization", "")
+    service_token = await _acquire_service_token(auth_header)
+
+    await bulk_reanalyse_manager.initialize(total_cvs=total)
+    background_tasks.add_task(bg_bulk_reanalyse, service_token)
+
+    return {
+        "success": True,
+        "total_cvs": total,
+        "status": "building",
+        "message": f"Ré-analyse de {total} CVs démarrée. Suivre via GET /bulk-reanalyse/status.",
+    }
+
+
+@router.get("/bulk-reanalyse/status")
+async def get_bulk_reanalyse_status(_: dict = Depends(verify_jwt)):
+    """
+    Retourne le statut courant du pipeline de ré-analyse globale.
+    Si status='batch_running', interroge Vertex pour les completion_stats.
+    """
+    status = await bulk_reanalyse_manager.get_status()
+    if not status:
+        return {"status": "idle"}
+
+    # Enrichissement Vertex en temps réel
+    if (
+        status.get("status") == "batch_running"
+        and status.get("batch_job_id")
+        and vertex_batch_client
+    ):
+        try:
+            job = await asyncio.to_thread(
+                vertex_batch_client.batches.get,
+                name=status["batch_job_id"],
+            )
+            status["vertex_state"] = job.state.name if hasattr(job.state, "name") else str(job.state)
+            if hasattr(job, "completion_stats") and job.completion_stats:
+                cs = job.completion_stats
+                ok   = int(getattr(cs, "success_count",    None) or getattr(cs, "successful_count", None) or 0)
+                fail = int(getattr(cs, "failed_count",     None) or getattr(cs, "error_count",      None) or 0)
+                inc  = int(getattr(cs, "incomplete_count", None) or 0)
+                total_raw = getattr(cs, "total_count", None)
+                total = int(total_raw) if total_raw is not None else (ok + fail + inc)
+                status["completion_stats"] = {
+                    "total": total,
+                    "completed": ok,
+                    "failed": fail,
+                    "percent": int(ok * 100 / max(total, 1)),
+                }
+
+        except Exception as e:
+            status["vertex_poll_error"] = str(e)
+
+    return status
+
+
+@router.post("/bulk-reanalyse/cancel", status_code=200)
+async def cancel_bulk_reanalyse(user: dict = Depends(verify_jwt)):
+    """
+    (Admin only) Annule le job Vertex AI Batch en cours.
+    Utilise un 'cancel doux' : l'état passe à 'cancelled' mais dest_uri est
+    préservé en Redis — le bouton 'Retry Apply' pourra rejouer la phase apply
+    depuis les résultats GCS sans relancer Vertex AI.
+    Pour un reset complet (suppression de l'état), appeler /bulk-reanalyse/reset.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+
+    current = await bulk_reanalyse_manager.get_status()
+    if current and current.get("batch_job_id") and vertex_batch_client:
+        try:
+            await asyncio.to_thread(
+                vertex_batch_client.batches.cancel,
+                name=current["batch_job_id"],
+            )
+            logger.info(f"[bulk_reanalyse] Job Vertex annulé : {current['batch_job_id']}")
+        except Exception as e:
+            logger.warning(f"[bulk_reanalyse] Cancel Vertex échoué (job peut-être déjà terminé) : {e}")
+
+    result = await bulk_reanalyse_manager.cancel_soft(
+        reason="Pipeline annulé par l'administrateur — résultats GCS préservés pour retry-apply."
+    )
+    dest_uri = result.get("dest_uri")
+    return {
+        "success": True,
+        "message": "Pipeline annulé. Les résultats GCS sont préservés.",
+        "can_retry_apply": bool(dest_uri),
+        "dest_uri": dest_uri,
+    }
+
+
+@router.post("/bulk-reanalyse/reset", status_code=200)
+async def reset_bulk_reanalyse(user: dict = Depends(verify_jwt)):
+    """
+    (Admin only) Réinitialisation complète de l'état Redis — supprime aussi dest_uri.
+    Le retry-apply ne sera plus possible après cette action.
+    Utiliser uniquement pour débloquer un pipeline corrompu.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    await bulk_reanalyse_manager.reset()
+    return {"success": True, "message": "État Redis réinitialisé complètement."}
+
+
+
+# ── Data Quality Gate ─────────────────────────────────────────────────────────
+
+@router.get("/bulk-reanalyse/data-quality")
+async def get_data_quality_report(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(verify_jwt),
+):
+    """
+    Rapport de qualité des données peuplées par le pipeline bulk.
+    Vérifie : missions, embeddings, compétences, summary, current_role,
+              competency_assignment et ai_scoring (≥10 évaluations IA).
+    Retourne un score 0-100 et un grade A-D.
+    Cache in-process 30s (aligné sur le polling frontend).
+    """
+    from datetime import timedelta
+    from src.services.config import _CV_CACHE
+    from src.services.data_quality_service import compute_data_quality_report, CACHE_TTL_SECONDS
+
+    try:
+        now = datetime.now(timezone.utc)
+        cached = _CV_CACHE["data_quality"]
+        if cached["value"] is not None and now < cached["expires"]:
+            return cached["value"]
+
+        report = await compute_data_quality_report(
+            db=db,
+            auth_header=request.headers.get("Authorization", ""),
+        )
+
+        _CV_CACHE["data_quality"]["value"] = report
+        _CV_CACHE["data_quality"]["expires"] = now + timedelta(seconds=CACHE_TTL_SECONDS)
+
+        return report
+
+    except Exception as e:
+        logger.error(f"[data-quality] Erreur calcul rapport: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur calcul data quality: {e}")
+
+
+
+
+@router.post("/bulk-reanalyse/retry-apply", status_code=202)
+async def retry_bulk_apply(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(verify_jwt),
+):
+    """
+    (Admin only) Rejoue la phase apply depuis les résultats GCS du dernier batch Vertex.
+    Ne relance pas Vertex — économise temps (~35 min) et coût.
+    Prérequis : un job précédent doit avoir stocké dest_uri en Redis.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    if await bulk_reanalyse_manager.is_running():
+        raise HTTPException(status_code=409, detail="Un pipeline est déjà en cours.")
+
+    state = await bulk_reanalyse_manager.get_status()
+    if not state:
+        raise HTTPException(status_code=404, detail="Aucun état Redis trouvé. Lancez d'abord un pipeline complet.")
+    dest_uri = state.get("dest_uri")
+    if not dest_uri:
+        raise HTTPException(status_code=400, detail="dest_uri absent — impossible de retrouver les résultats GCS.")
+
+    auth_header = request.headers.get("Authorization", "")
+    service_token = await _acquire_service_token(auth_header)
+
+    await bulk_reanalyse_manager.reset_apply_counters()
+    await bulk_reanalyse_manager.update_progress(
+        status="applying",
+        new_log="Retry apply démarré — reprise depuis les résultats GCS existants.",
+    )
+
+    background_tasks.add_task(_bg_retry_apply, service_token, dest_uri)
+
+    return {
+        "success": True,
+        "dest_uri": dest_uri,
+        "message": "Retry apply démarré en arrière-plan. Suivre via GET /bulk-reanalyse/status.",
+    }
+
+

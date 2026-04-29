@@ -22,6 +22,7 @@ class CVProfile(Base):
     from sqlalchemy.dialects.postgresql import ARRAY
     competencies_keywords = Column(ARRAY(String), nullable=True)
     missions = Column(JSONB, nullable=True)
+    educations = Column(JSONB, nullable=True)
     
     raw_content = Column(Text, nullable=False)
     # Using 3072 dimensions to match gemini-embedding-001 output topology natively

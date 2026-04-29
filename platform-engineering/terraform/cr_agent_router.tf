@@ -66,7 +66,7 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
       }
       env {
         name  = "GEMINI_MODEL"
-        value = var.gemini_model
+        value = var.gemini_router_model
       }
       env {
         name  = "ROOT_PATH"
@@ -147,7 +147,7 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/1"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/2"
       }
       env {
         name  = "TRACE_EXPORTER"

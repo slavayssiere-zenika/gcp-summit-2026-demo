@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 
   User as UserIcon, 
@@ -11,7 +11,8 @@ import {
   Fingerprint,
   ArrowLeft,
   Award,
-  History
+  History,
+  GraduationCap
 } from 'lucide-vue-next'
 import axios from 'axios'
 import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.vue'
@@ -19,7 +20,7 @@ import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.v
 const route = useRoute()
 const router = useRouter()
 
-const userId = route.params.id as string
+const userId = computed(() => route.params.id as string)
 
 interface User {
   id: number
@@ -47,7 +48,7 @@ const errorCategories = ref<string | null>(null)
 const fetchUser = async () => {
   try {
     // /auth routes to /users on the API. So /auth/ID/ gets /users/ID
-    const response = await axios.get(`/auth/${userId}`)
+    const response = await axios.get(`/auth/${userId.value}`)
     user.value = response.data
   } catch (err: any) {
     console.error('Failed to fetch user:', err)
@@ -79,17 +80,20 @@ const getCategoryName = (id: number) => {
 const cvProfiles = ref<any[]>([])
 const importerUser = ref<User | null>(null)
 const missions = ref<any[]>([])
+const educations = ref<any[]>([])
 const isLoadingMissions = ref(false)
 
 const fetchCVProfile = async () => {
   try {
-    const response = await axios.get(`/api/cv/user/${userId}`)
+    const response = await axios.get(`/api/cv/user/${userId.value}`)
     cvProfiles.value = response.data
-    
-    // We display the importer based on the most recent CV if it exists
-    if (cvProfiles.value && cvProfiles.value.length > 0 && cvProfiles.value[0].imported_by_id) {
-      const importerRes = await axios.get(`/auth/${cvProfiles.value[0].imported_by_id}`)
-      importerUser.value = importerRes.data
+    // Extract educations from first CV profile
+    if (cvProfiles.value && cvProfiles.value.length > 0) {
+      educations.value = cvProfiles.value[0].educations || []
+      if (cvProfiles.value[0].imported_by_id) {
+        const importerRes = await axios.get(`/auth/${cvProfiles.value[0].imported_by_id}`)
+        importerUser.value = importerRes.data
+      }
     }
   } catch (err) {
     console.warn("No CV profile found for this user.")
@@ -99,7 +103,7 @@ const fetchCVProfile = async () => {
 const fetchMissions = async () => {
   isLoadingMissions.value = true
   try {
-    const response = await axios.get(`/api/cv/user/${userId}/missions`)
+    const response = await axios.get(`/api/cv/user/${userId.value}/missions`)
     missions.value = response.data.missions || []
   } catch (err) {
     console.warn("Missions not found or error fetching them.")
@@ -152,6 +156,17 @@ onMounted(() => {
   fetchCategories()
   fetchCVProfile()
   fetchMissions()
+})
+
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId !== oldId && newId) {
+    isMerging.value = false
+    selectedTargetId.value = null
+    isLoading.value = true
+    fetchUser()
+    fetchCVProfile()
+    fetchMissions()
+  }
 })
 </script>
 
@@ -372,6 +387,21 @@ onMounted(() => {
           </div>
         </section>
 
+        <!-- Formation Card -->
+        <section class="profile-card education-card" v-if="educations && educations.length > 0">
+          <div class="card-header">
+            <GraduationCap class="icon" />
+            <h2>Formation & Diplômes</h2>
+          </div>
+          <div class="education-list">
+            <div v-for="(edu, index) in educations" :key="index" class="education-item">
+              <div class="edu-degree">{{ edu.degree || edu.diploma || 'Diplôme non précisé' }}</div>
+              <div class="edu-school">{{ edu.school || edu.institution || edu.etablissement || '' }}</div>
+              <div class="edu-year" v-if="edu.year || edu.graduation_year">{{ edu.year || edu.graduation_year }}</div>
+            </div>
+          </div>
+        </section>
+
         <!-- Évaluations des Compétences (lecture seule) -->
         <section class="profile-card eval-card-ro">
           <div class="card-header">
@@ -528,6 +558,7 @@ h1 {
 
 .search-input:focus {
   border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.25);
 }
 
 .results-list {
@@ -875,5 +906,53 @@ h1 {
   .profile-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Formation / Education */
+.education-card {
+  grid-column: 1 / -1;
+  margin-top: 2rem;
+}
+
+.education-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.education-item {
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, rgba(227,25,55,0.03) 0%, #fafafa 100%);
+  border: 1px solid rgba(227,25,55,0.12);
+  border-radius: 16px;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.education-item:hover {
+  border-color: var(--zenika-red);
+  background: rgba(227,25,55,0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(227,25,55,0.08);
+}
+
+.edu-degree {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #1a1a1a;
+}
+
+.edu-school {
+  font-size: 0.9rem;
+  color: var(--zenika-red);
+  font-weight: 600;
+}
+
+.edu-year {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 0.25rem;
 }
 </style>

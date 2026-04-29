@@ -159,8 +159,8 @@ def test_assign_and_list_user_competencies(client):
         # Second assignment is idempotent (ON CONFLICT DO NOTHING) — same 201, no error
         assign_resp2 = client.post(f"/user/1/assign/{comp_id}")
         assert assign_resp2.status_code == 201
-        # The message now always reflects the assignment action (idempotent upsert)
-        assert "assigned" in assign_resp2.json()["message"]
+        # The status now always reflects the assignment action (idempotent upsert)
+        assert "assigned" in assign_resp2.json()["status"]
 
     # List user competencies
     list_resp = client.get("/user/1")
@@ -187,60 +187,60 @@ def test_get_user_from_api_not_found(client):
         assert response.status_code == 404
 
 def test_bulk_import_tree_unauthorized(client):
-    # Dependency override in conftest gives {"sub": "1", "allowed_category_ids": [1]} without role=admin
-    response = client.post("/bulk_tree", json={"tree": {"Root": {}}})
-    assert response.status_code == 403
+    from main import app
+    from src.auth import verify_jwt
+    with patch.dict(app.dependency_overrides, {verify_jwt: lambda: {"sub": "1", "allowed_category_ids": [1]}}):
+        response = client.post("/bulk_tree", json={"tree": {"Root": {}}})
+        assert response.status_code == 403
 
 def test_bulk_import_tree_authorized(client):
     from main import app
     from src.auth import verify_jwt
-    app.dependency_overrides[verify_jwt] = lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}
-
-    payload = {
-        "tree": {
-            "Language": {
-                "sub": {
-                    "Python": {
-                        "sub": ["FastAPI", ["Django", "Web Framework"]]
+    with patch.dict(app.dependency_overrides, {verify_jwt: lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}}):
+        payload = {
+            "tree": {
+                "Language": {
+                    "sub": {
+                        "Python": {
+                            "sub": ["FastAPI", ["Django", "Web Framework"]]
+                        }
                     }
                 }
             }
         }
-    }
-    response = client.post("/bulk_tree", json=payload)
-    assert response.status_code == 200
+        response = client.post("/bulk_tree", json=payload)
+        assert response.status_code == 200
 
 def test_bulk_import_tree_list_format(client):
     from main import app
     from src.auth import verify_jwt
-    app.dependency_overrides[verify_jwt] = lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}
-
-    payload = {
-        "tree": [
-            {
-                "Language": {
-                    "sub": {
-                        "Go": {
-                            "sub": ["Gin"]
+    with patch.dict(app.dependency_overrides, {verify_jwt: lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}}):
+        payload = {
+            "tree": [
+                {
+                    "Language": {
+                        "sub": {
+                            "Go": {
+                                "sub": ["Gin"]
+                            }
                         }
                     }
+                },
+                {
+                    "Database": {
+                        "sub": ["PostgreSQL"]
+                    }
                 }
-            },
-            {
-                "Database": {
-                    "sub": ["PostgreSQL"]
-                }
-            }
-        ]
-    }
-    response = client.post("/bulk_tree", json=payload)
-    assert response.status_code == 200
-    
-    # Optional: verify that it was stored correctly
-    list_resp = client.get("/")
-    assert list_resp.status_code == 200
-    names = [i["name"] for i in list_resp.json()["items"]]
-    assert "Language" in names or "Database" in names
+            ]
+        }
+        response = client.post("/bulk_tree", json=payload)
+        assert response.status_code == 200
+        
+        # Optional: verify that it was stored correctly
+        list_resp = client.get("/")
+        assert list_resp.status_code == 200
+        names = [i["name"] for i in list_resp.json()["items"]]
+        assert "Language" in names or "Database" in names
 
 
 def test_get_competency_stats(client):

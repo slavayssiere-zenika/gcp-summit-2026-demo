@@ -188,7 +188,14 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_competency_users",
-            description="Get a list of user IDs that possess a specific competency",
+            description=(
+                "Retourne la liste des IDs d'utilisateurs qui possèdent une compétence spécifique. "
+                "⚠️ RETOURNE DES IDs BRUTS — pas des noms. "
+                "TOUJOURS enchaîner avec get_users_bulk (users_api) pour résoudre les IDs en noms complets. "
+                "NE PAS utiliser list_users : trop coûteux et incomplet (limit=100 max). "
+                "Pour scorer les candidats sur cette compétence, passer les IDs à batch_evaluate_competencies_users "
+                "par lots de 50 maximum, et filtrer directement les scores ≥ 3.0 dans la réponse."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -227,11 +234,13 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_user_competency_evaluations",
             description=(
-                "Recupere toutes les evaluations de competences feuilles pour un consultant. "
+                "Recupere TOUTES les evaluations de competences feuilles pour un consultant. "
+                "⚠️ RETOURNE L'ENSEMBLE DES COMPÉTENCES DU CONSULTANT — pas uniquement une compétence spécifique. "
+                "N'utiliser que pour un profil complet (coaching, bilan 360°). "
+                "Si tu as besoin du score d'une seule compétence, préfère batch_evaluate_competencies_users "
+                "qui est ciblé et retourne uniquement les compétences demandées. "
                 "Chaque evaluation contient : la note IA (ai_score, calculee par Gemini depuis ses missions reelles), "
-                "la justification textuelle de cette note, et la note auto-evaluee par le consultant (user_score). "
-                "Utilise cet outil pour analyser le niveau reel d'un consultant, identifier les gaps, "
-                "ou declencher un coaching CV personnalise."
+                "la justification textuelle de cette note, et la note auto-evaluee par le consultant (user_score)."
             ),
             inputSchema={
                 "type": "object",
@@ -410,17 +419,84 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="batch_evaluate_competencies_users",
             description=(
-                "Récupère les évaluations de compétences pour tous les utilisateurs associés "
-                "aux compétences données. Retourne les scores IA et auto-évalués par paire (user, compétence). "
-                "Utiliser pour établir un rapport compétence-centric (ex: 'qui maîtrise AWS ?')."
+                "Récupère les scores de compétences pour un ensemble de consultants et des compétences ciblées. "
+                "Retourne les scores IA par paire (user_id, compétence). Les utilisateurs sans score (ai_score=null) "
+                "n'ont pas encore été analysés par l'IA — les exclure des résultats. "
+                "⚠️ FLUX RECOMMANDÉ pour 'qui maîtrise une techno' : "
+                "1) search_competencies → id, 2) list_competency_users → pool d'IDs, "
+                "3) batch_evaluate_competencies_users(competency_ids=[id], user_ids=pool[:50]) → scores, "
+                "4) filtrer ai_score >= 3.0, 5) get_users_bulk → noms. "
+                "Ne jamais passer plus de 100 user_ids à la fois."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "competency_ids": {"type": "array", "items": {"type": "integer"}, "description": "IDs des compétences cibles"},
-                    "user_ids": {"type": "array", "items": {"type": "integer"}, "description": "Optionnel — Filtre sur un pool de consultants"}
+                    "user_ids": {"type": "array", "items": {"type": "integer"}, "description": "Optionnel — Filtre sur un pool de consultants (max 100)"}
                 },
                 "required": ["competency_ids"]
+            }
+        ),
+        Tool(
+            name="assign_competencies_bulk",
+            description=(
+                "(Admin/Pipeline) Résout, crée si manquant, et assigne en masse une liste de compétences "
+                "pour un utilisateur en un seul appel. Idempotent. Ignore les compétences avec practiced=False. "
+                "Utilisé par le pipeline de ré-analyse globale Vertex AI Batch."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID de l'utilisateur"},
+                    "competencies": {
+                        "type": "array",
+                        "description": "Liste des compétences à assigner",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "parent": {"type": "string"},
+                                "aliases": {"type": "array", "items": {"type": "string"}},
+                                "practiced": {"type": "boolean", "default": True}
+                            },
+                            "required": ["name"]
+                        }
+                    }
+                },
+                "required": ["user_id", "competencies"]
+            }
+        ),
+        Tool(
+            name="clear_user_evaluations",
+            description=(
+                "(Admin Only) Supprime toutes les CompetencyEvaluation (scores IA + manuels) pour un utilisateur. "
+                "Utilisé par le pipeline de ré-analyse globale avant ré-assignation complète des compétences."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "L'ID de l'utilisateur"}
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="bulk_scoring_all",
+            description=(
+                "(Admin/Rattrapage) Déclenche le calcul IA des scores de compétences pour TOUS les consultants "
+                "sans ai_score. Utiliser après un pipeline bulk ou quand des consultants n'ont pas de score "
+                "suite à une erreur quota Gemini ou un scale-down Cloud Run. "
+                "Retourne le nombre de consultants concernés et le message de confirmation. "
+                "Le traitement se fait en arrière-plan (BackgroundTask) — ne pas attendre de résultats immédiats. "
+                "Utiliser force=True pour re-scorer même les consultants ayant déjà un score."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "force": {"type": "boolean", "description": "Si True, re-score tous les consultants même avec un score existant", "default": False},
+                    "semaphore_limit": {"type": "integer", "description": "Nombre max de scorings simultanés (2 recommandé)", "default": 2, "minimum": 1, "maximum": 5}
+                },
+                "required": []
             }
         )
     ]
@@ -608,6 +684,53 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "batch_evaluate_competencies_users":
                 response = await client.post(f"{API_BASE_URL}/evaluations/batch/users", json=arguments, timeout=30.0)
+                response.raise_for_status()
+                raw = response.json()
+                # Filtrer les paires sans score IA pour ne pas surcharger le contexte LLM
+                evaluations = raw.get("evaluations", raw) if isinstance(raw, dict) else raw
+                if isinstance(evaluations, dict):
+                    scored = {
+                        uid: eval_data
+                        for uid, eval_data in evaluations.items()
+                        if eval_data.get("ai_score") is not None
+                    }
+                    result = {
+                        "evaluations": scored,
+                        "scored_count": len(scored),
+                        "total_queried": len(evaluations),
+                        "note": f"{len(evaluations) - len(scored)} consultants sans score IA (CV non analysé) exclus du résultat."
+                    }
+                else:
+                    result = raw
+                return [TextContent(type="text", text=json.dumps(result))]
+
+            elif name == "assign_competencies_bulk":
+                user_id = arguments["user_id"]
+                payload = {"competencies": arguments["competencies"]}
+                response = await client.post(
+                    f"{API_BASE_URL}/user/{user_id}/assign/bulk",
+                    json=payload,
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(response.json()))]
+
+            elif name == "clear_user_evaluations":
+                user_id = arguments["user_id"]
+                response = await client.delete(
+                    f"{API_BASE_URL}/user/{user_id}/evaluations"
+                )
+                response.raise_for_status()
+                return [TextContent(type="text", text=f"All evaluations cleared for user {user_id}")]
+
+            elif name == "bulk_scoring_all":
+                force = arguments.get("force", False)
+                semaphore_limit = arguments.get("semaphore_limit", 2)
+                response = await client.post(
+                    f"{API_BASE_URL}/evaluations/bulk-scoring-all",
+                    params={"force": force, "semaphore_limit": semaphore_limit},
+                    timeout=15.0,
+                )
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

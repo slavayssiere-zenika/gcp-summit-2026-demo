@@ -1,17 +1,18 @@
+import asyncio
 import json
 import logging
 import os
 import re
 import time
-
+import traceback
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Optional
 
-import jwt as pyjwt
+import httpx
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.propagate import extract, inject
@@ -25,7 +26,9 @@ from pydantic import BaseModel
 from agent import MISSIONS_TOOLS, run_agent_query
 from logger import setup_logging, LoggingMiddleware
 from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.schemas import A2ARequest, A2AResponse
+from agent_commons.schemas import A2ARequest, A2AResponse, QueryRequest, get_tool_metadata
+from agent_commons.jwt_middleware import verify_jwt_request as verify_jwt, ALGORITHM
+from agent_commons.exception_handler import make_global_exception_handler
 from metrics import QUERY_COUNT, QUERY_LATENCY
 from agent_commons.mcp_client import auth_header_var
 
@@ -36,13 +39,10 @@ ROOT_PATH = os.getenv("ROOT_PATH", "")
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "agent-missions-api")
 TRACE_EXPORTER = os.getenv("TRACE_EXPORTER", "none")
 
-# JWT
-SECRET_KEY = os.getenv("SECRET_KEY", "")
-ALGORITHM = "HS256"
-_raw_secret = SECRET_KEY
-if not _raw_secret:
-    logging.critical("[MISSIONS] FATAL: SECRET_KEY env var is not set. JWT validation will fail.")
-
+# JWT — AGENTS.md §4 : l'absence de SECRET_KEY doit bloquer le démarrage du service
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("[MISSIONS] FATAL: SECRET_KEY env var is not set. Service cannot start.")
 
 # ── OTel Tracing — 3 modes : http (Tempo), gcp (Cloud Trace), none ────────────
 def setup_tracing(app: FastAPI) -> TracerProvider:
@@ -70,22 +70,8 @@ def setup_tracing(app: FastAPI) -> TracerProvider:
     FastAPIInstrumentor.instrument_app(app, tracer_provider=provider, excluded_urls="health,metrics")
     return provider
 
-
-# ── Auth (JWT) — validation unique, payload retourné ──────────────────────────
-async def verify_jwt(request: Request) -> dict:
-    """Validate Bearer JWT. Sets auth_header_var for MCP propagation. Raises 401 if invalid."""
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
-    token = auth_header.split(" ", 1)[1]
-    try:
-        payload = pyjwt.decode(token, _raw_secret, algorithms=[ALGORITHM])
-        auth_header_var.set(auth_header)
-        return payload
-    except pyjwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="JWT token expired")
-    except pyjwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid JWT: {e}")
+# ── Auth (JWT) — délégué à agent_commons.jwt_middleware.verify_jwt_request ──────
+# verify_jwt = verify_jwt_request importé en tête de fichier
 
 
 # ── Session service (lazy singleton) ──────────────────────────────────────────
@@ -143,12 +129,7 @@ _tracer = trace.get_tracer("agent_missions_api")
 # Prometheus (Golden Rules §5 — obligatoire)
 Instrumentator().instrument(app).expose(app)
 
-
-# ── Pydantic models ────────────────────────────────────────────────────────────
-class QueryRequest(BaseModel):
-    query: str
-    session_id: Optional[str] = None
-    user_id: Optional[str] = None  # None par défaut : le sub JWT est utilisé comme fallback
+# ── Pydantic models — QueryRequest migré dans agent_commons.schemas ──────────
 
 
 # ── Public endpoints (no JWT) ──────────────────────────────────────────────────
@@ -383,48 +364,7 @@ async def mcp_registry(_payload: dict = Depends(verify_jwt)):
 app.include_router(protected_router)
 
 
-
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
-
-async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception: raise
-
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(
-                f"{prompts_api_url}/errors/report",
-                json={
-                    "service_name": service_name,
-                    "error_message": error_msg,
-                    "context": trace_context[:2000]
-                },
-                headers=headers
-            )
-        except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    
-    if token:
-        await report_exception_to_prompts_api("agent_missions_api", error_msg, trace_context, token)
-    
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+app.add_exception_handler(Exception, make_global_exception_handler("agent_missions_api"))
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

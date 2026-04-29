@@ -20,3 +20,6 @@ databaseChangeLog:
                   name: "updated_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+      rollback:
+        - dropTable:
+            tableName: "prompts"

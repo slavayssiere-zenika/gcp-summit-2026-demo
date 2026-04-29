@@ -19,7 +19,8 @@ import {
   Copy,
   Check,
   Clock,
-  Briefcase
+  Briefcase,
+  FileText
 } from 'lucide-vue-next'
 import axios from 'axios'
 import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.vue'
@@ -47,6 +48,11 @@ const promptSaveError = ref(false)
 const unavailabilityPeriods = ref<any[]>([])
 const newPeriod = ref({ start_date: '', end_date: '', type: 'full', reason: 'client' })
 const isSavingAvailability = ref(false)
+
+const cvUrl = ref('')
+const isImportingCv = ref(false)
+const cvImportSuccess = ref(false)
+const cvImportError = ref<string | null>(null)
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const userInitials = computed(() => {
@@ -163,6 +169,30 @@ const reasonLabel: Record<string, string> = {
 }
 const typeLabel: Record<string, string> = {
   full: 'Journée', am: 'Matin', pm: 'Après-midi'
+}
+
+const importCv = async () => {
+  if (!cvUrl.value) return
+  isImportingCv.value = true
+  cvImportSuccess.value = false
+  cvImportError.value = null
+  try {
+    const token = localStorage.getItem('access_token')
+    const folderName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Unknown'
+    await axios.post('/api/cvs/import', { 
+      url: cvUrl.value,
+      folder_name: folderName
+    }, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    cvImportSuccess.value = true
+    cvUrl.value = ''
+    setTimeout(() => { cvImportSuccess.value = false }, 3000)
+  } catch (err: any) {
+    cvImportError.value = err.response?.data?.detail || "Erreur lors de l'importation"
+  } finally {
+    isImportingCv.value = false
+  }
 }
 
 onMounted(() => {
@@ -302,6 +332,41 @@ onMounted(() => {
           <div v-else class="empty-mini">
             <AlertCircle :size="20" />
             <p>Aucune catégorie assignée</p>
+          </div>
+        </div>
+
+        <!-- Mon CV -->
+        <div class="panel-card full-width">
+          <div class="panel-card-header">
+            <FileText :size="18" class="card-icon" />
+            <h2>Mon Curriculum Vitae</h2>
+          </div>
+          <p class="card-desc">Rattachez votre CV via une URL Google Docs. Cela permettra à l'Agent RH d'extraire vos compétences et missions.</p>
+          
+          <div class="add-period-form" style="margin-top: 1rem;">
+            <p class="form-label">Importer depuis Google Docs</p>
+            <div class="form-row" style="align-items: flex-start;">
+              <label class="field" style="flex: 1;">
+                <input 
+                  type="url" 
+                  v-model="cvUrl" 
+                  class="field-input" 
+                  placeholder="https://docs.google.com/document/d/1X..." 
+                  aria-label="URL du Google Doc" 
+                />
+              </label>
+              <button @click="importCv" :disabled="!cvUrl || isImportingCv" class="btn-primary" style="padding: 9px 18px; margin-top: 0;">
+                <Check v-if="cvImportSuccess" :size="16" />
+                <Plus v-else :size="16" />
+                <span>{{ isImportingCv ? 'Importation...' : cvImportSuccess ? 'Importé !' : 'Importer le CV' }}</span>
+              </button>
+            </div>
+            <Transition name="fade-msg">
+              <div v-if="cvImportError" class="msg-error" style="margin-top: 8px;">
+                <AlertCircle :size="14" style="display:inline; margin-right:4px;" />
+                {{ cvImportError }}
+              </div>
+            </Transition>
           </div>
         </div>
 
@@ -784,10 +849,10 @@ onMounted(() => {
   font-family: inherit;
   background: white;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   width: 100%;
 }
-.field-input:focus { border-color: #E31937; }
+.field-input:focus { border-color: #E31937; box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.25); }
 
 .btn-add {
   display: inline-flex;
@@ -823,7 +888,7 @@ onMounted(() => {
   margin-bottom: 1rem;
   box-sizing: border-box;
 }
-.prompt-textarea:focus { border-color: #E31937; box-shadow: 0 0 0 3px rgba(227,25,55,0.08); }
+.prompt-textarea:focus { border-color: #E31937; box-shadow: 0 0 0 3px rgba(227,25,55,0.25); }
 
 .prompt-actions { display: flex; align-items: center; gap: 1rem; }
 

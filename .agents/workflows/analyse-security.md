@@ -31,3 +31,32 @@ En plus du contexte historique, valider l'intégrité globale sur ces directives
 Parcourez l'ensemble des `Dockerfile` :
 - Refus implicite de toute image tournant en mode `root`. L'utilisateur `USER appuser` doit être défini pour le Backend, et `nginx-unprivileged` géré côté VueJs.
 - Hygiène du Build avec des `.dockerignore` stricts validant l'exclusion de `.env`, clefs asymétriques ou de secrets.
+
+## 5. Analyse Systémique RBAC (Contrôle d'Accès par Rôle)
+Vérifier la matrice des droits pour chaque rôle (`user`, `rh`, `commercial`, `admin`, `service_account`) :
+
+- **Formalisation des Rôles** : Contrôler que le champ `role` dans `users_api/src/users/schemas.py` est une `Literal` Python (ou équivalent Pydantic) imposant des valeurs strictes (`user`, `rh`, `commercial`, `admin`, `service_account`). Un champ `String` libre est une faille permettant l'injection de rôles arbitraires.
+- **Guards Backend sur Actions Coûteuses** : Vérifier que les endpoints déclenchant un LLM ou un batch Vertex AI (ex: `POST /missions`, `POST /cvs/import`, `POST /recalculate_tree`) sont protégés par une vérification de rôle explicite au-delà du simple JWT. Tout JWT valide d'un `user` standard ne doit pas pouvoir déclencher une analyse Gemini.
+- **Guards Backend sur Actions Administratives** : Contrôler que les endpoints de mutation structurelle (création d'utilisateur, suspension de compte, suppression de missions, bulk_tree de taxonomie) imposent `role in ["admin", "service_account"]`. La commande `grep -rn 'role.*!=.*admin\|role not in' --include="*.py"` doit couvrir tous les endpoints sensibles.
+- **Cohérence Frontend/Backend** : S'assurer que les routes frontend marquées `adminOnly` dans le router Vue sont AUSSI protégées côté backend. Une route frontend sans meta `adminOnly` accessible directement par URL est une faille si le backend ne vérifie pas le rôle.
+- **Enum Rôle Obligatoire** : Ajouter un changeset Liquibase avec une contrainte `CHECK (role IN ('user', 'rh', 'commercial', 'admin', 'service_account'))` sur la colonne `role` de la table `users` pour prévenir la corruption en base.
+- **Matrice Cible** : Pour chaque API data, vérifier la conformité à la matrice suivante :
+
+| Action | user | rh | commercial | admin | service_account |
+|--------|:----:|:--:|:----------:|:-----:|:---------------:|
+| Créer mission + LLM | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Importer CV + LLM | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Créer compétence | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Créer utilisateur | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Suspendre utilisateur | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Ré-analyse batch (Vertex AI) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Modifier prompts IA | ❌ | ❌ | ❌ | ✅ | ❌ |
+
+## 6. Audit MCP — Élévation de Privilèges via Tools
+Les serveurs MCP (`mcp_server.py`) constituent un vecteur d'attaque indirect : un agent IA peut appeler un tool MCP qui contourne les gardes de rôle si celles-ci ne sont pas en place côté backend.
+
+- **Propagation JWT Obligatoire** : Vérifier que chaque `mcp_server.py` propage le JWT entrant via `mcp_auth_header_var` (ContextVar) dans les headers des appels HTTP sortants vers les APIs data. L'absence de propagation implique que les appels MCP arrivent sans JWT → rejet 401 ou, pire, bypass si le backend n'a pas de guard.
+- **Pas de Logique de Rôle dans les MCP** : Les tools MCP ne doivent PAS implémenter de logique de rôle propre — ce serait de la duplication fragile. La responsabilité est intégralement dans l'API data cible. Vérifier qu'aucun MCP ne contient de pattern `if role == "admin": skip_guard`.
+- **Tools Destructifs Sans Guard Backend** : Identifier les tools MCP exposant des actions destructives (`delete_competency`, `delete_all_missions`, `clear_user_competencies`) et s'assurer que l'API cible impose une vérification de rôle `admin` sur ces endpoints. Commande : `grep -n "delete\|clear\|drop\|suspend" */mcp_server.py`.
+- **Pas de Fabrication de Token** : Vérifier que les MCP servers ne génèrent pas de JWT de service en interne (pas d'appel à `/auth/internal/service-token` sans audit trail). Seul `agent_router_api` est autorisé à obtenir un service token avant de lancer une background task.
+- **Isolation Stdio** : Les sidecars MCP stdio (`mcp_server.py`) ne doivent pas avoir accès aux variables d'environnement contenant des secrets (SECRET_KEY, GOOGLE_API_KEY). Ces variables doivent être purgées via `os.environ.pop()` dans `main.py` avant le démarrage du sidecar.

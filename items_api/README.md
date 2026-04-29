@@ -1,41 +1,40 @@
-# Items API
+# items_api
 
-## Code Coverage
+## Rôle
+Gestion des items (catalogue de services/produits) et de leurs catégories.
 
-```
-Name                    Stmts   Miss  Cover   Missing
------------------------------------------------------
-cache.py                   30     30     0%   1-40
-database.py                15     15     0%   1-22
-main.py                    43     43     0%   1-78
-src/__init__.py             0      0   100%
-src/items/__init__.py       0      0   100%
-src/items/models.py        11     11     0%   1-15
-src/items/router.py        67     67     0%   1-107
-src/items/schemas.py       26     26     0%   1-38
------------------------------------------------------
-TOTAL                     192    192     0%
-```
+## Type
+🔵 API data (producteur MCP)
 
-## Endpoints
+## Fichiers clés
+| Fichier | Lignes | État |
+|---|---|---|
+| `src/items/router.py` | 605 | 🚨 Zone bloquante (> 400) — refactoring requis |
+| `src/items/schemas.py` | 74 | ✅ OK |
+| `src/items/models.py` | 45 | ✅ OK |
+| `src/auth.py` | 40 | ✅ OK |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /items | List items (paginated) |
-| GET | /items/{id} | Get item by ID |
-| POST | /items | Create item (requires user_id) |
-| GET | /health | Health check |
-| GET | /metrics | Prometheus metrics |
+## Variables d'environnement
+| Var | Type | Valeur dev |
+|---|---|---|
+| `SECRET_KEY` | Secret | via `.env` |
+| `DATABASE_URL` | Infra | injecté Cloud Run |
+| `REDIS_URL` | Infra | `redis://redis:6379/1` |
+| `MCP_SIDECAR_URL` | Comportement | `http://items_mcp:8000` |
+| `ROOT_PATH` | Comportement | `/items-api` |
 
-## Pagination
+## Redis
+**DB 1** — namespace `items:*`
+- Invalidation obligatoire sur POST/PUT/DELETE (`items:list:*`)
 
-```
-GET /items?skip=0&limit=10
-```
+## MCP tools exposés
+- `get_item_by_id`, `list_items`, `create_item`, `update_item`, `delete_item`
+- `list_categories`, `get_category_by_id`
 
-## Run
+## Gotchas connus
+- `router.py` est en zone bloquante : toute nouvelle feature DOIT passer par un `services/` layer
+- Routes statiques avant wildcard obligatoire (cf. règle FastAPI §AGENTS.md)
+- Cache Redis DB1 — ne pas confondre avec `agent_router_api` qui utilisait historiquement DB1 aussi (corrigé en DB2)
 
-```bash
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8001
-```
+## Dernière modification
+2026-04-29 — v0.0.45 — bump version post-audit sécurité

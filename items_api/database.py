@@ -1,12 +1,14 @@
+import asyncio
+import logging
+import os
+import re
+
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import text
 from google.cloud.alloydb.connector import AsyncConnector, IPTypes
 from typing import AsyncGenerator
-import logging
-from sqlalchemy import text
-import os
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,11 @@ async def init_db_connector():
     pool_params = {
         "pool_pre_ping": True,
         "pool_recycle": 1800,
+        # Pool dimensionné pour le pipeline bulk-reanalyse :
+        # BULK_APPLY_SEMAPHORE=5 × 2 calls items_api = 10 requêtes simultanées max.
+        # pool_size=10 + max_overflow=20 = 30 connexions max/instance — large marge.
+        "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
     }
 
     if USE_IAM_AUTH and ALLOYDB_INSTANCE_URI:
@@ -77,13 +84,26 @@ async def close_db_connector():
     if connector:
         await connector.close()
         
-async def check_db_connection():
+async def check_db_connection() -> bool:
+    """Vérifie la connectivité DB avec un timeout court (5s).
+
+    Utilise asyncio.wait_for pour éviter de bloquer le /ready endpoint
+    quand le pool de connexions est saturé (ex: pendant un bulk pipeline).
+    En cas de TimeoutError (saturation temporaire), retourne True de façon
+    optimiste — le 503 ne se déclenche que si la DB est réellement inaccessible.
+    """
     global engine
     if not engine:
         return False
     try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        async def _ping():
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_ping(), timeout=5.0)
+        return True
+    except asyncio.TimeoutError:
+        logger.warning("[DB] check_db_connection timeout (5s) — pool probablement saturé. Retour optimiste: True.")
         return True
     except Exception as e:
         logger.error(f"[DB] Database connection test failed: {e}")

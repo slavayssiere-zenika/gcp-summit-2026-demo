@@ -78,7 +78,7 @@ resource "google_cloud_run_v2_service" "items_api" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/1"
       }
       env {
         name  = "TRACE_EXPORTER"
@@ -87,6 +87,10 @@ resource "google_cloud_run_v2_service" "items_api" {
       env {
         name  = "TRACE_SAMPLING_RATE"
         value = var.trace_sampling_rate
+      }
+      env {
+        name  = "PROMPTS_API_URL"
+        value = "http://api.internal.zenika/api/prompts"
       }
       env {
         name  = "APP_VERSION"

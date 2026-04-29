@@ -180,6 +180,8 @@ services:
       - COMPETENCIES_API_URL=http://competencies_api:8003
       - PROMPTS_API_URL=http://prompts_api:8000
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_CV_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview  # [LEGACY] fallback
       - SECRET_KEY=${SECRET_KEY}
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - DRIVE_API_URL=http://drive_api:8006
@@ -311,6 +313,7 @@ services:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_SERVICE_NAME=analytics-mcp
+      - REDIS_URL=redis://redis:6379/7
     networks:
       - monitoring_net
 
@@ -327,6 +330,7 @@ services:
       - OTEL_SERVICE_NAME=monitoring-mcp
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - REDIS_URL=redis://redis:6379/9
     networks:
       - monitoring_net
 
@@ -341,7 +345,8 @@ services:
       - "8002:8002"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_ROUTER_MODEL=gemini-3.1-pro-preview
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
       - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - AGENT_HR_API_URL=http://agent_hr_api:8080
@@ -379,7 +384,7 @@ services:
     networks:
       - monitoring_net
 
-  agent_hr_api:
+      agent_hr_api:
         condition: service_started
       agent_ops_api:
         condition: service_started
@@ -416,8 +421,8 @@ services:
     hostname: agent_hr_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
-      # Main APIs (for business calls that require auth context)
+      - GEMINI_HR_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview  # [LEGACY] fallback
       - USERS_API_URL=http://users_api:8000
       - ITEMS_API_URL=http://items_api:8001
       - COMPETENCIES_API_URL=http://competencies_api:8003
@@ -469,7 +474,8 @@ services:
     hostname: agent_ops_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_OPS_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
       - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - DRIVE_MCP_URL=http://drive_mcp:8000
@@ -502,7 +508,8 @@ services:
     hostname: agent_missions_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_MISSIONS_MODEL=gemini-3.1-flash-lite-preview
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
       - PROMPTS_MCP_URL=http://prompts_mcp:8000
       - MISSIONS_MCP_URL=http://missions_api:8009

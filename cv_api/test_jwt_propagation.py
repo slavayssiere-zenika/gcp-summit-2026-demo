@@ -39,63 +39,44 @@ def client():
 
 def test_cv_router_extracts_sub_for_finops():
     """
-    Test structurel : vérifie que src/cvs/router.py extrait bien le sub JWT
+    Test structurel : vérifie que src/services/cv_import_service.py extrait bien le sub JWT
     via token_payload.get("sub") pour le logging FinOps.
-    Détecte une régression si quelqu'un remplace par une constante hardcodée.
     """
-    router_path = pathlib.Path(__file__).parent / "src" / "cvs" / "router.py"
-    source = router_path.read_text()
+    service_path = pathlib.Path(__file__).parent / "src" / "services" / "cv_import_service.py"
+    source = service_path.read_text()
 
-    # Le sub doit être extrait
     assert 'token_payload.get("sub"' in source or "token_payload.get('sub'" in source, \
-        "ANOMALIE: token_payload.get('sub') introuvable dans cv_api/router.py"
+        "ANOMALIE: token_payload.get('sub') introuvable dans cv_import_service.py"
 
-    # Aucune valeur "user_1" hardcodée
     assert 'user_caller = "user_1"' not in source, \
-        "REGRESSION: user_caller hardcodé à 'user_1' dans cv_api/router.py"
+        "REGRESSION: user_caller hardcodé à 'user_1'"
     assert "user_caller = 'user_1'" not in source, \
-        "REGRESSION: user_caller hardcodé à 'user_1' dans cv_api/router.py"
+        "REGRESSION: user_caller hardcodé à 'user_1'"
 
-    # _log_finops doit recevoir user_caller (variable), pas une constante
-    # Vérifier que les appels _log_finops utilisent user_caller variable
     finops_calls = [line for line in source.splitlines()
-                    if "_log_finops(" in line and "user_caller" in line]
-    assert len(finops_calls) >= 2, \
-        f"Attendu >= 2 appels _log_finops(user_caller, ...), trouvé: {len(finops_calls)}"
+                    if "log_finops(" in line and "user_caller" in line]
+    assert len(finops_calls) >= 1, \
+        f"Attendu >= 1 appel log_finops(user_caller, ...), trouvé: {len(finops_calls)}"
 
 
 # ---------------------------------------------------------------------------
-# 2. Test structurel — GET /cvs/analyze passe user_caller à _log_finops
+# 2. Test structurel — GET /cvs/analyze passe user_caller à log_finops
 # ---------------------------------------------------------------------------
 
 def test_analyze_cv_uses_jwt_sub_as_user_caller():
     """
-    REGRESSION BUG-FINOPS-002 : _log_finops doit recevoir le user_caller 
+    REGRESSION BUG-FINOPS-002 : log_finops doit recevoir le user_caller 
     (sub JWT), pas une variable hardcodée.
     """
-    router_path = pathlib.Path(__file__).parent / "src" / "cvs" / "router.py"
-    source = router_path.read_text()
+    service_path = pathlib.Path(__file__).parent / "src" / "services" / "cv_import_service.py"
+    source = service_path.read_text()
     
-    lines = source.splitlines()
-    in_analyze = False
-    analyze_block = []
-    
-    for line in lines:
-        if "@router.post" in line and '"/analyze"' in line:
-            in_analyze = True
-        if in_analyze:
-            analyze_block.append(line)
-            if "@router." in line and len(analyze_block) > 1:
-                break
-                
-    analyze_code = "\n".join(analyze_block)
-    if analyze_code:
-        assert "token_payload.get(\"sub\", \"unknown\")" in analyze_code or "token_payload.get('sub', 'unknown')" in analyze_code, (
-            "REGRESSION: user_caller n'extrait plus sub JWT en fallback strict"
-        )
-        assert "_log_finops(user_caller" in analyze_code, (
-            "REGRESSION: _log_finops n'utilise plus user_caller dans /analyze"
-        )
+    assert "token_payload.get(\"sub\"" in source or "token_payload.get('sub'" in source, (
+        "REGRESSION: user_caller n'extrait plus sub JWT en fallback strict"
+    )
+    assert "log_finops(user_caller" in source, (
+        "REGRESSION: log_finops n'utilise plus user_caller dans cv_import_service"
+    )
 
 
 

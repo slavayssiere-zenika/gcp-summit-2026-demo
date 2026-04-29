@@ -192,6 +192,24 @@ resource "google_pubsub_subscription" "items_api_sub" {
   depends_on = [google_service_account_iam_member.pubsub_token_creator]
 }
 
+resource "google_pubsub_subscription" "competencies_api_sub" {
+  name  = "competencies-api-user-events-sub-${terraform.workspace}"
+  topic = google_pubsub_topic.user_events.id
+
+  ack_deadline_seconds = 20
+
+  push_config {
+    push_endpoint = "https://${terraform.workspace}.${var.base_domain}/competencies-api/pubsub/user-events"
+
+    oidc_token {
+      service_account_email = google_service_account.pubsub_invoker.email
+      audience              = "https://${terraform.workspace}.${var.base_domain}/competencies-api/pubsub/user-events"
+    }
+  }
+
+  depends_on = [google_service_account_iam_member.pubsub_token_creator]
+}
+
 # --------------------------------------------------------------
 # IAM Permissions
 # --------------------------------------------------------------
@@ -215,6 +233,13 @@ resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker_cv" {
 resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker_items" {
   location = var.region
   name     = google_cloud_run_v2_service.items_api.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.pubsub_invoker.email}"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker_competencies" {
+  location = var.region
+  name     = google_cloud_run_v2_service.competencies_api.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.pubsub_invoker.email}"
 }

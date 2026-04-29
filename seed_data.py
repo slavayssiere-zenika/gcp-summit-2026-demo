@@ -361,7 +361,10 @@ def main():
         "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
         "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
-        "cv_api.generate_taxonomy_tree": "cv_api/cv_api.generate_taxonomy_tree.txt",
+        "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
+        "cv_api.generate_taxonomy_tree_deduplicate": "cv_api/cv_api.generate_taxonomy_tree_deduplicate.txt",
+        "cv_api.generate_taxonomy_tree_reduce": "cv_api/cv_api.generate_taxonomy_tree_reduce.txt",
+        "cv_api.generate_taxonomy_tree_sweep": "cv_api/cv_api.generate_taxonomy_tree_sweep.txt",
         "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
         "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
         "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"

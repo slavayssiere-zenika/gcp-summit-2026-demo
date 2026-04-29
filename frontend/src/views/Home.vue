@@ -30,6 +30,10 @@ const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner 
 const isMissionObj = (obj: any) => obj && obj.title && (obj.proposed_team || obj.extracted_competencies || obj.description);
 // Détecte les objets compétences retournés par l'agent (ils ont un id et name mais pas d'email ni user_id)
 const isCompetencyObj = (obj: any) => obj && obj.name && obj.id && !obj.email && !obj.user_id && !obj.categories && !obj.owner && !obj.title;
+// Détecte les évaluations de compétences pures d'un consultant (sans user_id racine)
+const isEvaluationObj = (obj: any) => obj && obj.competency_id && obj.competency_name && obj.ai_score !== undefined && !obj.user_id;
+// Détecte une liste d'évaluations pour plusieurs consultants (résultats de recherche/staffing)
+const isBulkEvaluationsList = (arr: any[]) => arr && Array.isArray(arr) && arr.length > 0 && arr.every((o: any) => o && o.competency_id && o.competency_name && o.ai_score !== undefined && o.user_id !== undefined);
 const techKeys = [
   'semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 
   'username', 'name', 'full_name', 'agent', 'response', 'source', 'session_id', 
@@ -39,7 +43,7 @@ const techKeys = [
 const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
 const isProfileObj = (obj: any) => obj && !obj.email && (obj.user_id || obj.summary) && (obj.missions || obj.competencies_keywords || obj.current_role)
 const isAvailabilityObj = (obj: any) => obj && obj.summary && obj.active_missions !== undefined && obj.is_available !== undefined;
-const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj) || isAvailabilityObj(obj);
+const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj) || isAvailabilityObj(obj) || isEvaluationObj(obj);
 const hasBusinessData = (obj: any) => filteredKeys(obj).length > 0 || isBusinessObj(obj);
 const hasAnyBusinessData = (msg: any) => {
   if (msg.displayType === 'text_only') return false;
@@ -207,12 +211,68 @@ onUnmounted(() => {
             <div class="text-content" v-html="md.render(msg.content)"></div>
             
             <!-- Modern JSON Parsed Dashboard -->
-            <div v-if="msg.parsedData && (msg.displayType === 'tree' || hasAnyBusinessData(msg) || isHealthData(msg.parsedData))" class="dashboard-content">
+            <div v-if="msg.parsedData && (msg.displayType === 'tree' || hasAnyBusinessData(msg) || isHealthData(msg.parsedData)) || msg.consultantCards" class="dashboard-content">
               <!-- System Health Dashboard -->
               <SystemHealthCard v-if="isHealthData(msg.parsedData)" :components="msg.parsedData" />
 
-              <!-- Table UI -->
-              <div v-else-if="msg.displayType === 'table'" class="data-table-container">
+              <!-- ── Dual Display : Consultant Cards (sémantique) + Tableau évaluations ── -->
+              <template v-else-if="msg.consultantCards && msg.consultantCards.length > 0">
+                <!-- 1. Cards consultants (résultat sémantique) -->
+                <div class="dual-section-label">
+                  <span class="dual-section-icon">🎯</span> Profils identifiés par recherche sémantique
+                </div>
+                <div class="consultant-cards-grid">
+                  <div
+                    v-for="c in msg.consultantCards"
+                    :key="c.user_id"
+                    class="consultant-semantic-card"
+                    @click="goToUser(c.user_id)"
+                    :title="`Voir le profil de ${c.full_name}`"
+                  >
+                    <div class="csc-avatar">{{ getInitials(c.full_name || '') }}</div>
+                    <div class="csc-info">
+                      <div class="csc-name">{{ c.full_name || `#${c.user_id}` }}</div>
+                      <div class="csc-meta">
+                        <span v-if="c.source_tag" class="csc-agency">📍 {{ c.source_tag }}</span>
+                        <span v-if="c.current_role" class="csc-role">{{ c.current_role }}</span>
+                      </div>
+                    </div>
+                    <div v-if="c.combined_similarity !== undefined" class="csc-score" :style="{ color: c.combined_similarity >= 0.7 ? '#10b981' : c.combined_similarity >= 0.6 ? '#f59e0b' : '#94a3b8' }">
+                      {{ Math.round(c.combined_similarity * 100) }}%
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 2. Tableau brut des évaluations (si disponible) -->
+                <template v-if="msg.parsedData && msg.parsedData.length > 0 && !isHealthData(msg.parsedData)">
+                  <div class="dual-section-label" style="margin-top: 1.5rem;">
+                    <span class="dual-section-icon">📋</span> Évaluations de compétences (données brutes)
+                  </div>
+                  <div class="data-table-container">
+                    <table class="zen-table">
+                      <thead>
+                        <tr>
+                          <th v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_') && !['id','user_id','ai_scored_at','user_scored_at','user_comment','ai_justification'].includes(k))" :key="key">{{ key.replace(/_/g,' ').toUpperCase() }}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(row, idx) in msg.parsedData.slice(0, 20)" :key="idx">
+                          <td v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_') && !['id','user_id','ai_scored_at','user_scored_at','user_comment','ai_justification'].includes(k))" :key="key">
+                            <span v-if="row[key] === null || row[key] === undefined" class="null-badge">—</span>
+                            <span v-else>{{ row[key] }}</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div v-if="msg.parsedData.length > 20" class="table-truncation-note">
+                      {{ msg.parsedData.length - 20 }} ligne(s) supplémentaire(s) non affichées
+                    </div>
+                  </div>
+                </template>
+              </template>
+
+              <!-- Table UI (mode normal sans consultantCards) -->
+              <div v-else-if="msg.displayType === 'table' || (Array.isArray(msg.parsedData) && isBulkEvaluationsList(msg.parsedData))" class="data-table-container">
                 <table class="zen-table">
                   <thead>
                     <tr>
@@ -251,6 +311,12 @@ onUnmounted(() => {
                     <span v-if="obj.aliases" class="comp-result-alias">{{ obj.aliases }}</span>
                   </div>
 
+                  <!-- Évaluations de compétences : affichage compact -->
+                  <div v-else-if="isEvaluationObj(obj)" class="competency-result-badge">
+                    <span class="comp-result-name">{{ obj.competency_name }} <span style="color: var(--zenika-red);">({{ obj.ai_score }}/5)</span></span>
+                    <span v-if="obj.ai_justification" class="comp-result-desc" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;" :title="obj.ai_justification">{{ obj.ai_justification }}</span>
+                  </div>
+
                   <div v-else-if="hasBusinessData(obj)" class="generic-dash-card" @click="(obj.user_id || (obj.id && obj.email)) ? goToUser(obj.user_id || obj.id) : null" :class="{ 'non-clickable': !obj.user_id && !(obj.id && obj.email) }">
                     <div class="card-header" v-if="obj.username || obj.name || obj.full_name">
                       <h3 class="name">{{ obj.full_name || obj.username || obj.name }}</h3>
@@ -270,7 +336,6 @@ onUnmounted(() => {
                   </div>
                 </template>
               </div>
-
 
               <!-- Tree View UI -->
               <div v-else-if="msg.displayType === 'tree'" class="tree-grid">
@@ -733,6 +798,106 @@ input {
 }
 
 /* Dynamic JSON Dashboard Elements */
+
+/* ── Dual Display : section labels ── */
+.dual-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #edf2f7;
+}
+.dual-section-icon { font-size: 1rem; }
+
+/* ── Consultant Cards Grid (résultats sémantiques) ── */
+.consultant-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.consultant-semantic-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+}
+.consultant-semantic-card:hover {
+  border-color: rgba(227, 25, 55, 0.3);
+  box-shadow: 0 4px 14px rgba(227, 25, 55, 0.07);
+  transform: translateX(4px);
+}
+.csc-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #E31937 0%, #ff6b6b 100%);
+  color: white;
+  font-weight: 800;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.csc-info { flex: 1; min-width: 0; }
+.csc-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.csc-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+}
+.csc-agency {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.csc-role {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.csc-score {
+  font-weight: 800;
+  font-size: 1rem;
+  min-width: 42px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.null-badge {
+  color: #cbd5e1;
+  font-style: italic;
+}
+.table-truncation-note {
+  padding: 0.5rem 1rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-top: 1px solid #edf2f7;
+  text-align: center;
+}
+
 .data-table-container {
   overflow-x: auto;
   margin-top: 1.5rem;
@@ -936,4 +1101,31 @@ input {
   100% { transform: translateX(100%); }
 }
 
+/* Responsive UI Adjustments */
+@media (max-width: 768px) {
+  .chat-wrapper {
+    height: calc(100vh - 80px);
+    border-radius: 12px;
+  }
+  .generic-grid, .consultant-list {
+    grid-template-columns: 1fr;
+  }
+  .input-area {
+    padding: 1rem;
+  }
+  .input-container {
+    flex-wrap: wrap;
+  }
+  .message {
+    max-width: 100%;
+    padding: 1rem;
+  }
+  .tree-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .tree-cost-badge {
+    margin-left: 0;
+  }
+}
 </style>

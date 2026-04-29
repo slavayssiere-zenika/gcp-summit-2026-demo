@@ -97,8 +97,8 @@ const fetchStatus = async () => {
       axios.get('/api/drive/files', { params: { status: 'PROCESSING', limit: 20 }, headers: authHeader() }),
       axios.get('/api/drive/files', { params: { status: 'QUEUED', limit: 5 }, headers: authHeader() }),
     ])
-    activeFiles.value = procResp.data
-    queuedFiles.value = queuedResp.data
+    activeFiles.value = procResp.data.files || (Array.isArray(procResp.data) ? procResp.data : [])
+    queuedFiles.value = queuedResp.data.files || (Array.isArray(queuedResp.data) ? queuedResp.data : [])
 
     // Poll faster if active
     if (isActive.value) {
@@ -336,9 +336,15 @@ const displayName = (f: FileState): string =>
 
       <!-- Quick action -->
       <div class="quick-access">
+        <RouterLink to="/admin/drive-ingestion" class="quick-link dashboard-link">
+          <Activity size="13" />
+          Dashboard complet Data Quality
+          <ArrowRight size="13" />
+        </RouterLink>
+        <span class="quick-sep">·</span>
         <RouterLink to="/admin/reanalysis" class="quick-link">
           <Zap size="13" />
-          Réanalyse batch des profils
+          Réanalyse batch
           <ArrowRight size="13" />
         </RouterLink>
         <span class="quick-sep">·</span>
@@ -550,6 +556,7 @@ const displayName = (f: FileState): string =>
   transition: opacity 0.2s;
 }
 .quick-link:hover { opacity: 0.75; }
+.dashboard-link { color: #7c3aed; }
 .quick-sep { color: #e2e8f0; }
 .last-refresh { margin-left: auto; }
 

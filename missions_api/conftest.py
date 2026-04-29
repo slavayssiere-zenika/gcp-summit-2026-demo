@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 # CRITICAL: Set environment variables BEFORE imports
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./missions_test.db"
 os.environ["SECRET_KEY"] = "testsecret"
-os.environ["REDIS_URL"] = "redis://localhost:6379/0"
+os.environ["REDIS_URL"] = "redis://localhost:6379/8"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     from main import app

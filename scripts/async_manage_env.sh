@@ -10,7 +10,7 @@ IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_NAME}/${JOB_NAME}"
 
 if [ "$1" = "list-versions" ] || [ "$1" = "--list-versions" ] || [ "$1" = "-l" ]; then
     echo "[*] Liste des versions du conteneur dans Artifact Registry..."
-    gcloud artifacts docker images list "$IMAGE" --sort-by=~UPDATE_TIME
+    gcloud artifacts docker images list "$IMAGE" --include-tags --sort-by=~UPDATE_TIME
     exit 0
 fi
 

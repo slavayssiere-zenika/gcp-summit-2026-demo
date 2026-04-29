@@ -78,7 +78,7 @@ resource "google_cloud_run_v2_service" "competencies_api" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/3"
       }
       env {
         name  = "TRACE_EXPORTER"
@@ -87,6 +87,10 @@ resource "google_cloud_run_v2_service" "competencies_api" {
       env {
         name  = "TRACE_SAMPLING_RATE"
         value = var.trace_sampling_rate
+      }
+      env {
+        name  = "PROMPTS_API_URL"
+        value = "http://api.internal.zenika/api/prompts"
       }
       env {
         name  = "APP_VERSION"
@@ -126,6 +130,23 @@ resource "google_cloud_run_v2_service" "competencies_api" {
             version = "latest"
           }
         }
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "VERTEX_LOCATION"
+        value = var.region
+      }
+      env {
+        name  = "BATCH_GCS_BUCKET"
+        value = google_storage_bucket.cv_batch.name
+      }
+      env {
+        # Utilisé par scoring_service.py pour construire les noms de services Cloud Run.
+        name  = "CLOUDRUN_WORKSPACE"
+        value = terraform.workspace
       }
     }
 
@@ -250,6 +271,27 @@ resource "google_project_iam_member" "competencies_alloydb_client" {
 resource "google_project_iam_member" "competencies_alloydb_databaseUser" {
   project = var.project_id
   role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.competencies_sa.email}"
+}
+
+# Vertex AI Batch Scoring : competencies_sa doit pouvoir soumettre des jobs Batch Prediction
+resource "google_project_iam_member" "competencies_vertex_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.competencies_sa.email}"
+}
+
+# GCS : competencies_sa doit lire/écrire les JSONL I/O du bucket batch (partagé avec cv_api)
+resource "google_storage_bucket_iam_member" "competencies_batch_storage" {
+  bucket = google_storage_bucket.cv_batch.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.competencies_sa.email}"
+}
+
+# Cloud Scheduler : competencies_sa doit pouvoir pause/resume le job de polling Vertex Batch
+resource "google_project_iam_member" "competencies_scheduler_admin" {
+  project = var.project_id
+  role    = "roles/cloudscheduler.admin"
   member  = "serviceAccount:${google_service_account.competencies_sa.email}"
 }
 

@@ -78,7 +78,7 @@ resource "google_cloud_run_v2_service" "missions_api" {
       }
       env {
         name  = "REDIS_URL"
-        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/0"
+        value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/8"
       }
       env {
         name  = "TRACE_EXPORTER"

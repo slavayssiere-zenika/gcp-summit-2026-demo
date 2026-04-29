@@ -54,19 +54,19 @@ Il ne possède aucun outil MCP direct — il orchestre uniquement d'autres agent
 
 - **GET** `/metrics` : Metrics
 - **GET** `/` : Root
-- **GET** `/spec` : Get Spec
-- **POST** `/login` : Login
-- **POST** `/logout` : Logout
-- **GET** `/me` : Get Me
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
 - **GET** `/health/agents` : Health Agents
+- **POST** `/login` : Login
+- **POST** `/logout` : Logout
+- **GET** `/me` : Get Me
+- **GET** `/spec` : Get Spec
 - **POST** `/query` : Query
 - **GET** `/history` : Get History
 - **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

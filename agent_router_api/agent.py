@@ -241,12 +241,18 @@ async def create_agent(session_id: str | None = None):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     instruction_text = "Tu es l'Orchestrateur Principal de la plateforme Zenika, le 'Front-Desk'. Ton rôle est de diriger la demande vers le hub approprié en utilisant tes outils de délégation (A2A). Ne dis pas 'je vais interroger mon collègue', sois direct."
     try:
+        from mcp_client import auth_header_var
+        auth_header = auth_header_var.get(None)
+        headers = {"Authorization": auth_header} if auth_header else {}
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url.rstrip('/')}/agent_router_api.system_instruction/compiled")
+            res = await client.get(
+                f"{prompts_api_url.rstrip('/')}/agent_router_api.system_instruction/compiled",
+                headers=headers,
+            )
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:
-                logger.error(f"Failed to fetch system prompt from prompts_api: {res.status_code}")
+                logger.warning(f"Failed to fetch system prompt from prompts_api: {res.status_code} (using built-in default)")
     except Exception as e:
         logger.warning(f"Error fetching system prompt: {e}")
         
@@ -261,14 +267,19 @@ async def create_agent(session_id: str | None = None):
                     user_prompt = res.json().get("value", "")
                     if user_prompt:
                         instruction_text += f"\n\n--- INSTRUCTIONS UTILISATEUR ({session_id}) ---\n{user_prompt}\n------------------------------------------------------------"
-        except Exception: raise
+        except Exception as e:
+            logger.warning(f"Error fetching user system prompt for session {session_id}: {e}")
             
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    
+    # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
+    model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"))
+
     agent = Agent(
         name="assistant_zenika_router",
         model=model,
         generate_content_config=types.GenerateContentConfig(
+            tool_config=types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode="AUTO")
+            ),
             http_options=types.HttpOptions(
                 retry_options=types.HttpRetryOptions(initial_delay=1, attempts=2),
             )
@@ -364,7 +375,7 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
                         # Unwrap MCP 'result' JSON string (Crucial for sub-agent data access)
                         if isinstance(res_data, dict) and "result" in res_data and isinstance(res_data["result"], str) and res_data["result"].startswith("{"):
                             try: res_data = json.loads(res_data["result"])
-                            except: pass
+                            except Exception as e: logger.warning(f"Erreur ignorée lors du parsing JSON: {e}")
 
                         # Aggregate sub-agent metadata if this is an A2A delegation
                         if isinstance(res_data, dict) and "response" in res_data:
@@ -475,6 +486,48 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
             logger.error(f"[run_agent_query] Unexpected ADK ValueError for session '{session_id}': {adk_err}")
             response_parts.append(f"⚠️ Erreur inattendue lors du traitement: {error_msg}")
 
+    except Exception as gemini_err:
+        # OPS-003 — Interception du dépassement de context window Gemini (400 INVALID_ARGUMENT)
+        # Survient quand l'historique de session accumulé dépasse 1M tokens (gemini-3.1-pro-preview).
+        # Stratégie : réinitialiser la session Redis pour libérer le contexte, retourner une réponse
+        # guidée invitant l'utilisateur à relancer sa question.
+        err_str = str(gemini_err)
+        if "input token count exceeds" in err_str or "INVALID_ARGUMENT" in err_str:
+            logger.warning(
+                f"[OPS-003] Gemini context window overflow for session '{session_id}'. "
+                f"Session history too long (>1M tokens). Auto-resetting session. Error: {err_str[:200]}"
+            )
+            # Reset automatique de la session Redis pour éviter que chaque requête suivante échoue
+            try:
+                session_service_local = get_session_service()
+                session_to_delete = await session_service_local.get_session(
+                    app_name="zenika_assistant", user_id=user_id, session_id=session_id
+                )
+                if session_to_delete:
+                    session_service_local._delete_session_impl(
+                        app_name="zenika_assistant", user_id=user_id, session_id=session_id
+                    )
+                    logger.info(f"[OPS-003] Session '{session_id}' supprimée après context overflow.")
+            except Exception as reset_err:
+                logger.warning(f"[OPS-003] Session reset failed (non-critical): {reset_err}")
+            steps.append({
+                "type": "warning",
+                "tool": "adk_runner:CONTEXT_OVERFLOW",
+                "args": {
+                    "message": "La fenêtre de contexte Gemini a été dépassée. L'historique de conversation a été réinitialisé automatiquement.",
+                    "technical_detail": err_str[:300]
+                }
+            })
+            response_parts.append(
+                "⚠️ La conversation a atteint la limite de mémoire du modèle IA. "
+                "Votre historique de session a été réinitialisé automatiquement. "
+                "Vous pouvez relancer votre question — la prochaine requête sera traitée normalement."
+            )
+        else:
+            # Autre exception non interceptée — la remonter pour le global_exception_handler
+            raise
+
+
 
     response_text = "".join(response_parts)
     
@@ -503,9 +556,11 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
                                 "metadata": {"query": query[:100]}
                             }
                         })
-                except Exception: raise
+                except Exception as e:
+                    logger.warning(f"[FinOps] BQ token logging failed (non-critical): {e}")
             asyncio.create_task(log_bq())
-        except Exception: raise
+        except Exception as e:
+            logger.warning(f"[FinOps] Failed to schedule BQ logging task (non-critical): {e}")
 
     final_result = {
         "response": response_text,

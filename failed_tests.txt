@@ -1,0 +1,315 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- /usr/local/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/sebastien.lavayssiere/Code/test-open-code
+plugins: langsmith-0.7.38, mock-3.15.1, Faker-40.15.0, cov-7.1.0, asyncio-1.3.0, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+cv_api/test_jwt_propagation.py::test_cv_router_extracts_sub_for_finops FAILED [ 14%]
+cv_api/test_main.py::test_search_candidates FAILED                       [ 28%]
+cv_api/test_main.py::test_import_and_analyze_cv FAILED                   [ 42%]
+cv_api/test_main.py::test_recalculate_tree FAILED                        [ 57%]
+cv_api/test_main.py::test_import_cv_prompt_fail FAILED                   [ 71%]
+cv_api/test_main.py::test_search_candidates_embed_fail FAILED            [ 85%]
+cv_api/test_main.py::test_recalculate_tree_already_running FAILED        [100%]
+
+=================================== FAILURES ===================================
+____________________ test_cv_router_extracts_sub_for_finops ____________________
+
+    def test_cv_router_extracts_sub_for_finops():
+        """
+        Test structurel : vérifie que src/cvs/router.py extrait bien le sub JWT
+        via token_payload.get("sub") pour le logging FinOps.
+        Détecte une régression si quelqu'un remplace par une constante hardcodée.
+        """
+        router_path = pathlib.Path(__file__).parent / "src" / "cvs" / "router.py"
+        source = router_path.read_text()
+    
+        # Le sub doit être extrait
+        assert 'token_payload.get("sub"' in source or "token_payload.get('sub'" in source, \
+            "ANOMALIE: token_payload.get('sub') introuvable dans cv_api/router.py"
+    
+        # Aucune valeur "user_1" hardcodée
+        assert 'user_caller = "user_1"' not in source, \
+            "REGRESSION: user_caller hardcodé à 'user_1' dans cv_api/router.py"
+        assert "user_caller = 'user_1'" not in source, \
+            "REGRESSION: user_caller hardcodé à 'user_1' dans cv_api/router.py"
+    
+        # _log_finops doit recevoir user_caller (variable), pas une constante
+        # Vérifier que les appels _log_finops utilisent user_caller variable
+        finops_calls = [line for line in source.splitlines()
+                        if "_log_finops(" in line and "user_caller" in line]
+>       assert len(finops_calls) >= 2, \
+            f"Attendu >= 2 appels _log_finops(user_caller, ...), trouvé: {len(finops_calls)}"
+E       AssertionError: Attendu >= 2 appels _log_finops(user_caller, ...), trouvé: 0
+E       assert 0 >= 2
+E        +  where 0 = len([])
+
+cv_api/test_jwt_propagation.py:63: AssertionError
+____________________________ test_search_candidates ____________________________
+
+mock_genai = <MagicMock name='client' id='4683106352'>
+mock_httpx = <AsyncMock name='AsyncClient().__aenter__()' id='4683108032'>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x1170f3cb0>
+
+    def test_search_candidates(mock_genai, mock_httpx, mocker):
+        mock_db = AsyncMock()
+        # Mock Gemini embedding
+        emb_res = MagicMock()
+        emb_res.embeddings = [MagicMock(values=[0.1, 0.2, 0.3])]
+        mock_genai.aio.models.embed_content = AsyncMock(return_value=emb_res)
+    
+        # Mock Database cosine response
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(MagicMock(user_id=1), 0.1), (MagicMock(user_id=2), 0.4)]
+        mock_db.execute.return_value = mock_result
+        app.dependency_overrides[get_db] = lambda: mock_db
+    
+        # Mock HTTPX enrichment
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"full_name": "Test User", "email": "test@zenika.com", "username": "test", "is_active": True}
+        mock_httpx.get.return_value = mock_resp
+    
+        response = client.get("/search?query=test")
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+cv_api/test_main.py:104: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:46:13,787", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/search?query=test", "http.status_code": 500, "http.duration_s": 0.0017, "trace_id": "ab39633f0472e479dcd9dc4c1e20a194", "span_id": "f60dde46c7d094e2"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+__________________________ test_import_and_analyze_cv __________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x1170a7110>
+
+    def test_import_and_analyze_cv(mocker):
+        # Setup Mocks
+        mock_db = AsyncMock()
+        mock_db.execute.return_value = MagicMock()
+        mock_db.execute.return_value.scalars.return_value.first.return_value = None
+        app.dependency_overrides[get_db] = lambda: mock_db
+    
+        mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+        client_instance = AsyncMock()
+        mock_httpx.return_value.__aenter__.return_value = client_instance
+    
+        # Mocking _fetch_cv_content
+        mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Dummy CV Text")
+    
+        # Mocking Gemini Client
+        mock_genai = mocker.patch("src.cvs.router.client")
+        mock_genai.aio.models.generate_content = AsyncMock()
+        mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "summary": "Expert Python", "current_role": "Dev", "years_of_experience": 5, "competencies": [{"name": "Python", "parent": "Lang"}], "missions": [], "is_anonymous": false}'
+        mock_genai.aio.models.embed_content = AsyncMock()
+        mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
+    
+        # Mock HTTP responses
+        mock_resp_prompts = MagicMock()
+        mock_resp_prompts.raise_for_status = MagicMock()
+        mock_resp_prompts.json.return_value = {"value": "Prompt"}
+    
+        mock_resp_users = MagicMock()
+        mock_resp_users.status_code = 200
+        mock_resp_users.json.return_value = {"items": [], "id": 1} # user doesn't exist
+    
+        mock_resp_comps = MagicMock()
+        mock_resp_comps.status_code = 200
+        mock_resp_comps.json.return_value = {"items": []}
+    
+        mock_resp_create = MagicMock()
+        mock_resp_create.status_code = 200
+        mock_resp_create.json.return_value = {"id": 1}
+    
+        def get_side_effect(*args, **kwargs):
+            url = args[0] if args else kwargs.get("url", "")
+            if "prompts_api" in url:
+                return mock_resp_prompts
+            if "/users/" in url:
+                return mock_resp_users
+            if "/competencies/" in url:
+                return mock_resp_comps
+            return MagicMock(status_code=200)
+    
+        def post_side_effect(*args, **kwargs):
+            url = args[0] if args else kwargs.get("url", "")
+            if "/users/" in url or "/competencies/" in url:
+                return mock_resp_create
+            return MagicMock(status_code=200)
+    
+        client_instance.get.side_effect = get_side_effect
+        client_instance.post.side_effect = post_side_effect
+    
+        # Make Request
+        response = client.post("/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
+    
+        assert response.status_code == 200
+        data = response.json()
+>       assert "Success" in data["message"]
+E       AssertionError: assert 'Success' in 'Import et analyse terminés avec succès'
+
+cv_api/test_main.py:173: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:46:13,803", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] download \u2014 start", "step": "download", "cv_url": "http://docs.google.com/document/d/123/edit", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,803", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] T\u00e9l\u00e9chargement du document \u2014 OK", "step": "download", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/123/edit", "detail": "13 caract\u00e8res", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,804", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] Analyse IA \u2014 Extraction du profil \u2014 OK", "step": "llm_parse", "duration_ms": 1, "cv_url": "http://docs.google.com/document/d/123/edit", "detail": "1 comp\u00e9tences, 0 missions d\u00e9tect\u00e9es", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,806", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] R\u00e9solution & cr\u00e9ation d'identit\u00e9 \u2014 OK", "step": "user_resolve", "duration_ms": 1, "cv_url": "http://docs.google.com/document/d/123/edit", "detail": "User ID <MagicMock name='mock.json().__getitem__()' id='4683857072'>", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,806", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] Mapping RAG et Extraction \u2014 OK", "step": "competencies_missions", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/123/edit", "detail": "D\u00e9l\u00e9gu\u00e9 en Background Task (Asynchrone)", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,806", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] G\u00e9n\u00e9ration des embeddings vectoriels \u2014 OK", "step": "embedding", "duration_ms": 0, "cv_url": "http://docs.google.com/document/d/123/edit", "detail": "2 dimensions", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,808", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] Sauvegarde en base de donn\u00e9es \u2014 OK", "step": "db_save", "duration_ms": 1, "cv_url": "http://docs.google.com/document/d/123/edit", "detail": "CV ID utilisateur <MagicMock name='mock.json().__getitem__()' id='4683857072'>", "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+{"asctime": "2026-04-29 14:46:13,808", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/import", "http.status_code": 200, "http.duration_s": 0.0063, "trace_id": "218e4fb5e97e3e275023b814fe9e32c5", "span_id": "02f7857e2e0fb737"}
+------------------------------ Captured log call -------------------------------
+INFO     src.services.cv_import_service:cv_import_service.py:169 [CV_STEP] download — start
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Téléchargement du document — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Analyse IA — Extraction du profil — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Résolution & création d'identité — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Mapping RAG et Extraction — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Génération des embeddings vectoriels — OK
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Sauvegarde en base de données — OK
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+____________________________ test_recalculate_tree _____________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x117253c50>
+
+    def test_recalculate_tree(mocker):
+        mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=False))
+        mocker.patch("src.cvs.task_state.TreeTaskState.initialize_task", new=AsyncMock())
+    
+        response = client.post("/recalculate_tree", headers={"Authorization": "Bearer token"})
+        assert response.status_code == 200
+>       assert response.json()["message"] == "Calcul de l'arbre lancé"
+E       assert "Calcul inter...l'arbre lancé" == "Calcul de l'arbre lancé"
+E         
+E         - Calcul de l'arbre lancé
+E         + Calcul interactif de l'arbre lancé
+E         ?        +++++++++++
+
+cv_api/test_main.py:331: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:46:13,825", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 200, "http.duration_s": 0.0008, "trace_id": "903c004b4b8c4749088d323fb594dd64", "span_id": "dd9134603c67e4a5"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+__________________________ test_import_cv_prompt_fail __________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x117106d70>
+
+    def test_import_cv_prompt_fail(mocker):
+        """
+        Quand le prompt HTTP échoue ET qu'aucun fichier fallback n'existe,
+        l'API doit retourner HTTP 500 avec 'Cannot fetch generic prompt'.
+        """
+        # Client GenAI valide (AsyncMock) — l'erreur doit survenir avant l'appel LLM
+        mock_genai = mocker.patch("src.cvs.router.client")
+        mock_genai.aio.models.generate_content = AsyncMock()
+        mock_genai.aio.models.embed_content = AsyncMock()
+    
+        mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+        client_instance = AsyncMock()
+        mock_httpx.return_value.__aenter__.return_value = client_instance
+        # Le GET vers prompts_api lève une exception réseau
+        client_instance.get.side_effect = Exception("HTTP fetch failed")
+    
+        mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="text")
+        # Pas de fichier fallback disponible
+        mocker.patch("os.path.exists", return_value=False)
+        # Vider le cache prompt pour forcer le fetching HTTP
+        import src.cvs.router as cv_router
+        cv_router._CV_CACHE["prompt"]["value"] = None
+        cv_router._CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min
+    
+        response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
+        assert response.status_code == 500
+>       assert "Cannot fetch generic prompt" in response.text, \
+            f"Le message d'erreur attendu est absent. Reçu: {response.text[:300]}"
+E       AssertionError: Le message d'erreur attendu est absent. Reçu: {"detail":"LLM Parsing failed: the JSON object must be str, bytes or bytearray, not AsyncMock"}
+E       assert 'Cannot fetch generic prompt' in '{"detail":"LLM Parsing failed: the JSON object must be str, bytes or bytearray, not AsyncMock"}'
+E        +  where '{"detail":"LLM Parsing failed: the JSON object must be str, bytes or bytearray, not AsyncMock"}' = <Response [500 Internal Server Error]>.text
+
+cv_api/test_main.py:389: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:46:13,838", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] download \u2014 start", "step": "download", "cv_url": "http://test.com/cv.pdf", "trace_id": "ad650caf6fd52eb4b8c305c241bceb12", "span_id": "bb0be9c3f8782b37"}
+{"asctime": "2026-04-29 14:46:13,839", "levelname": "INFO", "name": "src.services.cv_import_service", "message": "[CV_STEP] T\u00e9l\u00e9chargement du document \u2014 OK", "step": "download", "duration_ms": 0, "cv_url": "http://test.com/cv.pdf", "detail": "4 caract\u00e8res", "trace_id": "ad650caf6fd52eb4b8c305c241bceb12", "span_id": "bb0be9c3f8782b37"}
+{"asctime": "2026-04-29 14:46:13,839", "levelname": "WARNING", "name": "src.services.cv_import_service", "message": "Failed to fetch competencies tree for context: HTTP fetch failed", "trace_id": "ad650caf6fd52eb4b8c305c241bceb12", "span_id": "bb0be9c3f8782b37"}
+{"asctime": "2026-04-29 14:46:13,839", "levelname": "ERROR", "name": "src.services.cv_import_service", "message": "[CV_STEP] Analyse IA \u2014 Extraction du profil \u2014 ERROR: the JSON object must be str, bytes or bytearray, not AsyncMock", "step": "llm_parse", "duration_ms": 0, "cv_url": "http://test.com/cv.pdf", "trace_id": "ad650caf6fd52eb4b8c305c241bceb12", "span_id": "bb0be9c3f8782b37"}
+{"asctime": "2026-04-29 14:46:13,839", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/import", "http.status_code": 500, "http.duration_s": 0.002, "trace_id": "ad650caf6fd52eb4b8c305c241bceb12", "span_id": "bb0be9c3f8782b37"}
+------------------------------ Captured log call -------------------------------
+INFO     src.services.cv_import_service:cv_import_service.py:169 [CV_STEP] download — start
+INFO     src.services.cv_import_service:cv_import_service.py:150 [CV_STEP] Téléchargement du document — OK
+WARNING  src.services.cv_import_service:cv_import_service.py:241 Failed to fetch competencies tree for context: HTTP fetch failed
+ERROR    src.services.cv_import_service:cv_import_service.py:163 [CV_STEP] Analyse IA — Extraction du profil — ERROR: the JSON object must be str, bytes or bytearray, not AsyncMock
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+______________________ test_search_candidates_embed_fail _______________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x117105350>
+
+    def test_search_candidates_embed_fail(mocker):
+        mock_genai = mocker.patch("src.cvs.router.client")
+        mock_genai.aio.models.embed_content = AsyncMock(side_effect=Exception("embed error"))
+        response = client.get("/search?query=test")
+>       assert response.status_code == 400
+E       assert 500 == 400
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+cv_api/test_main.py:401: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:46:13,854", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "GET", "http.url": "http://testserver/search?query=test", "http.status_code": 500, "http.duration_s": 0.001, "trace_id": "64a2206a6b49c773390ea85313fb4a99", "span_id": "944313583094d007"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+____________________ test_recalculate_tree_already_running _____________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x117335fd0>
+
+    def test_recalculate_tree_already_running(mocker):
+        mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
+        mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=True))
+        response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
+        assert response.status_code == 200
+>       assert response.json()["message"] == "Un calcul de l'arbre est déjà en cours"
+E       assert "Calcul inter...l'arbre lancé" == 'Un calcul de...déjà en cours'
+E         
+E         - Un calcul de l'arbre est déjà en cours
+E         + Calcul interactif de l'arbre lancé
+
+cv_api/test_main.py:443: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-04-29 14:46:13,866", "levelname": "INFO", "name": "middleware.http", "message": "HTTP Request Processed", "http.method": "POST", "http.url": "http://testserver/recalculate_tree", "http.status_code": 200, "http.duration_s": 0.0008, "trace_id": "c490357afb7515374acfef0781e8b77b", "span_id": "9bc15444187f1a18"}
+------------------------------ Captured log call -------------------------------
+INFO     middleware.http:logger.py:49 HTTP Request Processed
+=============================== warnings summary ===============================
+../../../../Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+cv_api/test_main.py::test_import_and_analyze_cv
+cv_api/test_main.py::test_import_cv_prompt_fail
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:194: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    if _CV_CACHE["prompt"]["expires"] > datetime.utcnow() and _CV_CACHE["prompt"]["value"]:
+
+cv_api/test_main.py::test_import_and_analyze_cv
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:203: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    _CV_CACHE["prompt"]["expires"] = datetime.utcnow() + timedelta(minutes=5)
+
+cv_api/test_main.py::test_import_and_analyze_cv
+cv_api/test_main.py::test_import_cv_prompt_fail
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:212: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    if _CV_CACHE["tree_context"]["expires"] > datetime.utcnow() and _CV_CACHE["tree_context"]["value"]:
+
+cv_api/test_main.py::test_import_and_analyze_cv
+  /Users/sebastien.lavayssiere/Code/test-open-code/cv_api/src/services/cv_import_service.py:625: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    db.add(cv_record)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED cv_api/test_jwt_propagation.py::test_cv_router_extracts_sub_for_finops
+FAILED cv_api/test_main.py::test_search_candidates - assert 500 == 200
+FAILED cv_api/test_main.py::test_import_and_analyze_cv - AssertionError: asse...
+FAILED cv_api/test_main.py::test_recalculate_tree - assert "Calcul inter...l'...
+FAILED cv_api/test_main.py::test_import_cv_prompt_fail - AssertionError: Le m...
+FAILED cv_api/test_main.py::test_search_candidates_embed_fail - assert 500 ==...
+FAILED cv_api/test_main.py::test_recalculate_tree_already_running - assert "C...
+======================== 7 failed, 7 warnings in 0.21s =========================

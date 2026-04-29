@@ -45,7 +45,13 @@ waf_rate_limit: 1000
 admin_user:               "sebastien.lavayssiere@zenika.com"
 finops_anomaly_threshold: 500000
 
-# ── IA / Modèles ──────────────────────────────────────────
-gemini_model:           "gemini-3.1-flash-lite-preview"
-gemini_embedding_model: "gemini-embedding-001"   # SEC-F06 Semantic Cache
+# ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
+gemini_router_model:       "gemini-3.1-pro-preview"         # Orchestrateur : raisonnement complexe
+gemini_hr_model:           "gemini-3.1-flash-lite-preview"  # RH : RAG + MCP
+gemini_ops_model:          "gemini-3.1-flash-lite-preview"  # Ops : SQL + logs
+gemini_missions_model:     "gemini-3.1-flash-lite-preview"  # Missions : matching staffing
+gemini_cv_model:           "gemini-3.1-flash-lite-preview"  # CV API : extraction JSON contrainte
+gemini_pro_model:          "gemini-3.1-pro-preview"         # Taxonomy Reduce (batch)
+gemini_model:              "gemini-3.1-flash-lite-preview"  # [LEGACY] fallback
+gemini_embedding_model:    "gemini-embedding-001"           # SEC-F06 Semantic Cache
 trace_sampling_rate: 0.5

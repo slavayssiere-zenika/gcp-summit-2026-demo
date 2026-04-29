@@ -1,7 +1,5 @@
 import pytest
 from fastapi.testclient import TestClient
-from conftest import app
-
 from unittest.mock import MagicMock, patch
 
 def test_health(client):
