@@ -267,6 +267,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
 async def list_files(
     status: str | None = None,
     folder_id: int | None = None,
+    search: str | None = None,
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
@@ -276,6 +277,8 @@ async def list_files(
         stmt = stmt.filter(DriveSyncState.status == status)
     if folder_id:
         stmt = stmt.filter(DriveSyncState.folder_id == folder_id)
+    if search:
+        stmt = stmt.filter(DriveSyncState.parent_folder_name.ilike(f"%{search}%"))
         
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar() or 0
@@ -304,6 +307,42 @@ async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)
     if not state:
         raise HTTPException(status_code=404, detail=f"Fichier Drive '{google_file_id}' inconnu.")
     return state
+
+
+@router.get("/consultant/search")
+async def search_consultant_files(
+    name: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint de diagnostic : recherche tous les fichiers d'un consultant par nom de dossier (ILIKE).
+    Retourne le parent_folder_name, status, user_id et folder_id pour chaque fichier trouvé.
+    Utile pour investiguer les consultants manquants dans le graphe.
+    Exemple : GET /drive/consultant/search?name=Lavayssière
+    """
+    stmt = (
+        select(DriveSyncState)
+        .filter(DriveSyncState.parent_folder_name.ilike(f"%{name}%"))
+        .order_by(DriveSyncState.parent_folder_name)
+    )
+    results = (await db.execute(stmt)).scalars().all()
+
+    return {
+        "query": name,
+        "count": len(results),
+        "files": [
+            {
+                "google_file_id": r.google_file_id,
+                "file_name": r.file_name,
+                "parent_folder_name": r.parent_folder_name,
+                "status": r.status,
+                "user_id": r.user_id,
+                "folder_id": r.folder_id,
+                "error_message": r.error_message,
+            }
+            for r in results
+        ],
+    }
 
 @router.post("/retry-errors")
 async def retry_errors(force: bool = False, db: AsyncSession = Depends(get_db)):
