@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1777498122067" clover="3.2.0">
-  <project timestamp="1777498122067" name="All files">
-    <metrics statements="4163" coveredstatements="268" conditionals="4572" coveredconditionals="194" methods="925" coveredmethods="50" elements="9660" coveredelements="512" complexity="0" loc="4163" ncloc="4163" packages="11" files="57" classes="57"/>
+<coverage generated="1777498211142" clover="3.2.0">
+  <project timestamp="1777498211142" name="All files">
+    <metrics statements="4163" coveredstatements="316" conditionals="4572" coveredconditionals="259" methods="925" coveredmethods="63" elements="9660" coveredelements="638" complexity="0" loc="4163" ncloc="4163" packages="11" files="57" classes="57"/>
     <package name="src">
       <metrics statements="78" coveredstatements="0" conditionals="115" coveredconditionals="0" methods="35" coveredmethods="0"/>
       <file name="App.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/App.vue">
@@ -993,7 +993,7 @@
       </file>
     </package>
     <package name="src.components.agent">
-      <metrics statements="411" coveredstatements="21" conditionals="522" coveredconditionals="17" methods="113" coveredmethods="5"/>
+      <metrics statements="411" coveredstatements="49" conditionals="522" coveredconditionals="70" methods="113" coveredmethods="10"/>
       <file name="AgentExpertTerminal.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/AgentExpertTerminal.vue">
         <metrics statements="73" coveredstatements="0" conditionals="95" coveredconditionals="0" methods="19" coveredmethods="0"/>
         <line num="2" count="0" type="stmt"/>
@@ -1263,22 +1263,22 @@
         <line num="72" count="0" type="stmt"/>
       </file>
       <file name="ConsultantCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/ConsultantCard.vue">
-        <metrics statements="15" coveredstatements="0" conditionals="36" coveredconditionals="0" methods="4" coveredmethods="0"/>
-        <line num="5" count="0" type="stmt"/>
-        <line num="19" count="0" type="stmt"/>
-        <line num="21" count="0" type="stmt"/>
-        <line num="22" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="23" count="0" type="stmt"/>
-        <line num="26" count="0" type="stmt"/>
-        <line num="27" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="28" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="33" count="0" type="stmt"/>
+        <metrics statements="15" coveredstatements="14" conditionals="36" coveredconditionals="27" methods="4" coveredmethods="3"/>
+        <line num="5" count="9" type="stmt"/>
+        <line num="19" count="9" type="stmt"/>
+        <line num="21" count="9" type="stmt"/>
+        <line num="22" count="9" type="cond" truecount="2" falsecount="0"/>
+        <line num="23" count="16" type="stmt"/>
+        <line num="26" count="9" type="stmt"/>
+        <line num="27" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="28" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="33" count="9" type="stmt"/>
         <line num="41" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="47" count="0" type="stmt"/>
-        <line num="48" count="0" type="stmt"/>
-        <line num="49" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="50" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="63" count="0" type="stmt"/>
+        <line num="47" count="1" type="stmt"/>
+        <line num="48" count="1" type="stmt"/>
+        <line num="49" count="1" type="cond" truecount="2" falsecount="0"/>
+        <line num="50" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="63" count="1" type="stmt"/>
       </file>
       <file name="DebugPromptCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/DebugPromptCard.vue">
         <metrics statements="21" coveredstatements="0" conditionals="24" coveredconditionals="0" methods="6" coveredmethods="0"/>
@@ -1327,21 +1327,21 @@
         <line num="70" count="0" type="stmt"/>
       </file>
       <file name="ItemCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/ItemCard.vue">
-        <metrics statements="14" coveredstatements="0" conditionals="29" coveredconditionals="0" methods="2" coveredmethods="0"/>
-        <line num="4" count="0" type="stmt"/>
-        <line num="15" count="0" type="stmt"/>
-        <line num="16" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="17" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="22" count="0" type="stmt"/>
-        <line num="24" count="0" type="stmt"/>
-        <line num="25" count="0" type="stmt"/>
-        <line num="26" count="0" type="stmt"/>
-        <line num="30" count="0" type="stmt"/>
-        <line num="31" count="0" type="stmt"/>
-        <line num="32" count="0" type="stmt"/>
-        <line num="37" count="0" type="stmt"/>
-        <line num="39" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="44" count="0" type="stmt"/>
+        <metrics statements="14" coveredstatements="14" conditionals="29" coveredconditionals="26" methods="2" coveredmethods="2"/>
+        <line num="4" count="9" type="stmt"/>
+        <line num="15" count="9" type="stmt"/>
+        <line num="16" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="17" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="22" count="9" type="stmt"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="25" count="1" type="stmt"/>
+        <line num="26" count="1" type="stmt"/>
+        <line num="30" count="1" type="stmt"/>
+        <line num="31" count="1" type="stmt"/>
+        <line num="32" count="1" type="stmt"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="39" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="44" count="4" type="stmt"/>
       </file>
       <file name="MissionCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/MissionCard.vue">
         <metrics statements="21" coveredstatements="21" conditionals="21" coveredconditionals="17" methods="5" coveredmethods="5"/>
@@ -1440,36 +1440,36 @@
       </file>
     </package>
     <package name="src.components.ui">
-      <metrics statements="21" coveredstatements="1" conditionals="22" coveredconditionals="6" methods="9" coveredmethods="1"/>
+      <metrics statements="21" coveredstatements="21" conditionals="22" coveredconditionals="18" methods="9" coveredmethods="9"/>
       <file name="BaseButton.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/ui/BaseButton.vue">
         <metrics statements="1" coveredstatements="1" conditionals="6" coveredconditionals="6" methods="1" coveredmethods="1"/>
         <line num="2" count="4" type="cond" truecount="4" falsecount="0"/>
       </file>
       <file name="PageHeader.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/ui/PageHeader.vue">
-        <metrics statements="12" coveredstatements="0" conditionals="16" coveredconditionals="0" methods="4" coveredmethods="0"/>
-        <line num="12" count="0" type="stmt"/>
-        <line num="23" count="0" type="stmt"/>
-        <line num="25" count="0" type="stmt"/>
-        <line num="26" count="0" type="stmt"/>
-        <line num="27" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="28" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="29" count="0" type="stmt"/>
-        <line num="34" count="0" type="stmt"/>
-        <line num="37" count="0" type="stmt"/>
-        <line num="45" count="0" type="stmt"/>
-        <line num="53" count="0" type="stmt"/>
-        <line num="57" count="0" type="stmt"/>
+        <metrics statements="12" coveredstatements="12" conditionals="16" coveredconditionals="12" methods="4" coveredmethods="4"/>
+        <line num="12" count="7" type="stmt"/>
+        <line num="23" count="7" type="stmt"/>
+        <line num="25" count="7" type="stmt"/>
+        <line num="26" count="7" type="stmt"/>
+        <line num="27" count="6" type="cond" truecount="1" falsecount="1"/>
+        <line num="28" count="6" type="cond" truecount="1" falsecount="1"/>
+        <line num="29" count="6" type="stmt"/>
+        <line num="34" count="7" type="stmt"/>
+        <line num="37" count="3" type="stmt"/>
+        <line num="45" count="1" type="stmt"/>
+        <line num="53" count="1" type="stmt"/>
+        <line num="57" count="1" type="stmt"/>
       </file>
       <file name="ToastNotification.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/ui/ToastNotification.vue">
-        <metrics statements="8" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="4" coveredmethods="0"/>
-        <line num="6" count="0" type="stmt"/>
-        <line num="8" count="0" type="stmt"/>
-        <line num="10" count="0" type="stmt"/>
-        <line num="19" count="0" type="stmt"/>
-        <line num="22" count="0" type="stmt"/>
-        <line num="23" count="0" type="stmt"/>
-        <line num="30" count="0" type="stmt"/>
-        <line num="34" count="0" type="stmt"/>
+        <metrics statements="8" coveredstatements="8" conditionals="0" coveredconditionals="0" methods="4" coveredmethods="4"/>
+        <line num="6" count="4" type="stmt"/>
+        <line num="8" count="4" type="stmt"/>
+        <line num="10" count="4" type="stmt"/>
+        <line num="19" count="4" type="stmt"/>
+        <line num="22" count="4" type="stmt"/>
+        <line num="23" count="4" type="stmt"/>
+        <line num="30" count="1" type="stmt"/>
+        <line num="34" count="1" type="stmt"/>
       </file>
     </package>
     <package name="src.data">
@@ -1541,7 +1541,7 @@
       </file>
       <file name="auth.ts" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/services/auth.ts">
         <metrics statements="93" coveredstatements="37" conditionals="51" coveredconditionals="7" methods="13" coveredmethods="4"/>
-        <line num="5" count="1" type="stmt"/>
+        <line num="5" count="2" type="stmt"/>
         <line num="6" count="0" type="stmt"/>
         <line num="7" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="9" count="0" type="cond" truecount="0" falsecount="4"/>
@@ -1549,15 +1549,15 @@
         <line num="12" count="0" type="stmt"/>
         <line num="16" count="0" type="stmt"/>
         <line num="17" count="0" type="stmt"/>
-        <line num="21" count="1" type="stmt"/>
-        <line num="22" count="1" type="stmt"/>
-        <line num="24" count="1" type="cond" truecount="0" falsecount="1"/>
+        <line num="21" count="2" type="stmt"/>
+        <line num="22" count="2" type="stmt"/>
+        <line num="24" count="2" type="cond" truecount="0" falsecount="1"/>
         <line num="25" count="0" type="stmt"/>
         <line num="26" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="27" count="0" type="stmt"/>
         <line num="29" count="0" type="stmt"/>
         <line num="32" count="0" type="stmt"/>
-        <line num="35" count="1" type="stmt"/>
+        <line num="35" count="2" type="stmt"/>
         <line num="36" count="0" type="stmt"/>
         <line num="38" count="0" type="stmt"/>
         <line num="41" count="0" type="stmt"/>
@@ -1600,10 +1600,10 @@
         <line num="102" count="0" type="stmt"/>
         <line num="104" count="0" type="stmt"/>
         <line num="108" count="0" type="stmt"/>
-        <line num="129" count="1" type="stmt"/>
-        <line num="136" count="1" type="stmt"/>
-        <line num="138" count="1" type="stmt"/>
-        <line num="140" count="7" type="stmt"/>
+        <line num="129" count="2" type="stmt"/>
+        <line num="136" count="2" type="stmt"/>
+        <line num="138" count="2" type="stmt"/>
+        <line num="140" count="13" type="stmt"/>
         <line num="144" count="3" type="stmt"/>
         <line num="145" count="3" type="stmt"/>
         <line num="146" count="3" type="stmt"/>

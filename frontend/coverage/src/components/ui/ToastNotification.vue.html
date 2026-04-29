@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>9/9</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/8</span>
+                <span class='fraction'>8/8</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -234,35 +234,35 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -400,11 +400,11 @@ import { computed } from 'vue'
 import { useUxStore } from '@/stores/uxStore'
 import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-vue-next'
 &nbsp;
-const <span class="cstat-no" title="statement not covered" >uxStore = useUxStore()</span>
+const uxStore = useUxStore()
 &nbsp;
-const <span class="cstat-no" title="statement not covered" >toasts = <span class="fstat-no" title="function not covered" >computed(() =&gt; <span class="cstat-no" title="statement not covered" >u</span>xStore.toasts)</span></span>
+const toasts = computed(() =&gt; uxStore.toasts)
 &nbsp;
-const iconMap = <span class="cstat-no" title="statement not covered" >{</span>
+const iconMap = {
   success: CheckCircle,
   error: XCircle,
   info: Info,
@@ -413,22 +413,22 @@ const iconMap = <span class="cstat-no" title="statement not covered" >{</span>
 &lt;/script&gt;
 &nbsp;
 &lt;template&gt;
-<span class="cstat-no" title="statement not covered" >  &lt;Teleport to="body"&gt;</span>
+  &lt;Teleport to="body"&gt;
     &lt;div class="toast-container" aria-live="polite" aria-atomic="false"&gt;
       &lt;TransitionGroup name="toast" tag="div" class="toast-wrapper"&gt;
-<span class="cstat-no" title="statement not covered" >        &lt;div</span>
-          v-for="toast in <span class="fstat-no" title="function not covered" >toasts"<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" ></span></span></span>
+        &lt;div
+          v-for="toast in toasts"
           :key="toast.id"
           :class="['toast', `toast--${toast.type}`]"
           role="alert"
           :aria-label="`Notification ${toast.type}: ${toast.message}`"
         &gt;
           &lt;component :is="iconMap[toast.type]" class="toast-icon" :size="18" /&gt;
-          &lt;span <span class="cstat-no" title="statement not covered" >class="toast-message"&gt;</span>{{ toast.message }}&lt;/span&gt;
+          &lt;span class="toast-message"&gt;{{ toast.message }}&lt;/span&gt;
           &lt;button
             class="toast-close"
             :aria-label="'Fermer la notification'"
-            @<span class="fstat-no" title="function not covered" >click=</span>"<span class="cstat-no" title="statement not covered" >uxStore.removeToast(toast.id)"</span>
+            @click="uxStore.removeToast(toast.id)"
           &gt;
             &lt;X :size="14" /&gt;
           &lt;/button&gt;
@@ -568,7 +568,7 @@ const iconMap = <span class="cstat-no" title="statement not covered" >{</span>
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-29T21:28:42.027Z
+                at 2026-04-29T21:30:11.096Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
