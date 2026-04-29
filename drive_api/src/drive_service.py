@@ -591,7 +591,7 @@ class DriveService:
                                     )
                                 )
                             ).scalars().first()
-                            if existing and existing.revision_id == version and existing.parent_folder_name is not None:
+                            if existing and existing.revision_id == version and existing.parent_folder_name:
                                 continue
                             self.redis.delete(f"drive:file:known:{file_id}")
     
