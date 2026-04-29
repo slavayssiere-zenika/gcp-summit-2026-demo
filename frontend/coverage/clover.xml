@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1777498211142" clover="3.2.0">
-  <project timestamp="1777498211142" name="All files">
-    <metrics statements="4163" coveredstatements="316" conditionals="4572" coveredconditionals="259" methods="925" coveredmethods="63" elements="9660" coveredelements="638" complexity="0" loc="4163" ncloc="4163" packages="11" files="57" classes="57"/>
+<coverage generated="1777498339273" clover="3.2.0">
+  <project timestamp="1777498339273" name="All files">
+    <metrics statements="4163" coveredstatements="402" conditionals="4572" coveredconditionals="354" methods="925" coveredmethods="93" elements="9660" coveredelements="849" complexity="0" loc="4163" ncloc="4163" packages="11" files="57" classes="57"/>
     <package name="src">
       <metrics statements="78" coveredstatements="0" conditionals="115" coveredconditionals="0" methods="35" coveredmethods="0"/>
       <file name="App.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/App.vue">
@@ -993,7 +993,7 @@
       </file>
     </package>
     <package name="src.components.agent">
-      <metrics statements="411" coveredstatements="49" conditionals="522" coveredconditionals="70" methods="113" coveredmethods="10"/>
+      <metrics statements="411" coveredstatements="96" conditionals="522" coveredconditionals="135" methods="113" coveredmethods="26"/>
       <file name="AgentExpertTerminal.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/AgentExpertTerminal.vue">
         <metrics statements="73" coveredstatements="0" conditionals="95" coveredconditionals="0" methods="19" coveredmethods="0"/>
         <line num="2" count="0" type="stmt"/>
@@ -1232,35 +1232,35 @@
         <line num="313" count="0" type="stmt"/>
       </file>
       <file name="ConsultantAvailabilityCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/ConsultantAvailabilityCard.vue">
-        <metrics statements="28" coveredstatements="0" conditionals="33" coveredconditionals="0" methods="7" coveredmethods="0"/>
-        <line num="6" count="0" type="stmt"/>
-        <line num="13" count="0" type="stmt"/>
-        <line num="15" count="0" type="stmt"/>
-        <line num="16" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="17" count="0" type="stmt"/>
-        <line num="21" count="0" type="stmt"/>
-        <line num="22" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="23" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="24" count="0" type="stmt"/>
-        <line num="27" count="0" type="stmt"/>
-        <line num="28" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="29" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="30" count="0" type="stmt"/>
-        <line num="33" count="0" type="stmt"/>
-        <line num="34" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="35" count="0" type="stmt"/>
-        <line num="37" count="0" type="stmt"/>
-        <line num="42" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="44" count="0" type="stmt"/>
-        <line num="46" count="0" type="stmt"/>
-        <line num="50" count="0" type="stmt"/>
-        <line num="56" count="0" type="stmt"/>
-        <line num="57" count="0" type="stmt"/>
-        <line num="59" count="0" type="stmt"/>
-        <line num="62" count="0" type="stmt"/>
-        <line num="63" count="0" type="stmt"/>
-        <line num="71" count="0" type="stmt"/>
-        <line num="72" count="0" type="stmt"/>
+        <metrics statements="28" coveredstatements="28" conditionals="33" coveredconditionals="31" methods="7" coveredmethods="7"/>
+        <line num="6" count="8" type="stmt"/>
+        <line num="13" count="8" type="stmt"/>
+        <line num="15" count="8" type="stmt"/>
+        <line num="16" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="17" count="1" type="stmt"/>
+        <line num="21" count="8" type="stmt"/>
+        <line num="22" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="23" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="24" count="6" type="stmt"/>
+        <line num="27" count="8" type="stmt"/>
+        <line num="28" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="6" type="stmt"/>
+        <line num="33" count="8" type="stmt"/>
+        <line num="34" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="35" count="1" type="stmt"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="42" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="44" count="1" type="stmt"/>
+        <line num="46" count="1" type="stmt"/>
+        <line num="50" count="1" type="stmt"/>
+        <line num="56" count="1" type="stmt"/>
+        <line num="57" count="1" type="stmt"/>
+        <line num="59" count="1" type="stmt"/>
+        <line num="62" count="1" type="stmt"/>
+        <line num="63" count="1" type="stmt"/>
+        <line num="71" count="1" type="stmt"/>
+        <line num="72" count="2" type="stmt"/>
       </file>
       <file name="ConsultantCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/ConsultantCard.vue">
         <metrics statements="15" coveredstatements="14" conditionals="36" coveredconditionals="27" methods="4" coveredmethods="3"/>
@@ -1305,26 +1305,26 @@
         <line num="91" count="0" type="stmt"/>
       </file>
       <file name="FinopsBadge.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/FinopsBadge.vue">
-        <metrics statements="19" coveredstatements="0" conditionals="40" coveredconditionals="0" methods="9" coveredmethods="0"/>
-        <line num="29" count="0" type="stmt"/>
-        <line num="35" count="0" type="stmt"/>
-        <line num="36" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="37" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="40" count="0" type="stmt"/>
-        <line num="41" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="42" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="46" count="0" type="stmt"/>
-        <line num="47" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="48" count="0" type="stmt"/>
-        <line num="50" count="0" type="cond" truecount="0" falsecount="7"/>
-        <line num="60" count="0" type="stmt"/>
-        <line num="62" count="0" type="stmt"/>
-        <line num="63" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="64" count="0" type="stmt"/>
-        <line num="65" count="0" type="stmt"/>
-        <line num="68" count="0" type="stmt"/>
-        <line num="69" count="0" type="stmt"/>
-        <line num="70" count="0" type="stmt"/>
+        <metrics statements="19" coveredstatements="19" conditionals="40" coveredconditionals="34" methods="9" coveredmethods="9"/>
+        <line num="29" count="6" type="stmt"/>
+        <line num="35" count="6" type="stmt"/>
+        <line num="36" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="37" count="4" type="cond" truecount="4" falsecount="0"/>
+        <line num="40" count="6" type="stmt"/>
+        <line num="41" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="42" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="46" count="6" type="stmt"/>
+        <line num="47" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="48" count="2" type="stmt"/>
+        <line num="50" count="3" type="cond" truecount="3" falsecount="4"/>
+        <line num="60" count="6" type="stmt"/>
+        <line num="62" count="6" type="stmt"/>
+        <line num="63" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="64" count="1" type="stmt"/>
+        <line num="65" count="1" type="stmt"/>
+        <line num="68" count="6" type="stmt"/>
+        <line num="69" count="1" type="stmt"/>
+        <line num="70" count="1" type="stmt"/>
       </file>
       <file name="ItemCard.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/components/agent/ItemCard.vue">
         <metrics statements="14" coveredstatements="14" conditionals="29" coveredconditionals="26" methods="2" coveredmethods="2"/>
@@ -1820,7 +1820,7 @@
       </file>
     </package>
     <package name="src.views">
-      <metrics statements="2475" coveredstatements="27" conditionals="2845" coveredconditionals="27" methods="542" coveredmethods="4"/>
+      <metrics statements="2475" coveredstatements="66" conditionals="2845" coveredconditionals="57" methods="542" coveredmethods="18"/>
       <file name="Admin.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/views/Admin.vue">
         <metrics statements="136" coveredstatements="0" conditionals="134" coveredconditionals="0" methods="18" coveredmethods="0"/>
         <line num="32" count="0" type="stmt"/>
@@ -3786,47 +3786,47 @@
         <line num="511" count="0" type="stmt"/>
       </file>
       <file name="MissionsList.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/views/MissionsList.vue">
-        <metrics statements="40" coveredstatements="0" conditionals="36" coveredconditionals="0" methods="14" coveredmethods="0"/>
-        <line num="8" count="0" type="stmt"/>
-        <line num="9" count="0" type="stmt"/>
-        <line num="10" count="0" type="stmt"/>
-        <line num="11" count="0" type="stmt"/>
-        <line num="13" count="0" type="stmt"/>
-        <line num="15" count="0" type="stmt"/>
-        <line num="27" count="0" type="stmt"/>
-        <line num="29" count="0" type="stmt"/>
-        <line num="30" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="31" count="0" type="stmt"/>
-        <line num="34" count="0" type="stmt"/>
-        <line num="35" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="36" count="0" type="stmt"/>
-        <line num="39" count="0" type="stmt"/>
-        <line num="40" count="0" type="stmt"/>
-        <line num="41" count="0" type="stmt"/>
-        <line num="42" count="0" type="stmt"/>
+        <metrics statements="40" coveredstatements="39" conditionals="36" coveredconditionals="30" methods="14" coveredmethods="14"/>
+        <line num="8" count="8" type="stmt"/>
+        <line num="9" count="8" type="stmt"/>
+        <line num="10" count="8" type="stmt"/>
+        <line num="11" count="8" type="stmt"/>
+        <line num="13" count="8" type="stmt"/>
+        <line num="15" count="8" type="stmt"/>
+        <line num="27" count="8" type="stmt"/>
+        <line num="29" count="8" type="stmt"/>
+        <line num="30" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="6" type="stmt"/>
+        <line num="34" count="8" type="stmt"/>
+        <line num="35" count="56" type="cond" truecount="2" falsecount="0"/>
+        <line num="36" count="132" type="stmt"/>
+        <line num="39" count="8" type="stmt"/>
+        <line num="40" count="8" type="stmt"/>
+        <line num="41" count="8" type="stmt"/>
+        <line num="42" count="7" type="stmt"/>
         <line num="44" count="0" type="stmt"/>
-        <line num="46" count="0" type="stmt"/>
-        <line num="50" count="0" type="stmt"/>
-        <line num="51" count="0" type="stmt"/>
-        <line num="54" count="0" type="stmt"/>
-        <line num="55" count="0" type="stmt"/>
-        <line num="57" count="0" type="stmt"/>
-        <line num="58" count="0" type="stmt"/>
-        <line num="63" count="0" type="stmt"/>
-        <line num="64" count="0" type="stmt"/>
-        <line num="65" count="0" type="stmt"/>
-        <line num="91" count="0" type="stmt"/>
-        <line num="96" count="0" type="stmt"/>
-        <line num="102" count="0" type="stmt"/>
-        <line num="111" count="0" type="stmt"/>
-        <line num="112" count="0" type="stmt"/>
-        <line num="113" count="0" type="stmt"/>
-        <line num="118" count="0" type="stmt"/>
-        <line num="119" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="120" count="0" type="stmt"/>
-        <line num="121" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="124" count="0" type="stmt"/>
-        <line num="125" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="46" count="7" type="stmt"/>
+        <line num="50" count="8" type="stmt"/>
+        <line num="51" count="8" type="stmt"/>
+        <line num="54" count="8" type="stmt"/>
+        <line num="55" count="1" type="stmt"/>
+        <line num="57" count="8" type="stmt"/>
+        <line num="58" count="1" type="stmt"/>
+        <line num="63" count="17" type="stmt"/>
+        <line num="64" count="1" type="stmt"/>
+        <line num="65" count="1" type="stmt"/>
+        <line num="91" count="56" type="stmt"/>
+        <line num="96" count="2" type="stmt"/>
+        <line num="102" count="1" type="stmt"/>
+        <line num="111" count="17" type="stmt"/>
+        <line num="112" count="1" type="stmt"/>
+        <line num="113" count="1" type="stmt"/>
+        <line num="118" count="1" type="stmt"/>
+        <line num="119" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="120" count="1" type="stmt"/>
+        <line num="121" count="15" type="cond" truecount="1" falsecount="1"/>
+        <line num="124" count="1" type="stmt"/>
+        <line num="125" count="6" type="cond" truecount="1" falsecount="1"/>
       </file>
       <file name="Profile.vue" path="/Users/sebastien.lavayssiere/Code/test-open-code/frontend/src/views/Profile.vue">
         <metrics statements="165" coveredstatements="0" conditionals="175" coveredconditionals="0" methods="34" coveredmethods="0"/>
