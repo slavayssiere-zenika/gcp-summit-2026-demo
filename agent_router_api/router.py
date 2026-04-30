@@ -20,17 +20,20 @@ import asyncio
 
 tracer = setup_telemetry()
 _semantic_cache = SemanticCache()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(verify_jwt)])
 security = HTTPBearer()
 SECRET_KEY = os.getenv("SECRET_KEY", "dummy")
+os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
 
 @router.get("/spec")
 async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
             return Response(content=f.read(), media_type="text/markdown")
-    except Exception:
+    except Exception as e:
+        logger.debug("[spec] spec.md not found or unreadable: %s", e)
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 @router.post("/query")
@@ -46,11 +49,12 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
         computed_session_id = body_session_id if body_session_id else jwt_sub
         if not computed_session_id:
             raise HTTPException(status_code=401, detail="Token invalide")
-    except Exception:
+    except Exception as e:
+        logger.warning("[query] JWT decode failed: %s", e)
         raise HTTPException(status_code=401, detail="Token invalide")
-        
+
     ctx = extract(http_request.headers)
-    
+
     with tracer.start_as_current_span("query.process", context=ctx, kind=SpanKind.SERVER) as span:
         trace_id = format(span.get_span_context().trace_id, '032x')
         span.set_attribute("trace.id", trace_id)
@@ -107,9 +111,9 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
         jwt_user_id = payload.get("sub", "user_1")
         if not session_id:
             raise Exception("No user")
-    except Exception:
+    except Exception as e:
+        logger.warning("[history] JWT decode failed: %s", e)
         raise HTTPException(status_code=401, detail="Token invalide")
-        
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_assistant", 
@@ -325,7 +329,8 @@ async def delete_history(request: Request, auth: HTTPAuthorizationCredentials = 
         jwt_user_id = payload.get("sub", "user_1")
         if not jwt_user_id:
             raise Exception("No user")
-    except Exception:
+    except Exception as e:
+        logger.warning("[clear-history] JWT decode failed: %s", e)
         raise HTTPException(status_code=401, detail="Token invalide")
 
     session_id = request.query_params.get("session_id") or jwt_user_id

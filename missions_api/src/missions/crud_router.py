@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import func, select, delete
 from src.auth import verify_jwt
 import database
 from .models import Mission, MissionStatus, MissionStatusHistory, ALLOWED_TRANSITIONS, STATUS_UPDATE_ROLES
@@ -9,21 +9,30 @@ from .schemas import MissionAnalyzeResponse, MissionStatusUpdate, StatusHistoryE
 router = APIRouter(prefix="", tags=["Missions"], dependencies=[Depends(verify_jwt)])
 
 
-@router.get("/missions", response_model=list[MissionAnalyzeResponse])
+@router.get("/missions")
 async def list_missions(
     db: AsyncSession = Depends(database.get_db),
     status: str = None,
+    skip: int = Query(0, ge=0, description="Nombre d'enregistrements à sauter"),
+    limit: int = Query(50, ge=1, le=500, description="Nombre max de missions retournées"),
     _: dict = Depends(verify_jwt),
 ):
-    query = select(Mission).order_by(Mission.created_at.desc())
+    """Liste les missions avec pagination. Supporte un filtre optionnel par statut."""
+    base_query = select(Mission)
     if status:
-        query = query.where(Mission.status == status)
+        base_query = base_query.where(Mission.status == status)
+
+    total = (await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )).scalar_one()
+
+    query = base_query.order_by(Mission.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     missions = result.scalars().all()
 
-    response = []
+    missions_data = []
     for m in missions:
-        response.append({
+        missions_data.append({
             "id": m.id,
             "title": m.title,
             "description": m.description,
@@ -33,7 +42,7 @@ async def list_missions(
             "proposed_team": m.proposed_team or [],
             "fallback_full_scan": m.fallback_full_scan,
         })
-    return response
+    return {"missions": missions_data, "total": total, "skip": skip, "limit": limit}
 
 
 @router.patch("/missions/{mission_id}/status")

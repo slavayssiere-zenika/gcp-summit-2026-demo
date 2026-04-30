@@ -71,15 +71,15 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/categories` : List Categories
 - **POST** `/categories` : Create Category
 - **GET** `/stats` : Get Item Stats
+- **GET** `/search/query` : Search Items
+- **GET** `/user/{user_id}` : List User Items
 - **GET** `/` : List Items
 - **POST** `/` : Create Item
 - **GET** `/{item_id}` : Get Item
 - **PUT** `/{item_id}` : Update Item
 - **DELETE** `/{item_id}` : Delete Item
 - **POST** `/bulk` : Create Items Bulk
-- **GET** `/search/query` : Search Items
-- **GET** `/user/{user_id}` : List User Items
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp

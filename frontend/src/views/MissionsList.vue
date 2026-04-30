@@ -9,6 +9,7 @@ const router = useRouter()
 const missions = ref<any[]>([])
 const loading = ref(true)
 const activeFilter = ref<string>('ALL')
+const totalMissions = ref(0)
 
 useHead({ title: 'Fiches Missions - Zenika Console' })
 
@@ -39,7 +40,10 @@ const countByStatus = (status: string) => {
 const fetchMissions = async () => {
   try {
     const response = await axios.get('/api/missions/missions')
-    missions.value = response.data
+    const data = response.data
+    // API retourne désormais {missions: [...], total: N, skip: 0, limit: 50}
+    missions.value = Array.isArray(data) ? data : (data.missions ?? [])
+    totalMissions.value = data.total ?? missions.value.length
   } catch (error) {
     console.error('Erreur chargement missions:', error)
   } finally {

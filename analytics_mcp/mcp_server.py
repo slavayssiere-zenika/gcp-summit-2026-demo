@@ -152,6 +152,25 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="detect_usage_anomalies",
+            description="Détecte les utilisateurs dépassant un seuil de tokens/heure (anomaly detection FinOps). Utile pour identifier les comportements anormaux (exfiltration de données via flood de requêtes LLM).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "threshold_tokens_per_hour": {
+                        "type": "integer",
+                        "description": "Seuil de tokens par heure déclenchant l'alerte. Défaut: 50000.",
+                        "default": 50000
+                    },
+                    "hours_back": {
+                        "type": "integer",
+                        "description": "Fenêtre d'analyse en heures (1 = dernière heure). Défaut: 1.",
+                        "default": 1
+                    }
+                }
+            }
         )
     ]
 
@@ -280,6 +299,49 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "get_aiops_dashboard_data":
             data = await get_aiops_dashboard_data_internal()
             return [TextContent(type="text", text=json.dumps(data))]
+
+        elif name == "detect_usage_anomalies":
+            threshold = int(arguments.get("threshold_tokens_per_hour", 50000))
+            hours_back = int(arguments.get("hours_back", 1))
+            query = f"""
+                SELECT
+                    user_email,
+                    SUM(input_tokens + output_tokens) AS total_tokens,
+                    COUNT(*) AS request_count,
+                    MIN(timestamp) AS window_start,
+                    MAX(timestamp) AS window_end
+                FROM `{FINOPS_TABLE_REF}`
+                WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @hours_back HOUR)
+                GROUP BY user_email
+                HAVING total_tokens > @threshold
+                ORDER BY total_tokens DESC
+                LIMIT 20
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("threshold", "INT64", threshold),
+                    bigquery.ScalarQueryParameter("hours_back", "INT64", hours_back),
+                ]
+            )
+            query_job = await asyncio.to_thread(client.query, query, job_config)
+            results = await asyncio.to_thread(query_job.result)
+            anomalies = []
+            for row in results:
+                anomalies.append({
+                    "user_email": row.user_email,
+                    "total_tokens": row.total_tokens,
+                    "request_count": row.request_count,
+                    "window_start": row.window_start.isoformat() if row.window_start else None,
+                    "window_end": row.window_end.isoformat() if row.window_end else None,
+                    "threshold_exceeded_by": row.total_tokens - threshold,
+                })
+            return [TextContent(type="text", text=json.dumps({
+                "anomalies": anomalies,
+                "threshold_tokens_per_hour": threshold,
+                "hours_back": hours_back,
+                "anomaly_count": len(anomalies),
+                "generated_at": datetime.utcnow().isoformat(),
+            }))]
 
         else:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]

@@ -19,21 +19,21 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.23"
-agent_hr_api_version:       "v0.0.85"
-agent_ops_api_version:      "v0.0.52"
-agent_missions_api_version: "v0.1.28"
-users_api_version:          "v0.0.62"
-items_api_version:          "v0.0.46"
-competencies_api_version:   "v0.1.55"
-cv_api_version:             "v0.0.194"
-prompts_api_version:        "v0.0.50"
-drive_api_version:          "v0.0.107"
-analytics_mcp_version:      "v0.0.82"
+agent_router_api_version:   "v0.1.28"
+agent_hr_api_version:       "v0.0.88"
+agent_ops_api_version:      "v0.0.55"
+agent_missions_api_version: "v0.1.31"
+users_api_version:          "v0.0.63"
+items_api_version:          "v0.0.49"
+competencies_api_version:   "v0.1.61"
+cv_api_version:             "v0.0.198"
+prompts_api_version:        "v0.0.52"
+drive_api_version:          "v0.0.109"
+analytics_mcp_version:      "v0.0.85"
 monitoring_mcp_version:     "v0.0.74"
 db_migrations_version:      "v0.0.28"
 db_init_version:            "v0.1.1"
-missions_api_version:       "v0.0.70"
+missions_api_version:       "v0.0.72"
 frontend_version:           "v0.0.198"
 
 # ── Cloud Run ─────────────────────────────────────────────
@@ -46,9 +46,14 @@ alloydb_cpu: 2   # 2 vCPU (downscale optimisation coûts)
 # ── Sécurité / WAF ────────────────────────────────────────
 waf_rate_limit: 10000
 
-# ── Administration ─────────────────────────────────────────
+# ── Administration ─────────────────────────────────────
 admin_user:               "sebastien.lavayssiere@zenika.com"
 finops_anomaly_threshold: 500000
+
+# Audience OIDC pour le Cloud Scheduler → competencies_api (/bulk-scoring-all/resume)
+# Récupérer via : gcloud run services describe competencies-api-prd --region europe-west1 --format="value(status.url)"
+# Laisser vide si inconnu — le endpoint refusera les appels Scheduler (safe-by-default)
+competencies_scheduler_audience: ""
 
 # ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
 # Chaque agent dispose de son propre modèle pour optimiser coût/qualité.

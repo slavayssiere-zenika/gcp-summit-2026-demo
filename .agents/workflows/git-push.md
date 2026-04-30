@@ -4,6 +4,15 @@ description: Automatisation de la préparation au push Git (Tests, Specs, Change
 
 Voici les étapes strictes à suivre pour l'exécution d'un workflow de préparation `/git-push` :
 
+### Étape 0 : Lire les README.md des services modifiés
+Avant de lancer les tests, identifier les services modifiés depuis le dernier commit et lire leur `README.md`.
+Si un README est obsolète ou manquant pour un service modifié, le mettre à jour **maintenant** (avant le commit).
+
+// turbo
+```bash
+git diff --name-only HEAD 2>/dev/null | grep -E "^[a-z_]+_api/|^agent_[a-z_]+/|^[a-z_]+_mcp/" | cut -d/ -f1 | sort -u | while read svc; do echo "=== $svc ==="; [ -f "$svc/README.md" ] && head -10 "$svc/README.md" || echo "MANQUANT"; done
+```
+
 1. **Relancer les tests unitaires via script parallèle**
    Exécute le script bash dédié pour effectuer la couverture en simultané sur chaque environnement. L'arrêt est requis si le script est en erreur.
    > ⚠️ **Note** : Ce script exécute uniquement les tests présents dans chaque répertoire de service.
@@ -66,6 +75,8 @@ test_env/bin/python scripts/generate_pipeline_docs.py
 
 7. **Révision des README.md (Services, Agents, APIs)**
    Met à jour la documentation (fichiers `README.md`) de l'ensemble des microservices, agents et APIs pour s'assurer de leur cohérence avec l'implémentation actuelle.
+   > ⚠️ **IMPORTANT** : `generate_readmes.py` DOIT effectuer une **mise à jour partielle** — uniquement les sections générées automatiquement (ex: liste des routes, variables d'environnement extraites du Dockerfile).
+   > Il est **strictement interdit** d'écraser les sections rédigées manuellement (`## Architecture`, `## Points d'attention`, `## Dernière modification`). Ces sections contiennent la mémoire opérationnelle du service et ne doivent pas être régénérées.
 // turbo
 ```bash
 test_env/bin/python scripts/generate_readmes.py

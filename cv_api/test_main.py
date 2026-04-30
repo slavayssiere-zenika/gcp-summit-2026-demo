@@ -49,14 +49,16 @@ def test_get_spec_fail(mocker):
 # 3. Router Tests with Mocks
 @pytest.fixture
 def mock_httpx(mocker):
-    mock = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock = mocker.patch("httpx.AsyncClient")
     client_instance = AsyncMock()
     mock.return_value.__aenter__.return_value = client_instance
     return client_instance
 
 @pytest.fixture
 def mock_genai(mocker):
-    return mocker.patch("src.cvs.router.client")
+    # Les sous-routers utilisent _svc_config.client (accès attribut).
+    # Patcher la source src.services.config.client suffit pour tous.
+    return mocker.patch("src.services.config.client")
 
 def test_get_user_cv(mocker):
     # Mocking db.query
@@ -118,7 +120,7 @@ def test_import_and_analyze_cv(mocker):
     mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
     
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
     
@@ -126,7 +128,7 @@ def test_import_and_analyze_cv(mocker):
     mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Dummy CV Text")
 
     # Mocking Gemini Client
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "summary": "Expert Python", "current_role": "Dev", "years_of_experience": 5, "competencies": [{"name": "Python", "parent": "Lang"}], "missions": [], "is_anonymous": false}'
     mock_genai.aio.models.embed_content = AsyncMock()
@@ -206,13 +208,13 @@ def test_import_cv_steps_on_truncated_document(mocker):
     long_text = "A" * 101000  # dépasse le seuil réel de 100000 caractères du router
     mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value=long_text)
 
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "Jane", "last_name": "Smith", "email": "jane@test.com", "summary": "Expert", "current_role": "Lead", "years_of_experience": 3, "competencies": [{"name": "Java"}], "missions": [], "is_anonymous": false}'
     mock_genai.aio.models.embed_content = AsyncMock()
     mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
@@ -256,14 +258,14 @@ def test_import_cv_steps_on_zero_competencies(mocker):
 
     mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Short legal document")
 
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     # LLM retourne is_cv=true mais 0 compétences
     mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "Alice", "last_name": "Boo", "email": "a@b.com", "summary": "Expert", "current_role": "Dev", "years_of_experience": 1, "competencies": [], "missions": [], "is_anonymous": false}'
     mock_genai.aio.models.embed_content = AsyncMock()
     mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1])]
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
@@ -358,7 +360,7 @@ def test_import_cv_no_auth(mocker):
 
 def test_import_cv_genai_not_configured(mocker):
     # force client to None
-    mocker.patch("src.cvs.router.client", None)
+    mocker.patch("src.services.config.client", None)
     mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="text")
     mocker.patch("os.path.exists", return_value=False)
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
@@ -371,11 +373,11 @@ def test_import_cv_prompt_fail(mocker):
     l'API doit retourner HTTP 500 avec 'Cannot fetch generic prompt'.
     """
     # Client GenAI valide (AsyncMock) — l'erreur doit survenir avant l'appel LLM
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     mock_genai.aio.models.embed_content = AsyncMock()
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
     # Le GET vers prompts_api lève une exception réseau
@@ -395,12 +397,12 @@ def test_import_cv_prompt_fail(mocker):
         f"Le message d'erreur attendu est absent. Reçu: {response.text[:300]}"
 
 def test_search_candidates_no_client(mocker):
-    mocker.patch("src.cvs.router.client", None)
+    mocker.patch("src.services.config.client", None)
     response = client.get("/search?query=test")
     assert response.status_code == 500
 
 def test_search_candidates_embed_fail(mocker):
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.embed_content = AsyncMock(side_effect=Exception("embed error"))
     response = client.get("/search?query=test")
     assert response.status_code == 400
@@ -456,14 +458,14 @@ def test_import_cv_not_a_cv_boolean_check(mocker):
     mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
     
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
     
     mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="This is a cake recipe, not a resume.")
 
     # Mocking Gemini Client to return is_cv false
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": false, "first_name": null, "last_name": null, "email": null, "competencies": []}'
     
@@ -501,7 +503,7 @@ def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email
 
     mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Contenu du CV de test")
 
-    mock_genai = mocker.patch("src.cvs.router.client")
+    mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     mock_genai.aio.models.generate_content.return_value.text = (
         f'{{"is_cv": true, "first_name": "{first_name}", "last_name": "{last_name}", '
@@ -512,7 +514,7 @@ def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email
     mock_genai.aio.models.embed_content = AsyncMock()
     mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
@@ -726,7 +728,7 @@ def test_reanalyze_returns_json_immediately(mocker):
     """
     _make_reanalyze_mocks(mocker)
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
@@ -803,7 +805,7 @@ def test_reanalyze_url_without_google_doc_id(mocker):
     """
     _make_reanalyze_mocks(mocker, source_url="https://externe.pdf")
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
@@ -833,7 +835,7 @@ def test_reanalyze_drive_api_unavailable_degraded(mocker):
     """
     _make_reanalyze_mocks(mocker)
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
@@ -876,7 +878,7 @@ def test_reanalyze_no_cvs_in_db(mocker):
     mock_db.execute.return_value = mock_result
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
     ci.post.return_value = MagicMock(status_code=200)
@@ -897,7 +899,7 @@ def test_reanalyze_status_proxies_drive_api(mocker):
     Vérifie que GET /reanalyze/status proxyfie vers drive_api /status
     et retourne le résultat tel quel.
     """
-    mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+    mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 

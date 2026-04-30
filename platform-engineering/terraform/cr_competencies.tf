@@ -148,6 +148,15 @@ resource "google_cloud_run_v2_service" "competencies_api" {
         name  = "CLOUDRUN_WORKSPACE"
         value = terraform.workspace
       }
+      env {
+        # SCHEDULER_AUDIENCE = URL exacte du service Cloud Run competencies (ex: https://competencies-api-prd-HASH.a.run.app)
+        # Terraform ne peut pas auto-référencer ce service pour obtenir son URI.
+        # Action requise : après le 1er déploiement, lancer :
+        #   gcloud run services describe competencies-api-prd --region europe-west1 --format="value(status.url)"
+        # Et mettre à jour cette valeur dans prd.yaml (competencies_scheduler_audience) puis re-appliquer.
+        name  = "SCHEDULER_AUDIENCE"
+        value = var.competencies_scheduler_audience
+      }
     }
 
     # Conteneur Sidecar (MCP)

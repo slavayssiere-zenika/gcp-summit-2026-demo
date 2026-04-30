@@ -56,15 +56,23 @@ def mock_genai(mocker):
 def test_list_missions(mocker):
     mock_db = AsyncMock()
     app.dependency_overrides[get_db] = lambda: mock_db
-    
+
     mock_mission = MagicMock(id=1, title="Test Mission", description="Description", extracted_competencies=["Java"], proposed_team=[], fallback_full_scan=False, status="STAFFED", prefiltered_candidates=[])
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [mock_mission]
-    mock_db.execute.return_value = mock_result
-    
+
+    # Premier execute : SELECT count(*) — retourne scalar_one() = 1
+    mock_count_result = MagicMock()
+    mock_count_result.scalar_one.return_value = 1
+    # Deuxième execute : SELECT missions — retourne scalars().all()
+    mock_missions_result = MagicMock()
+    mock_missions_result.scalars.return_value.all.return_value = [mock_mission]
+    mock_db.execute.side_effect = [mock_count_result, mock_missions_result]
+
     response = client.get("/missions", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
-    assert response.json()[0]["title"] == "Test Mission"
+    data = response.json()
+    assert "missions" in data
+    assert data["total"] == 1
+    assert data["missions"][0]["title"] == "Test Mission"
 
 # Tests STAFF-003 — Détection de conflits de staffing (get_active_missions_for_user)
 # ---------------------------------------------------------------------------
@@ -273,14 +281,18 @@ def test_list_missions_includes_status(mocker):
         extracted_competencies=["Java"],
         proposed_team=[],
         fallback_full_scan=False,
+        prefiltered_candidates=[],
     )
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [mock_mission]
-    mock_db.execute.return_value = mock_result
+    mock_count_result = MagicMock()
+    mock_count_result.scalar_one.return_value = 1
+    mock_missions_result = MagicMock()
+    mock_missions_result.scalars.return_value.all.return_value = [mock_mission]
+    mock_db.execute.side_effect = [mock_count_result, mock_missions_result]
 
     response = client.get("/missions", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
-    missions = response.json()
+    data = response.json()
+    missions = data["missions"]
     assert len(missions) > 0
     assert "status" in missions[0]
     assert missions[0]["status"] == "STAFFED"

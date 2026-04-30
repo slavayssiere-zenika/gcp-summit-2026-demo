@@ -79,7 +79,8 @@ async def health_agents():
                 ok = True
             if not isinstance(v_res, Exception) and v_res.status_code == 200:
                 version = v_res.json().get("version", "unknown")
-        except Exception:
+        except Exception as e:
+            logger.warning("[health-probe] Agent '%s' health check failed: %s", agent_name, e)
             ok = False
         finally:
             latency_ms = round((time.monotonic() - start) * 1000)

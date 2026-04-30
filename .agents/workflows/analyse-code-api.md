@@ -6,6 +6,17 @@ Ce workflow permet à l'agent de scanner automatiquement toutes les APIs du proj
 
 // turbo-all
 
+### Étape 0 : Lecture des README.md (OBLIGATOIRE)
+
+Avant d'inspecter le moindre fichier de code, lire le `README.md` de chaque service détecté. Le README est la source de vérité sur l'architecture, les dépendances critiques et les points d'attention du service.
+
+// turbo
+```bash
+for d in *_api *_mcp agent_*; do [ -d "$d" ] && { echo "=== $d ==="; [ -f "$d/README.md" ] && head -25 "$d/README.md" || echo ">>> MANQUANT — à créer avant d\'auditer"; }; done
+```
+
+Si un README est absent pour un service → le créer conformément au template §13 AGENTS.md **avant** de démarrer l'audit de ce service.
+
 ### Étape 1 : Détection et Catégorisation des Services
 Utilise l'outil `list_dir` ou `run_command` (ex: `find . -maxdepth 1 -name "*_api" -o -name "*_mcp" -type d`) pour identifier tous les dossiers de services dans le répertoire courant.
 Classe chaque service selon la typologie définie dans `AGENTS.md` :

@@ -127,8 +127,11 @@ class SemanticCache:
             await self._redis.execute_command("FT.INFO", _HNSW_INDEX_NAME)
             self._hnsw_ready = True
             logger.info(f"[SemanticCache] Index HNSW '{_HNSW_INDEX_NAME}' trouvé.")
-        except Exception:
-            # Index absent → création
+        except Exception as e:
+            # Index absent ou erreur FT.INFO → tentative de création.
+            # NOTE: on capture Exception (pas ResponseError) car GCP Memorystore peut lever
+            # des types d'erreurs non standard. Comportement intentionnel et documenté.
+            logger.debug("[SemanticCache] FT.INFO failed (index likely absent, will create): %s", e)
             # GCP Memorystore ne supporte pas TEXT (nécessite le module RediSearch complet).
             # On essaie d'abord avec TEXT (Redis Stack), puis fallback sur TAG (Memorystore).
             try:
@@ -195,7 +198,8 @@ class SemanticCache:
                 try:
                     from metrics import SEMANTIC_CACHE_MISSES_TOTAL
                     SEMANTIC_CACHE_MISSES_TOTAL.inc()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
                     raise
                 return None
 
@@ -216,7 +220,8 @@ class SemanticCache:
             try:
                 from metrics import SEMANTIC_CACHE_SIMILARITY_HISTOGRAM
                 SEMANTIC_CACHE_SIMILARITY_HISTOGRAM.observe(score)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
                 raise
 
             if score >= self._threshold and "response" in field_map:
@@ -227,7 +232,8 @@ class SemanticCache:
                 try:
                     from metrics import SEMANTIC_CACHE_HITS_TOTAL
                     SEMANTIC_CACHE_HITS_TOTAL.inc()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
                     raise
                 return self._make_cache_hit_response(field_map["response"], score)
             else:
@@ -238,7 +244,8 @@ class SemanticCache:
                 try:
                     from metrics import SEMANTIC_CACHE_MISSES_TOTAL
                     SEMANTIC_CACHE_MISSES_TOTAL.inc()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
                     raise
                 return None
 
@@ -334,7 +341,8 @@ class SemanticCache:
         """Reconstruit la réponse depuis l'entrée cache et l'enrichit avec les métadonnées de hit."""
         try:
             response = json.loads(response_json)
-        except Exception:
+        except Exception as e:
+            logger.warning("[SemanticCache] Malformed JSON in cache entry: %s", e)
             return None
 
         # Injecter un step informatif visible en mode Expert

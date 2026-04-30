@@ -185,3 +185,22 @@ databaseChangeLog:
       rollback:
         - dropTable:
             tableName: "user_audit_logs"
+
+  - changeSet:
+      id: "9"
+      author: "security-audit-2026-04-30"
+      comment: "Contrainte CHECK sur role pour bloquer les valeurs hors domaine. Pré-migration : normalise les éventuels rôles invalides en 'user' avant d'ajouter la contrainte."
+      changes:
+        - sql:
+            sql: |
+              UPDATE users
+              SET role = 'user'
+              WHERE role NOT IN ('user', 'rh', 'commercial', 'admin', 'service_account');
+
+              ALTER TABLE users
+              ADD CONSTRAINT chk_users_role
+              CHECK (role IN ('user', 'rh', 'commercial', 'admin', 'service_account'));
+      rollback:
+        - sql:
+            sql: ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_role;
+

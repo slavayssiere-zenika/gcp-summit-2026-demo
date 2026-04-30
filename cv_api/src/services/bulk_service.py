@@ -152,8 +152,8 @@ async def bg_bulk_reanalyse(service_token: str):
                     if items:
                         ctx, nb_parents, nb_leaves = build_taxonomy_context(items)
                         tree_context = f"\n\n## TAXONOMY:\n{ctx}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[bulk_reanalyse] Taxonomy fetch failed (non-blocking): %s", e)
 
         full_prompt = prompt + tree_context
         jsonl_lines: list[str] = []
@@ -211,7 +211,8 @@ async def bg_bulk_reanalyse(service_token: str):
             await asyncio.sleep(30)
             try:
                 job = await asyncio.to_thread(vertex_batch_client.batches.get, name=job.name)
-            except Exception:
+            except Exception as e:
+                logger.warning("[bulk_reanalyse] Vertex job poll error (retrying): %s", e)
                 continue
 
             state_name = job.state.name if hasattr(job.state, "name") else str(job.state)
@@ -243,8 +244,8 @@ async def bg_bulk_reanalyse(service_token: str):
                         if not candidates: continue
                         text = _clean_llm_json(candidates[0].get("content", {}).get("parts", [{}])[0].get("text", ""))
                         results.append((cv_id, user_id, json.loads(text), record.get("response", {}).get("usageMetadata", {})))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("[bulk_reanalyse] Skipping malformed GCS result line: %s", e)
         except Exception as e:
             await bulk_reanalyse_manager.update_progress(status="error", error=f"GCS read: {e}")
             return

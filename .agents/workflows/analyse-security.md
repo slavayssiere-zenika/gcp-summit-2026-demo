@@ -8,6 +8,16 @@ description: Workflow d'audit automatisé de sécurité applicative, Terraform e
 
 Ce workflow fournit une marche à suivre stricte pour auditer la posture de sécurité de la plateforme, depuis l'Infrastructure as Code (Terraform) jusqu'à la logique applicative (FastAPI, LLM). Lorsqu'un utilisateur exécute ce workflow, l'Agent DOIT exécuter les vérifications suivantes de manière autonome.
 
+## Étape 0 : Lecture des README.md
+
+Avant tout audit de code, lire le fichier `README.md` de chaque service ciblé. C'est la source de vérité sur l'architecture, les dépendances et les points sensibles du service.
+
+```bash
+for d in *_api *_mcp agent_*; do [ -f "$d/README.md" ] && echo "=== $d ===" && head -30 "$d/README.md"; done
+```
+
+Si un README est absent pour un service ciblé → le créer conformément au template §13 AGENTS.md avant de continuer.
+
 ## 1. Audit Périmétrique et Terraform (Network & IAM)
 Vérifiez activement le code contenu dans `platform-engineering/terraform/` :
 - **Règles WAF (Cloud Armor)** : S'assurer que les défenses OWASP (`sqli`, `xss`, `lfi`, `rce`, `scannerdetection`) et les *Rate Limiters* (Protection Anti-DoS et FinOps) sont actifs et configurés dans le fichier `waf.tf`.
@@ -19,6 +29,13 @@ Vérifiez le code source (Python/FastAPI) :
 - **Vérification JWT Systématique** : Confirmer que `Depends(verify_jwt)` est imposé sur les instanciations de `APIRouter` de chaque microservice et Serveur MCP, garantissant un contrôle strict des accès, même en trafic inter-microservices VPC natif.
 - **Anti-Fingerprinting Serveur** : Valider que les configurations `uvicorn` (que ce soit via CLI Terraform `args` flag `--no-server-header` ou script Python `server_header=False`) suppriment les empreintes côté serveur.
 - **Leak Mitigation Mémoire** : S'assurer que toutes les clés critiques ou mots de passe initiaux subissent d'office un `os.environ.pop()` immédiatement au démarrage (`main.py`, `auth.py`). L'objectif principal est de parer à un comportement inattendu où l'agent fouillerait les variables d'environnement de son système (Prompt Injection).
+- **Pagination — Absence de Hard Limits** : Vérifier que tout endpoint retournant une liste utilise `skip`/`limit` + `total` et que la consommation d'APIs externes (Google Drive, BigQuery) utilise les page tokens. Commandes de détection :
+  ```bash
+  # Hard limits sans pagination
+  grep -rn "\.limit(" */src/ | grep -v "skip\|offset\|page" | head -20
+  # Appels Google API sans boucle pageToken
+  grep -rn "\.list(" */src/ --include="*.py" | grep -v "pageToken\|page_token\|while" | head -20
+  ```
 
 ## 3. Pratiques Avancées et Nouvelles Règles de Sécurité (Agent)
 En plus du contexte historique, valider l'intégrité globale sur ces directives additionnelles :

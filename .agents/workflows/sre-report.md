@@ -4,6 +4,11 @@ description: Workflow d'automatisation SRE pour identifier, analyser et proposer
 
 Ce workflow permet de générer un rapport SRE automatisé à partir des erreurs loggées et de nettoyer les erreurs traitées.
 
+### Étape 0 : Lecture du README du service impacté
+
+Identifier le(s) service(s) concerné(s) depuis les erreurs loggées, puis lire leur `README.md` avant d'analyser le code source.
+Si le README est absent → le créer conformément au template §13 AGENTS.md avant de continuer.
+
 ### Étape 1 : Récupération des erreurs
 Exécute le script Python `sre_report_runner.py` situé à la racine du projet (`python3 sre_report_runner.py`). Ce script va s'authentifier et récupérer tous les prompts d'erreur commençant par `error_correction:`.
 

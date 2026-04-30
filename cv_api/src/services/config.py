@@ -38,7 +38,8 @@ try:
         client = genai.Client(api_key=GEMINI_API_KEY)
     else:
         client = None
-except Exception:
+except Exception as e:
+    logger.warning("[config] Gemini client init failed (api_key mode): %s — cv_extraction disabled", e)
     client = None
 
 try:
@@ -46,7 +47,8 @@ try:
         vertex_batch_client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION)
     else:
         vertex_batch_client = None
-except Exception:
+except Exception as e:
+    logger.warning("[config] Vertex batch client init failed: %s — bulk re-analyse disabled", e)
     vertex_batch_client = None
 
 # ── Parallélisme du pipeline bulk-reanalyse (configurable via env) ────────────

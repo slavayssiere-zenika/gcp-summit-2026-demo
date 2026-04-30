@@ -4,12 +4,15 @@ description: Aide au diagnostic de bug — collecte structurée du contexte et p
 
 Voici les étapes strictes à suivre pour l'exécution du workflow `/bug` :
 
-### Étape 0 : Recherche en mémoire (OBLIGATOIRE)
+### Étape 0 : Recherche en mémoire + Lecture du README (OBLIGATOIRE)
 
 // turbo
-Avant toute analyse, rechercher dans la base de connaissance :
-1. `search_past_errors` avec les mots-clés de l'erreur
-2. `search_learnings` avec la technologie concernée
+Avant toute analyse, exécuter dans cet ordre :
+1. Identifier le service impacté (fichier actif dans l'éditeur, contexte de la conversation).
+2. Lire `<service>/README.md` si présent — c'est la source de vérité sur l'architecture du service.
+3. Rechercher dans la base de connaissance :
+   - `mcp_antigravity-memory_search_past_errors` avec les mots-clés de l'erreur
+   - `mcp_antigravity-memory_search_learnings` avec la technologie concernée
 
 Si un résultat pertinent est trouvé (score RRF > 0), appliquer la solution mémorisée directement sans re-analyser.
 

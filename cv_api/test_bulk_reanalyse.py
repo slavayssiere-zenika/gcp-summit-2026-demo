@@ -243,7 +243,7 @@ class TestBulkReanalyseEndpoints:
 
     def test_status_idle(self, mocker):
         """GET /bulk-reanalyse/status doit retourner idle quand aucun job actif."""
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.get_status",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.get_status",
                      new=AsyncMock(return_value=None))
         r = client.get("/bulk-reanalyse/status", headers={"Authorization": "Bearer token"})
         assert r.status_code == 200
@@ -259,7 +259,7 @@ class TestBulkReanalyseEndpoints:
             "start_time": datetime.now().isoformat(), "updated_at": datetime.now().isoformat(),
             "end_time": None, "error": None,
         }
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.get_status",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.get_status",
                      new=AsyncMock(return_value=state))
         r = client.get("/bulk-reanalyse/status", headers={"Authorization": "Bearer token"})
         assert r.status_code == 200
@@ -278,9 +278,9 @@ class TestBulkReanalyseEndpoints:
 
     def test_start_returns_202_when_idle(self, mocker):
         """POST /bulk-reanalyse/start doit retourner 202 si aucun job en cours."""
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.is_running",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.is_running",
                      new=AsyncMock(return_value=False))
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.initialize",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.initialize",
                      new=AsyncMock(return_value={"status": "building"}))
         # Mock DB pour SELECT COUNT(*) FROM cv_profiles
         mock_db = AsyncMock()
@@ -289,7 +289,7 @@ class TestBulkReanalyseEndpoints:
         mock_db.execute = AsyncMock(return_value=count_result)
         app.dependency_overrides[get_db] = lambda: mock_db
 
-        mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+        mock_httpx = mocker.patch("src.cvs.routers.bulk_router.httpx.AsyncClient")
         ci = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = ci
         svc = MagicMock(status_code=200)
@@ -305,7 +305,7 @@ class TestBulkReanalyseEndpoints:
 
     def test_start_returns_409_when_running(self, mocker):
         """POST /bulk-reanalyse/start doit retourner 409 si job déjà actif."""
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.is_running",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.is_running",
                      new=AsyncMock(return_value=True))
         r = client.post("/bulk-reanalyse/start", headers={"Authorization": "Bearer token"})
         assert r.status_code == 409
@@ -322,9 +322,9 @@ class TestBulkReanalyseEndpoints:
         POST /bulk-reanalyse/cancel sur un état idle retourne 200 (reset gracieux).
         Le cancel ne lève pas d'erreur — il réinitialise toujours l'état.
         """
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.get_status",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.get_status",
                      new=AsyncMock(return_value=None))
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.reset", new=AsyncMock())
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.reset", new=AsyncMock())
         r = client.post("/bulk-reanalyse/cancel", headers={"Authorization": "Bearer token"})
         assert r.status_code == 200
         data = r.json()
@@ -336,13 +336,13 @@ class TestBulkReanalyseEndpoints:
             "status": "batch_running",
             "batch_job_id": "projects/p/locations/eu/batchPredictionJobs/abc",
         }
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.is_running",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.is_running",
                      new=AsyncMock(return_value=True))
-        mocker.patch("src.cvs.router.bulk_reanalyse_manager.get_status",
+        mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.get_status",
                      new=AsyncMock(return_value=state))
-        cancel_mock = mocker.patch("src.cvs.router.bulk_reanalyse_manager.cancel_soft",
+        cancel_mock = mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.cancel_soft",
                                   new=AsyncMock(return_value={"dest_uri": "gs://..."}))
-        mock_httpx = mocker.patch("src.cvs.router.httpx.AsyncClient")
+        mock_httpx = mocker.patch("src.cvs.routers.bulk_router.httpx.AsyncClient")
         ci = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = ci
         ci.post.return_value = MagicMock(status_code=200)

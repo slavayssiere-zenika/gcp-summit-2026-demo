@@ -1,13 +1,14 @@
 import os
 import json
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import get_db
 from . import models, schemas
+from .schemas import PaginatedPromptsResponse
 from cache import get_cache, set_cache, delete_cache
 from jose import jwt, JWTError
 from .analyzer import generate_test_cases, run_promptfoo_analysis, improve_prompt_with_gemini, generate_error_correction_prompt
@@ -89,9 +90,18 @@ async def update_my_prompt(payload: schemas.PromptUpdate, db: AsyncSession = Dep
 
     return prompt
 
-@router.get("/", response_model=list[schemas.Prompt])
-async def list_prompts(db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
-    return (await db.execute(select(models.Prompt))).scalars().all()
+@router.get("/", response_model=PaginatedPromptsResponse)
+async def list_prompts(
+    skip: int = Query(0, ge=0, description="Nombre d'enregistrements à sauter"),
+    limit: int = Query(50, ge=1, le=500, description="Nombre max d'enregistrements retournés"),
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(verify_admin),
+):
+    """Liste tous les prompts avec pagination. Réservé aux admins."""
+    from sqlalchemy import func
+    total = (await db.execute(select(func.count()).select_from(models.Prompt))).scalar_one()
+    prompts = (await db.execute(select(models.Prompt).offset(skip).limit(limit))).scalars().all()
+    return PaginatedPromptsResponse(prompts=prompts, total=total, skip=skip, limit=limit)
 
 @router.get("/{key}", response_model=schemas.Prompt)
 async def read_prompt(key: str, db: AsyncSession = Depends(get_db)):
@@ -279,10 +289,10 @@ async def read_compiled_prompt(key: str, db: AsyncSession = Depends(get_db)):
     compiled_prompt = schemas.Prompt(key=prompt.key, value=compiled_value)
     return compiled_prompt
 
-@router.delete("/{key}", summary="Supprime un prompt existant", dependencies=[Depends(verify_jwt)])
-async def delete_prompt(key: str, db: AsyncSession = Depends(get_db)):
+@router.delete("/{key}", summary="Supprime un prompt existant")
+async def delete_prompt(key: str, db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
     """
-    Supprime un prompt de la base de données. Utilisé principalement pour le nettoyage des error_correction.
+    Supprime un prompt de la base de données. Réservé aux admins. Utilisé principalement pour le nettoyage des error_correction.
     """
     db_prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
     if not db_prompt:

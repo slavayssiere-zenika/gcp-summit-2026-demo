@@ -7,9 +7,9 @@ from google.genai import types
 from google.adk.agents import Agent
 import httpx
 from opentelemetry.propagate import inject
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from metrics import A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL, A2A_CALL_RETRIES_TOTAL
+from mcp_client import auth_header_var, user_id_var
 
 logger = logging.getLogger(__name__)
 
@@ -129,25 +129,27 @@ async def _call_sub_agent(
 
 # --- A2A Protocol Tools ---
 
-async def ask_hr_agent(query: str, user_id: str = "user_1") -> dict:
+async def ask_hr_agent(query: str, user_id: str = "") -> dict:
     """
-    Délègue une requête à l'Agent RH (Talent Acquisition & Staffing).
-    Utiliser cet outil si l'utilisateur pose une question concernant:
-    - La recherche de candidats ou profils.
+    Délègue une requête à l'Agent RH (Talent & Compétences).
+    Utiliser cet outil si l'utilisateur pose une question concernant :
+    - La recherche ou la consultation de profils consultants.
     - L'analyse ou la lecture de CVs (notamment via un lien Google Drive).
-    - La création ou la gestion de missions (staffing, sélection d'équipe).
-    - Les utilisateurs internes ou les compétences (Tree).
-    
+    - Les compétences des consultants (arbre taxonomique, évaluation, coaching CV, scoring Gemini).
+    - L'historique des missions **d'un consultant nommé** (ex: "quelles missions a faites Jean ?").
+    - La disponibilité d'un consultant spécifique.
+    NE PAS utiliser pour lister les missions client ou proposer une équipe → utiliser `ask_missions_agent`.
+
     Args:
-        query (str): La requête détaillée, claire et complète à transmettre à l'Agent RH. Reformule bien pour qu'il ait tout le contexte sans ambiguïté.
-        user_id (str): L'identifiant de l'utilisateur (email ou sub JWT) pour l'isolation des sessions.
+        query (str): La requête détaillée à transmettre à l'Agent RH. Inclure tout le contexte pertinent.
+        user_id (str): L'identifiant de l'utilisateur (email JWT). Laissé vide — automatiquement résolu depuis le token.
     """
-    from mcp_client import auth_header_var
+    effective_user_id = user_id or user_id_var.get("anonymous")
     hr_url = os.getenv("AGENT_HR_API_URL", "http://agent_hr_api:8080")
     auth = auth_header_var.get(None)
 
-    logger.info(f"[A2A] Dispatching query to HR Agent: {query[:50]}...")
-    data = await _call_sub_agent("hr_agent", hr_url, query, user_id, timeout=60.0, auth_header=auth)
+    logger.info(f"[A2A] Dispatching query to HR Agent (user={effective_user_id[:20]}): {query[:50]}...")
+    data = await _call_sub_agent("hr_agent", hr_url, query, effective_user_id, timeout=60.0, auth_header=auth)
 
     if data.get("degraded"):
         return {"result": json.dumps(data)}
@@ -162,7 +164,7 @@ async def ask_hr_agent(query: str, user_id: str = "user_1") -> dict:
     })}
 
 
-async def ask_ops_agent(query: str, user_id: str = "user_1") -> dict:
+async def ask_ops_agent(query: str, user_id: str = "") -> dict:
     """
     Délègue une requête à l'Agent Ops (FinOps, Système & Drive Integration).
     Utiliser cet outil UNIQUEMENT si l'utilisateur pose une question concernant:
@@ -170,18 +172,18 @@ async def ask_ops_agent(query: str, user_id: str = "user_1") -> dict:
     - Le FinOps, la facture IA, l'estimation des coûts, le marché.
     - La modification de la configuration système de parsing Google Drive (dossiers synchronisés).
     - L'exploration technique de logs bruts Applicatifs avec Grafana/Loki.
-    - La gestion des System Prompts (création, modification) et la remontée d'erreurs pour générer des directives de prompt.
+    - La gestion des System Prompts (création, modification) et la remontée d'erreurs.
     
     Args:
         query (str): La requête ou la commande technique à envoyer à l'Agent Ops.
-        user_id (str): L'identifiant de l'utilisateur (email ou sub JWT) pour l'isolation des sessions.
+        user_id (str): L'identifiant de l'utilisateur (email JWT). Laissé vide — automatiquement résolu depuis le token.
     """
-    from mcp_client import auth_header_var
+    effective_user_id = user_id or user_id_var.get("anonymous")
     ops_url = os.getenv("AGENT_OPS_API_URL", "http://agent_ops_api:8080")
     auth = auth_header_var.get(None)
 
-    logger.info(f"[A2A] Dispatching query to Ops Agent: {query[:50]}...")
-    data = await _call_sub_agent("ops_agent", ops_url, query, user_id, timeout=60.0, auth_header=auth)
+    logger.info(f"[A2A] Dispatching query to Ops Agent (user={effective_user_id[:20]}): {query[:50]}...")
+    data = await _call_sub_agent("ops_agent", ops_url, query, effective_user_id, timeout=60.0, auth_header=auth)
 
     if data.get("degraded"):
         return {"result": json.dumps(data)}
@@ -196,7 +198,7 @@ async def ask_ops_agent(query: str, user_id: str = "user_1") -> dict:
     })}
 
 
-async def ask_missions_agent(query: str, user_id: str = "user_1") -> dict:
+async def ask_missions_agent(query: str, user_id: str = "") -> dict:
     """
     Délègue une requête à l'Agent Missions (Staffing Director).
     Utiliser cet outil UNIQUEMENT si l'utilisateur pose une question concernant :
@@ -211,15 +213,15 @@ async def ask_missions_agent(query: str, user_id: str = "user_1") -> dict:
     Args:
         query (str): La requête détaillée à transmettre à l'Agent Missions.
             Inclure l'ID de mission si connu, les compétences recherchées, tout le contexte pertinent.
-        user_id (str): L'identifiant de l'utilisateur (email ou sub JWT) pour l'isolation des sessions.
+        user_id (str): L'identifiant de l'utilisateur (email JWT). Laissé vide — automatiquement résolu depuis le token.
     """
-    from mcp_client import auth_header_var
+    effective_user_id = user_id or user_id_var.get("anonymous")
     missions_url = os.getenv("AGENT_MISSIONS_API_URL", "http://agent_missions_api:8080")
     auth = auth_header_var.get(None)
 
-    logger.info(f"[A2A] Dispatching query to Missions Agent: {query[:50]}...")
+    logger.info(f"[A2A] Dispatching query to Missions Agent (user={effective_user_id[:20]}): {query[:50]}...")
     # Timeout 90s : pipeline staffing (get_mission + search_best_candidates + RAG x3 + LLM)
-    data = await _call_sub_agent("missions_agent", missions_url, query, user_id, timeout=90.0, auth_header=auth)
+    data = await _call_sub_agent("missions_agent", missions_url, query, effective_user_id, timeout=90.0, auth_header=auth)
 
     if data.get("degraded"):
         return {"result": json.dumps(data)}
@@ -311,6 +313,10 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
     # garantit que les tools ADK (ask_*_agent) lisent le bon token.
     if auth_token:
         auth_header_var.set(auth_token)
+    # 3.2 — Propagate real user_id (JWT email/sub) to A2A tool functions via ContextVar
+    # This replaces the default "user_1" placeholder used previously.
+    if user_id and user_id != "unknown@zenika.com":
+        user_id_var.set(user_id)
 
     session_id = session_id or str(uuid.uuid4())
     session_service = get_session_service()
@@ -322,7 +328,8 @@ async def run_agent_query(query: str, session_id: str | None = None, auth_token:
         session = await session_service.get_session(app_name="zenika_assistant", user_id=user_id, session_id=session_id)
         if session is None:
             raise KeyError("Session not found")
-    except Exception:
+    except Exception as e:
+        logger.debug("[agent] Session not found or error (creating new): %s", e)
         await session_service.create_session(app_name="zenika_assistant", user_id=user_id, session_id=session_id)
 
     response_parts = []
