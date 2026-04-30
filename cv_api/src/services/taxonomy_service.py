@@ -363,10 +363,9 @@ async def run_taxonomy_step(
                     new_log=f"Structuration du pilier : {pillar_name}..."
                 )
 
-                pillar_skills_str = ", ".join(pillar_skills)
                 pillar_instruction = (
                     instruction_reduce
-                    .replace("{{EXISTING_COMPETENCIES}}", pillar_skills_str)
+                    .replace("{{MAP_RESULT}}", json.dumps(map_result, ensure_ascii=False))
                     .replace("{{CURRENT_PILLAR}}", pillar_name)
                 )
 

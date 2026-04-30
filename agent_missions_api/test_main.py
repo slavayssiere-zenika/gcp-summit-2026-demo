@@ -9,7 +9,7 @@ import jwt
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 import os
-SECRET_KEY = os.getenv("SECRET_KEY", "testsecret")
+from main import SECRET_KEY
 ALGORITHM = "HS256"
 
 

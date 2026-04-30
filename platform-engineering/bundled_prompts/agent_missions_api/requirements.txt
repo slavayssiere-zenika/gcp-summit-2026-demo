@@ -10,7 +10,7 @@ opentelemetry-instrumentation-fastapi>=0.40b0
 opentelemetry-instrumentation-httpx
 opentelemetry-instrumentation-redis
 mcp[sse,fastapi]>=1.0.0
-google-adk==1.28.1
+google-adk==1.31.1
 google-genai>=1.0.0
 litellm>=1.0.0
 prometheus-fastapi-instrumentator>=6.1.0

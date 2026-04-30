@@ -3,6 +3,8 @@ import inspect
 import json
 import logging
 import os
+import warnings
+warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 import re
 import traceback
 from contextlib import asynccontextmanager

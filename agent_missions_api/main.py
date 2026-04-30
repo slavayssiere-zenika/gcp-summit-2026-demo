@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import warnings
+warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 import re
 import time
 import traceback

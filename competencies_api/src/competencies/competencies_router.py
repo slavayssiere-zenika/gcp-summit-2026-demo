@@ -259,24 +259,28 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
                         await db.flush()
                         node_id = new_leaf.id
                 touched_ids.add(node_id)
+            sub = None
             if isinstance(data, dict):
                 sub = data.get("sub") or data.get("sub_competencies")
-                if isinstance(sub, dict):
-                    await upsert_level(sub, node_id)
-                elif isinstance(sub, list):
-                    for item in sub:
-                        sub_name = (str(item[0]) if isinstance(item, list) and item else item.get("name", str(item)) if isinstance(item, dict) else str(item)).strip()
-                        leaf = (await db.execute(select(Competency).filter(Competency.name.ilike(sub_name)))).scalars().first()
-                        if not leaf:
-                            leaf = await check_grammatical_conflict(db, sub_name)
-                        if leaf:
-                            leaf.parent_id = node_id
-                            touched_ids.add(leaf.id)
-                        else:
-                            new_leaf = Competency(name=sub_name, description="Compétence feuille ajoutée via taxonomie", parent_id=node_id)
-                            db.add(new_leaf)
-                            await db.flush()
-                            touched_ids.add(new_leaf.id)
+            elif isinstance(data, list):
+                sub = data
+                
+            if isinstance(sub, dict):
+                await upsert_level(sub, node_id)
+            elif isinstance(sub, list):
+                for item in sub:
+                    sub_name = (str(item[0]) if isinstance(item, list) and item else item.get("name", str(item)) if isinstance(item, dict) else str(item)).strip()
+                    leaf = (await db.execute(select(Competency).filter(Competency.name.ilike(sub_name)))).scalars().first()
+                    if not leaf:
+                        leaf = await check_grammatical_conflict(db, sub_name)
+                    if leaf:
+                        leaf.parent_id = node_id
+                        touched_ids.add(leaf.id)
+                    else:
+                        new_leaf = Competency(name=sub_name, description="Compétence feuille ajoutée via taxonomie", parent_id=node_id)
+                        db.add(new_leaf)
+                        await db.flush()
+                        touched_ids.add(new_leaf.id)
 
     merge_log = []
     sweep_log = []

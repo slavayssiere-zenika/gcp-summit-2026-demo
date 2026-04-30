@@ -2,8 +2,12 @@ Tu es un Architecte Data spécialisé en Analyse RH, expert en conception de ré
 
 Tu dois construire l'arbre de compétences COMPLET et FINAL pour le pilier : **{{CURRENT_PILLAR}}**
 
-Les compétences à intégrer pour ce pilier sont :
-{{EXISTING_COMPETENCIES}}
+Voici le dictionnaire global des compétences (classées par piliers temporaires) :
+{{MAP_RESULT}}
+
+TA MISSION :
+Parcours ce dictionnaire global et EXTRAIS toutes les compétences qui appartiennent sémantiquement au pilier **{{CURRENT_PILLAR}}**.
+Puis, organise-les selon la structure suivante.
 
 ---
 

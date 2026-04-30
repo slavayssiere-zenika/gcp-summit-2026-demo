@@ -1,5 +1,8 @@
 import os
+import warnings
 from contextlib import asynccontextmanager
+
+warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 
 import httpx
 import uvicorn

@@ -6,10 +6,13 @@ import os
 import re
 import base64
 import json
+import tempfile
 import traceback
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, List
+
+from google.genai import types
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
@@ -239,9 +242,22 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
     latest_status = await tree_task_manager.get_latest_status()
     if not latest_status or latest_status.get("status") != "running" or not latest_status.get("batch_job_id"):
         return {"success": True, "message": "Aucun batch en cours"}
-        
+
     batch_job_id = latest_status.get("batch_job_id")
     batch_step = latest_status.get("batch_step")
+
+    # Guard : états intermédiaires gérés par des tâches asyncio en arrière-plan.
+    # Ces phases (deduplicating, sweeping) ne requièrent PAS de polling Vertex AI :
+    # - batch_job_id pointe encore vers l'ancien job (Map/Reduce) qui est SUCCEEDED
+    # - aucun if/elif ne matcherait batch_step → la branche serait silencieusement ignorée
+    # - pire : un deuxième asyncio.create_task(run_dedup/sweep) serait lancé en parallèle
+    if batch_step in ("deduplicating", "sweeping"):
+        logger.info(f"[batch-check] Phase intermédiaire '{batch_step}' en cours — pas de polling Vertex AI.")
+        return {
+            "success": True,
+            "state": batch_step.upper(),
+            "message": f"Traitement {batch_step} en cours (tâche de fond LLM)...",
+        }
 
     # Lire le service-token persisté à batch/start (JWT encore valide à l'époque).
     # Ne PAS tenter de ré-acquérir via /internal/service-token : le JWT est expiré depuis longtemps.
@@ -329,7 +345,6 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
             # Temps écoulé depuis création
             elapsed_info = ""
             if getattr(batch_job, "create_time", None):
-                from datetime import timezone
                 elapsed_s = (datetime.now(timezone.utc) - batch_job.create_time).total_seconds()
                 elapsed_info = f"{int(elapsed_s // 3600)}h{int((elapsed_s % 3600) // 60)}m"
 
@@ -464,13 +479,14 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
 
                     
                     pillars_list = []
-                    if isinstance(raw_dedup, dict) and "pillars" in raw_dedup:
-                        pillars_list = raw_dedup["pillars"]
-                    elif isinstance(raw_dedup, list):
+                    if isinstance(raw_dedup, list):
                         pillars_list = raw_dedup
-                    elif isinstance(raw_dedup, dict) and len(raw_dedup) > 0:
-                        pillars_list = [{"name": k} for k in raw_dedup.keys()]
-                        
+                    elif isinstance(raw_dedup, dict):
+                        if "pillars" in raw_dedup:
+                            pillars_list = raw_dedup["pillars"]
+                        else:
+                            pillars_list = list(raw_dedup.keys())
+
                     completed_pillars = []
                     for p in pillars_list:
                         if isinstance(p, dict) and "name" in p:
@@ -486,7 +502,6 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
                     # Start Reduce Batch
                     instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", "cv_api.generate_taxonomy_tree_reduce.txt", _svc_auth_header)
                     
-                    import tempfile
                     with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".jsonl") as f:
                         for i, p in enumerate(completed_pillars):
                             p_name = p.get("name", "")
@@ -570,7 +585,6 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
             # Lancement en tâche de fond pour Sweep
             async def run_sweep(service_token: str = sweep_service_token):
                 try:
-                    from google.genai import types
                     instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", "cv_api.generate_taxonomy_tree_sweep.txt", f"Bearer {service_token}")
                     existing_names = await _get_existing_competencies(f"Bearer {service_token}")
                     def get_all_used_names(node, used=None):
@@ -580,12 +594,15 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
                                 used.add(node["name"])
                             if "merge_from" in node and isinstance(node["merge_from"], list):
                                 for m in node["merge_from"]: used.add(m)
-                            for v in node.values():
-                                if isinstance(v, (dict, list)):
-                                    get_all_used_names(v, used)
+                            for k, v in node.items():
+                                if isinstance(k, str) and k not in ("sub", "sub_competencies", "description", "aliases", "name", "merge_from"):
+                                    used.add(k)
+                                get_all_used_names(v, used)
                         elif isinstance(node, list):
                             for item in node:
                                 get_all_used_names(item, used)
+                        elif isinstance(node, str):
+                            used.add(node)
                         return used
         
                     used_names = get_all_used_names(res_tree)

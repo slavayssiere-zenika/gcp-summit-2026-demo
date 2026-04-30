@@ -1,3 +1,82 @@
+## Mise à jour automatique - 2026-04-30 11:12:47
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1177  | 510  |  57% |
+| agent_hr_api     | 1304  | 233  |  82% |
+| agent_missions_api | 1098  | 353  |  68% |
+| agent_ops_api    | 1274  | 198  |  84% |
+| agent_router_api | 2191  | 379  |  83% |
+| analytics_mcp    | 696   | 299  |  57% |
+| competencies_api | 3844  | 1186 |  69% |
+| cv_api           | 5921  | 1955 |  67% |
+| drive_api        | 2460  | 1059 |  57% |
+| items_api        | 1563  | 448  |  71% |
+| missions_api     | 1827  | 509  |  72% |
+| monitoring_mcp   | 824   | 462  |  44% |
+| platform-engineering | 1240  | 970  |  22% |
+| prompts_api      | 1105  | 390  |  65% |
+| users_api        | 1628  | 564  |  65% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_commons/pyproject.toml` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/main.py` (M)
+- `agent_hr_api/requirements.txt` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/main.py` (M)
+- `agent_missions_api/requirements.txt` (M)
+- `agent_missions_api/test_guardrail.py` (M)
+- `agent_missions_api/test_main.py` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/requirements.txt` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/main.py` (M)
+- `agent_router_api/requirements.txt` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/competencies_router.py` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/cv_api.generate_taxonomy_tree_deduplicate.txt` (M)
+- `cv_api/cv_api.generate_taxonomy_tree_reduce.txt` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/taxonomy_router.py` (M)
+- `cv_api/src/services/taxonomy_service.py` (M)
+- `cv_api/test_taxonomy_router.py` (M)
+- `drive_api/spec.md` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/views/PromptsAdmin.vue` (M)
+- `frontend/vitest.log` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/bundled_prompts/agent_hr_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/agent_missions_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/agent_ops_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/agent_router_api/requirements.txt` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+- `debug_test.py` (??)
+- `pytest.ini` (??)
+
+---
+
 ## Mise à jour automatique - 2026-04-30 08:22:18
 
 ### Couverture de Code

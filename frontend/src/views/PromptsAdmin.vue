@@ -111,12 +111,14 @@ const fetchPrompts = async () => {
   try {
     loading.value = true
     const res = await axios.get('/api/prompts/')
-    prompts.value = res.data
-    res.data.forEach((p: Prompt) => {
+    // L'API retourne un objet paginé { prompts: [...], total, skip, limit }
+    const data: Prompt[] = Array.isArray(res.data) ? res.data : (res.data.prompts ?? [])
+    prompts.value = data
+    data.forEach((p: Prompt) => {
       originalPrompts.value[p.key] = p.value
     })
-    if (res.data.length > 0 && !selectedKey.value) {
-      const defaultItem = res.data.find((p: Prompt) => !p.key.startsWith('error_correction:'))
+    if (data.length > 0 && !selectedKey.value) {
+      const defaultItem = data.find((p: Prompt) => !p.key.startsWith('error_correction:'))
       if (defaultItem) selectedKey.value = defaultItem.key
     }
   } catch (e: any) {

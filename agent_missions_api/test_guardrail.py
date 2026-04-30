@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import jwt as pyjwt
 
-SECRET_KEY = os.getenv("SECRET_KEY", "testsecret")
+os.environ["SECRET_KEY"] = os.getenv("SECRET_KEY", "testsecret")
+SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 
 
