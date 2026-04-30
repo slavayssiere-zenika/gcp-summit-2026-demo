@@ -6,10 +6,19 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Type
 🔵 API data (producteur MCP)
 
-## Fichiers clés
-| Fichier | Lignes | État |
+## Architecture modulaire (refactoring 2026-04-30)
+
+`router.py` est désormais un **orchestrateur pur** (~42L) — il ne contient que des `include_router()`. Toute logique métier est dans les sous-routers :
+
+| Fichier | Lignes | Responsabilité |
 |---|---|---|
-| `src/cvs/router.py` | ~2380 | 🚨 GOD ROUTER — remédiation en cours (service layer créé) |
+| `src/cvs/router.py` | 42 | ✅ Orchestrateur pur — inclut les sous-routers |
+| `src/cvs/routers/profile_router.py` | ~651 | Import CV, profils, tags, merge, pubsub |
+| `src/cvs/routers/search_router.py` | ~466 | Recherche sémantique, similar, RAG, multi-criteria |
+| `src/cvs/routers/analytics_router.py` | ~372 | Ranking, reindex, reanalyze, skills coverage |
+| `src/cvs/routers/taxonomy_router.py` | ~785 | recalculate_tree interactif + batch Map/Dedup/Reduce |
+| `src/cvs/routers/bulk_router.py` | ~279 | bulk-reanalyse pipeline (Vertex AI Batch) |
+| `src/cvs/routers/_shared.py` | ~120 | Constantes, utils partagés entre sous-routers |
 | `src/services/cv_import_service.py` | ~650 | ⚠️ Zone alerte |
 | `src/services/bulk_service.py` | ~601 | ⚠️ Zone alerte |
 | `src/services/taxonomy_service.py` | ~570 | ⚠️ Zone alerte |
@@ -19,6 +28,8 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `src/cvs/bulk_task_state.py` | ~80 | ✅ OK |
 | `src/gemini_retry.py` | ~75 | ✅ OK |
 | `src/auth.py` | ~40 | ✅ OK |
+
+## Fichiers clés
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -57,13 +68,22 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 
 ## Architecture Service Layer
 ```
-src/cvs/router.py          → HTTP in/out + délégation (2380L — en remédiation)
+src/cvs/router.py              → Orchestrateur pur (42L) — inclut les 5 sous-routers
+src/cvs/routers/
+  _shared.py                   → constantes, utils partagés (USERS_API_URL, inject...)
+  profile_router.py            → import, profils, pubsub, merge
+  search_router.py             → GET /search, POST /search/multi-criteria, /similar, /rag-snippet
+  analytics_router.py          → /ranking, /reindex-embeddings, /reanalyze, /skills-coverage
+  taxonomy_router.py           → /recalculate_tree/* (interactif + batch Map/Dedup/Reduce/Sweep)
+  bulk_router.py               → /bulk-reanalyse/* (Vertex AI Batch, data-quality, retry-apply)
 src/services/
-  cv_import_service.py     → pipeline d'import/analyse CV
-  bulk_service.py          → orchestration Vertex AI Batch (préfixe GCS: bulk-reanalyse/)
-  taxonomy_service.py      → classification taxonomique
-  config.py                → configuration centralisée (vertex_batch_client, client genai)
+  cv_import_service.py         → pipeline d'import/analyse CV
+  bulk_service.py              → orchestration Vertex AI Batch (préfixe GCS: bulk-reanalyse/)
+  taxonomy_service.py          → classification taxonomique
+  config.py                    → configuration centralisée (vertex_batch_client, client genai)
 ```
+
+**RÈGLE ABSOLUE** : Ne JAMAIS ajouter de logique métier dans `router.py`. Créer un nouveau sous-router dans `src/cvs/routers/`.
 
 ## GCS Bucket partagé (`cv_batch`)
 Le bucket Terraform `google_storage_bucket.cv_batch` est **partagé** entre :
@@ -78,7 +98,7 @@ Les deux services ont `roles/storage.objectAdmin` sur ce bucket via leurs servic
 - `get_cv_profile`, `search_cvs_semantic`, `list_cvs`, `get_cv_bulk_status`
 
 ## Gotchas connus
-- **RÈGLE CRITIQUE** : `router.py` était 5039L (God Router) — refactorisé en service layer. NE PAS réajouter de logique métier dans `router.py`
+- **RÈGLE CRITIQUE** : `router.py` est désormais un orchestrateur pur (42L). Toute nouvelle logique DOIT aller dans un sous-router `src/cvs/routers/`. Ne JAMAIS réajouter de logique métier dans `router.py`
 - **Bucket GCS partagé** : `cv_batch` est partagé avec `competencies_api`. Les préfixes `bulk-reanalyse/` (cv) et `bulk-scoring/` (competencies) sont obligatoires pour l'isolation.
 - **`GET /user/{id}/missions`** : endpoint critique consommé par `competencies_api/scoring_service.py` — toute modification du format de réponse (`missions[]`) brise le scoring IA Vertex Batch de competencies_api.
 - Le prompt `extract_cv_info` est fetché depuis `prompts_api` via `GET /prompts/cv_api.extract_cv_info` — une URL incorrecte retourne une string vide, cassant l'extraction LLM
@@ -88,4 +108,4 @@ Les deux services ont `roles/storage.objectAdmin` sur ce bucket via leurs servic
 - `POST /assign/bulk` dans `competencies_api` DOIT être appelé après chaque analyse batch réussie
 
 ## Dernière modification
-2026-04-29 — Documentation mise à jour — `GET /user/{id}/missions` documenté comme dépendance critique du scoring Vertex AI Batch de `competencies_api`
+2026-04-30 — Refactoring God Router → architecture modulaire 5 sous-routers (`profile`, `search`, `analytics`, `taxonomy`, `bulk`). `router.py` réduit à 42L (orchestrateur pur).

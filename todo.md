@@ -1,13 +1,13 @@
-# 🗺️ Product Roadmap & Todo (Updated 2026-04-23)
+# 🗺️ Product Roadmap & Todo (Updated 2026-04-30)
 
 ## 🏁 Sprint 16 (En cours) : Focus GCP Summit Demo & Finalisation
 *Objectif : Mettre la plateforme sur les rails pour la démonstration finale GCP Summit.*
 
 - [ ] **Analyse de Tension (Skill Gap)** : Développer un outil croisant les compétences requises par les Missions (demande) et les compétences des Consultants (offre) pour identifier nos besoins de recrutement.
 - [ ] **Dashboard Looker** : Créer une visualisation "Skill Gap" connectée à BigQuery.
-- [ ] **Scénario de Démo GCP Summit** : Peaufiner les prompts de l'agent pour illustrer le FinOps et le Staffing Prédictif.
-- [ ] **RGPD / Démo** : Créer une agence fake pour le GCP Summit avec données anonymisées.
 - [ ] **Validation Finale** : Simulation de fin de sprint et revue de code.
+- [x] ~~**Scénario de Démo GCP Summit** : Peaufiner les prompts de l'agent pour illustrer le FinOps et le Staffing Prédictif.~~ ✅ Réalisé (multilinguisme, guardrails staffing, FinOps `is_batch`)
+- [x] ~~**RGPD / Démo** : Créer une agence fake pour le GCP Summit avec données anonymisées.~~ ✅ Réalisé (workflow `/generate-gcp-summit-fake`)
 
 ## ⚙️ Sprint 17 : MCO, SRE & Observabilité Antigravity
 *Objectif : Stabiliser les opérations, l'expérience développeur (DevEx) et les outils de debugging IA.*
@@ -19,6 +19,8 @@
 - [ ] **Infrastructure & Ops GCP** : Tool MCP `inspect_pubsub_dlq` et `get_redis_invalidation_state`.
 - [ ] **Base de Données & Auth GCP** : Tool MCP `execute_read_only_query` et `generate_dev_jwt`.
 - [ ] **Dashboard de performance des outils MCP** : (latency vs success rate).
+- [ ] **[ADR13] Agent Analytics** : Créer `agent_analytics_api` agrégeant les outils BigQuery (`get_finops_report`), compétences (`get_agency_competency_coverage`, `find_skill_gaps`) et CV (`get_skills_coverage`) pour répondre aux requêtes stratégiques (taux de couverture, gaps recrutement, analyse sectorielle). Évite de router ces questions vers HR+Ops simultanément.
+- [ ] **[3.3] Mémoire cross-session Missions** : Implémenter `store_missions_context` / `get_missions_context` dans `agent_commons/session.py` sur le modèle de `store_hr_candidates_pool`. Persistance Redis TTL 1h du contexte de mission en cours (ID, titre, compétences) pour éviter les appels `get_mission` répétés dans une même session de staffing.
 
 ## 🚀 Sprint 18 : Features Métiers, ML & ChatOps
 *Objectif : Rendre le produit plus interactif et intégrer des capacités prédictives/génératives avancées.*
@@ -41,7 +43,6 @@
 - [ ] **Code en python avec un docker pour le service mcp**.
 - [ ] **Déploiement dans le cloud GCP via le projet platform-engineering**.
 - [ ] **Catalogue ADR Frontend** : Implémenter l'interface de consultation des ADR dans la SPA.
-- [ ] **Data Quality CVs** : Identification des CV obsolètes.
 - [ ] **[ADR12-6] Consumer-Driven Contract Tests (A2A)** : Tests de contrat Router/Sous-agents.
 - [ ] **[ADR12-7] Agent Discovery dynamique** : Registre de services Redis/Consul.
 - [ ] **[ADR12-8] Agent Generalist** : Créer `agent_general_api` (ex: `gemini-flash`).

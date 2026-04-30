@@ -59,26 +59,26 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/cache/invalidate-taxonomy` : Force Invalidate Taxonomy Cache
 - **POST** `/import` : Import And Analyze Cv
-- **GET** `/search` : Search Candidates
-- **POST** `/search` : Search Candidates Post
-- **GET** `/user/{user_id}` : Get User Cv
 - **GET** `/users/tags/map` : Get All User Tags
 - **GET** `/users/tag/{tag}` : Get Users By Tag
+- **GET** `/user/{user_id}` : Get User Cv
 - **GET** `/user/{user_id}/missions` : Get User Missions
 - **GET** `/user/{user_id}/details` : Get User Cv Details
-- **GET** `/ranking/experience` : Get Consultants Experience Ranking
-- **POST** `/recalculate_tree/step` : Recalculate Competencies Tree Step
-- **POST** `/recalculate_tree` : Recalculate Competencies Tree
-- **GET** `/recalculate_tree/status` : Get Recalculate Tree Status
-- **POST** `/reindex-embeddings` : Reindex Embeddings
+- **POST** `/internal/users/merge` : Merge Users
+- **GET** `/search` : Search Candidates
+- **POST** `/search` : Search Candidates Post
 - **GET** `/user/{user_id}/similar` : Find Similar Consultants
 - **POST** `/search/multi-criteria` : Search Candidates Multi Criteria
 - **GET** `/user/{user_id}/rag-snippet` : Get Rag Snippet
-- **GET** `/reanalyze/status` : Get Reanalyze Status
 - **POST** `/search/mission-match` : Match Mission To Candidates
+- **GET** `/ranking/experience` : Get Consultants Experience Ranking
+- **POST** `/reindex-embeddings` : Reindex Embeddings
+- **GET** `/reanalyze/status` : Get Reanalyze Status
 - **GET** `/analytics/skills-coverage` : Get Skills Coverage
 - **POST** `/reanalyze` : Reanalyze Cvs
-- **POST** `/internal/users/merge` : Merge Users
+- **POST** `/recalculate_tree/step` : Recalculate Competencies Tree Step
+- **POST** `/recalculate_tree` : Recalculate Competencies Tree
+- **GET** `/recalculate_tree/status` : Get Recalculate Tree Status
 - **POST** `/recalculate_tree/batch/start` : Lance le processus batch asynchrone (Map)
 - **POST** `/recalculate_tree/batch/check` : Vérifie l'état du batch et avance la machine à états
 - **GET** `/recalculate_tree/batch/list` : Liste l'historique des jobs batch de taxonomie
@@ -95,5 +95,5 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/bulk-reanalyse/retry-apply` : Retry Bulk Apply
 - **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

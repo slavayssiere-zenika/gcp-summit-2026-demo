@@ -10,6 +10,7 @@ from metrics import AGENT_TOOL_CALLS_TOTAL
 
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
+user_id_var = contextvars.ContextVar("user_id", default="anonymous")
 
 logger = logging.getLogger(__name__)
 

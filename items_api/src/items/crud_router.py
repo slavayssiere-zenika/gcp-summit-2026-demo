@@ -1,3 +1,4 @@
+"""crud_router.py — Items CRUD (list, get, create, bulk, update, delete)."""
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +18,6 @@ from src.items.schemas import (
 )
 from src.auth import verify_jwt
 
-router = APIRouter(prefix="", tags=["items_crud"], dependencies=[Depends(verify_jwt)])
-
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
 
@@ -32,23 +31,21 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     auth_header = request.headers.get("Authorization")
     if auth_header:
         headers["Authorization"] = auth_header
-        
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+            response = await client.get(f"{USERS_API_URL.rstrip('/')}/users/{user_id}", headers=headers)
             if response.status_code == 404:
                 raise HTTPException(status_code=400, detail=f"User with id {user_id} not found")
             response.raise_for_status()
             return UserInfo(**response.json())
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=503, detail=f"Unable to verify user: {str(e)}")
+            raise HTTPException(status_code=503, detail=f"Unable to verify user: {e}")
 
 async def enrich_item(item: Item, request: Request) -> ItemResponse:
     try:
         user = await get_user_from_api(item.user_id, request)
     except HTTPException:
         user = None
-    
     return ItemResponse(
         id=item.id,
         name=item.name,
@@ -60,38 +57,7 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
         categories=[CategoryResponse.model_validate(c) for c in item.categories]
     )
 
-@router.get("/categories", response_model=List[CategoryResponse])
-async def list_categories(db: AsyncSession = Depends(get_db)):
-    return (await db.execute(select(Category))).scalars().all()
-
-@router.post("/categories", response_model=CategoryResponse, status_code=201)
-async def create_category(category: CategoryCreate, db: AsyncSession = Depends(get_db)):
-    db_category = Category(name=category.name, description=category.description)
-    db.add(db_category)
-    try:
-        await db.commit()
-        await db.refresh(db_category)
-    except Exception:
-        await db.rollback()
-        raise HTTPException(status_code=400, detail="Category name already exists")
-    return db_category
-
-@router.get("/stats", response_model=ItemStatsResponse)
-async def get_item_stats(db: AsyncSession = Depends(get_db)):
-    cache_key = "items:stats"
-    cached = get_cache(cache_key)
-    if cached:
-        return ItemStatsResponse(**cached)
-
-    from sqlalchemy import func
-    total = (await db.execute(select(func.count()).select_from(Item))).scalar()
-    
-    by_user_raw = (await db.execute(select(Item.user_id, func.count(Item.id)).group_by(Item.user_id))).all()
-    by_user = {user_id: count for user_id, count in by_user_raw}
-
-    result = ItemStatsResponse(total=total, by_user=by_user)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
-    return result
+router = APIRouter(prefix="", tags=["items_crud"], dependencies=[Depends(verify_jwt)])
 
 @router.get("/", response_model=PaginationResponse[ItemResponse])
 async def list_items(
@@ -389,70 +355,3 @@ async def delete_item(
     delete_cache_pattern("items:search:*")
     delete_cache_pattern("items:user:*")
     return
-
-@router.get("/search/query", response_model=PaginationResponse[ItemResponse])
-async def search_items(
-    request: Request,
-    query: str = Query(..., min_length=1, description="Search term"),
-    limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
-    db: AsyncSession = Depends(get_db),
-    auth_payload: dict = Depends(verify_jwt)
-):
-    allowed_ids = auth_payload.get("allowed_category_ids", [])
-    allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
-    cache_key = f"items:search:{query}:{limit}:auth_{allowed_ids_str}"
-    
-    cached = get_cache(cache_key)
-    if cached:
-        return PaginationResponse(**cached)
-
-    if not allowed_ids:
-        return PaginationResponse(items=[], total=0, skip=0, limit=limit)
-
-    from sqlalchemy import func, or_
-    base_query = select(Item).options(selectinload(Item.categories)).join(Item.categories).filter(
-        Category.id.in_(allowed_ids),
-        or_(Item.name.ilike(f"%{query}%"), Item.description.ilike(f"%{query}%"))
-    ).distinct()
-    
-    total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar()
-    items = (await db.execute(base_query.limit(limit))).scalars().all()
-    enriched_items = [await enrich_item(item, request) for item in items]
-    
-    result = PaginationResponse(items=[i.model_dump() for i in enriched_items], total=total, skip=0, limit=limit)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
-    return result
-
-@router.get("/user/{user_id}", response_model=PaginationResponse[ItemResponse])
-async def list_user_items(
-    user_id: int,
-    request: Request,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    auth_payload: dict = Depends(verify_jwt)
-):
-    allowed_ids = auth_payload.get("allowed_category_ids", [])
-    allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
-    cache_key = f"items:user:{user_id}:{skip}:{limit}:auth_{allowed_ids_str}"
-    
-    cached = get_cache(cache_key)
-    if cached:
-        return PaginationResponse(**cached)
-
-    if not allowed_ids:
-        return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
-
-    from sqlalchemy.future import select
-    from sqlalchemy import func
-    base_query = select(Item).options(selectinload(Item.categories)).join(Item.categories).filter(
-        Item.user_id == user_id,
-        Category.id.in_(allowed_ids)
-    ).distinct()
-
-    total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar()
-    items = (await db.execute(base_query.offset(skip).limit(limit))).scalars().all()
-    enriched_items = [await enrich_item(item, request) for item in items]
-    result = PaginationResponse(items=[i.model_dump() for i in enriched_items], total=total, skip=skip, limit=limit)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
-    return result

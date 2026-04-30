@@ -5,6 +5,14 @@ description: Assistant expert de mise en production (Analyse versions, changelog
 Ce workflow guide l'agent pour vérifier et préparer de manière experte une release en production.
 Toutes les étapes d'audit expertes définies ci-dessous sont **BLOQUANTES**. En cas d'échec sur l'une des vérifications de sécurité ou de conformité, l'agent doit l'imposer à l'utilisateur et proposer une correction immédiate avant de continuer.
 
+### Étape 0 : Lecture des README.md (OBLIGATOIRE)
+
+Avant toute analyse de versions ou de code, lire le `README.md` des services dont la version a changé dans `prd.yaml`. C'est la source de vérité sur l'architecture et les dépendances du service.
+
+```bash
+for d in *_api *_mcp agent_*; do [ -f "$d/README.md" ] && echo "=== $d ===" && head -20 "$d/README.md"; done
+```
+
 ### Étape 1 : Architecture Multi-Projets et Versions (`prd.yaml`)
 1. Lit le fichier `platform-engineering/envs/prd.yaml`.
 2. 🛑 **Check Multi-Projets** : Vérifie explicitement que `project_id` pointe bien vers le projet de production (ex: `prod-ia-staffing`), mais que `image_registry` pointe toujours vers le projet d'origine (Sandbox) pour réutiliser les artefacts validés en amont.
@@ -16,6 +24,12 @@ Toutes les étapes d'audit expertes définies ci-dessous sont **BLOQUANTES**. En
 ### Étape 2 : Bilan Fonctionnel (`changelog.md`)
 1. Scanne avec `view_file` les entrées les plus récentes du fichier `changelog.md` ou utilise `git status` / `git log`.
 2. **Action** : Fais la synthèse sous la forme d'encarts : `Features Ajoutées`, `Fixes`, `Spécificités Techniques` et surtout met en évidence en ROUGE (`🔴`) les `Breaking Changes` possibles.
+
+### Étape 2bis : Vérification des README.md (règle §13)
+Pour chaque service dont la version a changé dans `prd.yaml` à l'étape 1 :
+1. Lire son `README.md` et vérifier que la section **État actuel** et **Dernière modification** reflète bien les changements partant en production.
+2. Si le README est obsolète (ne mentionne pas la dernière feature ou le dernier fix) → le mettre à jour **maintenant**, avant le déploiement.
+3. Si le README est absent → le créer conformément au template §13 AGENTS.md (**BLOQUANT**).
 
 ### Étape 3 : Audit Zéro-Trust et Contrat Conteneur (BLOQUANT)
 1. **Zéro-Trust** : L'agent DOIT rechercher l'existence de fuites de dépendances FASTAPI. Demande à l'utilisateur de valider que la CI est verte, ou lance un audit rapide (par exemple `python3 scripts/run_tests.sh` via le tool de `run_command` s'il est compatible, ou une recherche statique de router sans `dependencies=[Depends(verify_jwt)]`).

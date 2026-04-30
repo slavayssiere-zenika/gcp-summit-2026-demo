@@ -46,7 +46,7 @@ ENV AGENT_MISSIONS_API_URL=http://agent_missions_api:8080
 ENV PROMPTS_API_URL=http://prompts_api:8000
 ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
-ENV REDIS_URL=redis://redis:6379/1
+ENV REDIS_URL=redis://redis:6379/2
 # SEC-F06 — Semantic Cache LLM
 ENV SEMANTIC_CACHE_ENABLED=true
 ENV SEMANTIC_CACHE_THRESHOLD=0.95

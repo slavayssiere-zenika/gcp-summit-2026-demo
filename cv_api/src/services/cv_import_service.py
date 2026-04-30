@@ -108,6 +108,21 @@ async def _fetch_cv_content(
                 )
             resp.raise_for_status()
 
+            # ── Validation MIME magic-bytes (sécurité P2 — anti-zip-bomb et fichiers maléficieux)
+            _MAX_DOCX_SIZE = 10 * 1024 * 1024  # 10 Mo
+            if len(resp.content) > _MAX_DOCX_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Fichier DOCX trop volumineux ({len(resp.content) // 1024} Ko > 10 Mo max).",
+                )
+            # Les fichiers DOCX sont des archives ZIP — magic bytes = PK\x03\x04
+            _DOCX_MAGIC = b"PK\x03\x04"
+            if not resp.content[:4].startswith(_DOCX_MAGIC):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Fichier refusé : le contenu ne correspond pas à un document DOCX valide (signature ZIP invalide).",
+                )
+
             from io import BytesIO
             import docx as python_docx
             doc = python_docx.Document(BytesIO(resp.content))
@@ -563,8 +578,8 @@ async def process_cv_core(
                                     for alias in aliases_raw.split(","):
                                         if normalize_comp(alias.strip()) == n_norm:
                                             return item["id"]
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[import] Competency alias lookup failed: %s", e)
                         return None
 
                     async def process_competency(comp):
@@ -650,8 +665,8 @@ async def process_cv_core(
                     if doc_id_match:
                         async with httpx.AsyncClient(timeout=10.0) as webhook_client:
                             await webhook_client.patch(f"{drive_api_url.rstrip('/')}/files/{doc_id_match.group(1)}", json={"status": "ERROR", "error_message": " | ".join(list(dict.fromkeys(bg_errors)))}, headers=bg_headers)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("[import] Drive webhook PATCH failed (non-blocking): %s", e)
 
             try:
                 async with httpx.AsyncClient(timeout=5.0) as _score_client:

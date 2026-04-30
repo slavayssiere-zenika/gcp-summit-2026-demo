@@ -62,8 +62,14 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_missions",
-            description="Récupère toutes les missions enregistrées.",
-            inputSchema={"type": "object", "properties": {}}
+            description="Récupère les missions enregistrées avec pagination. Par défaut retourne les 50 premières. Utiliser skip/limit pour parcourir toutes les missions si total > limit.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "skip": {"type": "integer", "default": 0, "description": "Nombre de missions à sauter (pagination)"},
+                    "limit": {"type": "integer", "default": 50, "description": "Nombre max de missions à retourner (max 500)"}
+                }
+            }
         ),
         Tool(
             name="reanalyze_mission",
@@ -202,12 +208,28 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 except Exception as e:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
             elif name == "list_missions":
+                skip = arguments.get("skip", 0)
+                limit = arguments.get("limit", 50)
                 try:
-                    response = await client.get(f"{API_BASE_URL}/missions", headers=headers, timeout=20.0)
+                    response = await client.get(
+                        f"{API_BASE_URL}/missions",
+                        params={"skip": skip, "limit": limit},
+                        headers=headers,
+                        timeout=20.0,
+                    )
                     response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                    data = response.json()
+                    # Extraire le tableau .missions de la réponse paginaée
+                    missions = data.get("missions", data) if isinstance(data, dict) else data
+                    result = {
+                        "missions": missions,
+                        "total": data.get("total", len(missions)) if isinstance(data, dict) else len(missions),
+                        "skip": skip,
+                        "limit": limit,
+                    }
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
             elif name == "reanalyze_mission":
                 mission_id = arguments.get("mission_id")
                 try:

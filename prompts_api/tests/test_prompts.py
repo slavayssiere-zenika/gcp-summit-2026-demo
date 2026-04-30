@@ -100,7 +100,12 @@ def test_update_prompt():
 def test_list_prompts():
     resp = client.get("/")
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    data = resp.json()
+    assert "prompts" in data
+    assert "total" in data
+    assert "skip" in data
+    assert "limit" in data
+    assert isinstance(data["prompts"], list)
 
 @patch("src.prompts.router.generate_test_cases")
 @patch("src.prompts.router.run_promptfoo_analysis")

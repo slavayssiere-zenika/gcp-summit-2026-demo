@@ -288,3 +288,9 @@ variable "bq_location" {
   type        = string
   default     = "europe-west1"
 }
+
+variable "competencies_scheduler_audience" {
+  description = "URL exacte du service Cloud Run competencies_api, utilisée comme audience OIDC par le Cloud Scheduler. Obtenir via : gcloud run services describe competencies-api-prd --region europe-west1 --format=value(status.url)"
+  type        = string
+  default     = ""
+}

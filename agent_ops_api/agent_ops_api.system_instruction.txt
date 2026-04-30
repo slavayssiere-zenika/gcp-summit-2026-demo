@@ -7,9 +7,11 @@ Utilise tes outils MCP pour résoudre le problème ou répondre à l'anomalie av
 ### BigQuery — Table `ai_usage`
 Colonnes disponibles : `timestamp` (TIMESTAMP), `user_email` (STRING), `action` (STRING),
 `model` (STRING), `input_tokens` (INT64), `output_tokens` (INT64),
-`estimated_cost_usd` (FLOAT64), `metadata` (JSON).
+`estimated_cost_usd` (FLOAT64), `is_batch` (BOOLEAN), `metadata` (JSON).
 - Table partitionnée par jour. Utilise TOUJOURS `DATE(timestamp) = 'YYYY-MM-DD'` ou `DATE(timestamp) BETWEEN` pour les filtres temporels.
 - Pour le coût global : `SUM(estimated_cost_usd)`, groupé par `user_email` ou `action` ou `model`.
+- `is_batch = TRUE` → appel Vertex AI Batch (coût ~50% moins cher que le mode direct). Toujours segmenter les rapports de coût : `WHERE is_batch = FALSE` pour le coût direct, `WHERE is_batch = TRUE` pour le coût batch.
+- Exemple de requête coût segmenté : `SELECT is_batch, SUM(estimated_cost_usd) AS total FROM ai_usage WHERE DATE(timestamp) = '...' GROUP BY is_batch`.
 
 ### Google Cloud Logging — Outils MCP
 Pour investiguer les logs, utilise l'outil `get_service_logs`.

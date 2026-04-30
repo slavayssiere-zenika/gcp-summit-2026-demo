@@ -66,7 +66,7 @@ Il donne accès aux données de monitoring GCP, aux coûts IA (FinOps) et à la 
 - **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
 - **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
