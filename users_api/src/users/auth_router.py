@@ -6,28 +6,22 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 import httpx
+from cache import delete_cache, delete_cache_pattern
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-from jose import jwt, JWTError
+from jose import JWTError, jwt
+from metrics import USER_CREATIONS_TOTAL, USER_LOGINS_TOTAL
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from cache import delete_cache, delete_cache_pattern
-from database import get_db
-from metrics import USER_LOGINS_TOTAL, USER_CREATIONS_TOTAL
-from src.auth import (
-    get_password_hash,
-    verify_password,
-    create_access_token,
-    create_refresh_token,
-    SECRET_KEY,
-    ALGORITHM,
-    verify_jwt,
-)
+from src.auth import (ALGORITHM, SECRET_KEY, create_access_token,
+                      create_refresh_token, get_password_hash, verify_jwt,
+                      verify_password)
 from src.users.models import User, UserAuditLog
-from src.users.schemas import LoginRequest, TokenResponse, ServiceAccountLoginRequest
+from src.users.schemas import (LoginRequest, ServiceAccountLoginRequest,
+                               TokenResponse)
 
 _log = logging.getLogger(__name__)
 

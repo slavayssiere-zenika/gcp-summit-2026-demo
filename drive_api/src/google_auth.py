@@ -1,5 +1,6 @@
-import os
 import logging
+import os
+
 import google.auth
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token

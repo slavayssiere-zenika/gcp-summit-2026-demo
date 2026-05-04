@@ -1,11 +1,13 @@
 import asyncio
-import sys
 import os
+import sys
+
+from database import get_db
+from models import DriveFolder, DriveSyncState
+from sqlalchemy.future import select
 
 sys.path.insert(0, os.path.abspath('src'))
-from database import get_db
-from sqlalchemy.future import select
-from models import DriveSyncState, DriveFolder
+
 
 async def main():
     async for db in get_db():

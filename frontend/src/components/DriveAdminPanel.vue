@@ -389,7 +389,7 @@ let pollInterval: any = null
 const fetchFolders = async () => {
   try {
     const res = await axios.get('/api/drive/folders')
-    folders.value = res.data
+    folders.value = res.data.items || res.data
   } catch (error) {
     console.error("Failed to load folders", error)
   }

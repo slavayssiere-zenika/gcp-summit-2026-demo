@@ -1,7 +1,8 @@
-import redis
 import json
-from typing import Optional, Any
 import os
+from typing import Any, Optional
+
+import redis
 from opentelemetry import trace
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/3")

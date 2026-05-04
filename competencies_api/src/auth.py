@@ -1,8 +1,9 @@
-from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
 import os
+from typing import Optional
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:

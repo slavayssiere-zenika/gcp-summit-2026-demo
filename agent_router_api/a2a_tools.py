@@ -17,10 +17,10 @@ import os
 import time
 
 import httpx
-from opentelemetry.propagate import inject
-
-from metrics import A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL, A2A_CALL_RETRIES_TOTAL
 from mcp_client import auth_header_var, user_id_var
+from metrics import (A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL,
+                     A2A_CALL_RETRIES_TOTAL)
+from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 

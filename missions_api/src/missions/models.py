@@ -1,9 +1,11 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
-from pgvector.sqlalchemy import Vector
-from datetime import datetime
-from database import Base
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 import enum
+from datetime import datetime
+
+from database import Base
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
+                        Text)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 
 class MissionStatus(str, enum.Enum):

@@ -6,7 +6,9 @@ Gère les erreurs transitoires :
   - 503 ServiceUnavailable (surcharge serveur)
 """
 import logging
-from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt, retry_if_exception, before_sleep_log
+
+from tenacity import (AsyncRetrying, before_sleep_log, retry_if_exception,
+                      stop_after_attempt, wait_exponential)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,8 @@ def _is_retryable(exc: BaseException) -> bool:
         return True
     # google.api_core (présent via google-genai)
     try:
-        from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
+        from google.api_core.exceptions import (ResourceExhausted,
+                                                ServiceUnavailable)
         if isinstance(exc, (ResourceExhausted, ServiceUnavailable)):
             return True
     except ImportError:

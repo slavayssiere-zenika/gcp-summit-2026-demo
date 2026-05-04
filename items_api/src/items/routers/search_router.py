@@ -1,22 +1,21 @@
 """search_router.py — Items recherche et filtrage par utilisateur."""
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy.exc import IntegrityError
-from typing import List
-import httpx
-from opentelemetry.propagate import inject
 import os
 
+import httpx
+from cache import delete_cache_pattern, get_cache, set_cache
 from database import get_db
-from cache import get_cache, set_cache, delete_cache_pattern
-from src.items.models import Item, Category
-from src.items.schemas import (
-    ItemCreate, ItemUpdate, ItemResponse, UserInfo, PaginationResponse, ItemStatsResponse,
-    CategoryCreate, CategoryResponse, BulkItemCreate
-)
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from opentelemetry.propagate import inject
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from src.auth import verify_jwt
+from src.items.models import Category, Item
+from src.items.schemas import (BulkItemCreate, CategoryCreate,
+                               CategoryResponse, ItemCreate, ItemResponse,
+                               ItemStatsResponse, ItemUpdate,
+                               PaginationResponse, UserInfo)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
@@ -112,8 +111,8 @@ async def list_user_items(
     if not allowed_ids:
         return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
 
-    from sqlalchemy.future import select
     from sqlalchemy import func
+    from sqlalchemy.future import select
     base_query = select(Item).options(selectinload(Item.categories)).join(Item.categories).filter(
         Item.user_id == user_id,
         Category.id.in_(allowed_ids)

@@ -86,7 +86,7 @@ const isLoadingMissions = ref(false)
 const fetchCVProfile = async () => {
   try {
     const response = await axios.get(`/api/cv/user/${userId.value}`)
-    cvProfiles.value = response.data
+    cvProfiles.value = response.data.items || []
     // Extract educations from first CV profile
     if (cvProfiles.value && cvProfiles.value.length > 0) {
       educations.value = cvProfiles.value[0].educations || []
@@ -104,7 +104,7 @@ const fetchMissions = async () => {
   isLoadingMissions.value = true
   try {
     const response = await axios.get(`/api/cv/user/${userId.value}/missions`)
-    missions.value = response.data.missions || []
+    missions.value = response.data.items || []
   } catch (err) {
     console.warn("Missions not found or error fetching them.")
   } finally {

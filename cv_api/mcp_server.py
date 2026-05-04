@@ -1,26 +1,29 @@
-import asyncio
+import contextvars
 import json
 import os
-import contextvars
+
 import httpx
 from mcp.server import Server
-from mcp.types import Tool, TextContent
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from mcp.types import TextContent, Tool
+from opentelemetry import propagate, trace
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-import os
+from opentelemetry.trace.propagation.tracecontext import \
+    TraceContextTextMapPropagator
+
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.propagate import inject
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 propagate.set_global_textmap(TraceContextTextMapPropagator())
@@ -104,7 +107,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Number of top candidates to return. Default is 5."
+                        "description": "Number of top candidates to return. Default is 5.",
+                        "default": 5
+                    },
+                    "skip": {
+                        "type": "integer",
+                        "description": "Number of items to skip. Default is 0.",
+                        "default": 0
                     },
                     "agency": {
                         "type": "string",
@@ -124,6 +133,16 @@ async def list_tools() -> list[Tool]:
                     "user_id": {
                         "type": "integer",
                         "description": "The user ID"
+                    },
+                    "skip": {
+                        "type": "integer",
+                        "description": "Number of items to skip. Default is 0.",
+                        "default": 0
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to return. Default is 50.",
+                        "default": 50
                     }
                 },
                 "required": ["user_id"]
@@ -138,6 +157,16 @@ async def list_tools() -> list[Tool]:
                     "tag": {
                         "type": "string",
                         "description": "The custom tag (e.g., location like 'Niort') used during import to group or locate CVs"
+                    },
+                    "skip": {
+                        "type": "integer",
+                        "description": "Number of items to skip. Default is 0.",
+                        "default": 0
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to return. Default is 50.",
+                        "default": 50
                     }
                 },
                 "required": ["tag"]
@@ -161,6 +190,16 @@ async def list_tools() -> list[Tool]:
                     "user_id": {
                         "type": "integer",
                         "description": "L'ID de l'utilisateur"
+                    },
+                    "skip": {
+                        "type": "integer",
+                        "description": "Number of items to skip. Default is 0.",
+                        "default": 0
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to return. Default is 50.",
+                        "default": 50
                     }
                 },
                 "required": ["user_id"]
@@ -451,7 +490,7 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    with tracer.start_as_current_span(f"mcp.tool.{name}") as span:
+    with tracer.start_as_current_span(f"mcp.tool.{name}"):
         auth_header = mcp_auth_header_var.get()
         headers = {}
         if auth_header:
@@ -502,12 +541,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "search_best_candidates":
                 query = arguments.get("query")
                 limit = arguments.get("limit", 5)
+                skip = arguments.get("skip", 0)
                 agency = arguments.get("agency")
                 if not query:
                     return [TextContent(type="text", text="Error: Missing query argument.")]
                 
                 try:
-                    params = {"query": query, "limit": limit}
+                    params = {"query": query, "limit": limit, "skip": skip}
                     if agency:
                         params["agency"] = agency
                     response = await client.get(f"{API_BASE_URL}/search", params=params, headers=headers, timeout=60.0)
@@ -524,11 +564,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
             elif name == "get_user_cv":
                 user_id = arguments.get("user_id")
+                skip = arguments.get("skip", 0)
+                limit = arguments.get("limit", 50)
                 if not user_id:
                     return [TextContent(type="text", text="Error: Missing user_id argument.")]
                 
                 try:
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}", headers=headers, timeout=10.0)
+                    params = {"skip": skip, "limit": limit}
+                    response = await client.get(f"{API_BASE_URL}/user/{user_id}", params=params, headers=headers, timeout=10.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
@@ -550,11 +593,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
             elif name == "get_users_by_tag":
                 tag = arguments.get("tag")
+                skip = arguments.get("skip", 0)
+                limit = arguments.get("limit", 50)
                 if not tag:
                     return [TextContent(type="text", text="Error: Missing tag argument.")]
                 
                 try:
-                    response = await client.get(f"{API_BASE_URL}/users/tag/{tag}", headers=headers, timeout=10.0)
+                    params = {"skip": skip, "limit": limit}
+                    response = await client.get(f"{API_BASE_URL}/users/tag/{tag}", params=params, headers=headers, timeout=10.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:
@@ -563,11 +609,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=f"Request failed: {str(e)}")]
             elif name == "get_user_missions":
                 user_id = arguments.get("user_id")
+                skip = arguments.get("skip", 0)
+                limit = arguments.get("limit", 50)
                 if not user_id:
                     return [TextContent(type="text", text="Error: Missing user_id argument.")]
                 
                 try:
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/missions", headers=headers, timeout=10.0)
+                    params = {"skip": skip, "limit": limit}
+                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/missions", params=params, headers=headers, timeout=10.0)
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except httpx.HTTPStatusError as e:

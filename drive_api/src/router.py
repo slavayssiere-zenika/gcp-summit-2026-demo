@@ -11,14 +11,11 @@ est dans les sous-routers :
 RÈGLE : ne JAMAIS ajouter de logique métier ici — créer un nouveau sous-router.
 """
 from fastapi import APIRouter, Depends
-
 from src.auth import verify_jwt
-from src.routers.folders_router import router as folders_router
-from src.routers.files_router import (
-    router as files_router,
-    public_router as files_public_router,
-)
 from src.routers.dlq_router import router as dlq_router
+from src.routers.files_router import public_router as files_public_router
+from src.routers.files_router import router as files_router
+from src.routers.folders_router import router as folders_router
 from src.routers.ingestion_router import router as ingestion_router
 
 # ── Router principal (protégé JWT) ────────────────────────────────────────────

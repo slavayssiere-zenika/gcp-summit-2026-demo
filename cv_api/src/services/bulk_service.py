@@ -11,47 +11,31 @@ import os
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Optional
-
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Depends
-from google.cloud import storage as gcs_storage
-from opentelemetry.propagate import inject
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import update as sa_update
-from sqlalchemy.dialects.postgresql import JSON
-from sqlalchemy.sql import func
 
 import database
-from src.cvs.models import CVProfile
+import httpx
+from fastapi import BackgroundTasks, Depends, HTTPException, Request
+from google.cloud import storage as gcs_storage
+from opentelemetry.propagate import inject
+from sqlalchemy import update as sa_update
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.sql import func
 from src.cvs.bulk_task_state import bulk_reanalyse_manager
-
-
+from src.cvs.models import CVProfile
 from src.gemini_retry import embed_content_with_retry
-
-from src.services.config import (
-    COMPETENCIES_API_URL,
-    ITEMS_API_URL,
-    PROMPTS_API_URL,
-    USERS_API_URL,
-    BATCH_GCS_BUCKET,
-    BULK_SCALE_MIN_INSTANCES,
-    BULK_APPLY_SEMAPHORE,
-    BULK_EMBED_SEMAPHORE,
-    _CV_CACHE,
-    client,
-    vertex_batch_client,
-)
+from src.services.config import (_CV_CACHE, BATCH_GCS_BUCKET,
+                                 BULK_APPLY_SEMAPHORE, BULK_EMBED_SEMAPHORE,
+                                 BULK_SCALE_MIN_INSTANCES,
+                                 COMPETENCIES_API_URL, ITEMS_API_URL,
+                                 PROMPTS_API_URL, USERS_API_URL, client,
+                                 vertex_batch_client)
 from src.services.finops import log_finops
-from src.services.utils import (
-    _CV_RESPONSE_SCHEMA,
-    _build_distilled_content,
-    _coerce_to_str,
-    _clean_llm_json,
-    build_taxonomy_context,
-)
 from src.services.search_service import scale_bulk_dependencies
+from src.services.utils import (_CV_RESPONSE_SCHEMA, _build_distilled_content,
+                                _clean_llm_json, _coerce_to_str,
+                                build_taxonomy_context)
 
 logger = logging.getLogger(__name__)
 

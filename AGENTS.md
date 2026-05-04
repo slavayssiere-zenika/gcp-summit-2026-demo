@@ -72,6 +72,32 @@ Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 
    **Auth automatique** : La CLI récupère le mot de passe via `gcloud secrets versions access latest --secret=admin-password-prd --project=prod-ia-staffing` et le JWT est mis en cache 55 min dans `~/.cache/zenika_mcp_cli_token.json`.
 8. **Standard Python Imports** : Les imports Python **DOIVENT** être placés en haut du fichier (conformément à la PEP 8). Évitez les imports locaux dans les fonctions, sauf cas exceptionnel de dépendance circulaire.
+
+8bis. **Conformité PEP8 Obligatoire — Auto-validation avant tout écriture de code Python** :
+   L'agent DOIT valider mentalement la conformité PEP8 **avant** de finaliser tout fichier `.py`. Flake8 est le standard du projet. Les violations récurrentes suivantes sont à éliminer à la source :
+
+   | Code | Règle | ❌ Mauvais | ✅ Correct |
+   |---|---|---|---|
+   | **E302** | 2 lignes vides entre définitions top-level | `def a():\ndef b():` | `def a():\n\n\ndef b():` |
+   | **E303** | Max 2 lignes vides consécutives | 3+ lignes vides | 2 lignes max |
+   | **E501** | Ligne > 120 caractères | Longue chaîne inline | Couper avec `\` ou parentheses |
+   | **W291/W293** | Espaces en fin de ligne | `def f(): ` (espace après `:`) | Pas d'espace final |
+   | **F401** | Import non utilisé | `import os` sans usage | Supprimer l'import |
+   | **E711** | Comparaison à `None` avec `==` | `if x == None:` | `if x is None:` |
+   | **E712** | Comparaison à bool avec `==` | `if flag == True:` | `if flag:` |
+   | **E231** | Espace manquant après `,` `:` `;` | `def f(a,b):` | `def f(a, b):` |
+   | **E261** | 2 espaces avant commentaire inline | `x = 1 # comment` | `x = 1  # comment` |
+   | **W503** | Opérateur en fin de ligne | `a +\n b` | `a\n+ b` |
+
+   **Standard de longueur de ligne du projet** : **120 caractères maximum** (non 79). Utiliser `# noqa: E501` uniquement pour les URLs et les strings générées non maîtrisables.
+
+   **Procédure de vérification obligatoire** : Après avoir écrit ou modifié tout fichier Python, l'agent DOIT proposer (ou exécuter si autorisé) :
+   ```bash
+   # Vérification rapide sur le fichier modifié
+   python3 -m flake8 <fichier.py> --max-line-length=120 --extend-ignore=W503
+   ```
+   Si des erreurs sont détectées, **les corriger dans le même tool call** avant de rendre la main à l'utilisateur. Il est **INTERDIT** de livrer du code Python avec des violations Flake8 connues.
+
 9. **Interpréteur Python** : Utilisez systématiquement la commande `python3` au lieu de `python` pour toute exécution de script ou commande dans le terminal de l'utilisateur.
 10. **Failfast & Zéro Erreur Silencieuse** : Il est **STRICTEMENT INTERDIT** d'ignorer silencieusement des erreurs (ex: `except Exception: pass`, ou un simple logger non accompagné d'une levée d'exception). Les services doivent adopter une approche "failfast". Toute exception doit soit être interrompue formelquement (`raise`) pour que le système centralisé gère l'erreur, soit être retournée explicitement sous la forme `{"success": false, "error": ...}` (ex: Tools MCP). Conserver des erreurs silencieuses corrompt la garantie d'intégrité de la plateforme.
 11. **🚫 INTERDICTION ABSOLUE — Build Docker & Déploiement GCP** : L'agent Antigravity a **formellement et absolument interdit** d'exécuter toute commande de build ou de déploiement vers GCP. Son périmètre d'action se limite **exclusivement à la modification des fichiers source**. Les commandes suivantes sont **STRICTEMENT PROSCRITES** dans toute circonstance, même si le user le demande explicitement :

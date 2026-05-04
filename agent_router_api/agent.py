@@ -15,25 +15,17 @@ import json
 import logging
 import os
 
-import httpx
+import httpx  # noqa: F401,F811 — re-exported so tests can patch "agent.httpx.AsyncClient"
+from a2a_tools import (  # noqa: F401 — backward-compat re-exports for test patching
+    ROUTER_TOOLS, A2aRequestInterceptor, A2ASubAgentError, _call_sub_agent,
+    ask_hr_agent, ask_missions_agent, ask_ops_agent)
 from google.adk.agents import Agent
 from google.genai import types
-from opentelemetry.propagate import inject
-
 from mcp_client import auth_header_var, user_id_var
-from a2a_tools import (  # noqa: F401 — backward-compat re-exports for test patching
-    ROUTER_TOOLS,
-    A2ASubAgentError,
-    A2aRequestInterceptor,
-    _call_sub_agent,
-    ask_hr_agent,
-    ask_ops_agent,
-    ask_missions_agent,
-)
 # Re-export des métriques pour compatibilité des patches de tests (mocker.patch("agent.A2A_CALL_*"))
-from metrics import A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL, A2A_CALL_RETRIES_TOTAL  # noqa: F401
-import httpx  # noqa: F401,F811 — re-exported so tests can patch "agent.httpx.AsyncClient"
-
+from metrics import (A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL,  # noqa: F401
+                     A2A_CALL_RETRIES_TOTAL)
+from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +120,9 @@ async def run_agent_query(
     Sans ce paramètre, auth_header_var peut être None dans ask_missions_agent,
     provocant un 401 lors de l'appel A2A interne.
     """
-    from google.adk.runners import Runner
     import uuid
+
+    from google.adk.runners import Runner
 
     # Fix JWT propagation [STAFF-007] — re-setter auth_header_var dans CE contexte asyncio
     if auth_token:

@@ -3,16 +3,17 @@ import re
 import unicodedata
 from typing import List
 
+from cache import delete_cache_pattern, get_cache, set_cache
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from cache import get_cache, set_cache, delete_cache_pattern
-from database import get_db
 from src.auth import verify_jwt
 from src.users.models import User, UserAuditLog
-from src.users.schemas import UserStatsResponse, DuplicateCandidate, MergeRequest
+from src.users.schemas import (DuplicateCandidate, MergeRequest,
+                               UserStatsResponse)
+
 from .pubsub import publish_user_event
 
 _log = logging.getLogger(__name__)

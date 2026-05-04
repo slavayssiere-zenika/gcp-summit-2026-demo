@@ -12,7 +12,6 @@ from typing import Any
 
 import httpx
 from opentelemetry.propagate import inject
-
 from src.services.config import ANALYTICS_MCP_URL
 
 logger = logging.getLogger(__name__)

@@ -1,22 +1,22 @@
 """categories_router.py — Items categories et statistiques."""
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from sqlalchemy.orm import selectinload
+import os
+from typing import List
+
+import httpx
+from cache import delete_cache_pattern, get_cache, set_cache
+from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from opentelemetry.propagate import inject
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.exc import IntegrityError
-from typing import List
-import httpx
-from opentelemetry.propagate import inject
-import os
-
-from database import get_db
-from cache import get_cache, set_cache, delete_cache_pattern
-from src.items.models import Item, Category
-from src.items.schemas import (
-    ItemCreate, ItemUpdate, ItemResponse, UserInfo, PaginationResponse, ItemStatsResponse,
-    CategoryCreate, CategoryResponse, BulkItemCreate
-)
+from sqlalchemy.orm import selectinload
 from src.auth import verify_jwt
+from src.items.models import Category, Item
+from src.items.schemas import (BulkItemCreate, CategoryCreate,
+                               CategoryResponse, ItemCreate, ItemResponse,
+                               ItemStatsResponse, ItemUpdate,
+                               PaginationResponse, UserInfo)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
@@ -59,9 +59,16 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
 
 router = APIRouter(prefix="", tags=["items_categories"], dependencies=[Depends(verify_jwt)])
 
-@router.get("/categories", response_model=List[CategoryResponse])
-async def list_categories(db: AsyncSession = Depends(get_db)):
-    return (await db.execute(select(Category))).scalars().all()
+@router.get("/categories", response_model=PaginationResponse[CategoryResponse])
+async def list_categories(
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+):
+    from sqlalchemy import func
+    total = (await db.execute(select(func.count()).select_from(Category))).scalar()
+    categories = (await db.execute(select(Category).offset(skip).limit(limit))).scalars().all()
+    return {"items": categories, "total": total, "skip": skip, "limit": limit}
 
 @router.post("/categories", response_model=CategoryResponse, status_code=201)
 async def create_category(category: CategoryCreate, db: AsyncSession = Depends(get_db)):

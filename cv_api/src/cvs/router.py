@@ -11,18 +11,16 @@ est dans les sous-routers :
 
 RÈGLE : ne JAMAIS ajouter de logique métier ici — créer un nouveau sous-router.
 """
-from fastapi import APIRouter, Depends
 import httpx  # Re-exporté pour compat mocks tests (src.cvs.router.httpx)
-
+from fastapi import APIRouter, Depends
 from src.auth import verify_jwt
-from src.cvs.routers.profile_router import (
-    router as profile_router,
-    public_router as profile_public_router,
-)
-from src.cvs.routers.search_router import router as search_router
 from src.cvs.routers.analytics_router import router as analytics_router
-from src.cvs.routers.taxonomy_router import router as taxonomy_router
 from src.cvs.routers.bulk_router import router as bulk_router
+from src.cvs.routers.profile_router import \
+    public_router as profile_public_router
+from src.cvs.routers.profile_router import router as profile_router
+from src.cvs.routers.search_router import router as search_router
+from src.cvs.routers.taxonomy_router import router as taxonomy_router
 
 # ── Router principal (protégé JWT) ───────────────────────────────────────────
 router = APIRouter(prefix="", tags=["CV Analysis"], dependencies=[Depends(verify_jwt)])

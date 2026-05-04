@@ -1,25 +1,30 @@
 import asyncio
+import contextvars
 import json
 import os
-import contextvars
+
 import httpx
 from mcp.server import Server
-from mcp.types import Tool, TextContent
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from mcp.types import TextContent, Tool
+from opentelemetry import propagate, trace
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.trace.propagation.tracecontext import \
+    TraceContextTextMapPropagator
+
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.propagate import inject
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 propagate.set_global_textmap(TraceContextTextMapPropagator())
@@ -189,7 +194,7 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    with tracer.start_as_current_span(f"mcp.tool.{name}") as span:
+    with tracer.start_as_current_span(f"mcp.tool.{name}"):
         auth_header = mcp_auth_header_var.get()
         headers = {}
         if auth_header:
@@ -309,8 +314,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
 async def main():
-    from mcp.server.stdio import stdio_server
     from mcp.server import InitializationOptions
+    from mcp.server.stdio import stdio_server
     options = InitializationOptions(
         server_name="missions-api",
         server_version="1.0.0",

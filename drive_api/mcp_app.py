@@ -1,12 +1,16 @@
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
+import logging
 import os
+import traceback
+
+import httpx
 import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from mcp_server import call_tool, list_tools, mcp_auth_header_var
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
-
-from mcp_server import list_tools, call_tool, mcp_auth_header_var
+from pydantic import BaseModel
 
 app = FastAPI(title="Drive MCP Sidecar (HTTP Standard)")
 
@@ -42,11 +46,8 @@ async def health():
     return {"status": "healthy", "service": "drive-mcp", "transport": "http"}
 
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
+
+
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")

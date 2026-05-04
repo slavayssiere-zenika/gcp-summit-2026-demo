@@ -15,11 +15,10 @@ Inclut les tests pour :
 """
 
 import json
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from mcp_server import list_tools, call_tool
-
+from mcp_server import call_tool, list_tools
 
 # ---------------------------------------------------------------------------
 # Tests check_component_health

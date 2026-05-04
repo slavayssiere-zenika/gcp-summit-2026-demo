@@ -1,21 +1,22 @@
+import asyncio
 import json
 import logging
 import os
+
+import httpx
+from agent import get_session_service, run_agent_query
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from mcp_client import auth_header_var
+from metrics import AGENT_QUERIES_TOTAL
 from opentelemetry.propagate import extract, inject
 from opentelemetry.trace import SpanKind
-import httpx
-
-from agent import run_agent_query, get_session_service
-from mcp_client import auth_header_var
 from semantic_cache import SemanticCache
-from agent_commons.schemas import QueryRequest
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt, ALGORITHM
-from metrics import AGENT_QUERIES_TOTAL
 from telemetry import setup_telemetry
 
-import asyncio
+from agent_commons.jwt_middleware import ALGORITHM
+from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
+from agent_commons.schemas import QueryRequest
 
 tracer = setup_telemetry()
 _semantic_cache = SemanticCache()
@@ -33,7 +34,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
     auth_header_var.set(auth_header)
     
     try:
-        from jose import jwt, JWTError
+        from jose import JWTError, jwt
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         body_session_id = request.session_id if request.session_id else None
         jwt_sub = payload.get("sub")
@@ -103,7 +104,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
 @router.get("/history")
 async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        from jose import jwt, JWTError
+        from jose import JWTError, jwt
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         session_id = payload.get("sub")
         jwt_user_id = payload.get("sub", "user_1")
@@ -316,7 +317,7 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
 @router.delete("/history")
 async def delete_history(request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        from jose import jwt, JWTError
+        from jose import JWTError, jwt
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         jwt_user_id = payload.get("sub", "user_1")
         if not jwt_user_id:

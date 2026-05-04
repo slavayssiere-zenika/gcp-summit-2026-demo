@@ -1,12 +1,14 @@
-import asyncio
-import httpx
-import json
-import getpass
-import sys
-import os
-import ast
 import argparse
-from typing import Dict, Any, List
+import ast
+import asyncio
+import getpass
+import json
+import os
+import sys
+from typing import Any, Dict, List
+
+import httpx
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Zenika Competency Cleanup Tool")

@@ -1,31 +1,34 @@
 import asyncio
-import os
-import logging
 import contextvars
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.server import InitializationOptions
-from mcp.types import Tool, TextContent
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.propagate import inject
+import logging
+import os
+
 import httpx
+from mcp.server import InitializationOptions, Server
+from mcp.server.stdio import stdio_server
+from mcp.types import TextContent, Tool
+from opentelemetry import propagate, trace
+from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.trace.propagation.tracecontext import \
+    TraceContextTextMapPropagator
+# Importer les outils refactorisés
+from src.mcp_tools.tools_handlers import handle_tool_call
+from src.mcp_tools.tools_registry import get_mcp_tools
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
 
-# Importer les outils refactorisés
-from src.mcp_tools.tools_registry import get_mcp_tools
-from src.mcp_tools.tools_handlers import handle_tool_call
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 

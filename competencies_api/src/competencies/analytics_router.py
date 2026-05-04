@@ -14,21 +14,20 @@ from collections import defaultdict
 from typing import List, Optional
 
 import httpx
+from cache import get_cache, set_cache
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from opentelemetry.propagate import inject
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from cache import get_cache, set_cache
-from database import get_db
 from src.auth import verify_jwt
-from src.competencies.models import Competency, CompetencyEvaluation, user_competency
-from src.competencies.schemas import (
-    AgencyCompetencyCoverage, AgencyCompetencyItem,
-    SimilarConsultant, SimilarConsultantsResult,
-    SkillGapItem, SkillGapResult,
-)
+from src.competencies.models import (Competency, CompetencyEvaluation,
+                                     user_competency)
+from src.competencies.schemas import (AgencyCompetencyCoverage,
+                                      AgencyCompetencyItem, SimilarConsultant,
+                                      SimilarConsultantsResult, SkillGapItem,
+                                      SkillGapResult)
 
 logger = logging.getLogger(__name__)
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")

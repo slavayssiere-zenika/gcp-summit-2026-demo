@@ -1,11 +1,11 @@
 from fastapi import APIRouter
 
 # Import the modular routers
-from .admin_router import router as admin_router
 from .admin_router import public_router as admin_public_router
+from .admin_router import router as admin_router
+from .crud_router import router as crud_router
 from .routers.categories_router import router as categories_router
 from .routers.search_router import router as search_router
-from .crud_router import router as crud_router
 
 # The main router that orchestrates everything
 router = APIRouter()

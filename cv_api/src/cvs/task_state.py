@@ -1,7 +1,8 @@
-import os
 import json
-import redis.asyncio as redis
+import os
 from datetime import datetime, timedelta
+
+import redis.asyncio as redis
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/4")
 # Si la tâche n'a pas été mise à jour depuis ce délai, elle est considérée comme morte (crash/timeout)

@@ -3,22 +3,25 @@ import os
 import warnings
 from contextlib import asynccontextmanager
 
-warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
-
 import httpx
 import uvicorn
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from logger import LoggingMiddleware, setup_logging
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
+from opentelemetry.propagate import inject
 from prometheus_fastapi_instrumentator import Instrumentator
-
-from telemetry import setup_telemetry
-from logger import setup_logging, LoggingMiddleware
-from agent_commons.exception_handler import make_global_exception_handler
 from router import router as api_router
+from telemetry import setup_telemetry
 from tools_registry import router as mcp_router
+
+from agent_commons.exception_handler import make_global_exception_handler
+
+warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
+
+
 
 tracer = setup_telemetry()
 setup_logging()
@@ -69,9 +72,10 @@ async def get_spec():
 @app.get("/health/agents")
 async def health_agents():
     """ADR12-5 — Agrège la santé des 3 sous-agents (HR, Ops, Missions)."""
-    from metrics import AGENT_HEALTH_PROBE_TOTAL
-    import time
     import asyncio
+    import time
+
+    from metrics import AGENT_HEALTH_PROBE_TOTAL
 
     _AGENTS = {
         "hr":       os.getenv("AGENT_HR_API_URL",       "http://agent_hr_api:8080"),
@@ -125,7 +129,6 @@ async def health_agents():
         status_code=http_code,
     )
 
-from opentelemetry.propagate import inject
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 

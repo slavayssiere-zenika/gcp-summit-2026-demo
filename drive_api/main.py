@@ -1,35 +1,38 @@
+import logging
 import os
 import traceback
-import asyncio
-import logging
-from fastapi import FastAPI, Response, Request
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+
 import database
 import httpx
-from opentelemetry.propagate import inject
-from prometheus_fastapi_instrumentator import Instrumentator
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from logger import LoggingMiddleware, setup_logging
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-import os
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from src.router import router, public_router
+from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
+from prometheus_fastapi_instrumentator import Instrumentator
 from src.auth import verify_jwt
-from logger import setup_logging, LoggingMiddleware
+from src.router import public_router, router
+
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
 sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
@@ -62,7 +65,6 @@ app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")  # Rule §5 (AGENTS.md): OTel auto-instrumentation
 
-from fastapi.middleware.cors import CORSMiddleware
 
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80,http://localhost:8080").split(",")
 app.add_middleware(
@@ -75,7 +77,6 @@ app.add_middleware(
 
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage (anti prompt-injection)
 
-from fastapi import APIRouter, Depends
 
 # Router protégé par JWT applicatif: endpoints admin + proxy MCP sidecar
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
@@ -145,7 +146,7 @@ app.include_router(protected_router)
 
 
 async def get_service_token_fallback() -> str:
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token

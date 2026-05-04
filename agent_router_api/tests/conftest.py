@@ -5,9 +5,10 @@ Ces tests ne dépendent pas de main.py et tournent hors Docker.
 """
 import os
 import sys
-import pytest
-import fakeredis
 from unittest.mock import patch
+
+import fakeredis
+import pytest
 
 # Ajouter le répertoire parent (agent_router_api/) au path pour accéder aux modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -5,7 +5,12 @@ bulk_router and analytics_router to avoid duplication.
 """
 import logging
 import os
-from datetime import datetime
+# ── Pydantic models shared between sub-routers ─────────────────────────────
+# These were defined inline in the original monolithic router.py.
+# Centralised here so that both taxonomy_router and search_router can import them.
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 # ── Logger ────────────────────────────────────────────────────────────────────
 logger = logging.getLogger("src.cvs")
@@ -99,11 +104,7 @@ CV_RESPONSE_SCHEMA: dict = {
 # Backward-compat alias (used in some older service code)
 _CV_RESPONSE_SCHEMA = CV_RESPONSE_SCHEMA
 
-# ── Pydantic models shared between sub-routers ─────────────────────────────
-# These were defined inline in the original monolithic router.py.
-# Centralised here so that both taxonomy_router and search_router can import them.
-from typing import Optional, List
-from pydantic import BaseModel
+
 
 
 class RecalculateStepRequest(BaseModel):

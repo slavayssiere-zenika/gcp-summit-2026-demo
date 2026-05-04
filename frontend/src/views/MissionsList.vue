@@ -41,8 +41,8 @@ const fetchMissions = async () => {
   try {
     const response = await axios.get('/api/missions/missions')
     const data = response.data
-    // API retourne désormais {missions: [...], total: N, skip: 0, limit: 50}
-    missions.value = Array.isArray(data) ? data : (data.missions ?? [])
+    // API retourne désormais {items: [...], total: N, skip: 0, limit: 50}
+    missions.value = Array.isArray(data) ? data : (data.items ?? data.missions ?? [])
     totalMissions.value = data.total ?? missions.value.length
   } catch (error) {
     console.error('Erreur chargement missions:', error)

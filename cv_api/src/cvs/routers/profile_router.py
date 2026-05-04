@@ -1,62 +1,72 @@
 """profile_router.py — Import CV, profils, tags, merge, pubsub."""
-import asyncio
-import logging
-import math
-import os
-import re
 import base64
 import json
-import traceback
-import urllib.parse
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, List
+import logging
+import os
+import time
+from datetime import datetime
+from typing import List, Optional
 
 import database
-import time
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport import requests as google_requests
-from jose import jwt as jose_jwt
-from jose.exceptions import JWTError
+import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
+from database import get_db
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     Request, Response)
 from fastapi.security import HTTPAuthorizationCredentials
 from google import genai
-from google.cloud import storage as gcs_storage
+from google.auth.transport import requests as google_requests
 from google.cloud import run_v2 as cloudrun_v2
+from google.cloud import storage as gcs_storage
+from google.oauth2 import id_token as google_id_token
+from jose import jwt as jose_jwt
+from jose.exceptions import JWTError
+from metrics import CV_MISSING_EMBEDDINGS, CV_PROCESSING_TOTAL
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
-from sqlalchemy import func, delete as sa_delete, text as sa_text, update as sa_update
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func
+from sqlalchemy import text as sa_text
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from database import get_db
-from src.auth import verify_jwt, security, SECRET_KEY as _AUTH_SECRET_KEY
-from src.cvs.models import CVProfile
-from src.cvs.schemas import (CVImportRequest, CVImportStep, CVResponse,
-    SearchCandidateResponse, SearchCandidateRequest, CVProfileResponse,
-    CVFullProfileResponse, UserMergeRequest, RankedExperienceResponse)
-from src.cvs.task_state import task_state_manager, tree_task_manager
+from src.auth import SECRET_KEY as _AUTH_SECRET_KEY
+from src.auth import security, verify_jwt
 from src.cvs.bulk_task_state import bulk_reanalyse_manager
-from src.cvs.routers._shared import (
-    USERS_API_URL, COMPETENCIES_API_URL, PROMPTS_API_URL, DRIVE_API_URL,
-    ITEMS_API_URL, MISSIONS_API_URL, ANALYTICS_MCP_URL, GCP_PROJECT_ID,
-    VERTEX_LOCATION, BATCH_GCS_BUCKET, CLOUDRUN_WORKSPACE, BULK_SCALE_SERVICES,
-    ADMIN_SERVICE_USERNAME, ADMIN_SERVICE_PASSWORD,
-    BULK_APPLY_SEMAPHORE, BULK_EMBED_SEMAPHORE, BULK_SCALE_MIN_INSTANCES,
-    CV_RESPONSE_SCHEMA as _CV_RESPONSE_SCHEMA,
-    RecalculateStepRequest, MultiCriteriaSearchRequest,
-)
-from metrics import CV_PROCESSING_TOTAL, CV_MISSING_EMBEDDINGS
-from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
-from src.services.cv_import_service import process_cv_core
-from src.services.search_service import execute_search, scale_bulk_dependencies
-import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
+from src.cvs.models import CVProfile
+from src.cvs.routers._shared import (ADMIN_SERVICE_PASSWORD,
+                                     ADMIN_SERVICE_USERNAME, ANALYTICS_MCP_URL,
+                                     BATCH_GCS_BUCKET, BULK_APPLY_SEMAPHORE,
+                                     BULK_EMBED_SEMAPHORE,
+                                     BULK_SCALE_MIN_INSTANCES,
+                                     BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
+                                     COMPETENCIES_API_URL)
+from src.cvs.routers._shared import CV_RESPONSE_SCHEMA as _CV_RESPONSE_SCHEMA
+from src.cvs.routers._shared import (DRIVE_API_URL, GCP_PROJECT_ID,
+                                     ITEMS_API_URL, MISSIONS_API_URL,
+                                     PROMPTS_API_URL, USERS_API_URL,
+                                     VERTEX_LOCATION,
+                                     MultiCriteriaSearchRequest,
+                                     RecalculateStepRequest)
+from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
+                             CVImportStep, CVProfileResponse, CVResponse,
+                             RankedExperienceResponse, SearchCandidateRequest,
+                             SearchCandidateResponse, UserMergeRequest)
+from src.cvs.task_state import task_state_manager, tree_task_manager
+from src.gemini_retry import (embed_content_with_retry,
+                              generate_content_with_retry)
+from src.services.bulk_service import (_acquire_service_token,
+                                       bg_bulk_reanalyse, bg_retry_apply)
 from src.services.config import _CV_CACHE
-from src.services.taxonomy_service import run_taxonomy_step, fetch_prompt, get_existing_competencies
-from src.services.finops import log_finops
+from src.services.cv_import_service import process_cv_core
 from src.services.embedding_service import reindex_embeddings_bg
-from src.services.bulk_service import bg_bulk_reanalyse, _acquire_service_token, bg_retry_apply
-from src.services.utils import _build_distilled_content, _clean_llm_json, _chunk_text
+from src.services.finops import log_finops
+from src.services.search_service import execute_search, scale_bulk_dependencies
+from src.services.taxonomy_service import (fetch_prompt,
+                                           get_existing_competencies,
+                                           run_taxonomy_step)
+from src.services.utils import (_build_distilled_content, _chunk_text,
+                                _clean_llm_json)
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -401,8 +411,10 @@ async def get_all_user_tags(db: AsyncSession = Depends(get_db)):
     return {str(p.user_id): p.source_tag for p in profiles}
 
 
-@router.get("/users/tag/{tag}", response_model=List[CVProfileResponse])
-async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession = Depends(get_db)):
+from src.cvs.schemas import PaginationResponse
+
+@router.get("/users/tag/{tag}", response_model=PaginationResponse[CVProfileResponse])
+async def get_users_by_tag(tag: str, skip: int = Query(0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
     Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
     Sans redondance par utilisateur (déduplication).
@@ -439,26 +451,35 @@ async def get_users_by_tag(tag: str, request: Request = None, db: AsyncSession =
             except Exception as e:
                 logger.warning(f"Failed to fetch user {u_id} for enrichment: {e}")
 
-    return [
-        CVProfileResponse(
-            user_id=p.user_id,
-            source_url=p.source_url,
-            source_tag=p.source_tag,
-            imported_by_id=p.imported_by_id,
-            is_anonymous=user_enrich_map.get(p.user_id, {}).get("is_anonymous", False),
-            full_name=user_enrich_map.get(p.user_id, {}).get("full_name"),
-            email=user_enrich_map.get(p.user_id, {}).get("email"),
-            username=user_enrich_map.get(p.user_id, {}).get("username")
-        ) for p in unique_profiles
-    ]
+    total = len(unique_profiles)
+    paginated_profiles = unique_profiles[skip:skip+limit]
+
+    return {
+        "items": [
+            CVProfileResponse(
+                user_id=p.user_id,
+                source_url=p.source_url,
+                source_tag=p.source_tag,
+                imported_by_id=p.imported_by_id,
+                is_anonymous=user_enrich_map.get(p.user_id, {}).get("is_anonymous", False),
+                full_name=user_enrich_map.get(p.user_id, {}).get("full_name"),
+                email=user_enrich_map.get(p.user_id, {}).get("email"),
+                username=user_enrich_map.get(p.user_id, {}).get("username")
+            ) for p in paginated_profiles
+        ],
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
-@router.get("/user/{user_id}", response_model=List[CVProfileResponse])
-async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = Depends(get_db)):
+@router.get("/user/{user_id}", response_model=PaginationResponse[CVProfileResponse])
+async def get_user_cv(user_id: int, skip: int = Query(0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db)):
     """
     Récupére le ou les liens source (Google Doc) originaux des CVs associés au collaborateur.
     """
-    profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
+    total = (await db.execute(select(func.count(CVProfile.id)).filter(CVProfile.user_id == user_id))).scalar() or 0
+    profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()).offset(skip).limit(limit))).scalars().all()
     if not profiles:
         raise HTTPException(status_code=404, detail="Aucun CV trouvé pour cet utilisateur.")
         
@@ -475,19 +496,24 @@ async def get_user_cv(user_id: int, request: Request = None, db: AsyncSession = 
         except Exception as e:
             logger.warning(f"Failed to fetch user {user_id} for is_anonymous check: {e}")
 
-    return [
-        CVProfileResponse(
-            user_id=p.user_id,
-            source_url=p.source_url,
-            source_tag=p.source_tag,
-            imported_by_id=p.imported_by_id,
-            is_anonymous=is_anon
-        ) for p in profiles
-    ]
+    return {
+        "items": [
+            CVProfileResponse(
+                user_id=p.user_id,
+                source_url=p.source_url,
+                source_tag=p.source_tag,
+                imported_by_id=p.imported_by_id,
+                is_anonymous=is_anon
+            ) for p in profiles
+        ],
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
-@router.get("/user/{user_id}/missions")
-async def get_user_missions(user_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/user/{user_id}/missions", response_model=PaginationResponse[dict])
+async def get_user_missions(user_id: int, skip: int = Query(0, ge=0), limit: int = 50, db: AsyncSession = Depends(get_db)):
     """
     Récupère le détail des missions extraites du CV pour un utilisateur.
     """

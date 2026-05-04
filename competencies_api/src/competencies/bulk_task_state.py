@@ -1,8 +1,8 @@
-import os
 import json
-import redis.asyncio as redis
+import os
 from datetime import datetime, timedelta, timezone
 
+import redis.asyncio as redis
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/3") # Note: using the competencies_api redis db
 

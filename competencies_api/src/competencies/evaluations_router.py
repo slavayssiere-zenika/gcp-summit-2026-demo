@@ -17,23 +17,25 @@ from datetime import datetime
 from typing import List
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
+from cache import delete_cache_pattern
+from database import get_db
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     Request)
 from opentelemetry.propagate import inject
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from cache import delete_cache_pattern
-from database import get_db
 from src.auth import verify_jwt
-from src.competencies.ai_scoring import (
-    _compute_ai_score, _score_all_bg,
-    _get_or_create_evaluation, _serialize_evaluation,
-)
-from src.competencies.models import Competency, CompetencyEvaluation, user_competency
-from src.competencies.schemas import (
-    AiScoreAllResponse, BatchEvaluationRequest, BatchEvaluationResponse,
-    BatchUsersEvaluationRequest, CompetencyEvaluationResponse, UserScoreRequest,
-)
+from src.competencies.ai_scoring import (_compute_ai_score,
+                                         _get_or_create_evaluation,
+                                         _score_all_bg, _serialize_evaluation)
+from src.competencies.models import (Competency, CompetencyEvaluation,
+                                     user_competency)
+from src.competencies.schemas import (AiScoreAllResponse,
+                                      BatchEvaluationRequest,
+                                      BatchEvaluationResponse,
+                                      BatchUsersEvaluationRequest,
+                                      CompetencyEvaluationResponse,
+                                      UserScoreRequest)
 
 logger = logging.getLogger(__name__)
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -107,9 +109,17 @@ async def search_batch_users_evaluations(request: BatchUsersEvaluationRequest, d
     return BatchEvaluationResponse(evaluations=eval_dict)
 
 
-@router.get("/evaluations/user/{user_id}", response_model=List[CompetencyEvaluationResponse])
-async def list_user_evaluations(user_id: int, db: AsyncSession = Depends(get_db)):
+from src.competencies.schemas import PaginationResponse
+@router.get("/evaluations/user/{user_id}", response_model=PaginationResponse)
+async def list_user_evaluations(
+    user_id: int, 
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=1000)
+):
     """Liste toutes les evaluations (feuilles uniquement) pour un utilisateur."""
+    from sqlalchemy import func
+    
     leaf_ids = (await db.execute(
         select(user_competency.c.competency_id)
         .where(user_competency.c.user_id == user_id)
@@ -122,25 +132,33 @@ async def list_user_evaluations(user_id: int, db: AsyncSession = Depends(get_db)
     )).scalars().all()
 
     if not leaf_ids:
-        return []
+        return {"items": [], "total": 0, "skip": skip, "limit": limit}
+
+    total = len(leaf_ids)
+    
+    # Apply pagination on the leaf IDs
+    paginated_leaf_ids = leaf_ids[skip:skip+limit]
+    
+    if not paginated_leaf_ids:
+        return {"items": [], "total": total, "skip": skip, "limit": limit}
 
     rows = (await db.execute(
         select(CompetencyEvaluation, Competency.name.label("comp_name"))
         .join(Competency, CompetencyEvaluation.competency_id == Competency.id)
-        .where(CompetencyEvaluation.user_id == user_id, CompetencyEvaluation.competency_id.in_(leaf_ids))
+        .where(CompetencyEvaluation.user_id == user_id, CompetencyEvaluation.competency_id.in_(paginated_leaf_ids))
     )).all()
 
     evaluated_ids = {ev.competency_id for ev, _ in rows}
     result = [_serialize_evaluation(ev, comp_name) for ev, comp_name in rows]
 
-    missing_ids = [cid for cid in leaf_ids if cid not in evaluated_ids]
+    missing_ids = [cid for cid in paginated_leaf_ids if cid not in evaluated_ids]
     if missing_ids:
         comps = (await db.execute(select(Competency).where(Competency.id.in_(missing_ids)))).scalars().all()
         for c in comps:
             result.append({"id": 0, "user_id": user_id, "competency_id": c.id, "competency_name": c.name,
                            "ai_score": None, "ai_justification": None, "ai_scored_at": None,
                            "user_score": None, "user_comment": None, "user_scored_at": None})
-    return result
+    return {"items": result, "total": total, "skip": skip, "limit": limit}
 
 
 @router.get("/evaluations/user/{user_id}/competency/{competency_id}", response_model=CompetencyEvaluationResponse)

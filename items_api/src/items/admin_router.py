@@ -1,14 +1,11 @@
-import os
-from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import delete as sa_delete
-from pydantic import BaseModel
 
 from cache import delete_cache_pattern
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
+from sqlalchemy import delete as sa_delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from src.auth import verify_jwt
 from src.items.models import Item
 

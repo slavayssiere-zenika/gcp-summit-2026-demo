@@ -10,6 +10,7 @@ Règle AGENTS.md §4 : aucun modèle IA hardcodé — utiliser les variables d'e
 
 import os
 from datetime import datetime, timezone
+
 from google import genai
 
 # ── URLs des microservices internes ──────────────────────────────────────────

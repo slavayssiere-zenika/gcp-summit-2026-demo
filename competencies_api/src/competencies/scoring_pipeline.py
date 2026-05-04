@@ -5,31 +5,30 @@ Contient : _fetch_missions_for_user, _prefetch_all_missions,
            _apply_scoring_results, bg_bulk_scoring_vertex.
 """
 import asyncio
-import json
 import logging
-import os
-import re
 import time
-from datetime import datetime, timezone
-from typing import Optional
-
-import httpx
-from google.cloud import storage as gcs_storage
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from datetime import datetime
 
 import database
+import httpx
+from google.cloud import storage as gcs_storage
 from opentelemetry.propagate import inject
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
-from src.competencies.models import Competency, user_competency, CompetencyEvaluation
-from src.competencies.scheduler_control import set_scoring_scheduler_enabled
 from src.competencies.finops import log_finops
-from src.competencies.scoring_utils import (
-    _build_scoring_prompt, _build_jsonl_lines, _parse_scoring_results_gcs,
-    GCP_PROJECT_ID, VERTEX_LOCATION, BATCH_GCS_BUCKET,
-    GEMINI_MODEL, VERTEX_BATCH_MODEL, CV_API_URL,
-    MISSIONS_FETCH_SEMAPHORE, SCORING_APPLY_SEMAPHORE,
-)
+from src.competencies.models import (Competency, CompetencyEvaluation,
+                                     user_competency)
+from src.competencies.scheduler_control import set_scoring_scheduler_enabled
+from src.competencies.scoring_utils import (BATCH_GCS_BUCKET, CV_API_URL,
+                                            GCP_PROJECT_ID, GEMINI_MODEL,
+                                            MISSIONS_FETCH_SEMAPHORE,
+                                            SCORING_APPLY_SEMAPHORE,
+                                            VERTEX_BATCH_MODEL,
+                                            VERTEX_LOCATION,
+                                            _build_jsonl_lines,
+                                            _build_scoring_prompt,
+                                            _parse_scoring_results_gcs)
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +85,7 @@ async def _apply_scoring_results(
 
 
     async def _process_chunk(chunk: list[tuple[int, int, str, float, str]]):
-        nonlocal success, errors
+        nonlocal success, errors, sample_error
         async with database.SessionLocal() as db:
             for user_id, comp_id, _, score, justification in chunk:
                 try:

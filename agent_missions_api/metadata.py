@@ -1,5 +1,4 @@
 import json
-import re
 
 
 def safe_get(obj, key, default=None):

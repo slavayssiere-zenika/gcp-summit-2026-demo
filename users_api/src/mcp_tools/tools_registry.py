@@ -1,5 +1,6 @@
 from mcp.types import Tool
 
+
 def get_mcp_tools() -> list[Tool]:
     """Retourne la liste complète des outils MCP exposés par l'API Users."""
     return [

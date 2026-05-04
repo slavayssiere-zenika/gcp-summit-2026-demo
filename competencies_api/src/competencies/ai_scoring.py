@@ -15,22 +15,19 @@ import re
 from datetime import datetime
 from typing import Optional
 
-import httpx
-from opentelemetry.propagate import inject
-from sqlalchemy.future import select
-
 import database
+import httpx
 from cache import delete_cache_pattern
 from google import genai
 from google.genai import types
-from src.competencies.models import Competency, user_competency, CompetencyEvaluation
+from opentelemetry.propagate import inject
+from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
-from src.competencies.helpers import (
-    _compute_recency_weight,
-    _parse_duration_months,
-    _duration_multiplier,
-    _get_mission_bonus,
-)
+from src.competencies.helpers import (_compute_recency_weight,
+                                      _duration_multiplier, _get_mission_bonus,
+                                      _parse_duration_months)
+from src.competencies.models import (Competency, CompetencyEvaluation,
+                                     user_competency)
 
 logger = logging.getLogger(__name__)
 

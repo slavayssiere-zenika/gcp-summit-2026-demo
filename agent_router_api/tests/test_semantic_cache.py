@@ -6,10 +6,9 @@ log BigQuery, désactivation via env var, et dégradation gracieuse.
 
 import json
 import os
-import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures

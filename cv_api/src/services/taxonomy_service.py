@@ -12,21 +12,19 @@ Consommé par router.py pour les endpoints :
     GET  /recalculate_tree/status
 """
 
-import asyncio
 import json
 import logging
 import os
 from typing import Any, Optional
 
+import database
 import httpx
 from opentelemetry.propagate import inject
-
-import database
 from src.cvs.models import CVProfile
 from src.cvs.task_state import task_state_manager, tree_task_manager
+from src.gemini_retry import generate_content_with_retry
 from src.services.config import COMPETENCIES_API_URL, PROMPTS_API_URL
 from src.services.finops import log_finops
-from src.gemini_retry import generate_content_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -362,7 +360,7 @@ async def run_taxonomy_step(
                     logger.info("Processus Reduce interrompu par l'utilisateur.")
                     break
 
-                pillar_skills = map_result[pillar_name]
+                map_result[pillar_name]
                 await tree_task_manager.update_progress(
                     new_log=f"Structuration du pilier : {pillar_name}..."
                 )

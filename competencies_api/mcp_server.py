@@ -1,33 +1,36 @@
 import asyncio
-import json
-import threading
-import os
-import logging
 import contextvars
+import json
+import logging
+import os
+
+import httpx
+from mcp.server import InitializationOptions, Server
+from mcp.server.stdio import stdio_server
+from mcp.types import TextContent, Tool
+from opentelemetry import propagate, trace
+from opentelemetry.propagate import extract, inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.trace.propagation.tracecontext import \
+    TraceContextTextMapPropagator
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.server import InitializationOptions
-from mcp.types import Tool, TextContent
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-import os
+
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.propagate import inject, extract
-import httpx
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 propagate.set_global_textmap(TraceContextTextMapPropagator())
 
@@ -188,7 +191,9 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "integer", "description": "The user ID"}
+                    "user_id": {"type": "integer", "description": "The user ID"},
+                    "skip": {"type": "integer", "description": "Number of items to skip", "default": 0},
+                    "limit": {"type": "integer", "description": "Maximum number of items to return", "default": 100}
                 },
                 "required": ["user_id"]
             }
@@ -261,7 +266,9 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "integer", "description": "L'ID du consultant"}
+                    "user_id": {"type": "integer", "description": "L'ID du consultant"},
+                    "skip": {"type": "integer", "description": "Number of items to skip", "default": 0},
+                    "limit": {"type": "integer", "description": "Maximum number of items to return", "default": 500}
                 },
                 "required": ["user_id"]
             },
@@ -594,7 +601,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text="Competency removed from user")]
 
             elif name == "list_user_competencies":
-                response = await client.get(f"{API_BASE_URL}/user/{arguments['user_id']}")
+                skip = arguments.get("skip", 0)
+                limit = arguments.get("limit", 100)
+                response = await client.get(f"{API_BASE_URL}/user/{arguments['user_id']}", params={"skip": skip, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -616,7 +625,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             elif name == "get_user_competency_evaluations":
                 user_id = arguments["user_id"]
-                response = await client.get(f"{API_BASE_URL}/evaluations/user/{user_id}")
+                skip = arguments.get("skip", 0)
+                limit = arguments.get("limit", 500)
+                response = await client.get(f"{API_BASE_URL}/evaluations/user/{user_id}", params={"skip": skip, "limit": limit})
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

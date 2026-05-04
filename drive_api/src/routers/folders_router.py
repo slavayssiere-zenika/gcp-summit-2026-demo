@@ -1,31 +1,25 @@
-"""folders_router.py — Gestion des dossiers Google Drive cibles."""
-"""Shared imports for drive_api sub-routers."""
-import base64 as _b64
-import os as _os
-import json as _json
-import re
-import asyncio
-import traceback
+"""folders_router.py — Gestion des dossiers Google Drive cibles.
+Shared imports for drive_api sub-routers."""
 import logging
-from datetime import datetime, timedelta
+import re
 
 import google.auth
+from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from google.cloud import pubsub_v1
 from google.api_core.exceptions import DeadlineExceeded
+from google.cloud import pubsub_v1
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, func
-
-from src.schemas import (FolderCreate, FolderResponse, StatusResponse,
-    FileStateResponse, PaginatedFilesResponse, FileUpdate, FolderStats, FolderUpdate)
-from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
-from src.google_auth import get_google_access_token, get_drive_service
-from database import get_db
-from src.drive_service import DriveService
-from src.redis_client import get_redis
 from src.auth import verify_jwt
+from src.drive_service import DriveService
+from src.google_auth import get_drive_service, get_google_access_token
+from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
+from src.redis_client import get_redis
+from src.schemas import (FileStateResponse, FileUpdate, FolderCreate,
+                         FolderResponse, FolderStats, FolderUpdate,
+                         PaginatedFilesResponse, PaginatedFoldersResponse, StatusResponse)
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +115,14 @@ async def update_folder(folder_id: int, folder_update: FolderUpdate, db: AsyncSe
     return f_response
 
 
-@router.get("/folders", response_model=list[FolderResponse])
-async def list_folders(db: AsyncSession = Depends(get_db)):
-    folders = (await db.execute(select(DriveFolder))).scalars().all()
+@router.get("/folders", response_model=PaginatedFoldersResponse)
+async def list_folders(
+    db: AsyncSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 50,
+):
+    total = (await db.execute(select(func.count()).select_from(DriveFolder))).scalar()
+    folders = (await db.execute(select(DriveFolder).offset(skip).limit(limit))).scalars().all()
     
     
     stats_query = select(
@@ -156,7 +155,7 @@ async def list_folders(db: AsyncSession = Depends(get_db)):
         f_response.stats.total_files = sum(f_stats.values())
         response_folders.append(f_response)
         
-    return response_folders
+    return {"items": response_folders, "total": total, "skip": skip, "limit": limit}
 
 
 
@@ -177,8 +176,8 @@ async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSessio
     SANS repasser les statuts en PENDING pour les fichiers déjà importés et non modifiés.
     """
     async def run_rebuild():
-        from src.drive_service import DriveService
         from database import SessionLocal
+        from src.drive_service import DriveService
         redis = get_redis()
         try:
             redis.set("drive:sync:rebuild_running", "1", ex=1800) # 30 min max

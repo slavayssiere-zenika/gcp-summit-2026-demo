@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, Float, Text
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
 from database import Base
+from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
+                        Table, Text)
+from sqlalchemy.orm import relationship
 
 # Association table for Many-to-Many relationship between User and Competency
 # Note: user_id is a logical reference to the users_api

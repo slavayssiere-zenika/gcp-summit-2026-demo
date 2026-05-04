@@ -75,18 +75,17 @@ def _gcloud_email() -> str:
 
 def _gcloud_admin_password() -> str:
     """Récupère le mot de passe admin depuis Secret Manager via gcloud."""
-    # Secret name en prd : admin-password-prd (pas admin-password)
-    for secret_name in ["admin-password-prd", "admin-password"]:
-        for project in ["prod-ia-staffing", "slavayssiere-sandbox-462015"]:
-            result = subprocess.run(
-                [GCLOUD_BIN, "secrets", "versions", "access", "latest",
-                 f"--secret={secret_name}", f"--project={project}"],
-                capture_output=True, text=True, timeout=15,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
-
-    print("❌ Impossible de récupérer le mot de passe admin depuis Secret Manager.", file=sys.stderr)
+    # ZENIKA_SECRET_NAME et ZENIKA_GCP_PROJECT peuvent être surchargés par env
+    secret_name = os.getenv("ZENIKA_SECRET_NAME", "admin-password-prd")
+    project = os.getenv("ZENIKA_GCP_PROJECT", "prod-ia-staffing")
+    result = subprocess.run(
+        [GCLOUD_BIN, "secrets", "versions", "access", "latest",
+         f"--secret={secret_name}", f"--project={project}"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    print(f"❌ Secret '{secret_name}' introuvable dans '{project}'.", file=sys.stderr)
     sys.exit(1)
 
 

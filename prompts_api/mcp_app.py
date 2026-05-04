@@ -1,18 +1,23 @@
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
+import logging
 import os
-import uvicorn
+import traceback
 
+import httpx
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 # We import the list_tools and call_tool decorators directly from the Python file
 # that registered them with the MCP Server object, but we invoke them dynamically via Python 
 # instead of relying on the SDK's execution loop.
-from mcp_server import list_tools, call_tool
-
-app = FastAPI(title="Prompts MCP Sidecar (HTTP Standard)")
-
+from mcp_server import call_tool, list_tools
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
+from pydantic import BaseModel
+
+app = FastAPI(title="Prompts MCP Sidecar (HTTP Standard)")
+
+
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
@@ -50,11 +55,8 @@ async def health():
     return {"status": "healthy", "service": "prompts-mcp", "transport": "http"}
 
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
+
+
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")

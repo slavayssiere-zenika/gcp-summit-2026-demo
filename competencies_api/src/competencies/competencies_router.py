@@ -24,7 +24,10 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
+from database import get_db
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     Request, Response)
 from pydantic import BaseModel
 from sqlalchemy import delete, func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -32,20 +35,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import aliased
-
-from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
-from database import get_db
 from src.auth import verify_jwt
-from src.competencies.helpers import (
-    _generate_aliases_for_competency, check_grammatical_conflict,
-    serialize_competency, trigger_taxonomy_cache_invalidation,
-)
-from src.competencies.models import Competency, CompetencyEvaluation, CompetencySuggestion, user_competency
-from src.competencies.schemas import (
-    CompetencyCount, CompetencyCreate, CompetencyResponse, CompetencyStatsResponse,
-    CompetencyUpdate, CompetencySuggestionCreate, CompetencySuggestionResponse,
-    MergeInstruction, PaginationResponse, StatsRequest, SuggestionReviewRequest, TreeImportRequest,
-)
+from src.competencies.helpers import (_generate_aliases_for_competency,
+                                      check_grammatical_conflict,
+                                      serialize_competency,
+                                      trigger_taxonomy_cache_invalidation)
+from src.competencies.models import (Competency, CompetencyEvaluation,
+                                     CompetencySuggestion, user_competency)
+from src.competencies.schemas import (CompetencyCount, CompetencyCreate,
+                                      CompetencyResponse,
+                                      CompetencyStatsResponse,
+                                      CompetencySuggestionCreate,
+                                      CompetencySuggestionResponse,
+                                      CompetencyUpdate, MergeInstruction,
+                                      PaginationResponse, StatsRequest,
+                                      SuggestionReviewRequest,
+                                      TreeImportRequest)
 
 logger = logging.getLogger(__name__)
 CACHE_TTL = 60

@@ -1,6 +1,7 @@
-import os
-import redis
 import logging
+import os
+
+import redis
 
 redis_url = os.getenv("REDIS_URL", "redis://redis:6379/5")
 redis_client = redis.from_url(redis_url, decode_responses=True)

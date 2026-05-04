@@ -15,7 +15,7 @@ const fetchTree = async () => {
         
         // 1. Fetch folders
         const fRes = await axios.get('/api/drive/folders', { headers })
-        folders.value = fRes.data
+        folders.value = fRes.data.items || fRes.data
         
         // 2. Fetch all files using pagination
         let allFiles: any[] = []

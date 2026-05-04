@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional, Generic, TypeVar, List, Literal
+from typing import Generic, List, Literal, Optional, TypeVar
+
+from pydantic import BaseModel, EmailStr
 
 T = TypeVar("T")
 

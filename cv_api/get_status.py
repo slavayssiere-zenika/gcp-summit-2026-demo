@@ -1,5 +1,7 @@
 import asyncio
+
 from src.cvs.routers.taxonomy_router import tree_task_manager
+
 
 async def main():
     state = await tree_task_manager.get_latest_status()

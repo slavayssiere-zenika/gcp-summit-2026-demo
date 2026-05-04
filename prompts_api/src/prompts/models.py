@@ -1,7 +1,7 @@
-import logging
-from sqlalchemy import Column, String, Text, DateTime
-from sqlalchemy.sql import func
 from database import Base
+from sqlalchemy import Column, DateTime, String, Text
+from sqlalchemy.sql import func
+
 
 class Prompt(Base):
     __tablename__ = "prompts"

@@ -1,10 +1,13 @@
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 import pytest
 import pytest_asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi.testclient import TestClient
-import httpx
 from httpx import ASGITransport
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 # CRITICAL: Set environment variables BEFORE imports
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./drive_test.db"
@@ -12,15 +15,13 @@ os.environ["SECRET_KEY"] = "testsecret"
 os.environ["USERS_API_URL"] = "http://users-api:8000"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from main import app
     from database import get_db
+    from main import app
     from src.auth import verify_jwt
 
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 test_engine = create_async_engine("sqlite+aiosqlite:///./drive_test.db", pool_pre_ping=True)
 TestSessionLocal = sessionmaker(
@@ -53,6 +54,7 @@ app.dependency_overrides[verify_jwt] = override_verify_jwt
 @pytest.fixture(autouse=True)
 def mock_google_auth(monkeypatch):
     from unittest.mock import MagicMock
+
     import google.auth
     creds = MagicMock()
     creds.universe_domain = "googleapis.com"

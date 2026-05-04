@@ -22,6 +22,31 @@ git diff --name-only HEAD 2>/dev/null | grep -E "^[a-z_]+_api/|^agent_[a-z_]+/|^
 bash scripts/run_tests.sh
 ```
 
+1b. **Vérification PEP8 / Flake8 sur les fichiers Python modifiés (BLOQUANT)**
+    Détecte les violations PEP8 sur **uniquement les fichiers modifiés depuis le dernier commit**. Si des erreurs sont trouvées, l'agent DOIT les corriger avant de continuer.
+    > 🛑 Ce step est **BLOQUANT** : aucun commit n'est autorisé si des violations Flake8 existent.
+    > Standard du projet : **120 caractères max**, W503 ignoré.
+// turbo
+```bash
+# Lister les fichiers Python modifiés et les passer à flake8
+MODIFIED_PY=$(git diff --name-only HEAD 2>/dev/null | grep '\.py$')
+if [ -n "$MODIFIED_PY" ]; then
+  echo "=== Flake8 PEP8 check sur les fichiers modifiés ==="
+  echo "$MODIFIED_PY" | xargs python3 -m flake8 --max-line-length=120 --extend-ignore=W503,E501
+  FLAKE8_EXIT=$?
+  if [ $FLAKE8_EXIT -ne 0 ]; then
+    echo ""
+    echo "❌ BLOQUANT : Des violations PEP8 ont été détectées."
+    echo "   L'agent DOIT corriger ces erreurs AVANT de continuer le workflow."
+    exit 1
+  else
+    echo "✅ Aucune violation PEP8 — code conforme."
+  fi
+else
+  echo "[+] Aucun fichier Python modifié — étape ignorée."
+fi
+```
+
 2. **Tester la logique d'infrastructure (`manage_env.py`)**
    Valide les fonctions critiques de déploiement : construction des URLs d'images, priorité des versions (YAML > VERSION local), cohérence des fichiers `envs/*.yaml`.
    L'arrêt est requis si les tests échouent.

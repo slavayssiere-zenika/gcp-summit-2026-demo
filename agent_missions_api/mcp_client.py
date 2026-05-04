@@ -1,15 +1,13 @@
-import httpx
+import contextvars
 import logging
-import asyncio
+import os
 import threading
 import time
-import os
-import contextvars
 from typing import Any, List, Optional
 
-from opentelemetry.propagate import inject
+import httpx
 from metrics import AGENT_TOOL_CALLS_TOTAL
-
+from opentelemetry.propagate import inject
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
@@ -85,9 +83,10 @@ class MCPSseClient:
         self.url = url
 
     async def list_tools(self) -> List[Any]:
-        from mcp.client.sse import sse_client
-        from mcp.client.session import ClientSession
         from contextlib import AsyncExitStack
+
+        from mcp.client.session import ClientSession
+        from mcp.client.sse import sse_client
 
         async with AsyncExitStack() as stack:
             streams = await stack.enter_async_context(sse_client(self.url))
@@ -100,9 +99,10 @@ class MCPSseClient:
             ]
 
     async def call_tool(self, tool_name: str, arguments: dict) -> List[Any]:
-        from mcp.client.sse import sse_client
-        from mcp.client.session import ClientSession
         from contextlib import AsyncExitStack
+
+        from mcp.client.session import ClientSession
+        from mcp.client.sse import sse_client
 
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info("[MCP-SSE] Calling tool '%s' on %s", tool_name, self.url)

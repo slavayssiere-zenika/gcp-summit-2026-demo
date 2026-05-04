@@ -1,5 +1,15 @@
+from typing import List, Optional, Generic, TypeVar
+
 from pydantic import BaseModel, HttpUrl
-from typing import List, Optional
+
+T = TypeVar("T")
+
+class PaginationResponse(BaseModel, Generic[T]):
+    items: List[T]
+    total: int
+    skip: int
+    limit: int
+
 
 class CVImportRequest(BaseModel):
     url: str  # A Google Docs export URL or public CV link
@@ -58,6 +68,7 @@ class CVResponse(BaseModel):
 
 class SearchCandidateRequest(BaseModel):
     query: str
+    skip: int = 0
     limit: int = 5
     skills: Optional[List[str]] = None
     agency: Optional[str] = None

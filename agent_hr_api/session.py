@@ -1,7 +1,8 @@
+import logging
 import os
 import pickle
+
 import redis
-import logging
 from google.adk.runners import InMemorySessionService
 
 logger = logging.getLogger(__name__)

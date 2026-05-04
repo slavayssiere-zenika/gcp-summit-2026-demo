@@ -19,40 +19,29 @@ import string
 import time
 import unicodedata
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
+import database
 import httpx
 from fastapi import BackgroundTasks, HTTPException
+from google import genai
+from google.genai import types
+from metrics import CV_PROCESSING_TOTAL
 from opentelemetry.propagate import inject
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete as sa_delete
-
-import database
 from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportStep, CVResponse
 from src.cvs.task_state import task_state_manager
-from metrics import CV_PROCESSING_TOTAL
-
-from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
-from google import genai
-from google.genai import types
-
-from src.services.config import (
-    COMPETENCIES_API_URL,
-    ITEMS_API_URL,
-    PROMPTS_API_URL,
-    USERS_API_URL,
-    _CV_CACHE,
-)
+from src.gemini_retry import (embed_content_with_retry,
+                              generate_content_with_retry)
+from src.services.config import (_CV_CACHE, COMPETENCIES_API_URL,
+                                 ITEMS_API_URL, PROMPTS_API_URL, USERS_API_URL)
 from src.services.finops import log_finops
-from src.services.utils import (
-    _CV_RESPONSE_SCHEMA,
-    _build_distilled_content,
-    _coerce_to_str,
-    build_taxonomy_context,
-)
-from datetime import datetime, timedelta, timezone
+from src.services.utils import (_CV_RESPONSE_SCHEMA, _build_distilled_content,
+                                _coerce_to_str, build_taxonomy_context)
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +113,7 @@ async def _fetch_cv_content(
                 )
 
             from io import BytesIO
+
             import docx as python_docx
             doc = python_docx.Document(BytesIO(resp.content))
 
@@ -544,7 +534,6 @@ async def process_cv_core(
 
         async def _bg_process_competencies_and_missions(bg_user_id, bg_structured_cv, bg_headers, bg_url):
             bg_errors = []
-            new_competency_ids = []
             async with httpx.AsyncClient(timeout=120.0) as bg_http_client:
                 try:
                     existing_comps = set()

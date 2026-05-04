@@ -1,20 +1,20 @@
-import json
-import os
 import asyncio
+import json
 import logging
+import os
 from datetime import datetime, timedelta
 
 import httpx
 from google.cloud import pubsub_v1
+from opentelemetry.propagate import inject
+from sqlalchemy import case, func, literal, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, update, case, literal
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from opentelemetry.propagate import inject
-
+from src.google_auth import (get_drive_service, get_google_access_token,
+                             get_google_oidc_id_token, get_m2m_jwt_token)
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.redis_client import get_redis
-from src.google_auth import get_drive_service, get_m2m_jwt_token, get_google_access_token, get_google_oidc_id_token
 
 logger = logging.getLogger(__name__)
 

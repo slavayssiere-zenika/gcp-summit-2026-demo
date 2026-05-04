@@ -4,12 +4,11 @@ Tests de résilience A2A — Circuit-Breaker [ADR12-2]
 Ces tests s'exécutent dans l'environnement Docker standard (via run_tests.sh).
 Ils mockent uniquement les appels httpx sortants, sans toucher aux dépendances système.
 """
-import pytest
 import json
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
-import httpx
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers

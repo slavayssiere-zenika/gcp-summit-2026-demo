@@ -1,10 +1,13 @@
 import asyncio
-import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from database import init_db_connector, get_db
-from src.competencies.models import Competency
+import sys
+
+from database import get_db, init_db_connector
 from sqlalchemy.future import select
+from src.competencies.models import Competency
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 async def l():
     await init_db_connector()

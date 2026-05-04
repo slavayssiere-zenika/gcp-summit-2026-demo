@@ -1,44 +1,53 @@
-# flake8: noqa: E402  — warnings.filterwarnings must precede third-party imports
-import warnings
-warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
-
 import logging
 import os
+# flake8: noqa: E402  — warnings.filterwarnings must precede third-party imports
+import warnings
 from contextlib import asynccontextmanager
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from agent import OPS_TOOLS, get_session_service, run_agent_query
+from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
+                     Response)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+# Routes /history (GET + DELETE) extraites dans history_routes.py (Golden Rule §14)
+from history_routes import history_router as _history_router
 from jose import jwt
-
+from logger import LoggingMiddleware, setup_logging
+from metrics import AGENT_QUERIES_TOTAL
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.propagate import inject, extract
-from opentelemetry.trace import SpanKind
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
+from opentelemetry.propagate import extract, inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.trace import SpanKind
+from prometheus_fastapi_instrumentator import Instrumentator
+
+from agent_commons.exception_handler import make_global_exception_handler
+from agent_commons.jwt_middleware import ALGORITHM
+from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
+from agent_commons.mcp_client import auth_header_var
+from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
+                                   get_tool_metadata)
+
+warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
+
+
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
 
-from prometheus_fastapi_instrumentator import Instrumentator
-from metrics import AGENT_QUERIES_TOTAL
-from agent import run_agent_query, OPS_TOOLS, get_session_service
-from agent_commons.schemas import A2ARequest, A2AResponse, QueryRequest, get_tool_metadata
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt, ALGORITHM
-from agent_commons.exception_handler import make_global_exception_handler
-from logger import setup_logging, LoggingMiddleware
-from agent_commons.mcp_client import auth_header_var
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -187,8 +196,7 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
             raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
-# Routes /history (GET + DELETE) extraites dans history_routes.py (Golden Rule §14)
-from history_routes import history_router as _history_router
+
 app.include_router(_history_router)
 
 

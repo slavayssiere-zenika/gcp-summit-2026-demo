@@ -1,11 +1,12 @@
 import logging
 import os
-import time
 import threading
+import time
 from collections import defaultdict
-from pythonjsonlogger import jsonlogger
-from opentelemetry import trace
+
 from fastapi import Request
+from opentelemetry import trace
+from pythonjsonlogger import jsonlogger
 from starlette.middleware.base import BaseHTTPMiddleware
 
 SILENT_PATHS: frozenset = frozenset({

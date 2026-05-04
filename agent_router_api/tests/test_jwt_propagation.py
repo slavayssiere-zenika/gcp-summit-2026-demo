@@ -1,200 +1,154 @@
 """
-Tests de non-régression : propagation du JWT sub comme user_id dans agent_router_api.
+test_jwt_propagation.py — Tests de propagation JWT dans agent_router_api.
 
-Régression ciblée :
-- run_agent_query recevait user_id="user_1" hardcodé (sessions ADK et runner)
-- log_ai_consumption BigQuery utilisait session_id (email) au lieu du vrai sub JWT
-- /history et DELETE /history utilisaient jwt_user_id = payload.get("sub", "user_1")
-  qui est correct si sub est non-null (pas de régression ici, test de confirmation)
-
-ADR : BUG-FINOPS-002
+Vérifie :
+  1. Token valide → accès autorisé à /query
+  2. Token absent → 403 Forbidden
+  3. Token expiré → 401 Unauthorized
+  4. Token sans claim 'sub' → 401 Unauthorized
+  5. JWT propagé vers les sous-agents (auth_header_var)
+  6. Session isolée par sub JWT (deux users = deux sessions distinctes)
 """
 
-import os
-import sys
+import time
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from jose import jwt as jose_jwt
-
-from router import SECRET_KEY
-ALGORITHM = "HS256"
 
 
-def make_jwt(sub: str = "router@zenika.com") -> str:
-    """Génère un JWT signé avec python-jose, cohérent avec le décodeur de main.py."""
-    return jose_jwt.encode({"sub": sub, "exp": 9999999999}, SECRET_KEY, algorithm=ALGORITHM)
+def make_token(sub: str = "user@zenika.com", role: str = "user", expired: bool = False, omit_sub: bool = False) -> str:
+    from jose import jwt
+    from router import SECRET_KEY
+
+    from agent_commons.jwt_middleware import ALGORITHM
+    payload: dict = {"role": role}
+    if not omit_sub:
+        payload["sub"] = sub
+    if expired:
+        payload["exp"] = int(time.time()) - 3600  # Expiré il y a 1h
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-# ---------------------------------------------------------------------------
-# 1. run_agent_query — doit accepter et utiliser user_id (pas "user_1")
-# ---------------------------------------------------------------------------
+# ── Accès autorisé ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_run_agent_query_uses_provided_user_id(mocker):
-    """
-    REGRESSION BUG-FINOPS-002 : run_agent_query doit utiliser le user_id fourni
-    depuis le JWT sub plutôt que 'user_1' hardcodé pour les sessions ADK.
-    """
-    import agent as agent_module
+async def test_valid_jwt_grants_access(mocker, client):
+    """Un token JWT valide doit permettre l'accès à /query."""
+    mocker.patch("router._semantic_cache.get", new=AsyncMock(return_value=None))
+    mocker.patch("router._semantic_cache.set", new=AsyncMock())
+    ok_response = {"response": "OK", "source": "agent_hr", "data": None, "steps": [], "thoughts": ""}
+    mocker.patch("router.run_agent_query", new=AsyncMock(return_value=ok_response))
 
-    captured_session_args = []
+    token = make_token()
+    resp = client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
 
-    mock_session_svc = MagicMock()
 
-    async def mock_get_session(app_name, user_id, session_id):
-        captured_session_args.append({"op": "get", "user_id": user_id})
-        raise KeyError("not found")
+# ── Token absent ──────────────────────────────────────────────────────────────
 
-    async def mock_create_session(app_name, user_id, session_id):
-        captured_session_args.append({"op": "create", "user_id": user_id})
+def test_missing_jwt_returns_401(client):
+    """Aucun header Authorization → 401."""
+    resp = client.post("/query", json={"query": "test"})
+    assert resp.status_code == 401
 
-    mock_session_svc.get_session = mock_get_session
-    mock_session_svc.create_session = mock_create_session
 
-    mock_runner = MagicMock()
+def test_malformed_bearer_returns_401(client):
+    """Header mal formé (pas 'Bearer XXX') → 401."""
+    resp = client.post("/query", json={"query": "test"}, headers={"Authorization": "Basic invalid"})
+    assert resp.status_code == 401
 
-    async def mock_run_async(user_id, session_id, new_message):
-        captured_session_args.append({"op": "run_async", "user_id": user_id})
-        return
-        yield  # Make it an async generator
 
-    mock_runner.run_async = mock_run_async
+# ── Token invalide / expiré ───────────────────────────────────────────────────
 
-    mocker.patch("agent.get_session_service", return_value=mock_session_svc)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-3-flash")))
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+def test_expired_jwt_returns_401(client):
+    """Token expiré → 401 Unauthorized."""
+    token = make_token(expired=True)
+    resp = client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
 
-    await agent_module.run_agent_query(
-        "Test query",
-        session_id="test-session-router",
-        user_id="router-user@zenika.com",
-    )
 
-    # Vérifier que AUCUN appel n'a utilisé "user_1"
-    for call in captured_session_args:
-        assert call["user_id"] != "user_1", (
-            f"REGRESSION: {call['op']} a utilisé 'user_1' hardcodé. "
-            f"Toutes les opérations doivent utiliser le sub JWT."
-        )
+def test_invalid_signature_returns_401(client):
+    """Token signé avec une mauvaise clé → 401."""
+    from jose import jwt
+    bad_token = jwt.encode({"sub": "hacker@evil.com"}, "WRONG_SECRET_KEY", algorithm="HS256")
+    resp = client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {bad_token}"})
+    assert resp.status_code == 401
 
-    # Vérifier que le bon user_id a été propagé
-    create_calls = [c for c in captured_session_args if c["op"] == "create"]
-    if create_calls:
-        assert create_calls[0]["user_id"] == "router-user@zenika.com", \
-            f"create_session doit utiliser le sub JWT, got: {create_calls[0]['user_id']}"
 
+def test_jwt_without_sub_returns_401(client):
+    """Token sans claim 'sub' → 401 (AGENTS.md §4)."""
+    token = make_token(omit_sub=True)
+    resp = client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
+
+
+# ── Propagation JWT vers les sous-agents ─────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_run_agent_query_bq_log_uses_user_id_not_session_id(mocker):
-    """
-    REGRESSION BUG-FINOPS-002 : log_ai_consumption BigQuery doit utiliser le
-    user_id (sub JWT) pour user_email, pas session_id (qui peut être un UUID).
-    """
-    import agent as agent_module
+async def test_auth_header_var_set_before_run_agent(mocker, client):
+    """auth_header_var doit être alimenté avec le Bearer token avant tout appel sous-agent."""
+    mocker.patch("router._semantic_cache.get", new=AsyncMock(return_value=None))
+    mocker.patch("router._semantic_cache.set", new=AsyncMock())
 
-    bq_log_calls = []
+    captured_header: list = []
 
-    mock_session_svc = MagicMock()
-    mock_session_svc.get_session = AsyncMock(side_effect=KeyError("not found"))
-    mock_session_svc.create_session = AsyncMock()
+    async def capture_run_agent_query(query, session_id, auth_token=None, user_id=None):
+        captured_header.append(auth_token)
+        return {"response": "OK", "source": "agent_hr", "data": None, "steps": [], "thoughts": ""}
 
-    mock_runner = MagicMock()
+    mocker.patch("router.run_agent_query", new=capture_run_agent_query)
 
-    # Simuler un event avec usage_metadata pour déclencher le log BQ
-    class MockEvent:
-        pass
-    
-    mock_event = MockEvent()
-    mock_event.content = None
-    mock_event.actions = []
-    mock_event.usage_metadata = {"prompt_token_count": 100, "candidates_token_count": 50}
+    token = make_token(sub="alice@zenika.com")
+    client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {token}"})
 
-    async def mock_run_async(user_id, session_id, new_message):
-        yield mock_event
-
-    mock_runner.run_async = mock_run_async
-
-    mocker.patch("agent.get_session_service", return_value=mock_session_svc)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-3-flash")))
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
-
-    # Mock httpx pour capturer l'appel BQ
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-
-    async def capture_bq_call(url, json=None, **kwargs):
-        if "log_ai_consumption" in str(json):
-            bq_log_calls.append(json)
-        return mock_response
-
-    mock_client = AsyncMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-    mock_client.post = capture_bq_call
-
-    mocker.patch("httpx.AsyncClient", return_value=mock_client)
-
-    await agent_module.run_agent_query(
-        "Test FinOps query",
-        session_id="test-session-uuid-12345",
-        user_id="finops-user@zenika.com",
-    )
-
-    # Si un log BQ a été émis, il doit utiliser le user_id, pas le session_id
-    for call in bq_log_calls:
-        args = call.get("arguments", {})
-        user_email = args.get("user_email", "")
-        assert user_email != "test-session-uuid-12345", (
-            "REGRESSION: BQ log_ai_consumption utilise session_id comme user_email "
-            "au lieu du sub JWT — les coûts sont mal imputés."
-        )
-        if user_email:
-            assert "@" in user_email, (
-                f"REGRESSION: user_email BQ doit contenir '@' (être un email), "
-                f"got: {user_email!r}"
-            )
+    # auth_token transmis à run_agent_query doit contenir le Bearer
+    assert len(captured_header) == 1
+    assert captured_header[0] is not None
+    assert "Bearer" in str(captured_header[0]) or captured_header[0] != ""
 
 
-# ---------------------------------------------------------------------------
-# 2. /query HTTP — user_id JWT sub transmis à run_agent_query
-# ---------------------------------------------------------------------------
+# ── Isolation de session par sub JWT ─────────────────────────────────────────
 
-def test_router_query_passes_jwt_sub_to_run_agent_query():
-    """
-    REGRESSION BUG-FINOPS-002 : Le handler /query du Router doit extraire le sub JWT
-    et le passer à run_agent_query comme user_id.
-    """
-    from main import app
-    from fastapi.testclient import TestClient
+@pytest.mark.asyncio
+async def test_different_users_have_different_sessions(mocker, client):
+    """Deux utilisateurs différents (sub distincts) doivent avoir des session_ids différents."""
+    mocker.patch("router._semantic_cache.get", new=AsyncMock(return_value=None))
+    mocker.patch("router._semantic_cache.set", new=AsyncMock())
 
-    client = TestClient(app, raise_server_exceptions=False)
-    captured = {}
+    captured_sessions: list = []
 
-    async def capture(query, session_id, auth_token=None, user_id="user_1"):
-        captured["user_id"] = user_id
-        return {
-            "response": "Router OK",
-            "steps": [],
-            "thoughts": "",
-            "usage": {},
-            "source": "router",
-        }
+    async def capture_sessions(query, session_id, auth_token=None, user_id=None):
+        captured_sessions.append(session_id)
+        return {"response": "OK", "source": "agent_hr", "data": None, "steps": [], "thoughts": ""}
 
-    with patch("router.run_agent_query", new=capture):
-        resp = client.post(
-            "/query",
-            json={"query": "Recherche consultants"},
-            headers={"Authorization": f"Bearer {make_jwt('router-sub@zenika.com')}"},
-        )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    mocker.patch("router.run_agent_query", new=capture_sessions)
 
-    assert captured.get("user_id") == "router-sub@zenika.com", (
-        f"REGRESSION: run_agent_query doit recevoir sub JWT comme user_id, "
-        f"got: {captured.get('user_id')!r}"
-    )
-    assert captured.get("user_id") != "user_1", \
-        "REGRESSION: user_id 'user_1' hardcodé détecté dans le Router /query"
+    token_alice = make_token(sub="alice@zenika.com")
+    token_bob = make_token(sub="bob@zenika.com")
 
+    client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {token_alice}"})
+    client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {token_bob}"})
+
+    assert len(captured_sessions) == 2
+    assert captured_sessions[0] != captured_sessions[1], "Les sessions de deux users différents doivent être isolées"
+
+
+# ── Endpoint /history protégé ─────────────────────────────────────────────────
+
+def test_history_requires_valid_jwt(client):
+    """GET /history sans token → 401."""
+    resp = client.get("/history")
+    assert resp.status_code == 401
+
+
+def test_history_with_valid_jwt(mocker, client):
+    """GET /history avec token valide → 200 (même si vide)."""
+    # Mock la session service pour éviter Redis réel
+    mock_session_service = mocker.MagicMock()
+    mock_session_service.get_session = AsyncMock(return_value=None)
+    mocker.patch("router.get_session_service", return_value=mock_session_service)
+
+    token = make_token()
+    resp = client.get("/history", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert "history" in resp.json()

@@ -1,37 +1,43 @@
-import asyncio
 import logging
 import os
-
-from fastapi import FastAPI, Response, Request
+import traceback
 from contextlib import asynccontextmanager
-import database
-from fastapi.middleware.cors import CORSMiddleware
-from prometheus_fastapi_instrumentator import Instrumentator
 
+import database
+import httpx
+from database import Base, engine
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+# 2. Initialize FastAPI
+from logger import LoggingMiddleware, setup_logging
 from opentelemetry import trace
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-
-from database import engine, Base
+from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.semconv.resource import ResourceAttributes
+from prometheus_fastapi_instrumentator import Instrumentator
 from src.prompts import router
+from src.prompts.router import verify_jwt
+
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 # 1. Setup DB Schema
 # Deferring schema creation to async startup event to speed up uvicorn boot
 
-# 2. Initialize FastAPI
-from logger import setup_logging, LoggingMiddleware
 setup_logging()
 
 
@@ -80,10 +86,6 @@ async def ready(response: Response):
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
-import httpx
-from fastapi import APIRouter, Depends
-from src.prompts.router import verify_jwt
-from opentelemetry.propagate import inject
 
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
@@ -130,21 +132,15 @@ async def proxy_mcp(path: str, request: Request):
 app.include_router(protected_router)  # /spec MUST be registered before /{key} wildcard
 app.include_router(router.router, prefix="", tags=["prompts"])
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
 
 
 
 async def get_service_token_fallback() -> str:
-    import httpx, os, logging
-    logger = logging.getLogger(__name__)
+    import logging
+    import os
+
+    import httpx
+    logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token

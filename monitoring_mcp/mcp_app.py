@@ -1,40 +1,42 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, APIRouter, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 import asyncio
-import httpx
 import json
 import logging
 import os
 import traceback
-import uvicorn
-import redis
 from datetime import datetime
 
+import httpx
+import redis
+import uvicorn
+from auth import verify_jwt
+from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
+                     HTTPException, Request, Response)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from logger import LoggingMiddleware, setup_logging
+from mcp_server import call_tool, list_tools
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel
 
-from mcp_server import list_tools, call_tool
-from auth import verify_jwt
-from logger import setup_logging, LoggingMiddleware
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 # La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py,
 # importé ci-dessus, ce qui empêche une disparition prématurée de la variable d'env lors des imports.

@@ -1,10 +1,13 @@
-import sys
 import asyncio
+import sys
+
+from database import get_db, init_db_connector
+from sqlalchemy.future import select
+from src.cvs.models import CVProfile
+
 sys.path.append("/Users/sebastien.lavayssiere/Code/test-open-code/cv_api")
 
-from database import init_db_connector, get_db
-from src.cvs.models import CVProfile
-from sqlalchemy.future import select
+
 
 async def main():
     await init_db_connector()

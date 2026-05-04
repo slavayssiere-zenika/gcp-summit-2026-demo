@@ -39,7 +39,12 @@ BASE_URL = os.getenv("ZENIKA_BASE_URL", "https://prd.zenika.slavayssiere.fr")
 MCP_URL = f"{BASE_URL}/mcp/analytics"
 GCLOUD_BIN = os.getenv("GCLOUD_BIN", "gcloud")
 ADMIN_EMAIL = os.getenv("ZENIKA_ADMIN_EMAIL", "admin@zenika.com")
-TOKEN_CACHE = Path.home() / ".cache" / "zenika_mcp_cli_token.json"
+# Secret et projet GCP injectés par mcp_config.json selon l'environnement (prd/dev)
+SECRET_NAME = os.getenv("ZENIKA_SECRET_NAME", "admin-password-prd")
+GCP_PROJECT = os.getenv("ZENIKA_GCP_PROJECT", "prod-ia-staffing")
+# Cache JWT isolé par URL pour éviter les collisions prd ↔ dev
+_url_slug = BASE_URL.replace("https://", "").replace("/", "_").replace(".", "_")
+TOKEN_CACHE = Path.home() / ".cache" / f"zenika_mcp_cli_token_{_url_slug}.json"
 TOKEN_TTL = 3300  # 55 minutes
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -47,16 +52,17 @@ TOKEN_TTL = 3300  # 55 minutes
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_secret() -> str:
-    for secret_name in ["admin-password-prd", "admin-password"]:
-        for project in ["prod-ia-staffing", "slavayssiere-sandbox-462015"]:
-            r = subprocess.run(
-                [GCLOUD_BIN, "secrets", "versions", "access", "latest",
-                 f"--secret={secret_name}", f"--project={project}"],
-                capture_output=True, text=True, timeout=15,
-            )
-            if r.returncode == 0 and r.stdout.strip():
-                return r.stdout.strip()
-    raise RuntimeError("Impossible de récupérer le mot de passe admin depuis Secret Manager.")
+    r = subprocess.run(
+        [GCLOUD_BIN, "secrets", "versions", "access", "latest",
+         f"--secret={SECRET_NAME}", f"--project={GCP_PROJECT}"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip()
+    raise RuntimeError(
+        f"Impossible de récupérer le secret '{SECRET_NAME}' "
+        f"dans le projet '{GCP_PROJECT}' via gcloud."
+    )
 
 
 def _load_cached_token() -> str | None:

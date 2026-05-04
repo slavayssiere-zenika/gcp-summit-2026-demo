@@ -1,4 +1,5 @@
 import os
+
 import pytest
 
 # Injecter les variables d'environnement de test AVANT tout import des modules applicatifs

@@ -1,9 +1,11 @@
 import os
-import pytest
-import fakeredis
 from unittest.mock import MagicMock, patch
+
+import fakeredis
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -20,12 +22,11 @@ _fake_redis_client = fakeredis.FakeRedis(server=_fake_redis_server, decode_respo
 
 with patch("redis.from_url", return_value=_fake_redis_client), \
      patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+    from database import engine, get_db
     from main import app
-    from database import get_db, engine
-    from src.competencies.models import Base
     from src.auth import verify_jwt
+    from src.competencies.models import Base
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 if engine: engine.dispose()
 

@@ -1,21 +1,24 @@
-import pytest
-from fastapi.testclient import TestClient
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+import src.prompts.analyzer as analyzer
+import src.prompts.router as router
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./prompts_test.db"
 os.environ["SECRET_KEY"] = "testsecret"
 
-from unittest.mock import MagicMock, patch, AsyncMock
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from main import app
-    from database import get_db, engine
-    from src.prompts.models import Base
     import database
+    from database import engine, get_db
+    from main import app
+    from src.prompts.models import Base
 
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 if engine: engine.dispose()
 sync_engine = create_engine("sqlite:///./prompts_test.db", connect_args={"check_same_thread": False})
@@ -54,7 +57,7 @@ def override_verify_admin():
 def override_verify_jwt():
     return {"role": "admin", "sub": "test_user@zenika.com"}
 
-import src.prompts.router as router
+
 app.dependency_overrides[router.verify_admin] = override_verify_admin
 app.dependency_overrides[router.verify_jwt] = override_verify_jwt
 
@@ -137,10 +140,11 @@ def test_analyze_not_found():
     assert resp.status_code == 404
 
 def test_auth_verify_jwt_pass():
-    from src.prompts.router import verify_jwt
-    from fastapi.security import HTTPAuthorizationCredentials
-    import jose.jwt
     import os
+
+    import jose.jwt
+    from fastapi.security import HTTPAuthorizationCredentials
+    from src.prompts.router import verify_jwt
     
     secret = os.getenv("SECRET_KEY", "zenika_super_secret_key_change_me_in_production")
     token = jose.jwt.encode({"sub": "1", "role": "admin"}, secret, algorithm="HS256")
@@ -150,9 +154,9 @@ def test_auth_verify_jwt_pass():
     assert payload["role"] == "admin"
 
 def test_auth_verify_jwt_fail():
-    from src.prompts.router import verify_jwt
-    from fastapi.security import HTTPAuthorizationCredentials
     from fastapi import HTTPException
+    from fastapi.security import HTTPAuthorizationCredentials
+    from src.prompts.router import verify_jwt
     
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="bad")
     with pytest.raises(HTTPException) as exc:
@@ -160,8 +164,8 @@ def test_auth_verify_jwt_fail():
     assert exc.value.status_code == 401
 
 def test_auth_verify_admin_fail():
-    from src.prompts.router import verify_admin
     from fastapi import HTTPException
+    from src.prompts.router import verify_admin
     with pytest.raises(HTTPException) as exc:
         verify_admin({"role": "user"})
     assert exc.value.status_code == 403
@@ -170,9 +174,8 @@ def test_auth_verify_admin_pass():
     from src.prompts.router import verify_admin
     assert verify_admin({"role": "admin"}) == {"role": "admin"}
 
-import src.prompts.analyzer as analyzer
-import os
-import json
+
+
 
 def test_analyzer_get_genai_client_fail(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)

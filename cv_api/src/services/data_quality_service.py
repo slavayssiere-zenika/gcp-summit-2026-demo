@@ -16,10 +16,10 @@ from datetime import datetime, timezone
 
 import httpx
 from opentelemetry.propagate import inject
-from sqlalchemy import func, text as sa_text
+from sqlalchemy import func
+from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
 from src.cvs.models import CVProfile
 
 logger = logging.getLogger(__name__)

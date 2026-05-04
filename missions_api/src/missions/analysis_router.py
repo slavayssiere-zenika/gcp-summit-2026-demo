@@ -1,20 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, File, UploadFile, Form
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 import uuid
-import traceback
 
 import database
-from .models import Mission, MissionStatus, MissionStatusHistory
-from .schemas import TaskResponse
-from src.auth import verify_jwt
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+                     HTTPException, Request, UploadFile)
 from opentelemetry.propagate import inject
-
-from .cache import force_invalidate_prompt
-from .task_state import task_manager
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.auth import verify_jwt
 
 # Import du service coeur pour l'analyse des missions
 from .analysis_service import process_mission_core
+from .cache import force_invalidate_prompt
+from .models import Mission, MissionStatus, MissionStatusHistory
+from .schemas import TaskResponse
+from .task_state import task_manager
 
 router = APIRouter(prefix="", tags=["Missions_Analysis"], dependencies=[Depends(verify_jwt)])
 

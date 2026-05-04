@@ -8,11 +8,11 @@ Tests manquants pour analytics_mcp :
 - Authentification JWT sur /mcp/call
 """
 
-import pytest
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
-from mcp_server import list_tools, call_tool
+from unittest.mock import MagicMock, patch
 
+import pytest
+from mcp_server import call_tool, list_tools
 
 # ---------------------------------------------------------------------------
 # Tests log_ai_consumption

@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, delete
-from src.auth import verify_jwt
 import database
-from .models import Mission, MissionStatus, MissionStatusHistory, ALLOWED_TRANSITIONS, STATUS_UPDATE_ROLES
-from .schemas import MissionAnalyzeResponse, MissionStatusUpdate, StatusHistoryEntry
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.auth import verify_jwt
+
+from .models import (ALLOWED_TRANSITIONS, STATUS_UPDATE_ROLES, Mission,
+                     MissionStatus, MissionStatusHistory)
+from .schemas import (MissionAnalyzeResponse, MissionStatusUpdate,
+                      StatusHistoryEntry)
 
 router = APIRouter(prefix="", tags=["Missions"], dependencies=[Depends(verify_jwt)])
 

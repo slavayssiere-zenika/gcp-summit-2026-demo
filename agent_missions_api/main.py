@@ -1,20 +1,19 @@
-import asyncio
 import json
 import logging
 import os
-import warnings
-warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 import re
 import time
-import traceback
+import warnings
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import httpx
 import uvicorn
+from agent import MISSIONS_TOOLS, run_agent_query
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from logger import LoggingMiddleware, setup_logging
+from metrics import QUERY_COUNT, QUERY_LATENCY
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.propagate import extract, inject
@@ -25,14 +24,17 @@ from opentelemetry.trace import SpanKind
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
-from agent import MISSIONS_TOOLS, run_agent_query
-from logger import setup_logging, LoggingMiddleware
-from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.schemas import A2ARequest, A2AResponse, QueryRequest, get_tool_metadata
-from agent_commons.jwt_middleware import verify_jwt_request as verify_jwt, ALGORITHM
 from agent_commons.exception_handler import make_global_exception_handler
-from metrics import QUERY_COUNT, QUERY_LATENCY
+from agent_commons.jwt_middleware import ALGORITHM
+from agent_commons.jwt_middleware import verify_jwt_request as verify_jwt
 from agent_commons.mcp_client import auth_header_var
+from agent_commons.metadata import extract_metadata_from_session
+from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
+                                   get_tool_metadata)
+
+warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +58,14 @@ def setup_tracing(app: FastAPI) -> TracerProvider:
     provider = TracerProvider(resource=resource, sampler=sampler)
 
     if TRACE_EXPORTER == "http":
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+            OTLPSpanExporter
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
         logger.info("[MISSIONS] OTLP HTTP exporter (Tempo) configured.")
     elif TRACE_EXPORTER == "gcp":
         try:
-            from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+            from opentelemetry.exporter.cloud_trace import \
+                CloudTraceSpanExporter
             provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
             logger.info("[MISSIONS] GCP Cloud Trace exporter configured.")
         except Exception as e:
@@ -98,8 +102,9 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("[MISSIONS] 🚀 Starting agent_missions_api %s", APP_VERSION)
     try:
-        from agent_commons.mcp_proxy import get_cached_tools
         from agent import _MISSIONS_CLIENTS_MAP, _MISSIONS_TOOLS_CACHE
+
+        from agent_commons.mcp_proxy import get_cached_tools
         tools = await get_cached_tools(_MISSIONS_CLIENTS_MAP, "[MISSIONS]", ttl=300, _cache=_MISSIONS_TOOLS_CACHE)
         logger.info("[MISSIONS] ✅ Pre-warmed %d MCP tools at startup.", len(tools))
     except Exception as e:

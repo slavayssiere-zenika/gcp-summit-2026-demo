@@ -8,18 +8,18 @@ import logging
 from datetime import datetime
 from typing import List
 
+from cache import delete_cache_pattern, get_cache, set_cache
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import delete, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from cache import delete_cache_pattern, get_cache, set_cache
-from database import get_db
 from src.auth import verify_jwt
 from src.competencies.helpers import get_user_from_api, serialize_competency
-from src.competencies.models import Competency, CompetencyEvaluation, user_competency
+from src.competencies.models import (Competency, CompetencyEvaluation,
+                                     user_competency)
 from src.competencies.schemas import CompetencyResponse
 
 logger = logging.getLogger(__name__)
@@ -97,20 +97,38 @@ async def remove_competency_from_user(user_id: int, competency_id: int, db: Asyn
     return Response(status_code=204)
 
 
-@router.get("/user/{user_id}", response_model=List[CompetencyResponse])
-async def list_user_competencies(user_id: int, db: AsyncSession = Depends(get_db)):
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
+from src.competencies.schemas import CompetencyResponse, PaginationResponse
+
+@router.get("/user/{user_id}", response_model=PaginationResponse)
+async def list_user_competencies(
+    user_id: int, 
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+):
     """Retourne toutes les compétences assignées à un utilisateur."""
-    cache_key = f"competencies:user:{user_id}:list"
+    cache_key = f"competencies:user:{user_id}:list:skip:{skip}:limit:{limit}"
     cached = get_cache(cache_key)
     if cached:
-        return [CompetencyResponse(**c) for c in cached]
+        return PaginationResponse(**cached)
+    
+    from sqlalchemy import func
+    total = (await db.execute(
+        select(func.count()).select_from(user_competency)
+        .filter(user_competency.c.user_id == user_id)
+    )).scalar()
+    
     results = (await db.execute(
         select(Competency).join(user_competency, Competency.id == user_competency.c.competency_id)
         .filter(user_competency.c.user_id == user_id)
+        .offset(skip).limit(limit)
     )).scalars().all()
     items = [CompetencyResponse(**serialize_competency(c)) for c in results]
-    set_cache(cache_key, [i.model_dump() for i in items], CACHE_TTL)
-    return items
+    
+    resp = PaginationResponse(items=[i.model_dump() for i in items], total=total, skip=skip, limit=limit)
+    set_cache(cache_key, resp.model_dump(), CACHE_TTL)
+    return resp
 
 
 @router.post("/internal/users/merge")

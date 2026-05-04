@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +23,9 @@ def extract_metadata_from_session(session):
     events = safe_get(session, "events", [])
     
     for event in events:
-        author = str(safe_get(event, "author", "")).lower()
+        str(safe_get(event, "author", "")).lower()
         content = safe_get(event, "content")
-        role = str(safe_get(content, "role", "")).lower()
+        str(safe_get(content, "role", "")).lower()
         
         # Parts extraction
         parts = safe_get(content, "parts", [])

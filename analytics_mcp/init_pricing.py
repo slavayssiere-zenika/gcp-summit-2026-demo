@@ -1,6 +1,7 @@
-import os
-from google.cloud import bigquery
 import logging
+import os
+
+from google.cloud import bigquery
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

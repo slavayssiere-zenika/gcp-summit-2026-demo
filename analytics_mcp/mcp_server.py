@@ -1,14 +1,14 @@
 import asyncio
-import json
-import os
-import logging
 import contextvars
+import json
+import logging
+import os
 from datetime import datetime
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+
 from google.cloud import bigquery
 from google.protobuf.timestamp_pb2 import Timestamp
-import time
+from mcp.server import Server
+from mcp.types import TextContent, Tool
 
 # Standard context var for MCP auth
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
@@ -422,7 +422,7 @@ async def get_aiops_dashboard_data_internal():
         return [dict(row) for row in client.query(q).result()]
         
     import asyncio
-    
+
     # Exécution parallèle
     monthly_res, daily_res, top_count_res, top_cost_res, top_actions_res, top_models_res, pricing_res = await asyncio.gather(
         asyncio.to_thread(fetch_data, query_monthly),
@@ -453,8 +453,8 @@ async def get_aiops_dashboard_data_internal():
 
 async def main():
     """Main entry point for the MCP server when run directly over stdio."""
-    from mcp.server.stdio import stdio_server
     from mcp.server import InitializationOptions
+    from mcp.server.stdio import stdio_server
     options = InitializationOptions(
         server_name="analytics-mcp",
         server_version="1.0.0",

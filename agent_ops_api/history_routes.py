@@ -8,17 +8,16 @@ Usage dans main.py :
     from history_routes import history_router
     app.include_router(history_router)
 """
-import json
 import logging
-import os
 
+from agent import get_session_service
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt
 
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt, ALGORITHM
+from agent_commons.jwt_middleware import ALGORITHM
+from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
 from agent_commons.metadata import extract_metadata_from_session
-from agent import get_session_service
 
 logger = logging.getLogger(__name__)
 

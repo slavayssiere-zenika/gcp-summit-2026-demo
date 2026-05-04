@@ -1,32 +1,34 @@
 import asyncio
-import json
-import os
-import logging
 import contextvars
+import json
+import logging
+import os
+
+import httpx
+from mcp.server import InitializationOptions, NotificationOptions, Server
+from mcp.server.stdio import stdio_server
+from mcp.types import TextContent, Tool
+from opentelemetry import propagate, trace
+from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.trace.propagation.tracecontext import \
+    TraceContextTextMapPropagator
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.server import InitializationOptions, NotificationOptions
-from mcp.types import Tool, TextContent
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.propagate import inject
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-import httpx
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
 
 propagate.set_global_textmap(TraceContextTextMapPropagator())
 

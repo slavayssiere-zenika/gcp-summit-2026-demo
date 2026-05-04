@@ -1,35 +1,42 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, APIRouter, Response
-from pydantic import BaseModel
 import asyncio
-import os
 import json
-import uvicorn
+import logging
+import os
+import traceback
+
+import httpx
 import redis
+import uvicorn
+from auth import verify_jwt
+from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
+                     HTTPException, Request, Response)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from logger import LoggingMiddleware, setup_logging
+from mcp_server import call_tool, get_aiops_dashboard_data_internal, list_tools
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel
 
-from mcp_server import list_tools, call_tool, get_aiops_dashboard_data_internal
-from auth import verify_jwt
-from logger import setup_logging, LoggingMiddleware
-import logging
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +71,7 @@ RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 Instrumentator().instrument(app).expose(app)
 
-from fastapi.middleware.cors import CORSMiddleware
+
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80,http://localhost:8080,https://dev.zenika.slavayssiere.fr,https://uat.zenika.slavayssiere.fr,https://zenika.slavayssiere.fr").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -190,8 +197,9 @@ async def detect_finops_anomalies(http_request: Request, token_payload: dict = D
             status_code=403,
             detail="Accès refusé : le Kill-Switch FinOps est réservé aux administrateurs."
         )
-    from mcp_server import client as bq_client, FINOPS_TABLE_REF
     import httpx
+    from mcp_server import FINOPS_TABLE_REF
+    from mcp_server import client as bq_client
     
     threshold = int(os.getenv("FINOPS_ANOMALY_THRESHOLD", 500000))
     users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000/")
@@ -252,12 +260,13 @@ async def health():
 @app.get("/ready")
 @app.get("/api/ready")
 async def ready(response: Response):
-    import time
     import asyncio
+    import time
     start_time = time.time()
     logger.info("[HealthCheck] Started BQ health check.")
     try:
-        from mcp_server import client as bq_client, PROJECT_ID, FINOPS_DATASET_ID
+        from mcp_server import FINOPS_DATASET_ID, PROJECT_ID
+        from mcp_server import client as bq_client
         if bq_client:
             # Perform a deep check of BigQuery connectivity without blocking the event loop
             # and by using the environment-injected Dataset ID instead of a hardcoded string.
@@ -289,11 +298,8 @@ async def get_spec():
         return Response(content="# Analytics MCP — Spécification introuvable", media_type="text/markdown")
 
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
+
+
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")

@@ -1,14 +1,16 @@
-import asyncio
-import sys
-import os
 import ast
+import asyncio
 import json
+import os
+import sys
+
+from database import get_db, init_db_connector
+from sqlalchemy import text
 
 # Add current directory to path to import database
 sys.path.append(os.path.abspath('.'))
 
-from database import init_db_connector, get_db
-from sqlalchemy import text
+
 
 async def cleanup():
     print("Checking items database for corrupted entries...")

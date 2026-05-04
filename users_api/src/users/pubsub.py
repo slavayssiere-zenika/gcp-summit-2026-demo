@@ -1,7 +1,8 @@
 
-import os
 import json
 import logging
+import os
+
 from google.cloud import pubsub_v1
 from opentelemetry.propagate import inject
 

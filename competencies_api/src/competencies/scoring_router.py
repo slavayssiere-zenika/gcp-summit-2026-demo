@@ -15,26 +15,23 @@ import os
 import google.auth.transport.requests
 import google.oauth2.id_token
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from database import get_db
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     Request)
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database import get_db
 from src.auth import verify_jwt
 from src.competencies.ai_scoring import _bulk_scoring_all_bg
 from src.competencies.bulk_task_state import bulk_scoring_manager
-from src.competencies.scheduler_control import set_scoring_scheduler_enabled
-from src.competencies.scoring_service import (
-    bg_bulk_scoring_vertex,
-    _apply_scoring_results,
-    _parse_scoring_results_gcs,
-    BATCH_GCS_BUCKET,
-    VERTEX_BATCH_MODEL,
-    GCP_PROJECT_ID,
-    VERTEX_LOCATION,
-)
 from src.competencies.models import Competency, user_competency
+from src.competencies.scheduler_control import set_scoring_scheduler_enabled
+from src.competencies.scoring_service import (BATCH_GCS_BUCKET, GCP_PROJECT_ID,
+                                              VERTEX_BATCH_MODEL,
+                                              VERTEX_LOCATION,
+                                              _apply_scoring_results,
+                                              _parse_scoring_results_gcs,
+                                              bg_bulk_scoring_vertex)
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +203,8 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
     # Reconstruit un index minimal depuis les lignes GCS (pas de scoring_index disponible)
     # On parse directement les ids embedés dans les clés "score-{user_id}-{comp_id}"
     results = []
-    import json, re
+    import json
+    import re
     for line in raw_lines:
         if not line.strip():
             continue

@@ -19,25 +19,19 @@ import httpx
 from fastapi import HTTPException
 from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials
+from google.cloud import run_v2 as cloudrun_v2
+from metrics import CV_MISSING_EMBEDDINGS
 from opentelemetry.propagate import inject
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
-
-from google.cloud import run_v2 as cloudrun_v2
-
 from src.cvs.models import CVProfile
-from src.services.config import (
-    COMPETENCIES_API_URL,
-    USERS_API_URL,
-    GCP_PROJECT_ID,
-    VERTEX_LOCATION,
-    CLOUDRUN_WORKSPACE,
-    BULK_SCALE_SERVICES,
-)
+from src.gemini_retry import (embed_content_with_retry,
+                              generate_content_with_retry)
+from src.services.config import (BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
+                                 COMPETENCIES_API_URL, GCP_PROJECT_ID,
+                                 USERS_API_URL, VERTEX_LOCATION)
 from src.services.finops import log_finops
-from metrics import CV_MISSING_EMBEDDINGS
-from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +40,7 @@ async def execute_search(
     request,
     response: Response,
     query: str,
+    skip: int,
     limit: int,
     skills: List[str],
     db: AsyncSession,
@@ -53,7 +48,7 @@ async def execute_search(
     credentials: HTTPAuthorizationCredentials,
     genai_client,
     agency: Optional[str] = None,
-) -> list:
+) -> dict:
     """Recherche sémantique (RAG) du meilleur candidat via pgvector cosine distance.
 
     L'agent interroge cette route lorsqu'il cherche des consultants par mots-clés
@@ -70,6 +65,7 @@ async def execute_search(
         request: FastAPI Request pour récupérer Authorization.
         response: FastAPI Response pour injecter les headers X-*.
         query: Texte de la recherche.
+        skip: Nombre de résultats à ignorer.
         limit: Nombre maximum de résultats.
         skills: Liste de compétences pré-filtrées (override LLM si non vide).
         db: Session SQLAlchemy async.
@@ -79,7 +75,7 @@ async def execute_search(
         agency: Filtre optionnel par agence/tag.
 
     Returns:
-        Liste de dicts {user_id, similarity_score, full_name, email, ...}.
+        Dictionnaire avec les clés items, total, skip, limit.
 
     Raises:
         HTTPException 400 si l'embedding échoue.
@@ -204,15 +200,15 @@ async def execute_search(
 
         if approved_user_ids:
             stmt_filtered = stmt.filter(CVProfile.user_id.in_(list(approved_user_ids)))
-            query_results = (await db.execute(stmt_filtered.order_by("distance").limit(limit * 2))).all()
+            query_results = (await db.execute(stmt_filtered.order_by("distance").limit((limit + skip) * 2))).all()
             if not query_results:
                 fallback_scan = True
-                query_results = (await db.execute(stmt.order_by("distance").limit(limit * 2))).all()
+                query_results = (await db.execute(stmt.order_by("distance").limit((limit + skip) * 2))).all()
         else:
             fallback_scan = True
-            query_results = (await db.execute(stmt.order_by("distance").limit(limit * 2))).all()
+            query_results = (await db.execute(stmt.order_by("distance").limit((limit + skip) * 2))).all()
     else:
-        query_results = (await db.execute(stmt.order_by("distance").limit(limit * 2))).all()
+        query_results = (await db.execute(stmt.order_by("distance").limit((limit + skip) * 2))).all()
 
     if response:
         response.headers["X-Fallback-Full-Scan"] = str(fallback_scan).lower()
@@ -226,8 +222,9 @@ async def execute_search(
             seen_users.add(row.user_id)
             score = 1.0 - (distance if distance is not None else 0.0)
             mapped_results.append({"user_id": row.user_id, "similarity_score": round(score, 4)})
-            if len(mapped_results) >= limit:
-                break
+
+    total = len(mapped_results)
+    paginated_results = mapped_results[skip:skip+limit]
 
     # ── 4. Enrichissement via users_api ─────────────────────────────────────
     auth_header = request.headers.get("Authorization") if request else None
@@ -251,9 +248,9 @@ async def execute_search(
             except Exception as e:
                 logger.warning(f"HTTP Enrichment failed for user {res['user_id']}: {e}")
 
-        await asyncio.gather(*(fetch_user(res) for res in mapped_results))
+        await asyncio.gather(*(fetch_user(res) for res in paginated_results))
 
-    if not mapped_results:
+    if not paginated_results and skip == 0:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -262,7 +259,7 @@ async def execute_search(
             ),
         )
 
-    return mapped_results
+    return {"items": paginated_results, "total": total, "skip": skip, "limit": limit}
 
 
 async def scale_bulk_dependencies(min_instances: int) -> None:

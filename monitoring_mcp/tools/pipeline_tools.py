@@ -12,9 +12,8 @@ import logging
 import os
 
 import httpx
-from opentelemetry.propagate import inject
-
 from context import mcp_auth_header_var
+from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 

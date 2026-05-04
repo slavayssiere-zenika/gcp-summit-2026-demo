@@ -1,24 +1,25 @@
 import asyncio
-import os
-import io
 import json
+import logging
+import os
+import re
+import traceback
+
+import database
+import docx
 import httpx
 from google import genai
 from google.genai import types
-import logging
-import traceback
-import re
-import docx
-from sqlalchemy import select
-
-import database
-from .models import Mission, MissionStatus, MissionStatusHistory
 from opentelemetry.propagate import inject
+from sqlalchemy import select
+from src.gemini_retry import (embed_content_with_retry,
+                              generate_content_with_retry)
 
 from .cache import get_cached_prompt
+from .helpers import (_collect_all_known_names, build_taxonomy_context,
+                      find_domains_for_skills)
+from .models import Mission, MissionStatus, MissionStatusHistory
 from .task_state import task_manager
-from src.gemini_retry import generate_content_with_retry, embed_content_with_retry
-from .helpers import build_taxonomy_context, find_domains_for_skills, _collect_all_known_names
 
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GEMINI_API_KEY:

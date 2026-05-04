@@ -1,17 +1,17 @@
 import logging
 from typing import List, Optional
 
+from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from metrics import USER_CREATIONS_TOTAL
 from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from cache import get_cache, set_cache, delete_cache, delete_cache_pattern
-from database import get_db
-from metrics import USER_CREATIONS_TOTAL
-from src.auth import verify_jwt, get_password_hash
+from src.auth import get_password_hash, verify_jwt
 from src.users.models import User, UserAuditLog
-from src.users.schemas import UserCreate, UserUpdate, UserResponse, PaginationResponse
+from src.users.schemas import (PaginationResponse, UserCreate, UserResponse,
+                               UserUpdate)
 
 _log = logging.getLogger(__name__)
 

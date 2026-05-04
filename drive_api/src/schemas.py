@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel
 from src.models import DriveSyncStatus
 
 
@@ -67,6 +68,12 @@ class FileStateResponse(BaseModel):
 
 class PaginatedFilesResponse(BaseModel):
     files: List[FileStateResponse]
+    total: int
+    skip: int
+    limit: int
+
+class PaginatedFoldersResponse(BaseModel):
+    items: List[FolderResponse]
     total: int
     skip: int
     limit: int

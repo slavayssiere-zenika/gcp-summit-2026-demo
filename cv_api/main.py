@@ -1,28 +1,38 @@
-from fastapi import FastAPI, Response, Request
-from contextlib import asynccontextmanager
-import database
-from prometheus_fastapi_instrumentator import Instrumentator
-from opentelemetry.propagate import inject
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
+import asyncio
+import logging
 import os
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import traceback
+from contextlib import asynccontextmanager
+
+import database
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.responses import JSONResponse
+from logger import LoggingMiddleware, setup_logging
+from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from src.cvs.router import router, public_router
-from logger import setup_logging, LoggingMiddleware
+from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
+from prometheus_fastapi_instrumentator import Instrumentator
+from src.auth import verify_jwt
+from src.cvs.router import public_router, router
+
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
 sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
@@ -54,11 +64,6 @@ app = FastAPI(lifespan=lifespan, title="CV Analysis API", root_path=os.getenv("R
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
 
-import asyncio
-import os
-
-import logging
-
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
@@ -81,8 +86,7 @@ async def ready(response: Response):
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
 
-from src.auth import verify_jwt
-from fastapi import APIRouter, Depends
+
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @app.get("/spec")
@@ -129,21 +133,15 @@ async def proxy_mcp(path: str, request: Request):
 
 app.include_router(protected_router)
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
 
 
 
 async def get_service_token_fallback() -> str:
-    import httpx, os, logging
-    logger = logging.getLogger(__name__)
+    import logging
+    import os
+
+    import httpx
+    logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token

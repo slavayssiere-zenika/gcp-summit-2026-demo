@@ -264,7 +264,8 @@ async function fetchEvaluations() {
   isLoading.value = true
   try {
     const res = await axios.get(`/api/competencies/evaluations/user/${props.userId}`)
-    evaluations.value = (res.data || []).sort((a: Evaluation, b: Evaluation) =>
+    const items = res.data.items || (Array.isArray(res.data) ? res.data : [])
+    evaluations.value = items.sort((a: Evaluation, b: Evaluation) =>
       a.competency_name.localeCompare(b.competency_name)
     )
   } catch (e) {

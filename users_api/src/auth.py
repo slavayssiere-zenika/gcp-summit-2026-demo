@@ -1,10 +1,11 @@
+import os
 from datetime import datetime, timedelta
 from typing import Optional
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import os
 
 # Configuration for JWT
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -53,8 +54,9 @@ security = HTTPBearer(auto_error=False)
 def _is_user_blacklisted(username: str) -> bool:
     """Vérifie si un utilisateur est blacklisté (suspendu) en Redis (F-05)."""
     try:
-        import redis as _redis
         import os as _os
+
+        import redis as _redis
         _r = _redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
         return _r.exists(f"jwt:blacklist:user:{username}") > 0
     except Exception:

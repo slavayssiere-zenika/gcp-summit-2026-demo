@@ -1,7 +1,8 @@
 import logging
-from typing import Any
-import httpx
 import os
+from typing import Any
+
+import httpx
 from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)

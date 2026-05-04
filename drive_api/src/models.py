@@ -1,7 +1,10 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Boolean, JSON
-from database import Base
 import enum
 from datetime import datetime
+
+from database import Base
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, ForeignKey,
+                        Integer, String)
+
 
 class DriveSyncStatus(enum.Enum):
     PENDING = "PENDING"

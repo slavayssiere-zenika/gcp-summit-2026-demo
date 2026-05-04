@@ -1,6 +1,7 @@
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi.testclient import TestClient
 
 # CRITICAL: Set environment variables BEFORE imports
@@ -9,8 +10,8 @@ os.environ["SECRET_KEY"] = "testsecret"
 os.environ["REDIS_URL"] = "redis://localhost:6379/8"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from main import app
     from database import get_db
+    from main import app
     from src.auth import verify_jwt
 
 def override_verify_jwt():

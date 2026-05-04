@@ -1,31 +1,41 @@
-from fastapi import FastAPI, Response, Request
-from contextlib import asynccontextmanager
-import database
-from prometheus_fastapi_instrumentator import Instrumentator
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.semconv.resource import ResourceAttributes
+import asyncio
+import logging
 import os
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import traceback
+from contextlib import asynccontextmanager
+
+import database
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from logger import LoggingMiddleware, setup_logging
+from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import extract
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.trace import set_span_in_context
-from fastapi.middleware.cors import CORSMiddleware
-from src.users.router import router, auth_router
-import time
-from logger import setup_logging, LoggingMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy import text
+from src.auth import get_password_hash, verify_jwt
+from src.users.models import User
+from src.users.router import auth_router, router
+
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
+elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -69,12 +79,7 @@ app.add_middleware(
 )
 
 
-import asyncio
-import logging
-import os
-from sqlalchemy import text
-from src.users.models import User
-from src.auth import get_password_hash
+
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +124,7 @@ async def seed_admin():
                     )
                     await db.commit()
                 return
-        except Exception as e:
+        except Exception:
             # users table might not exist yet if Liquibase hasn't finished
             await asyncio.sleep(5)
 
@@ -144,8 +149,7 @@ async def ready(response: Response):
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
 
-from src.auth import verify_jwt
-from fastapi import APIRouter, Depends
+
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 @app.get("/spec")
@@ -160,21 +164,15 @@ app.include_router(auth_router)
 app.include_router(protected_router)  # /spec MUST be registered before /{user_id} wildcard
 app.include_router(router)
 
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-
-import traceback
-from fastapi.responses import JSONResponse
-import httpx
-import logging
-import asyncio
 
 
 
 async def get_service_token_fallback() -> str:
-    import httpx, os, logging
-    logger = logging.getLogger(__name__)
+    import logging
+    import os
+
+    import httpx
+    logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token

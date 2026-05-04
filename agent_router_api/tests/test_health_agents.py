@@ -9,12 +9,12 @@ Scenarios covered:
   5. latency_ms is present      → always measured
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
-
-import sys
 import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
 
 # Ensure the router module can be imported (PYTHONPATH trick for local test runs)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

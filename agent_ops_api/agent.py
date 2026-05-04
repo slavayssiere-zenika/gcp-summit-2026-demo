@@ -6,24 +6,24 @@ Toute la logique commune (proxy MCP, boucle runner, guardrails, FinOps,
 session Redis) est importée depuis le package `agent_commons`.
 """
 
+import logging
 import os
 import uuid
-import logging
 from datetime import datetime as _dt
 
 import httpx
-from opentelemetry.propagate import inject
-from google.genai import types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
+from google.genai import types
+from opentelemetry.propagate import inject
 
-from agent_commons.mcp_client import MCPHttpClient, auth_header_var
-from agent_commons.session import RedisSessionService
-from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.mcp_proxy import get_cached_tools
-from agent_commons.runner import run_agent_and_collect
+from agent_commons.finops import estimate_cost_usd, log_tokens_to_bq
 from agent_commons.guardrails import check_hallucination_guardrail
-from agent_commons.finops import log_tokens_to_bq, estimate_cost_usd
+from agent_commons.mcp_client import MCPHttpClient, auth_header_var
+from agent_commons.mcp_proxy import get_cached_tools
+from agent_commons.metadata import extract_metadata_from_session
+from agent_commons.runner import run_agent_and_collect
+from agent_commons.session import RedisSessionService
 
 app_logger = logging.getLogger(__name__)
 

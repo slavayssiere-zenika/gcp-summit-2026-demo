@@ -1,32 +1,26 @@
-"""ingestion_router.py — Ingestion KPIs, quality gate, batch-retry, history."""
-"""Shared imports for drive_api sub-routers."""
-import base64 as _b64
-import os as _os
-import json as _json
-import re
-import asyncio
-import traceback
+"""ingestion_router.py — Ingestion KPIs, quality gate, batch-retry, history.
+Shared imports for drive_api sub-routers."""
 import logging
 from datetime import datetime, timedelta
 
 import google.auth
+from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from google.cloud import pubsub_v1
 from google.api_core.exceptions import DeadlineExceeded
+from google.cloud import pubsub_v1
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, func
-
-from src.schemas import (FolderCreate, FolderResponse, StatusResponse,
-    FileStateResponse, PaginatedFilesResponse, FileUpdate, FolderStats, FolderUpdate)
-from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
-from src.google_auth import get_google_access_token, get_drive_service
-from database import get_db
-from src.drive_service import DriveService
-from src.redis_client import get_redis
 from src.auth import verify_jwt
+from src.drive_service import DriveService
+from src.google_auth import get_drive_service, get_google_access_token
+from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
+from src.redis_client import get_redis
 from src.routers.files_router import _compute_kpi_metric
+from src.schemas import (FileStateResponse, FileUpdate, FolderCreate,
+                         FolderResponse, FolderStats, FolderUpdate,
+                         PaginatedFilesResponse, StatusResponse)
 
 logger = logging.getLogger(__name__)
 

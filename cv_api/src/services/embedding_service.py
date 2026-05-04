@@ -13,13 +13,12 @@ import logging
 import os
 from typing import Optional
 
+import database
 from opentelemetry.propagate import inject
 from sqlalchemy.future import select
-
-import database
 from src.cvs.models import CVProfile
-from src.services.finops import log_finops
 from src.gemini_retry import embed_content_with_retry
+from src.services.finops import log_finops
 from src.services.utils import _build_distilled_content
 
 logger = logging.getLogger(__name__)

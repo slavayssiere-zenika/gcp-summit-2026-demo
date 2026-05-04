@@ -1,12 +1,13 @@
-from jose import JWTError, jwt
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status, Request
-import os
 import logging
+import os
 from typing import Optional
-from google.oauth2 import id_token
-from google.auth.transport import requests
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from google.auth import jwt as google_jwt
+from google.auth.transport import requests
+from google.oauth2 import id_token
+from jose import JWTError, jwt
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,6 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
             raise # Re-raise 403 (Service Account unauthorized)
         except Exception as e:
             logger.debug(f"Échec validation via header, tentative via cookie: {e}")
-            pass
 
     # 2. Fallback via le Cookie
     token = request.cookies.get("access_token")

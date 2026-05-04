@@ -1,26 +1,29 @@
-import asyncio
+import contextvars
 import json
 import os
-import contextvars
-from mcp.server import Server
-from mcp.types import Tool, TextContent
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+import httpx
+from mcp.server import Server
+from mcp.types import TextContent, Tool
+from opentelemetry import propagate, trace
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-import os
+from opentelemetry.trace.propagation.tracecontext import \
+    TraceContextTextMapPropagator
+
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.propagate import inject
-import httpx
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 propagate.set_global_textmap(TraceContextTextMapPropagator())
@@ -81,7 +84,13 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="list_drive_folders",
             description="Retrieve the list of all Google Drive folders currently tracked by the system.",
-            inputSchema={"type": "object", "properties": {}}
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "skip": {"type": "integer", "description": "Number of folders to skip", "default": 0},
+                    "limit": {"type": "integer", "description": "Maximum number of folders to return", "default": 50}
+                }
+            }
         ),
         Tool(
             name="delete_drive_folder",
@@ -268,7 +277,7 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    with tracer.start_as_current_span(f"mcp.tool.{name}") as span:
+    with tracer.start_as_current_span(f"mcp.tool.{name}"):
         auth_header = mcp_auth_header_var.get()
         headers = {}
         if auth_header:
@@ -284,7 +293,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     
                 elif name == "list_drive_folders":
-                    res = await client.get(f"{API_BASE_URL}/folders", headers=headers, timeout=10.0)
+                    skip = arguments.get("skip", 0)
+                    limit = arguments.get("limit", 50)
+                    res = await client.get(f"{API_BASE_URL}/folders", params={"skip": skip, "limit": limit}, headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
                     
