@@ -5,7 +5,8 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
   deletion_protection = false
 
   template {
-    service_account = google_service_account.monitoring_sa.email
+    max_instance_request_concurrency = var.cloudrun_concurrency
+    service_account                  = google_service_account.monitoring_sa.email
     scaling {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances

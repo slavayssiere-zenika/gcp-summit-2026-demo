@@ -70,7 +70,7 @@ def setup_tracing(app: FastAPI) -> TracerProvider:
         logger.info("[MISSIONS] No trace exporter configured (TRACE_EXPORTER=%s).", TRACE_EXPORTER)
 
     trace.set_tracer_provider(provider)
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider, excluded_urls="health,metrics")
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider, excluded_urls="health,ready,metrics,version")
     return provider
 
 # ── Auth (JWT) — délégué à agent_commons.jwt_middleware.verify_jwt_request ──────
@@ -168,6 +168,7 @@ async def _execute_query(request: QueryRequest, payload: dict) -> A2AResponse:
         return A2AResponse(
             response=result.get("response", ""),
             data=result.get("data"),
+            display_type=result.get("display_type"),
             steps=result.get("steps", []),
             thoughts=result.get("thoughts", ""),
             usage=result.get("usage", {}),
@@ -287,7 +288,8 @@ async def get_history(payload: dict = Depends(verify_jwt)):
                         current_assistant_msg["content"] = full_raw
                 else:
                     current_assistant_msg["content"] = full_raw
-            except Exception:
+            except Exception as e:
+                logger.debug("[history] JSON parse error in content: %s: %s", type(e).__name__, e)
                 current_assistant_msg["content"] = full_raw
 
             if current_assistant_msg.get("data"):
@@ -344,7 +346,8 @@ async def get_spec():
     try:
         with open("spec.md", encoding="utf-8") as f:
             return Response(content=f.read(), media_type="text/markdown")
-    except Exception:
+    except Exception as e:
+        logger.debug("[spec] spec.md not found or unreadable: %s: %s", type(e).__name__, e)
         return Response(
             content="# Agent Missions API\n\nStaffing Director — gestion des missions client et matching consultants.",
             media_type="text/markdown",

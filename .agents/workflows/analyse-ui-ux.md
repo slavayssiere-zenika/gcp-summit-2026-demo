@@ -334,9 +334,116 @@ grep -rn "title=\".*admin\|title=\".*droit\|tooltip" frontend/src/ --include="*.
 
 ---
 
-## Étape 8 : Génération du Rapport et Plan d'Action
+## Étape 8 : Audit de Cohérence Frontend ↔ MCP (Chaîne UI → Agent → Tool)
 
-À l'issue des étapes 1 à 7, créer un artefact **`ui_ux_analysis_report.md`** avec la structure suivante :
+Cette étape vérifie que les widgets UI qui déclenchent des actions IA sont effectivement connectés à des tools MCP réellement disponibles et correctement documentumés dans les agents. Un widget qui appelle un endpoint sans tool MCP correspondant produit des erreurs silencieuses ou des réponses vides que l'utilisateur ne peut pas interpréter.
+
+### 8.1 Inventaire des appels API depuis le frontend (stores Pinia)
+
+Identifier tous les appels HTTP sortants vers l'agent router et les APIs directes :
+
+```bash
+# Appels vers l'agent router (actions IA déclenchées par l'UI)
+grep -rn "/query\|/api/agent\|/a2a" frontend/src/stores/ --include="*.ts" | grep -v "//\|import" | head -30
+
+# Tous les endpoints appelés depuis les stores
+grep -rn "api\.\|axios\.\|fetch(\|\.get(\|\.post(\|\.put(\|\.delete(" frontend/src/stores/ --include="*.ts" | grep -v "//" | head -40
+
+# Composants Vue qui appellent directement des APIs (hors store)
+grep -rn "fetch(\|axios\|useApi" frontend/src/views/ frontend/src/components/ --include="*.vue" | grep -v "//\|import" | head -20
+```
+
+### 8.2 Inventaire des tools MCP enregistrés dans chaque agent
+
+Chaque agent déclare ses tools dans `agent.py`. Ce sont les seules capacités que l'agent peut utiliser pour répondre aux requêtes UI :
+
+```bash
+# Lister tous les tools/fonctions déclarés dans les agents ADK
+grep -rn "async def \|def " agent_*/agent*.py 2>/dev/null | grep -v "def __\|#" | head -50
+
+# Docstrings des tools (cruciales pour le routing LLM — vide = tool invisible)
+for f in agent_*/agent*.py; do
+  echo "=== $f ==="
+  python3 -c "
+import ast, sys
+try:
+  tree = ast.parse(open('$f').read())
+  for node in ast.walk(tree):
+    if isinstance(node, ast.AsyncFunctionDef) and not node.name.startswith('_'):
+      doc = ast.get_docstring(node) or 'DOCSTRING MANQUANTE'
+      print(f'  {node.name}: {doc[:80]}')
+except: pass
+" 2>/dev/null
+done
+
+# Clients MCP configurés dans les agents (sources de tools)
+grep -rn "MCPToolset\|StdioServerParameters\|server_params\|mcp_tools" agent_*/*.py 2>/dev/null | head -20
+```
+
+### 8.3 Inventaire des tools exposés par les serveurs MCP des APIs data
+
+```bash
+# Noms de tous les tools exposés par les mcp_server.py
+grep -rn "@mcp\.tool\|Tool(name=\|\"name\":\s*\"" *_api/mcp_server.py 2>/dev/null | head -50
+
+# Vérifier que chaque tool a une description (vide = agent aveugle)
+grep -rn "description=\"\"\|description=None\|\"description\":\s*\"\"" *_api/mcp_server.py 2>/dev/null | head -20
+
+# Tools qui gèrent les erreurs correctement (doivent retourner {success:false, error:...})
+grep -rn "except\|try:" *_api/mcp_server.py 2>/dev/null | grep -v "#" | head -20
+```
+
+### 8.4 Matrice de traçabilité : Widget UI → Store Pinia → Agent → Tool MCP → API
+
+Pour chaque fonctionnalité majeure, tracer la chaîne complète en croisant les résultats des étapes 8.1, 8.2 et 8.3 :
+
+| Widget UI (Vue component) | Store/Action | Agent cible | Tool agent | Tool MCP | API data |
+|---|---|---|---|---|---|
+| Recherche consultant | `useCvStore.search()` | `agent_hr_api` | `search_cvs` | `search_cvs_semantic` | `cv_api` |
+| Créer mission | `useMissionStore.create()` | `agent_ops_api` | `create_mission` | `create_mission` | `missions_api` |
+| Profil consultant | `useProfileStore.get()` | `agent_hr_api` | `get_cv_profile` | `get_cv_profile` | `cv_api` |
+| Scoring compétences | Direct API | — | — | — | `competencies_api` |
+| Import CV | Direct API | — | — | — | `cv_api` |
+
+> **Note** : Les actions "Direct API" (sans passage par l'agent) nécessitent tout de même vérification que le store gère correctement les erreurs 4xx/5xx.
+
+### 8.5 Détection des liens brisés
+
+```bash
+# 1. Stores sans gestion d'erreur sur les appels IA
+grep -rn "/query\|/api/agent" frontend/src/stores/ --include="*.ts" -A 5 | grep -v "catch\|error\|try\|finally" | grep -B3 "}" | head -30
+
+# 2. Tools agent référencés mais absents des MCP servers
+# Extraire les noms de tools des agents
+grep -rn "def " agent_*/agent*.py 2>/dev/null | grep -v "def __\|main\|query\|verify" | sed 's/.*def //;s/(.*//' | sort -u > /tmp/agent_tools.txt
+# Extraire les noms de tools des MCP servers
+grep -rn "@mcp\.tool\|Tool(name=" *_api/mcp_server.py 2>/dev/null | sed "s/.*name=\"//;s/\".*//' | sort -u > /tmp/mcp_tools.txt
+echo "=== Tools agent sans correspondance MCP ==="
+comm -23 /tmp/agent_tools.txt /tmp/mcp_tools.txt
+
+# 3. Tools MCP sans docstring (LLM ne peut pas les router correctement)
+grep -B1 -A5 "@mcp.tool" *_api/mcp_server.py 2>/dev/null | grep -A3 "async def" | grep -v "\"\"\"" | grep "def " | head -20
+
+# 4. Composants Vue avec des messages d'erreur génériques ("Une erreur est survenue")
+grep -rn "Une erreur\|something went wrong\|error occurred\|Erreur inconnue" frontend/src/ --include="*.vue" --include="*.ts" | head -15
+```
+
+### Violations à reporter dans le rapport
+
+| Type | Niveau | Description |
+|---|---|---|
+| Tool orphelin | ❌ P0 | Tool dans `agent.py` mais absent du `mcp_server.py` correspondant |
+| Docstring MCP vide | ❌ P0 | Tool MCP sans description → LLM ne sait pas quand l'appeler |
+| Store sans try/catch | ⚠️ P1 | Appel agent sans gestion d'erreur → échec silencieux pour l'utilisateur |
+| Message d'erreur générique | ⚠️ P1 | "Erreur inconnue" au lieu d'un message contextuel actionnable |
+| Tool MCP sans `{success: false}` | ⚠️ P1 | Gérer silencieusement les exceptions viole la règle Failfast |
+| Action UI sans feedback visuel | 🟡 P2 | Bouton qui appelle un agent sans spinner ou notification de résultat |
+
+---
+
+## Étape 9 : Génération du Rapport et Plan d'Action
+
+À l'issue des étapes 1 à 8, créer un artefact **`ui_ux_analysis_report.md`** avec la structure suivante :
 
 ### Structure du Rapport
 
@@ -350,8 +457,9 @@ Score global UX/UI : [X/100]
 | Contraste WCAG AA | X/20 | 🔴/🟡/🟢 |
 | Lisibilité & Typographie | X/20 | 🔴/🟡/🟢 |
 | Responsive Design | X/20 | 🔴/🟡/🟢 |
-| Accessibilité a11y | X/20 | 🔴/🟡/🟢 |
-| Sécurité UI & RBAC | X/20 | 🔴/🟡/🟢 |
+| Accessibilité a11y | X/10 | 🔴/🟡/🟢 |
+| Sécurité UI & RBAC | X/15 | 🔴/🟡/🟢 |
+| Cohérence Frontend ↔ MCP | X/15 | 🔴/🟡/🟢 |
 
 ## Violations Bloquantes (P0 — Priorité critique)
 [Liste des violations WCAG AA strictes — contraste < 3:1, boutons sans aria-label]

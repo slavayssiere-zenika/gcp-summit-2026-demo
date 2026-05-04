@@ -138,7 +138,10 @@ class A2AResponse(BaseModel):
         None,
         description=(
             "Données structurées optionnelles (liste d'utilisateurs, missions, compétences…) "
-            "pour l'affichage frontend (displayType=cards/tree)."
+            "pour l'affichage frontend. Le displayType est résolu depuis le render_ui_widgets "
+            "de l'ADK via la taxonomie sémantique : ui://consultants, ui://missions, "
+            "ui://competencies, ui://evaluations, ui://candidates, ui://items, "
+            "ui://availabilities, ui://tree, ui://health, ui://empty (aucun rendu)."
         ),
     )
     steps: list[AgentStep] = Field(
@@ -154,6 +157,16 @@ class A2AResponse(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ADK utilisée pour cette requête.")
     semantic_cache_hit: Optional[bool] = Field(None, description="True si la réponse a été servie depuis le cache sémantique.")
     degraded: Optional[bool] = Field(None, description="True si le sous-agent a répondu en mode dégradé (erreur réseau).")
+    display_type: Optional[str] = Field(
+        None,
+        description=(
+            "Hint UI émis par le sous-agent via render_ui_widgets ADK. "
+            "Slug sémantique après 'ui://' : 'consultants', 'profile', 'evaluations', "
+            "'missions', 'competencies', 'candidates', 'items', 'tree', 'cloudrun_logs'. "
+            "None = affichage texte uniquement."
+        ),
+    )
+
 
     model_config = {
         "json_schema_extra": {

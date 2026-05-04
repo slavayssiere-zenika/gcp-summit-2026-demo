@@ -1,26 +1,20 @@
-import asyncio
-import inspect
-import json
-import logging
-import os
+# flake8: noqa: E402  — warnings.filterwarnings must precede third-party imports
 import warnings
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
-import re
-import traceback
+
+import logging
+import os
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from jose import jwt
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.semconv.resource import ResourceAttributes
@@ -38,14 +32,15 @@ else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
 from prometheus_fastapi_instrumentator import Instrumentator
-from metrics import AGENT_QUERIES_TOTAL, AGENT_TOOL_CALLS_TOTAL
+from metrics import AGENT_QUERIES_TOTAL
 from agent import run_agent_query, HR_TOOLS, get_session_service
-from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.schemas import A2ARequest, A2AResponse, QueryRequest, get_tool_metadata
 from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt, ALGORITHM
 from agent_commons.exception_handler import make_global_exception_handler
 from logger import setup_logging, LoggingMiddleware
 from agent_commons.mcp_client import auth_header_var
+
+
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
 sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
@@ -65,9 +60,8 @@ trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 app_logger = logging.getLogger(__name__)
 
-
 setup_logging()
-from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -83,7 +77,7 @@ app = FastAPI(
 )
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
@@ -109,7 +103,8 @@ async def get_spec():
     try:
         with open("spec.md", "r", encoding="utf-8") as f:
             return Response(content=f.read(), media_type="text/markdown")
-    except Exception:
+    except Exception as e:
+        app_logger.debug("[spec] spec.md not found or unreadable: %s: %s", type(e).__name__, e)
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 @protected_router.post("/query")
@@ -142,7 +137,12 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             return result
             
         except Exception as e:
-            app_logger.exception("CRITICAL: Exception in /query")
+            app_logger.error(
+                "CRITICAL: Exception in /query — %s: %s",
+                type(e).__name__,
+                str(e) or repr(e),
+                exc_info=True,
+            )
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
 @protected_router.post("/a2a/query", response_model=A2AResponse)
@@ -155,7 +155,6 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
     auth_header_var.set(auth_header)
     
     try:
-        from jose import jwt, JWTError
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         computed_session_id = payload.get("sub")
     except Exception:
@@ -171,6 +170,7 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
             return A2AResponse(
                 response=result.get("response", ""),
                 data=result.get("data"),
+                display_type=result.get("display_type"),
                 steps=result.get("steps", []),
                 thoughts=result.get("thoughts", ""),
                 usage=result.get("usage", {}),
@@ -178,173 +178,19 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
                 session_id=result.get("session_id"),
             )
         except Exception as e:
-            app_logger.exception("CRITICAL: Exception in /a2a/query")
-            raise HTTPException(status_code=500, detail=str(e))
-
-@protected_router.get("/history")
-async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        from jose import jwt, JWTError
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        session_id = payload.get("sub")
-        if not session_id:
-            raise Exception("No user")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token invalide")
-        
-    session_service = get_session_service()
-    session = await session_service.get_session(
-        app_name="zenika_hr_assistant", 
-        user_id=session_id,  # sub JWT = user_id
-        session_id=session_id
-    )
-    if not session:
-        return {"history": []}
-        
-    history = []
-    current_assistant_msg = None
-    
-    for event in getattr(session, "events", []):
-        author = getattr(event, "author", None)
-        content = getattr(event, "content", "")
-        role = getattr(content, "role", None) if content else None
-        
-        # Normalize role
-        author_val = (author or "").lower()
-        role_val = (role or "").lower()
-        
-        is_assistant = any(x in ["assistant", "model", "assistant_zenika"] for x in [author_val, role_val])
-        is_tool = any(x in ["tool", "function"] for x in [author_val, role_val])
-        is_user = any(x in ["user"] for x in [author_val, role_val]) and not is_tool and not is_assistant
-        
-        # Extract parts if available
-        parts = []
-        if hasattr(content, "parts"):
-            parts = list(content.parts) if content.parts else []
-            content_text = "".join((getattr(p, "text", "") or "") for p in parts if hasattr(p, "text"))
-        else:
-            content_text = str(content)
-            
-            
-        # 1. Main turn logic (Grouping/Initialization)
-        if is_user:
-            # Avoid adding empty user messages that might come from system/tool noise
-            if content_text.strip():
-                history.append({
-                    "role": "user",
-                    "content": content_text
-                })
-                current_assistant_msg = None 
-            
-        elif is_assistant and current_assistant_msg is None:
-            # Reconstruct metadata using the shared foolproof utility
-            from agent_commons.metadata import extract_metadata_from_session
-            meta = extract_metadata_from_session(session) # Since we are in sub-agent, the whole session IS the turn
-            
-            current_assistant_msg = {
-                "role": "assistant",
-                "content": content_text,
-                "displayType": "text_only",
-                "data": meta.get("data"),
-                "parsedData": [],
-                "steps": meta.get("steps", []),
-                "thoughts": meta.get("thoughts", ""),
-                "rawResponse": content_text,
-                "activeTab": "preview",
-                "pagination": {"currentPage": 1, "itemsPerPage": 10}
-            }
-            history.append(current_assistant_msg)
+            app_logger.error(
+                "CRITICAL: Exception in /a2a/query — %s: %s",
+                type(e).__name__,
+                str(e) or repr(e),
+                exc_info=True,
+            )
+            raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
-            # Metadata extraction is now handled once above via extract_metadata_from_session
-            pass
+# Routes /history (GET + DELETE) extraites dans history_routes.py (Golden Rule §14)
+from history_routes import history_router as _history_router
+app.include_router(_history_router)
 
-        # 3. Process Content Text
-        if is_assistant and content_text:
-            full_raw = current_assistant_msg.get("_full_text_progress", "") + content_text
-            current_assistant_msg["_full_text_progress"] = full_raw
-            current_assistant_msg["rawResponse"] = full_raw
-            
-            # Robust JSON Dashboard Extraction (Non-Destructive)
-            try:
-                json_match = re.search(r'\{[\s\S]*\}', full_raw)
-                if json_match:
-                    json_str = json_match.group(0)
-                    json_obj = json.loads(json_str)
-                    if "reply" in json_obj and "display_type" in json_obj:
-                        # Replace the JSON block with its 'reply' text in the visible content
-                        reply = json_obj.get("reply", "")
-                        current_assistant_msg["content"] = full_raw.replace(json_str, reply).strip()
-                        current_assistant_msg["displayType"] = json_obj["display_type"]
-                        if current_assistant_msg["displayType"] == "profile":
-                            current_assistant_msg["displayType"] = "cards"
-                        
-                        if "data" in json_obj:
-                            current_assistant_msg["data"] = json_obj["data"]
-                    else:
-                        current_assistant_msg["content"] = full_raw
-                else:
-                    current_assistant_msg["content"] = full_raw
-            except: 
-                current_assistant_msg["content"] = full_raw
-
-            # Re-evaluate parsedData and displayType fallback
-            if current_assistant_msg.get("data"):
-                d = current_assistant_msg["data"]
-                
-                # Competency detection
-                if isinstance(d, dict) and d.get("dataType") == "competency":
-                    current_assistant_msg["displayType"] = "tree"
-                # Fallback to cards if we have data but no type
-                elif current_assistant_msg["displayType"] == "text_only":
-                    current_assistant_msg["displayType"] = "cards"
-
-                # Update parsedData
-                if isinstance(d, dict) and "items" in d:
-                    current_assistant_msg["parsedData"] = d["items"]
-                elif isinstance(d, list):
-                    current_assistant_msg["parsedData"] = d
-                else:
-                    current_assistant_msg["parsedData"] = [d]
-
-            
-    # Clean up internal progress field and empty ghost messages
-    final_history = []
-    for msg in history:
-        if isinstance(msg, dict):
-            msg.pop("_full_text_progress", None)
-            
-            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and not msg.get("data"):
-                continue # Skip completely empty ghost messages
-                
-            final_history.append(msg)
-            
-    return {"history": final_history}
-
-@protected_router.delete("/history")
-async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        from jose import jwt, JWTError
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        session_id = payload.get("sub")
-        if not session_id:
-            raise Exception("No user")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token invalide")
-        
-    session_service = get_session_service()
-    session = await session_service.get_session(
-        app_name="zenika_hr_assistant", 
-        user_id=session_id,  # sub JWT = user_id
-        session_id=session_id
-    )
-    if session:
-        session_service._delete_session_impl(app_name="zenika_hr_assistant", user_id=session_id, session_id=session_id)
-        return {"message": "Historique effacé"}
-    else:
-        return {"message": "Pas d'historique"}
-
-# get_tool_metadata migré dans agent_commons.schemas
 
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")

@@ -12,6 +12,7 @@ import logging
 from datetime import datetime as _dt
 
 import httpx
+from opentelemetry.propagate import inject
 from google.genai import types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
@@ -76,8 +77,14 @@ async def create_agent(session_id: str | None = None) -> Agent:
         "Tu détiens l'expertise des logs et de l'infra."
     )
     try:
+        auth_header = auth_header_var.get()
+        headers = {"Authorization": auth_header} if auth_header else {}
+        inject(headers)
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url.rstrip('/')}/agent_ops_api.system_instruction/compiled")
+            res = await client.get(
+                f"{prompts_api_url.rstrip('/')}/agent_ops_api.system_instruction/compiled",
+                headers=headers,
+            )
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:
@@ -157,7 +164,7 @@ async def run_agent_query(
         app_name="zenika_ops_assistant", user_id=user_id, session_id=ephemeral_session_id
     )
 
-    response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data = (
+    response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data, display_type = (
         await run_agent_and_collect(runner, user_id, ephemeral_session_id, query, "ops", "[Ops]")
     )
 
@@ -192,6 +199,7 @@ async def run_agent_query(
     return {
         "response": response_text,
         "data": last_tool_data,
+        "display_type": display_type,
         "steps": steps,
         "thoughts": "\n".join(thoughts),
         "usage": {

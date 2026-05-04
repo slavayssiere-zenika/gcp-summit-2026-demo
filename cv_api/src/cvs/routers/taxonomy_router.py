@@ -154,25 +154,16 @@ async def recalculate_tree_batch_start(request: Request, user: dict = Depends(ve
     await tree_task_manager.update_progress(batch_step="map", new_log="Démarrage du processus Batch (Map)...")
 
     # AGENTS.md §4 : obtenir le service-token MAINTENANT (JWT valide) et le stocker en Redis.
-    # Tous les batch/check suivants (dedup, reduce, sweep) arriveront 1h+ plus tard JWT expiré.
+    # Pour garantir le support de Cloud Scheduler (qui fournit un OIDC Token sans rôle admin),
+    # on génère le service_token via l'identité autonome du microservice cv_api.
     auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
     _start_service_token: str = auth_token
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as _svc_start:
-            _res_start = await _svc_start.post(
-                f"{USERS_API_URL.rstrip('/')}/internal/service-token",
-                headers={"Authorization": auth_header},
-                timeout=10.0,
-            )
-            if _res_start.status_code == 200:
-                _fresh = _res_start.json().get("access_token")
-                if _fresh:
-                    _start_service_token = _fresh
-                    logger.info("[batch-start] Service token 90 min stocké en Redis.")
-            else:
-                logger.warning(f"[batch-start] /internal/service-token HTTP {_res_start.status_code} — fallback JWT court.")
-    except Exception as _e_start:
-        logger.warning(f"[batch-start] Impossible d'obtenir le service-token: {_e_start} — fallback JWT court.")
+    _fresh_start = await _generate_autonomous_service_token()
+    if _fresh_start:
+        _start_service_token = _fresh_start
+        logger.info("[batch-start] Service token autonome (90 min) stocké en Redis.")
+    else:
+        logger.warning("[batch-start] Échec génération token autonome — fallback sur le JWT court.")
     await tree_task_manager.update_progress(service_token=_start_service_token)
 
     existing_names = await _get_existing_competencies(auth_header)
@@ -182,7 +173,11 @@ async def recalculate_tree_batch_start(request: Request, user: dict = Depends(ve
         await tree_task_manager.update_progress(status="error", error=error_msg)
         return {"success": False, "error": error_msg}
         
-    instruction_map = await _fetch_prompt("cv_api.generate_taxonomy_tree_map", "cv_api.generate_taxonomy_tree_map.txt", auth_header)
+    try:
+        instruction_map = await _fetch_prompt("cv_api.generate_taxonomy_tree_map", auth_header)
+    except RuntimeError as e:
+        await tree_task_manager.update_progress(status="error", error=str(e))
+        return {"success": False, "error": str(e)}
     
     chunk_size = 500
     existing_names_chunks = [existing_names[i:i + chunk_size] for i in range(0, len(existing_names), chunk_size)]
@@ -233,6 +228,51 @@ async def recalculate_tree_batch_start(request: Request, user: dict = Depends(ve
         return {"success": False, "error": str(e)}
 
 
+async def _generate_autonomous_service_token() -> str:
+    """
+    Génère un service_token de 90 minutes de manière autonome en utilisant
+    l'identité propre du microservice cv_api (OIDC ID Token → JWT court → JWT 90min).
+    Cela garantit que les jobs batch peuvent se poursuivre même s'ils sont réveillés
+    par Cloud Scheduler (qui n'a pas de claim 'role') ou si le token du caller expire.
+    """
+    try:
+        import google.auth.transport.requests as google_requests
+        from google.oauth2 import id_token as sa_id_token
+        import os
+        
+        is_local = os.getenv("USE_IAM_AUTH", "false").lower() != "true"
+        users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
+        
+        short_jwt = ""
+        if is_local:
+            short_jwt = os.getenv("MOCK_M2M_JWT", "")
+        else:
+            try:
+                req = google_requests.Request()
+                oidc_token = sa_id_token.fetch_id_token(req, users_api_url)
+                async with httpx.AsyncClient(timeout=10.0) as hc:
+                    res = await hc.post(
+                        f"{users_api_url.rstrip('/')}/service-account/login",
+                        json={"id_token": oidc_token}
+                    )
+                    if res.status_code == 200:
+                        short_jwt = res.json().get("access_token", "")
+            except Exception as e:
+                logger.warning(f"[batch-auth] Impossible de générer le JWT court OIDC: {e}")
+                
+        if short_jwt:
+            async with httpx.AsyncClient(timeout=10.0) as hc:
+                res2 = await hc.post(
+                    f"{users_api_url.rstrip('/')}/internal/service-token",
+                    headers={"Authorization": f"Bearer {short_jwt}"}
+                )
+                if res2.status_code == 200:
+                    return res2.json().get("access_token", "")
+    except Exception as e:
+        logger.error(f"[batch-auth] Erreur fatale génération token autonome: {e}")
+    return ""
+
+
 @router.post("/recalculate_tree/batch/check", summary="Vérifie l'état du batch et avance la machine à états")
 async def recalculate_tree_batch_check(request: Request, user: dict = Depends(verify_jwt)):
     auth_header = request.headers.get("Authorization")
@@ -260,27 +300,19 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
         }
 
     # Lire le service-token persisté à batch/start (JWT encore valide à l'époque).
-    # Ne PAS tenter de ré-acquérir via /internal/service-token : le JWT est expiré depuis longtemps.
     _persisted_svc_token = latest_status.get("service_token") or auth_token
     if not latest_status.get("service_token"):
         logger.warning(
             "[batch-check] service_token absent du state Redis (ancien batch pré-migration) —"
-            " tentative de ré-acquisition avec le JWT courant."
+            " tentative de ré-acquisition via identité autonome."
         )
         try:
-            async with httpx.AsyncClient(timeout=10.0) as _svc_compat:
-                _res_compat = await _svc_compat.post(
-                    f"{USERS_API_URL.rstrip('/')}/internal/service-token",
-                    headers={"Authorization": auth_header},
-                    timeout=10.0,
-                )
-                if _res_compat.status_code == 200:
-                    _fresh = _res_compat.json().get("access_token")
-                    if _fresh:
-                        _persisted_svc_token = _fresh
-                        await tree_task_manager.update_progress(service_token=_fresh)
+            _fresh = await _generate_autonomous_service_token()
+            if _fresh:
+                _persisted_svc_token = _fresh
+                await tree_task_manager.update_progress(service_token=_fresh)
         except Exception as _e_compat:
-            logger.warning(f"[batch-check] Ré-acquisition échouée: {_e_compat}")
+            logger.warning(f"[batch-check] Ré-acquisition autonome échouée: {_e_compat}")
 
     try:
         batch_job = await asyncio.to_thread(_svc_config.vertex_batch_client.batches.get, name=batch_job_id)
@@ -429,13 +461,18 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
             await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")
             
             # Service token lu depuis Redis (stocké à batch/start quand le JWT était encore valide).
-            dedup_service_token: str = _persisted_svc_token
+            # Afin d'éviter un 401 sur prompts_api (le token persisté a pu expirer pendant le batch Map),
+            # on génère un service_token frais de manière autonome via l'identité du microservice.
+            _fresh = await _generate_autonomous_service_token()
+            dedup_service_token = _fresh if _fresh else _persisted_svc_token
+            if _fresh:
+                await tree_task_manager.update_progress(service_token=_fresh)
 
             # Lancement en tâche de fond pour éviter le timeout HTTP
             async def run_dedup(svc_token: str = dedup_service_token):
                 _svc_auth_header = f"Bearer {svc_token}"
                 try:
-                    instruction_dedup = await _fetch_prompt("cv_api.generate_taxonomy_tree_deduplicate", "cv_api.generate_taxonomy_tree_deduplicate.txt", _svc_auth_header)
+                    instruction_dedup = await _fetch_prompt("cv_api.generate_taxonomy_tree_deduplicate", _svc_auth_header)
                     # map_json_str = map_result complet, injecté dans Dedup ET Reduce
                     map_json_str = json.dumps(map_result, ensure_ascii=False)
                     # Dedup utilise GEMINI_PRO_MODEL (contexte 1M tokens) pour traiter
@@ -500,7 +537,7 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
                     await tree_task_manager.update_progress(completed_pillars=completed_pillars, new_log="Deduplicate terminé. Lancement du Batch Reduce...")
                     
                     # Start Reduce Batch
-                    instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", "cv_api.generate_taxonomy_tree_reduce.txt", _svc_auth_header)
+                    instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", _svc_auth_header)
                     
                     with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".jsonl") as f:
                         for i, p in enumerate(completed_pillars):
@@ -557,15 +594,37 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
                     if cleaned.endswith("```"): cleaned = cleaned[:-3]
                     cleaned = cleaned.strip()
                     
-                    raw_res, _ = json.JSONDecoder().raw_decode(cleaned)
+                    import json_repair
+                    
+                    # Auto-fix ultra-robuste avec json-repair (répare virgules manquantes, guillemets, troncatures)
+                    raw_res = json_repair.loads(cleaned)
                     if isinstance(raw_res, dict):
                         res_tree.update(raw_res)
                 except Exception as e:
-                    logger.error(f"Erreur de parsing de chunk JSONL Reduce {i} (ignoré): {e}")
-                    continue
-                    
+                    snippet = cleaned[-100:] if len(cleaned) > 100 else cleaned
+                    error_msg = f"Erreur JSON Reduce: {e}. Extrait: {snippet}"
+                    logger.error(error_msg)
+                    await tree_task_manager.update_progress(status="error", error=error_msg)
+                    return {"success": False, "error": error_msg}
             if not res_tree:
                 return {"success": False, "error": "Aucun chunk JSONL du Reduce n'a pu être parsé."}
+                
+            expected_pillars = latest_status.get("completed_pillars", [])
+            expected_names = {p.get("name") for p in expected_pillars if p.get("name")}
+            actual_names = set(res_tree.keys())
+            
+            import re
+            def normalize(n): return re.sub(r'[^a-z0-9]', '', (n or '').lower().replace('&', 'et'))
+            
+            expected_norm = {normalize(n): n for n in expected_names}
+            actual_norm = {normalize(n): n for n in actual_names}
+            missing_norm = set(expected_norm.keys()) - set(actual_norm.keys())
+            
+            if missing_norm:
+                missing_original = [expected_norm[k] for k in missing_norm]
+                error_msg = f"Reduce incomplet : les piliers suivants manquent dans la réponse Vertex AI: {', '.join(missing_original)}. Trouvés : {', '.join(actual_names)}"
+                await tree_task_manager.update_progress(status="error", error=error_msg)
+                return {"success": False, "error": error_msg}
                 
             await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")
 
@@ -579,91 +638,184 @@ async def recalculate_tree_batch_check(request: Request, user: dict = Depends(ve
                 await tree_task_manager.update_progress(status="error", error=error_msg)
                 return {"success": False, "error": error_msg}
 
-            # Service token lu depuis Redis (stocké à batch/start quand le JWT était encore valide).
-            sweep_service_token: str = _persisted_svc_token
-
-            # Lancement en tâche de fond pour Sweep
-            async def run_sweep(service_token: str = sweep_service_token):
-                try:
-                    instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", "cv_api.generate_taxonomy_tree_sweep.txt", f"Bearer {service_token}")
-                    existing_names = await _get_existing_competencies(f"Bearer {service_token}")
-                    def get_all_used_names(node, used=None):
-                        if used is None: used = set()
-                        if isinstance(node, dict):
-                            if "name" in node:
-                                used.add(node["name"])
-                            if "merge_from" in node and isinstance(node["merge_from"], list):
-                                for m in node["merge_from"]: used.add(m)
-                            for k, v in node.items():
-                                if isinstance(k, str) and k not in ("sub", "sub_competencies", "description", "aliases", "name", "merge_from"):
-                                    used.add(k)
+            # Afin d'éviter un 401 sur prompts_api (le token persisté a pu expirer pendant le très long batch Reduce),
+            # on génère un service_token frais de manière autonome via l'identité du microservice.
+            _fresh = await _generate_autonomous_service_token()
+            sweep_service_token = _fresh if _fresh else _persisted_svc_token
+            if _fresh:
+                await tree_task_manager.update_progress(service_token=_fresh)
+                
+            try:
+                instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", f"Bearer {sweep_service_token}")
+                existing_names = await _get_existing_competencies(f"Bearer {sweep_service_token}")
+                def get_all_used_names(node, used=None):
+                    if used is None: used = set()
+                    if isinstance(node, dict):
+                        if "name" in node:
+                            used.add(node["name"])
+                        if "merge_from" in node and isinstance(node["merge_from"], list):
+                            for m in node["merge_from"]: used.add(m)
+                        for k, v in node.items():
+                            if isinstance(k, str) and k not in ("sub", "sub_competencies", "description", "aliases", "name", "merge_from"):
+                                used.add(k)
+                            if k not in ("description", "aliases"):
                                 get_all_used_names(v, used)
-                        elif isinstance(node, list):
-                            for item in node:
-                                get_all_used_names(item, used)
-                        elif isinstance(node, str):
-                            used.add(node)
-                        return used
-        
-                    used_names = get_all_used_names(res_tree)
-                    missing = list(set(existing_names) - used_names)
-                            
-                    sweep_instruction = instruction_sweep.replace("{{MISSING_COMPETENCIES}}", ", ".join(missing) if missing else "Aucune").replace("{{CURRENT_TREE}}", json.dumps(res_tree, ensure_ascii=False))
-                    response_sweep = await generate_content_with_retry(
-                        _svc_config.client,
-                        model=os.environ["GEMINI_PRO_MODEL"],
-                        contents=[sweep_instruction],
-                        config=types.GenerateContentConfig(
-                            temperature=0.1,
-                            response_mime_type="application/json",
-                            max_output_tokens=16384,  # liste d'assignments, peut être longue
-                        )
-                    )
-                    await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], response_sweep.usage_metadata, auth_token=service_token)
+                    elif isinstance(node, list):
+                        for item in node:
+                            get_all_used_names(item, used)
+                    elif isinstance(node, str):
+                        used.add(node)
+                    return used
+    
+                used_names = get_all_used_names(res_tree)
+                missing = list(set(existing_names) - used_names)
+                
+                if not missing:
+                    await tree_task_manager.update_progress(sweep_result=[], missing_competencies=[], new_log="Aucune compétence manquante détectée. Application de l'arbre en DB...")
                     
-                    cleaned = _clean_llm_json(response_sweep.text or "")
-
-                    # Guard : réponse vide ou non-JSON (LLM dit "Aucune" ou rend du texte libre)
-                    sweep_result = []
-                    if cleaned and cleaned[0] in ("{", "["):
-                        try:
-                            sweep_raw, _ = json.JSONDecoder().raw_decode(cleaned)
-                            if isinstance(sweep_raw, dict) and "assignments" in sweep_raw:
-                                sweep_result = sweep_raw["assignments"]
-                            elif isinstance(sweep_raw, list):
-                                sweep_result = sweep_raw
-                        except json.JSONDecodeError as e:
-                            logger.warning(f"[sweep] JSON invalide même après nettoyage : {e} — sweep ignoré.")
-                    else:
-                        logger.info(
-                            f"[sweep] Réponse LLM vide ou non-JSON ('{cleaned[:80]}') "
-                            "— aucun assignment Sweep à appliquer."
-                        )
-
-                    await tree_task_manager.update_progress(sweep_result=sweep_result, missing_competencies=missing, new_log="Sweep terminé. Application en base de données...")
-
-                    # Utilisation du service_token obtenu AVANT le lancement de la tâche
                     competencies_api_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8000")
-                    apply_headers = {"Authorization": f"Bearer {service_token}"}
+                    apply_headers = {"Authorization": f"Bearer {sweep_service_token}"}
                     from opentelemetry.propagate import inject
                     inject(apply_headers)
                     async with httpx.AsyncClient() as http_client:
                         res = await http_client.post(
                             f"{competencies_api_url}/bulk_tree",
-                            json={"tree": res_tree, "sweep_assignments": sweep_result},
+                            json={"tree": res_tree, "sweep_assignments": [], "merges": []},
                             headers=apply_headers,
                             timeout=180.0
                         )
                         if res.status_code == 200:
                             await tree_task_manager.update_progress(status="completed", new_log="Taxonomie appliquée avec succès !")
+                            return {"success": True, "state": "COMPLETED"}
                         else:
                             await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
-                except Exception as e:
-                    logger.error(f"Erreur background sweep: {e}")
-                    await tree_task_manager.update_progress(status="error", error=f"Erreur Sweep: {str(e)}")
+                            return {"success": False, "error": f"Erreur d'application: {res.text}"}
+                else:
+                    with tempfile.NamedTemporaryFile("w", delete=False) as f:
+                        chunk_size = 150
+                        for i in range(0, len(missing), chunk_size):
+                            missing_chunk = missing[i:i + chunk_size]
+                            sweep_instruction = instruction_sweep.replace("{{MISSING_COMPETENCIES}}", ", ".join(missing_chunk)).replace("{{RES_TREE}}", json.dumps(res_tree, ensure_ascii=False))
+                            req = {
+                                "request": {
+                                    "contents": [{"role": "user", "parts": [{"text": sweep_instruction}]}],
+                                    "generationConfig": {
+                                        "temperature": 0.1,
+                                        "responseMimeType": "application/json",
+                                        "maxOutputTokens": 8192,
+                                        "responseSchema": {
+                                            "type": "OBJECT",
+                                            "properties": {
+                                                "merges": {
+                                                    "type": "ARRAY",
+                                                    "items": {
+                                                        "type": "OBJECT",
+                                                        "properties": {
+                                                            "canonical": {"type": "STRING"},
+                                                            "merge_from": {"type": "ARRAY", "items": {"type": "STRING"}}
+                                                        },
+                                                        "required": ["canonical", "merge_from"]
+                                                    }
+                                                },
+                                                "assignments": {
+                                                    "type": "ARRAY",
+                                                    "items": {
+                                                        "type": "OBJECT",
+                                                        "properties": {
+                                                            "competency": {"type": "STRING"},
+                                                            "pillar": {"type": "STRING"}
+                                                        },
+                                                        "required": ["competency", "pillar"]
+                                                    }
+                                                }
+                                            },
+                                            "required": ["merges", "assignments"]
+                                        }
+                                    }
+                                }
+                            }
+                            f.write(json.dumps(req) + "\n")
+                        temp_path = f.name
+                        
+                    gcs_client_sweep = gcs_storage.Client()
+                    ts_sweep = int(datetime.utcnow().timestamp())
+                    blob_sweep_name = f"taxonomy/input/sweep-{ts_sweep}.jsonl"
+                    sweep_bucket = gcs_client_sweep.bucket(BATCH_GCS_BUCKET)
+                    blob_sweep = sweep_bucket.blob(blob_sweep_name)
+                    blob_sweep.upload_from_filename(temp_path, content_type="application/jsonl")
+                    src_sweep_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_sweep_name}"
+                    dest_sweep_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/sweep-{ts_sweep}/"
+
+                    sweep_batch_job = await asyncio.to_thread(
+                        _svc_config.vertex_batch_client.batches.create,
+                        model=os.environ["GEMINI_PRO_MODEL"],
+                        src=src_sweep_uri,
+                        config={"display_name": "taxonomy-sweep-batch", "dest": dest_sweep_uri}
+                    )
+                    await tree_task_manager.update_progress(batch_job_id=sweep_batch_job.name, batch_step="sweep", missing_competencies=missing, new_log=f"Job Batch Sweep créé (ID: {sweep_batch_job.name}). En attente Vertex AI...")
+                    os.unlink(temp_path)
                     
-            asyncio.create_task(run_sweep())
-            return {"success": True, "state": "PROCESSING_SWEEP"}
+                    return {"success": True, "state": "PROCESSING_SWEEP"}
+                    
+            except Exception as e:
+                logger.error(f"Erreur de création Sweep Batch: {e}")
+                await tree_task_manager.update_progress(status="error", error=f"Erreur Sweep: {str(e)}")
+                return {"success": False, "error": str(e)}
+
+        elif batch_step == "sweep":
+            await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
+            
+            sweep_assignments = []
+            merges = []
+            
+            for i, text in enumerate(parsed_results):
+                try:
+                    cleaned = text.strip()
+                    if cleaned.startswith("```json"): cleaned = cleaned[7:]
+                    if cleaned.startswith("```"): cleaned = cleaned[3:]
+                    if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                    
+                    if cleaned and cleaned[0] in ("{", "["):
+                        import json_repair
+                        sweep_raw = json_repair.loads(cleaned)
+                        if isinstance(sweep_raw, dict):
+                            for assign in sweep_raw.get("assignments", []):
+                                if isinstance(assign, dict) and assign.get("competency") and assign.get("pillar"):
+                                    sweep_assignments.append(assign)
+                            for merge in sweep_raw.get("merges", []):
+                                if isinstance(merge, dict) and merge.get("canonical") and isinstance(merge.get("merge_from"), list):
+                                    # Ensure elements in merge_from are strings
+                                    merge["merge_from"] = [str(x) for x in merge["merge_from"] if x]
+                                    merges.append(merge)
+                except Exception as e:
+                    logger.error(f"Erreur JSON Sweep (chunk {i}): {e}")
+                    
+            res_tree = latest_status.get("res_tree", {})
+            missing = latest_status.get("missing_competencies", [])
+            
+            await tree_task_manager.update_progress(sweep_result=sweep_assignments, missing_competencies=missing, new_log="Sweep Batch terminé. Application en base de données...")
+
+            _fresh = await _generate_autonomous_service_token()
+            apply_service_token = _fresh if _fresh else _persisted_svc_token
+
+            competencies_api_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8000")
+            apply_headers = {"Authorization": f"Bearer {apply_service_token}"}
+            from opentelemetry.propagate import inject
+            inject(apply_headers)
+            async with httpx.AsyncClient() as http_client:
+                res = await http_client.post(
+                    f"{competencies_api_url}/bulk_tree",
+                    json={"tree": res_tree, "sweep_assignments": sweep_assignments, "merges": merges},
+                    headers=apply_headers,
+                    timeout=180.0
+                )
+                if res.status_code == 200:
+                    await tree_task_manager.update_progress(status="completed", new_log="Taxonomie appliquée avec succès !")
+                    return {"success": True, "state": "COMPLETED"}
+                else:
+                    await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
+                    return {"success": False, "error": f"Erreur d'application: {res.text}"}
             
     except Exception as e:
         logger.error(f"Erreur check batch: {e}")
@@ -772,8 +924,8 @@ async def recalculate_tree_batch_recover(request: Request, user: dict = Depends(
         if step == "deduplicating": step = "map"
         elif step == "sweeping": step = "reduce"
         
-        await tree_task_manager.update_progress(status="running", batch_step=step, error="")
-        return {"success": True, "message": "État du batch forcé à 'running'. L'interface va reprendre le relais."}
+        await tree_task_manager.update_progress(status="batch_running", batch_step=step, error="")
+        return {"success": True, "message": "État du batch forcé à 'batch_running'. L'interface va reprendre le relais."}
     return {"success": False, "error": "Aucun job batch récent en mémoire."}
 
 

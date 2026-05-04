@@ -93,7 +93,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/bulk-reanalyse/reset` : Reset Bulk Reanalyse
 - **GET** `/bulk-reanalyse/data-quality` : Get Data Quality Report
 - **POST** `/bulk-reanalyse/retry-apply` : Retry Bulk Apply
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp

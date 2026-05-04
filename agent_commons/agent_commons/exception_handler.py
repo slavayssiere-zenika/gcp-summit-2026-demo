@@ -101,11 +101,15 @@ def make_global_exception_handler(service_name: str):
         )
 
         if token:
-            asyncio.create_task(
-                report_exception_to_prompts_api(
-                    service_name, error_msg, trace_context, token
+            try:
+                await asyncio.wait_for(
+                    report_exception_to_prompts_api(
+                        service_name, error_msg, trace_context, token
+                    ),
+                    timeout=2.0
                 )
-            )
+            except Exception as e:
+                logger.warning(f"[{service_name}] Impossible de délivrer l'erreur à prompts_api (timeout): {e}")
 
         logger.error(
             f"[{service_name}] Unhandled exception on {request.method} {request.url.path}: "

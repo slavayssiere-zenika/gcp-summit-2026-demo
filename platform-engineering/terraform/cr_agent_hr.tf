@@ -5,7 +5,8 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
   deletion_protection = false
 
   template {
-    service_account = google_service_account.agent_hr_sa.email # We reuse the agent service account
+    max_instance_request_concurrency = var.cloudrun_concurrency
+    service_account                  = google_service_account.agent_hr_sa.email # We reuse the agent service account
     scaling {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances

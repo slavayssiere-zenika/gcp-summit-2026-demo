@@ -35,6 +35,7 @@ ENV LOG_LEVEL=INFO
 ENV TRACE_EXPORTER=grpc
 ENV ROOT_PATH=/drive-api
 ENV APP_VERSION=dev
+ENV SERVICE_NAME=drive-api
 ENV USE_IAM_AUTH=false
 ENV USERS_API_URL=http://users_api:8000
 ENV PUBSUB_CV_IMPORT_TOPIC=zenika-cv-import-events-dev

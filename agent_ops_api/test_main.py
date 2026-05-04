@@ -141,8 +141,8 @@ def test_get_history_success(mocker):
     mock_session.events = [mock_event_1, mock_event_2]
     mock_svc.get_session.return_value = mock_session
     
-    mocker.patch("agent.get_session_service", return_value=mock_svc)
-    mocker.patch("agent_commons.metadata.extract_metadata_from_session", return_value={"steps": [{"type": "call", "tool": "test"}], "thoughts": "thought"})
+    mocker.patch("history_routes.get_session_service", return_value=mock_svc)
+    mocker.patch("history_routes.extract_metadata_from_session", return_value={"steps": [{"type": "call", "tool": "test"}], "thoughts": "thought"})
     
     token = get_auth_token("test_user_hi")
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})

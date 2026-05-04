@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from opentelemetry.propagate import extract, inject
@@ -27,14 +26,6 @@ security = HTTPBearer()
 SECRET_KEY = os.getenv("SECRET_KEY", "dummy")
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
 
-@router.get("/spec")
-async def get_spec():
-    try:
-        with open("spec.md", "r", encoding="utf-8") as f:
-            return Response(content=f.read(), media_type="text/markdown")
-    except Exception as e:
-        logger.debug("[spec] spec.md not found or unreadable: %s", e)
-        return Response(content="# Specification introuvable", media_type="text/markdown")
 
 @router.post("/query")
 async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
@@ -99,7 +90,14 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             
         except Exception as e:
             span.set_attribute("error", True)
+            span.set_attribute("error.type", type(e).__name__)
             span.set_attribute("error.message", str(e))
+            logger.error(
+                "CRITICAL: Exception in /query — %s: %s",
+                type(e).__name__,
+                str(e) or repr(e),
+                exc_info=True,
+            )
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
 @router.get("/history")
@@ -235,6 +233,10 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                         current_assistant_msg["usage"]["total_input_tokens"] += sub_use.get("total_input_tokens", 0)
                         current_assistant_msg["usage"]["total_output_tokens"] += sub_use.get("total_output_tokens", 0)
                         current_assistant_msg["data"] = res_to_process.get("data") or res_to_process
+                        # Propagation du hint UI depuis le sous-agent (render_ui_widgets → display_type → A2A)
+                        sub_display_type = res_to_process.get("display_type")
+                        if sub_display_type and current_assistant_msg.get("displayType") == "text_only":
+                            current_assistant_msg["displayType"] = sub_display_type
                     
                     if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
                         try: res_to_process = json.loads(res_to_process["result"])
@@ -266,39 +268,30 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                 ti = current_assistant_msg["usage"]["total_input_tokens"]
                 to = current_assistant_msg["usage"]["total_output_tokens"]
                 current_assistant_msg["usage"]["estimated_cost_usd"] = round(ti * 0.000000075 + to * 0.0000003, 6)
+                
+            actions = getattr(event, "actions", None)
+            if actions:
+                widgets = getattr(actions, "render_ui_widgets", None) or getattr(actions, "renderUiWidgets", [])
+                for widget in widgets:
+                    payload = getattr(widget, "payload", {})
+                    if payload:
+                        res_uri = payload.get("resource_uri", "")
+                        if res_uri.startswith("ui://"):
+                            # Pass the full semantic slug: consultant, mission, tree, candidate...
+                            current_assistant_msg["displayType"] = res_uri[5:]
 
         if is_assistant and content_text:
             full_raw = current_assistant_msg.get("_full_text_progress", "") + content_text
             current_assistant_msg["_full_text_progress"] = full_raw
             current_assistant_msg["rawResponse"] = full_raw
-            
-            try:
-                json_match = re.search(r'\{[\s\S]*\}', full_raw)
-                if json_match:
-                    json_str = json_match.group(0)
-                    json_obj = json.loads(json_str)
-                    if "reply" in json_obj and "display_type" in json_obj:
-                        reply = json_obj.get("reply", "")
-                        current_assistant_msg["content"] = full_raw.replace(json_str, reply).strip()
-                        current_assistant_msg["displayType"] = json_obj["display_type"]
-                        if current_assistant_msg["displayType"] == "profile":
-                            current_assistant_msg["displayType"] = "cards"
-                        
-                        if "data" in json_obj:
-                            current_assistant_msg["data"] = json_obj["data"]
-                    else:
-                        current_assistant_msg["content"] = full_raw
-                else:
-                    current_assistant_msg["content"] = full_raw
-            except: 
-                current_assistant_msg["content"] = full_raw
+            current_assistant_msg["content"] = full_raw
 
             if current_assistant_msg.get("data"):
                 d = current_assistant_msg["data"]
-                
+
                 if isinstance(d, dict) and d.get("dataType") == "competency":
                     current_assistant_msg["displayType"] = "tree"
-                elif current_assistant_msg["displayType"] == "text_only":
+                elif current_assistant_msg["displayType"] == "text_only" and d:
                     current_assistant_msg["displayType"] = "cards"
 
                 if isinstance(d, dict) and "items" in d:
@@ -308,7 +301,6 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
                 else:
                     current_assistant_msg["parsedData"] = [d]
 
-            
     final_history = []
     for msg in history:
         if isinstance(msg, dict):

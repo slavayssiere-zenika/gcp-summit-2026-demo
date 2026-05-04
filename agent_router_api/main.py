@@ -1,3 +1,4 @@
+import logging
 import os
 import warnings
 from contextlib import asynccontextmanager
@@ -21,6 +22,7 @@ from tools_registry import router as mcp_router
 
 tracer = setup_telemetry()
 setup_logging()
+_logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,7 +40,7 @@ app = FastAPI(
 
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,health/agents,metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,health/agents,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
@@ -53,6 +55,16 @@ async def health():
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
+
+@app.get("/spec")
+async def get_spec():
+    """Retourne la spécification fonctionnelle (spec.md). Public — pas de JWT requis."""
+    try:
+        with open("spec.md", "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/markdown")
+    except Exception as e:
+        _logger.debug("[spec] spec.md not found or unreadable: %s", e)
+        return Response(content="# Specification introuvable", media_type="text/markdown")
 
 @app.get("/health/agents")
 async def health_agents():

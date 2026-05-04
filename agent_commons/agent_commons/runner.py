@@ -27,7 +27,7 @@ async def run_agent_and_collect(
     query: str,
     agent_name: str,
     agent_prefix: str,
-) -> tuple[str, list, list, int, int, Any]:
+) -> tuple[str, list, list, int, int, Any, str | None]:
     """Execute the ADK runner and collect structured output from the event stream.
 
     This is the core event-processing loop that was duplicated verbatim in all
@@ -48,12 +48,13 @@ async def run_agent_and_collect(
 
     Returns:
         Tuple of:
-          - response_text      (str)   — aggregated model response
-          - steps              (list)  — tool calls + results
-          - thoughts           (list)  — raw thought strings
+          - response_text      (str)        — aggregated model response
+          - steps              (list)       — tool calls + results
+          - thoughts           (list)       — raw thought strings
           - total_input_tokens (int)
           - total_output_tokens(int)
-          - last_tool_data     (Any)   — last tool result payload
+          - last_tool_data     (Any)        — last tool result payload
+          - display_type       (str | None) — ui:// widget slug emitted via render_ui_widgets
     """
     response_parts: list[str] = []
     last_tool_data: Any = None
@@ -62,6 +63,7 @@ async def run_agent_and_collect(
     thoughts: list[str] = []
     total_input_tokens = 0
     total_output_tokens = 0
+    display_type: str | None = None  # Capturé depuis render_ui_widgets ADK
 
     new_message = types.Content(role="user", parts=[types.Part(text=query)])
 
@@ -124,6 +126,19 @@ async def run_agent_and_collect(
         # 1.1 Alternative extraction for some ADK event structures (actions)
         # --------------------------------------------------------------------
         if hasattr(event, "actions") and event.actions:
+            # Capture render_ui_widgets → display_type hint for A2A propagation
+            widgets = (
+                getattr(event.actions, "render_ui_widgets", None)
+                or getattr(event.actions, "renderUiWidgets", None)
+                or []
+            )
+            for widget in (widgets or []):
+                payload = getattr(widget, "payload", {}) or {}
+                res_uri = payload.get("resource_uri", "")
+                if res_uri.startswith("ui://"):
+                    display_type = res_uri[5:]  # ex: "consultants", "profile", "evaluations"
+                    logger.info("%s Captured render_ui_widgets: %s", agent_prefix, display_type)
+
             for action in event.actions:
                 tc = getattr(action, "tool_call", None)
                 if tc:
@@ -177,4 +192,4 @@ async def run_agent_and_collect(
             total_output_tokens = max(total_output_tokens, ot)
 
     response_text = "".join(response_parts)
-    return response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data
+    return response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data, display_type

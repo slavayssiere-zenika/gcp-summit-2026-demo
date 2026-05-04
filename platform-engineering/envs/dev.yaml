@@ -17,6 +17,7 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 1
 cloudrun_max_instances: 10
+cloudrun_concurrency: 500
 
 # ── AlloyDB ───────────────────────────────────────────────
 alloydb_cpu: 2   # Minimum pour le type custom AlloyDB
@@ -34,7 +35,7 @@ gemini_hr_model:           "gemini-3.1-flash-lite-preview"  # RH : RAG + MCP
 gemini_ops_model:          "gemini-3.1-flash-lite-preview"  # Ops : SQL + logs
 gemini_missions_model:     "gemini-3.1-flash-lite-preview"  # Missions : matching staffing
 gemini_cv_model:           "gemini-3.1-flash-lite-preview"  # CV API : extraction JSON contrainte
-gemini_pro_model:          "gemini-3.1-pro-preview"         # Taxonomy Reduce (batch)
+gemini_pro_model:          "gemini-3.1-flash-lite-preview"  # Taxonomy Reduce (batch)
 gemini_model:              "gemini-3.1-flash-lite-preview"  # [LEGACY] fallback
 gemini_embedding_model:    "gemini-embedding-001"           # SEC-F06 Semantic Cache
 trace_sampling_rate: 1.0

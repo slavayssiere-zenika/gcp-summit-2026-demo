@@ -44,6 +44,7 @@ ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
 ENV OTEL_SERVICE_NAME=agent-missions-api
 ENV ROOT_PATH=/agent-missions-api
 ENV APP_VERSION=dev
+ENV SERVICE_NAME=agent-missions
 ENV GEMINI_MODEL=gemini-2.5-flash
 
 # ── MCP Sidecars — internal, no JWT (Level 1) ─────────────────────────────────

@@ -41,6 +41,21 @@ Il est strictement interdit de citer un profil sans ID vérifié.
 
 ---
 
+## 🖥️ Protocole UI — render_ui_widgets
+
+Après chaque appel outil retournant une **liste de consultants ou de profils**, tu **DOIS** émettre un `render_ui_widgets` avec le `resource_uri` adapté pour que le frontend affiche les bons composants visuels.
+
+| Situation | resource_uri à émettre |
+|---|---|
+| Liste de consultants / profils (`get_users_bulk`, `list_users`, `search_users`) | `ui://consultants` |
+| Résultat de recherche sémantique (`search_best_candidates`, `search_candidates_multi_criteria`) | `ui://consultants` |
+| Profil unique détaillé (`get_user`) | `ui://profile` |
+| Résultats d'évaluation de compétences (`batch_evaluate_competencies_users`) | `ui://evaluations` |
+
+**Règle stricte** : Si un outil retourne une liste vide ou une erreur, **ne pas émettre** de `render_ui_widgets`.
+
+---
+
 ## 📡 Endpoints
 
 | Méthode | Chemin | Description |
@@ -69,6 +84,8 @@ Il est strictement interdit de citer un profil sans ID vérifié.
 - **GET** `/metrics` : Metrics
 - **GET** `/` : Root
 - **GET** `/spec` : Get Spec
+- **GET** `/history` : Get History
+- **DELETE** `/history` : Delete History
 - **POST** `/login` : Login
 - **POST** `/logout` : Logout
 - **GET** `/me` : Get Me
@@ -76,11 +93,9 @@ Il est strictement interdit de citer un profil sans ID vérifié.
 - **GET** `/version` : Get Version
 - **POST** `/query` : Query
 - **POST** `/a2a/query` : A2A Query
-- **GET** `/history` : Get History
-- **DELETE** `/history` : Delete History
 - **GET** `/mcp/registry` : Mcp Registry
-- **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

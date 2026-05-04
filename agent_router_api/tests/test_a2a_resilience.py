@@ -56,9 +56,9 @@ def make_mock_async_client(responses):
 @pytest.mark.asyncio
 async def test_call_sub_agent_success_first_attempt(mocker):
     """Succès au premier essai — aucune métrique d'erreur ou retry."""
-    mock_duration = mocker.patch("agent.A2A_CALL_DURATION")
-    mock_errors = mocker.patch("agent.A2A_CALL_ERRORS_TOTAL")
-    mock_retries = mocker.patch("agent.A2A_CALL_RETRIES_TOTAL")
+    mock_duration = mocker.patch("a2a_tools.A2A_CALL_DURATION")
+    mock_errors = mocker.patch("a2a_tools.A2A_CALL_ERRORS_TOTAL")
+    mock_retries = mocker.patch("a2a_tools.A2A_CALL_RETRIES_TOTAL")
 
     mock_resp = MagicMock(spec=httpx.Response)
     mock_resp.status_code = 200
@@ -67,19 +67,18 @@ async def test_call_sub_agent_success_first_attempt(mocker):
 
     mock_client = AsyncMock()
     mock_client.post.return_value = mock_resp
-    mocker.patch("agent.httpx.AsyncClient", return_value=AsyncMock(
+    mocker.patch("a2a_tools.httpx.AsyncClient", return_value=AsyncMock(
         __aenter__=AsyncMock(return_value=mock_client),
         __aexit__=AsyncMock(return_value=False),
     ))
 
-    from agent import _call_sub_agent
+    from a2a_tools import _call_sub_agent
     result = await _call_sub_agent(
         agent_name="hr_agent",
         url="http://fake-hr:8080",
         query="Trouve-moi des candidats Python",
         user_id="user_1",
         timeout=60.0,
-        auth_header="Bearer fake-token",
     )
 
     assert result["response"] == "Voici les résultats."
@@ -92,9 +91,9 @@ async def test_call_sub_agent_success_first_attempt(mocker):
 @pytest.mark.asyncio
 async def test_call_sub_agent_retry_on_connect_error(mocker):
     """Erreur réseau au 1er essai → retry → succès."""
-    mocker.patch("agent.A2A_CALL_RETRIES_TOTAL")
-    mocker.patch("agent.A2A_CALL_ERRORS_TOTAL")
-    mocker.patch("agent.A2A_CALL_DURATION")
+    mocker.patch("a2a_tools.A2A_CALL_RETRIES_TOTAL")
+    mocker.patch("a2a_tools.A2A_CALL_ERRORS_TOTAL")
+    mocker.patch("a2a_tools.A2A_CALL_DURATION")
     mocker.patch("asyncio.sleep", new_callable=AsyncMock)
 
     call_count = 0
@@ -113,19 +112,18 @@ async def test_call_sub_agent_retry_on_connect_error(mocker):
         return mock_resp_ok
 
     mock_client.post.side_effect = post_side_effect
-    mocker.patch("agent.httpx.AsyncClient", return_value=AsyncMock(
+    mocker.patch("a2a_tools.httpx.AsyncClient", return_value=AsyncMock(
         __aenter__=AsyncMock(return_value=mock_client),
         __aexit__=AsyncMock(return_value=False),
     ))
 
-    from agent import _call_sub_agent
+    from a2a_tools import _call_sub_agent
     result = await _call_sub_agent(
         agent_name="hr_agent",
         url="http://fake-hr:8080",
         query="test",
         user_id="user_1",
         timeout=60.0,
-        auth_header=None,
     )
 
     assert result["response"] == "Voici les résultats."
@@ -136,9 +134,9 @@ async def test_call_sub_agent_retry_on_connect_error(mocker):
 @pytest.mark.asyncio
 async def test_call_sub_agent_no_retry_on_4xx(mocker):
     """Erreur 4xx → dégradation immédiate, PAS de retry."""
-    mocker.patch("agent.A2A_CALL_RETRIES_TOTAL")
-    mock_errors = mocker.patch("agent.A2A_CALL_ERRORS_TOTAL")
-    mocker.patch("agent.A2A_CALL_DURATION")
+    mocker.patch("a2a_tools.A2A_CALL_RETRIES_TOTAL")
+    mock_errors = mocker.patch("a2a_tools.A2A_CALL_ERRORS_TOTAL")
+    mocker.patch("a2a_tools.A2A_CALL_DURATION")
 
     mock_resp_401 = MagicMock(spec=httpx.Response)
     mock_resp_401.status_code = 401
@@ -148,19 +146,18 @@ async def test_call_sub_agent_no_retry_on_4xx(mocker):
     mock_client = AsyncMock()
     mock_client.post.return_value = mock_resp_401
 
-    mocker.patch("agent.httpx.AsyncClient", return_value=AsyncMock(
+    mocker.patch("a2a_tools.httpx.AsyncClient", return_value=AsyncMock(
         __aenter__=AsyncMock(return_value=mock_client),
         __aexit__=AsyncMock(return_value=False),
     ))
 
-    from agent import _call_sub_agent
+    from a2a_tools import _call_sub_agent
     result = await _call_sub_agent(
         agent_name="missions_agent",
         url="http://fake-missions:8080",
         query="test",
         user_id="user_1",
         timeout=90.0,
-        auth_header=None,
     )
 
     assert result["degraded"] is True
@@ -173,27 +170,26 @@ async def test_call_sub_agent_no_retry_on_4xx(mocker):
 @pytest.mark.asyncio
 async def test_call_sub_agent_all_attempts_fail_degraded_structure(mocker):
     """Toutes les tentatives échouent → réponse dégradée structurée correcte."""
-    mocker.patch("agent.A2A_CALL_RETRIES_TOTAL")
-    mocker.patch("agent.A2A_CALL_ERRORS_TOTAL")
-    mocker.patch("agent.A2A_CALL_DURATION")
+    mocker.patch("a2a_tools.A2A_CALL_RETRIES_TOTAL")
+    mocker.patch("a2a_tools.A2A_CALL_ERRORS_TOTAL")
+    mocker.patch("a2a_tools.A2A_CALL_DURATION")
     mocker.patch("asyncio.sleep", new_callable=AsyncMock)
 
     mock_client = AsyncMock()
     mock_client.post.side_effect = httpx.ConnectError("Port 8080 closed")
 
-    mocker.patch("agent.httpx.AsyncClient", return_value=AsyncMock(
+    mocker.patch("a2a_tools.httpx.AsyncClient", return_value=AsyncMock(
         __aenter__=AsyncMock(return_value=mock_client),
         __aexit__=AsyncMock(return_value=False),
     ))
 
-    from agent import _call_sub_agent
+    from a2a_tools import _call_sub_agent
     result = await _call_sub_agent(
         agent_name="hr_agent",
         url="http://fake-hr:8080",
         query="Cherche des devs Python",
         user_id="user_1",
         timeout=60.0,
-        auth_header=None,
     )
 
     # Structure de la réponse dégradée
@@ -226,9 +222,9 @@ async def test_ask_hr_agent_propagates_degraded(mocker):
         "thoughts": "",
         "usage": {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0},
     }
-    mocker.patch("agent._call_sub_agent", new=AsyncMock(return_value=degraded))
+    mocker.patch("a2a_tools._call_sub_agent", new=AsyncMock(return_value=degraded))
 
-    from agent import ask_hr_agent
+    from a2a_tools import ask_hr_agent
     result = await ask_hr_agent("test query")
 
     parsed = json.loads(result["result"])
@@ -240,9 +236,9 @@ async def test_ask_hr_agent_propagates_degraded(mocker):
 async def test_ask_missions_agent_nominal(mocker):
     """ask_missions_agent retourne le format standard quand le sous-agent répond."""
     mocker.patch("mcp_client.auth_header_var")
-    mocker.patch("agent._call_sub_agent", new=AsyncMock(return_value=VALID_A2A_RESPONSE))
+    mocker.patch("a2a_tools._call_sub_agent", new=AsyncMock(return_value=VALID_A2A_RESPONSE))
 
-    from agent import ask_missions_agent
+    from a2a_tools import ask_missions_agent
     result = await ask_missions_agent("Staff la mission M-001")
 
     parsed = json.loads(result["result"])
@@ -255,9 +251,9 @@ async def test_ask_missions_agent_nominal(mocker):
 async def test_ask_ops_agent_nominal(mocker):
     """ask_ops_agent retourne le format standard quand le sous-agent répond."""
     mocker.patch("mcp_client.auth_header_var")
-    mocker.patch("agent._call_sub_agent", new=AsyncMock(return_value=VALID_A2A_RESPONSE))
+    mocker.patch("a2a_tools._call_sub_agent", new=AsyncMock(return_value=VALID_A2A_RESPONSE))
 
-    from agent import ask_ops_agent
+    from a2a_tools import ask_ops_agent
     result = await ask_ops_agent("Quelle est la santé du système?")
 
     parsed = json.loads(result["result"])

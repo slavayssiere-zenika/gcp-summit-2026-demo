@@ -15,7 +15,7 @@ async def test_fetch_prompt_success():
         mock_resp.json.return_value = {"value": "Prompt content"}
         client_instance.get.return_value = mock_resp
         
-        result = await fetch_prompt("prompt_name", "fallback.txt", "Bearer token")
+        result = await fetch_prompt("prompt_name", "Bearer token")
         assert result == "Prompt content"
 
 @pytest.mark.asyncio

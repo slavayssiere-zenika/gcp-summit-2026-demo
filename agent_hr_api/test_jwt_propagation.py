@@ -111,7 +111,7 @@ def test_history_uses_jwt_sub_as_user_id(client):
     mock_svc = MagicMock()
     mock_svc.get_session = mock_get_session
 
-    with patch("main.get_session_service", return_value=mock_svc):
+    with patch("history_routes.get_session_service", return_value=mock_svc):
         resp = client.get("/history", headers=auth_headers("charlie@zenika.com"))
     assert resp.status_code == 200
 
@@ -147,7 +147,7 @@ def test_delete_history_uses_jwt_sub_as_user_id(client):
     mock_svc.get_session = mock_get_session
     mock_svc._delete_session_impl = mock_delete
 
-    with patch("main.get_session_service", return_value=mock_svc):
+    with patch("history_routes.get_session_service", return_value=mock_svc):
         resp = client.delete("/history", headers=auth_headers("dana@zenika.com"))
     assert resp.status_code == 200
 

@@ -124,7 +124,7 @@ async def seed_admin():
             await asyncio.sleep(5)
 
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 

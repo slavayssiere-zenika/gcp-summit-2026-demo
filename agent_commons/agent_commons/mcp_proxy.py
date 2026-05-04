@@ -6,21 +6,22 @@ _get_cached_tools were strictly identical in HR, Ops, and Missions agents).
 
 Key exports:
   - create_mcp_tool_proxy(client, tool_def)
-      Build a Python async function wrapping a remote MCP tool so that the
-      Google ADK can validate and call it as a native function.
+      Build a native ADK McpTool wrapping a remote MCP tool so that the
+      Google ADK can validate and call it natively.
 
   - get_cached_tools(clients_map, agent_prefix, ttl)
       Fetch, cache, deduplicate, and filter MCP tool definitions from a list
-      of MCP clients.  Returns a list of proxy functions ready to pass to
+      of MCP clients.  Returns a list of McpTool instances ready to pass to
       google.adk.agents.Agent(tools=...).
 """
 
-import inspect
 import logging
 import time
-from typing import Any
 
-from agent_commons.mcp_client import MCPHttpClient
+from mcp.types import CallToolResult, TextContent, Tool
+from google.adk.tools.mcp_tool import McpTool
+
+from agent_commons.mcp_client import MCPHttpClient, auth_header_var
 
 logger = logging.getLogger(__name__)
 
@@ -30,74 +31,145 @@ NON_BUSINESS_TOOLS: frozenset[str] = frozenset({
 })
 
 
-def create_mcp_tool_proxy(client: MCPHttpClient, tool_def: dict) -> Any:
-    """Build a Python async function wrapping a remote MCP tool.
+class StatelessMcpSession:
+    """Bridges a single MCPHttpClient REST call into the ADK MCP session protocol."""
 
-    The returned callable has:
-      - ``__name__``      → tool name (used by ADK as the function declaration name)
-      - ``__doc__``       → tool description (used by the LLM to choose the tool)
-      - ``__signature__`` → reconstructed from the JSON Schema (used by ADK for
-                            parameter validation before calling Gemini)
+    def __init__(self, client: MCPHttpClient) -> None:
+        self._client = client
 
-    Type-mapping rules (JSON Schema → Python):
-      - string  → str
-      - integer → int
-      - number  → float
-      - boolean → bool
-      - array / object → ``object``  (NEVER ``list`` — Gemini rejects arrays
-        without an ``items`` field and would return 400 INVALID_ARGUMENT)
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict,
+        progress_callback=None,
+        meta=None,
+    ) -> CallToolResult:
+        """Delegate to MCPHttpClient and normalise the result into a CallToolResult.
+
+        MCPHttpClient.call_tool may return:
+          - A list of dicts  → {"text": "..."}
+          - A dict with "content" key → MCP standard format
+          - A dict with "result" key → {"result": "json-string", "success": True}
+          - Any other scalar/dict → serialised as text
+        """
+        result_data = await self._client.call_tool(name, arguments)
+        content: list[TextContent] = []
+
+        if isinstance(result_data, list):
+            for item in result_data:
+                text = item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                content.append(TextContent(type="text", text=text))
+        elif isinstance(result_data, dict) and "content" in result_data:
+            # Standard MCP envelope
+            for item in result_data["content"]:
+                content.append(TextContent(
+                    type=item.get("type", "text"),
+                    text=item.get("text", ""),
+                ))
+        elif isinstance(result_data, dict) and "result" in result_data:
+            # MCPHttpClient-specific envelope: {"result": "<json-string>", "success": True}
+            content.append(TextContent(type="text", text=str(result_data["result"])))
+        else:
+            content.append(TextContent(type="text", text=str(result_data)))
+
+        return CallToolResult(content=content)
+
+
+class StatelessMcpSessionManager:
+    """Provides a fresh StatelessMcpSession per ADK invocation (no persistent connection)."""
+
+    def __init__(self, client: MCPHttpClient) -> None:
+        self._client = client
+
+    async def create_session(self, headers: dict | None = None) -> StatelessMcpSession:
+        return StatelessMcpSession(self._client)
+
+
+def sanitize_input_schema(schema: dict) -> dict:
+    """Supprime récursivement les entrées de `required` absentes de `properties`.
+
+    Le SDK Google GenAI ignore silencieusement les champs de propriétés qu'il ne
+    reconnaît pas (ex: `description` dans un items d'array imbriqué), mais conserve
+    les `required` — ce qui produit une `FunctionDeclaration` invalide rejetée par
+    l'API Gemini avec : 400 INVALID_ARGUMENT "property is not defined".
+
+    Ce sanitizer nettoie le schéma *avant* la conversion SDK pour garantir que
+    tout champ listé dans `required` existe bien dans `properties`.
+    """
+    if not isinstance(schema, dict):
+        return schema
+
+    schema = dict(schema)  # shallow copy pour ne pas muter l'original
+
+    # Nettoyer required vs properties au niveau courant
+    props = schema.get("properties", {})
+    if "required" in schema and isinstance(schema["required"], list):
+        filtered = [r for r in schema["required"] if r in props]
+        if len(filtered) != len(schema["required"]):
+            dropped = set(schema["required"]) - set(filtered)
+            logger.debug(
+                "[schema_sanitizer] Dropped from required (not in properties): %s", dropped
+            )
+        if filtered:
+            schema["required"] = filtered
+        else:
+            schema.pop("required", None)
+
+    # Récursion sur properties
+    if "properties" in schema:
+        schema["properties"] = {
+            k: sanitize_input_schema(v) for k, v in schema["properties"].items()
+        }
+
+    # Récursion sur items (array schemas)
+    if "items" in schema and isinstance(schema["items"], dict):
+        schema["items"] = sanitize_input_schema(schema["items"])
+
+    # Récursion sur anyOf / oneOf / allOf
+    for key in ("anyOf", "oneOf", "allOf"):
+        if key in schema and isinstance(schema[key], list):
+            schema[key] = [
+                sanitize_input_schema(s) if isinstance(s, dict) else s
+                for s in schema[key]
+            ]
+
+    return schema
+
+
+def create_mcp_tool_proxy(client: MCPHttpClient, tool_def: dict) -> McpTool:
+    """Build a native ADK McpTool wrapping a remote MCP tool.
 
     Args:
         client:   MCPHttpClient pointing to the target MCP sidecar.
-        tool_def: Tool definition dict as returned by ``client.list_tools()``.
+        tool_def: Tool definition dict as returned by ``client.list_tools()``
+                  (plain Python dict from JSON, NOT a Pydantic object).
 
     Returns:
-        An async callable passable to ``Agent(tools=[...])``.
+        A native ADK McpTool passable to ``Agent(tools=[])``.
     """
-    name = tool_def["name"]
-    desc = tool_def.get("description", "No description")
-    schema = tool_def.get("parameters", tool_def.get("inputSchema", {}))
+    # ADK McpTool expects the MCP standard "inputSchema" key.
+    # MCPHttpClient may return the schema under "parameters" (legacy key).
+    if "inputSchema" not in tool_def and "parameters" in tool_def:
+        tool_def["inputSchema"] = tool_def["parameters"]
 
-    async def mcp_tool_wrapper(**kwargs):
-        return await client.call_tool(name, kwargs)
+    # Sanitize before SDK conversion — prevents 400 INVALID_ARGUMENT from Gemini
+    # when required[] references properties dropped by the SDK's JSON Schema conversion.
+    if "inputSchema" in tool_def and isinstance(tool_def["inputSchema"], dict):
+        tool_def["inputSchema"] = sanitize_input_schema(tool_def["inputSchema"])
 
-    mcp_tool_wrapper.__name__ = name
-    mcp_tool_wrapper.__doc__ = desc
+    mcp_tool = Tool.model_validate(tool_def)
+    session_manager = StatelessMcpSessionManager(client)
 
-    params = []
-    properties = schema.get("properties", {})
-    required = schema.get("required", [])
+    def header_provider(ctx) -> dict:
+        """Dynamically inject the current request's JWT into each MCP call."""
+        auth = auth_header_var.get(None)
+        return {"Authorization": auth} if auth else {}
 
-    for p_name, p_def in properties.items():
-        # IMPORTANT: Use `object` (not `Any`) as the fallback type.
-        # ADK calls isinstance(default_value, annotation) to validate optional
-        # params.  isinstance(None, typing.Any) raises TypeError — whereas
-        # isinstance(None, object) returns True.
-        p_type = object
-        js_type = p_def.get("type")
-        if js_type == "string":
-            p_type = str
-        elif js_type == "integer":
-            p_type = int
-        elif js_type == "number":
-            p_type = float
-        elif js_type == "boolean":
-            p_type = bool
-        # array / object → falls through to `object` (safe fallback)
-
-        default = inspect.Parameter.empty
-        if p_name not in required:
-            default = p_def.get("default", None)
-
-        params.append(inspect.Parameter(
-            p_name,
-            inspect.Parameter.KEYWORD_ONLY,
-            default=default,
-            annotation=p_type,
-        ))
-
-    mcp_tool_wrapper.__signature__ = inspect.Signature(params)
-    return mcp_tool_wrapper
+    return McpTool(
+        mcp_tool=mcp_tool,
+        mcp_session_manager=session_manager,
+        header_provider=header_provider,
+    )
 
 
 async def get_cached_tools(
@@ -118,7 +190,7 @@ async def get_cached_tools(
                        for different agents in the same process.
 
     Returns:
-        List of async callables (MCP tool proxies) after deduplication and
+        List of ``McpTool`` instances (MCP tool proxies) after deduplication and
         infrastructure-tool filtering.
 
     Note:
@@ -129,7 +201,6 @@ async def get_cached_tools(
         agent processes.
     """
     now = time.time()
-    cache_key = id(clients_map)
 
     if _cache.get("tools") and (now - _cache.get("ts", 0)) < ttl:
         logger.info("%s Using cached MCP tool definitions (%d tools).", agent_prefix, len(_cache["tools"]))
@@ -137,19 +208,20 @@ async def get_cached_tools(
 
     logger.info("%s Fetching MCP tool definitions from MCP sidecars...", agent_prefix)
 
-    raw_tools: list = []
+    raw_tools: list[McpTool] = []
     for svc_name, client in clients_map:
         logger.info("%s Connecting to %s at %s ...", agent_prefix, svc_name, client.url)
         try:
             service_tools = await client.list_tools()
             count = 0
             for t in service_tools:
+                tool_name = t.get("name", "<unknown>") if isinstance(t, dict) else getattr(t, "name", "<unknown>")
                 try:
                     proxy = create_mcp_tool_proxy(client, t)
                     raw_tools.append(proxy)
                     count += 1
                 except Exception as te:
-                    logger.error("%s Failed to proxy tool %s: %s", agent_prefix, t.get("name"), te)
+                    logger.error("%s Failed to proxy tool %s: %s", agent_prefix, tool_name, te)
             logger.info("%s ✅ Loaded %d tools from %s.", agent_prefix, count, svc_name)
         except Exception as e:
             logger.error(
@@ -157,12 +229,13 @@ async def get_cached_tools(
                 agent_prefix, svc_name, client.url, e,
             )
 
-    # Deduplicate by function name (Gemini rejects duplicate function declarations
+    # Deduplicate by tool name (Gemini rejects duplicate function declarations
     # with 400 INVALID_ARGUMENT) and filter out non-business infrastructure tools.
+    # NOTE: McpTool exposes `.name` (not `.__name__` which is a callable-only attr).
     seen_names: set[str] = set()
-    tools: list = []
+    tools: list[McpTool] = []
     for proxy in raw_tools:
-        fn_name = proxy.__name__
+        fn_name = proxy.name  # McpTool.name == mcp_tool.name (str) — NOT proxy.__name__
         if fn_name in NON_BUSINESS_TOOLS:
             logger.debug("%s Skipping non-business tool: %s", agent_prefix, fn_name)
             continue

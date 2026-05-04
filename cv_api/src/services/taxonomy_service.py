@@ -31,16 +31,18 @@ from src.gemini_retry import generate_content_with_retry
 logger = logging.getLogger(__name__)
 
 
-async def fetch_prompt(prompt_name: str, fallback_file: str, auth_header: str) -> Optional[str]:
-    """Récupère un prompt depuis prompts_api avec fallback fichier local.
+async def fetch_prompt(prompt_name: str, auth_header: str) -> str:
+    """Récupère un prompt depuis prompts_api de manière stricte (fail-fast).
 
     Args:
         prompt_name: Nom du prompt dans prompts_api (ex: "cv_api.generate_taxonomy_tree_map").
-        fallback_file: Chemin vers le fichier texte de fallback local.
         auth_header: Header Authorization pour l'appel HTTP.
 
     Returns:
-        Contenu du prompt, ou None si indisponible (prompts_api ET fichier local absents).
+        Contenu du prompt.
+
+    Raises:
+        RuntimeError: Si le prompt est introuvable ou l'API injoignable.
     """
     try:
         async with httpx.AsyncClient() as http_client:
@@ -53,11 +55,8 @@ async def fetch_prompt(prompt_name: str, fallback_file: str, auth_header: str) -
             res_prompt.raise_for_status()
             return res_prompt.json()["value"]
     except Exception as e:
-        logger.warning(f"Prompt {prompt_name} indisponible (erreur: {e}). Fallback local.")
-        if os.path.exists(fallback_file):
-            with open(fallback_file, "r", encoding="utf-8") as f:
-                return f.read()
-        return None
+        logger.error(f"Prompt {prompt_name} indisponible (erreur: {e}). Arrêt de l'agent (Fail-fast).")
+        raise RuntimeError(f"Critical failure: System prompt '{prompt_name}' could not be fetched from prompts_api. ({e})") from e
 
 
 async def get_existing_competencies(auth_header: str) -> list[str]:
@@ -189,14 +188,14 @@ async def run_taxonomy_step(
             await tree_task_manager.update_progress(
                 new_log="Étape 1b: Catégorisation des compétences en grands piliers (Map)..."
             )
-            instruction_map = await fetch_prompt(
-                "cv_api.generate_taxonomy_tree_map",
-                "cv_api.generate_taxonomy_tree_map.txt",
-                auth_header,
-            )
-            if not instruction_map:
+            try:
+                instruction_map = await fetch_prompt(
+                    "cv_api.generate_taxonomy_tree_map",
+                    auth_header,
+                )
+            except RuntimeError as e:
                 await tree_task_manager.update_progress(
-                    error="Prompt de map indisponible.", status="error"
+                    error=str(e), status="error"
                 )
                 return
 
@@ -276,14 +275,14 @@ async def run_taxonomy_step(
             await tree_task_manager.update_progress(
                 new_log="Étape 2: Déduplication des piliers..."
             )
-            instruction_dedup = await fetch_prompt(
-                "cv_api.generate_taxonomy_tree_deduplicate",
-                "cv_api.generate_taxonomy_tree_deduplicate.txt",
-                auth_header,
-            )
-            if not instruction_dedup:
+            try:
+                instruction_dedup = await fetch_prompt(
+                    "cv_api.generate_taxonomy_tree_deduplicate",
+                    auth_header,
+                )
+            except RuntimeError as e:
                 await tree_task_manager.update_progress(
-                    error="Prompt de déduplication indisponible.", status="error"
+                    error=str(e), status="error"
                 )
                 return
 
@@ -339,11 +338,16 @@ async def run_taxonomy_step(
                 )
                 return
 
-            instruction_reduce = await fetch_prompt(
-                "cv_api.generate_taxonomy_tree_reduce",
-                "cv_api.generate_taxonomy_tree_reduce.txt",
-                auth_header,
-            )
+            try:
+                instruction_reduce = await fetch_prompt(
+                    "cv_api.generate_taxonomy_tree_reduce",
+                    auth_header,
+                )
+            except RuntimeError as e:
+                await tree_task_manager.update_progress(
+                    error=str(e), status="error"
+                )
+                return
 
             pillars_to_process = [target_pillar] if target_pillar else map_result.keys()
 
@@ -441,14 +445,14 @@ async def run_taxonomy_step(
                 )
                 return
 
-            instruction_sweep = await fetch_prompt(
-                "cv_api.generate_taxonomy_tree_sweep",
-                "cv_api.generate_taxonomy_tree_sweep.txt",
-                auth_header,
-            )
-            if not instruction_sweep:
+            try:
+                instruction_sweep = await fetch_prompt(
+                    "cv_api.generate_taxonomy_tree_sweep",
+                    auth_header,
+                )
+            except RuntimeError as e:
                 await tree_task_manager.update_progress(
-                    error="Prompt de sweep indisponible.", status="error"
+                    error=str(e), status="error"
                 )
                 return
 

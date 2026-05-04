@@ -115,20 +115,6 @@ const addLog = (msg: string) => {
   if (logs.value.length > 50) logs.value.pop()
 }
 
-const triggerTreeStep = async (step: str, target_pillar?: string) => {
-  isTreeLoading.value = true
-  error.value = ''
-  addLog(`Lancement de l'étape: ${step}...`)
-  
-  try {
-    await axios.post(`/api/cv/recalculate_tree/step`, { step, target_pillar })
-    checkTreeTaskStatus()
-  } catch (e: any) {
-    error.value = e.response?.data?.detail || e.message || `Erreur lors de l'étape ${step}`
-    addLog(`ERREUR: ${error.value}`)
-    isTreeLoading.value = false
-  }
-}
 
 const checkTreeTaskStatus = async () => {
   try {
@@ -138,20 +124,15 @@ const checkTreeTaskStatus = async () => {
     if (data && data.status) {
         treeStatus.value = data.status
         treeArtifacts.value = {
-            map_result: data.map_result,
-            res_tree: data.res_tree,
-            sweep_result: data.sweep_result,
-            completed_pillars: data.completed_pillars || [],
-            missing_competencies: data.missing_competencies || []
+            batch_job_id: data.batch_job_id
         }
         treeCost.value = data.usage?.estimated_cost_usd || null
 
         if (data.logs && data.logs.length > 0) {
-            const latestLog = data.logs[data.logs.length - 1]
-            const msg = latestLog.includes('] ') ? latestLog.split('] ')[1] : latestLog
-            if (logs.value.length === 0 || !logs.value[0].includes(msg)) {
-                addLog(msg)
-            }
+            // Replace logs completely with backend history and reverse it for newest first
+            logs.value = data.logs.map((log: string) => 
+              log.includes('] ') ? log : `[${new Date().toLocaleTimeString()}] ${log}`
+            ).reverse()
         }
     }
     
@@ -226,27 +207,6 @@ const cancelTreeBatch = async () => {
     }
 }
 
-const cancelInteractiveTree = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir interrompre ce traitement interactif ? (L\'opération s\'arrêtera à la fin de la requête en cours)')) return;
-    
-    try {
-        const resp = await axios.post('/api/cv/recalculate_tree/cancel')
-        if (resp.data && resp.data.success) {
-            treeStatus.value = 'error'
-            addLog('Annulation demandée. Le processus s\'arrêtera sous peu.')
-            if (treePollingInterval.value) {
-                clearInterval(treePollingInterval.value)
-                treePollingInterval.value = null
-            }
-        } else {
-            addLog(`Erreur annulation: ${resp.data?.error || 'Inconnue'}`)
-        }
-    } catch (e: any) {
-        console.error('Erreur annulation:', e)
-        addLog(`Erreur réseau (Cancel): ${e.message}`)
-    }
-}
-
 onMounted(() => {
   checkTreeTaskStatus()
   fetchBatchHistory()
@@ -282,92 +242,20 @@ onUnmounted(() => {
         <div class="panel-content">
           <p class="section-desc">Ce processus génère une taxonomie en 4 étapes interactives. Vous pouvez valider chaque étape.</p>
           
-          <div class="step-wizard" v-if="treeStatus !== 'idle'">
-             <div class="step-status">Status actuel : <strong>{{ treeStatus }}</strong></div>
-             
-             <!-- Étape 1 & 2 : Map & Dedup -->
-             <div class="step-box" v-if="treeArtifacts.map_result && Object.keys(treeArtifacts.res_tree || {}).length === 0">
-                <h4>Étape 1 & 2 : Piliers (Map & Dedup)</h4>
-                <div class="artifact-cards">
-                    <div v-for="(skills, pillar) in treeArtifacts.map_result" :key="pillar" class="artifact-card">
-                        <div class="card-title">{{ pillar }} <span class="badge">{{ skills.length }}</span></div>
-                        <div class="tags-container">
-                            <span v-for="skill in skills" :key="skill" class="skill-tag">{{ skill }}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="actions" v-if="treeStatus === 'waiting_for_user' || treeStatus === 'error' || treeStatus === 'cancelled'">
-                    <button class="action-btn secondary-btn" @click="triggerTreeStep('deduplicate')">Relancer la déduplication</button>
-                    <button class="action-btn primary-btn" @click="triggerTreeStep('reduce')">Valider les piliers et passer à Reduce</button>
-                </div>
-             </div>
-
-             <!-- Étape 3 : Reduce -->
-             <div class="step-box" v-if="Object.keys(treeArtifacts.res_tree || {}).length > 0 && (treeArtifacts.sweep_result === undefined || treeArtifacts.sweep_result === null)">
-                <h4>Étape 3 : Arbre (Reduce)</h4>
-                <p>Piliers traités : {{ treeArtifacts.completed_pillars?.join(', ') || 'Aucun' }}</p>
-                <div class="artifact-cards">
-                    <div v-for="(node, pillar) in treeArtifacts.res_tree" :key="pillar" class="artifact-card">
-                        <div class="card-title">{{ node.name || pillar }}</div>
-                        <div class="tree-nodes">
-                            <div v-for="sub in node.sub_competencies" :key="sub.name" class="tree-node">
-                                <strong>{{ sub.name }}</strong>
-                                <span v-if="sub.aliases" style="font-size: 0.75rem; color: #64748b;"> ({{ sub.aliases }})</span>
-                                <div v-if="sub.merge_from && sub.merge_from.length" class="merge-tags">
-                                    <span v-for="m in sub.merge_from" :key="m" class="merge-tag">fusionner: {{ m }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="actions" v-if="treeStatus === 'waiting_for_user' || treeStatus === 'error' || treeStatus === 'cancelled'">
-                    <button class="action-btn secondary-btn" @click="triggerTreeStep('sweep')">Passer au Sweep (Rattrapage)</button>
-                </div>
-             </div>
-
-             <!-- Étape 4 : Sweep -->
-             <div class="step-box" v-if="treeArtifacts.sweep_result !== undefined && treeArtifacts.sweep_result !== null">
-                <h4>Étape 4 : Rattrapage (Sweep)</h4>
-                <p v-if="treeArtifacts.missing_competencies?.length">Orphelines trouvées: {{ treeArtifacts.missing_competencies.length }}</p>
-                <div class="artifact-cards">
-                    <div v-for="item in treeArtifacts.sweep_result" :key="item.name" class="artifact-card">
-                        <div class="card-title"><strong>{{ item.name }}</strong></div>
-                        <div class="tags-container" v-if="item.merge_from && item.merge_from.length">
-                            <span style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">À fusionner depuis :</span>
-                            <span v-for="m in item.merge_from" :key="m" class="merge-tag">← {{ m }}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="actions" v-if="treeStatus === 'waiting_for_user' || treeStatus === 'error' || treeStatus === 'cancelled'">
-                    <button class="action-btn primary-btn" @click="triggerTreeStep('apply')">Appliquer et Sauvegarder</button>
-                </div>
-             </div>
-          </div>
-          
           <div class="actions" v-if="['idle', 'error', 'completed', 'cancelled'].includes(treeStatus)">
-            <button 
-              class="action-btn secondary-btn" 
-              @click="triggerTreeStep('map')"
-              :disabled="isLoading || isTreeLoading || treeStatus === 'batch_running' || !isAdmin()"
-              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Démarrer la taxonomie (Mode Interactif)'"
-            >
-              <Network size="20" :class="{ 'pulse-animation': isTreeLoading && treeStatus !== 'batch_running' }" />
-              {{ isTreeLoading && treeStatus !== 'batch_running' ? 'Calcul en cours...' : "Démarrer la taxonomie (Mode Interactif)" }}
-            </button>
-            
             <button 
               class="action-btn primary-btn" 
               @click="startTreeBatch()"
               :disabled="isLoading || isTreeLoading || treeStatus === 'batch_running' || !isAdmin()"
               :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Planifier un recalcul complet (Mode Batch - Coût Réduit)'"
-              style="margin-top: 1rem; background: #6366f1;"
+              style="background: #6366f1;"
             >
               <Network size="20" :class="{ 'pulse-animation': treeStatus === 'batch_running' }" />
               {{ treeStatus === 'batch_running' ? 'Processus Batch en cours côté serveur...' : "Planifier un recalcul complet (Mode Batch - Coût Réduit)" }}
             </button>
             
             <button 
-              v-if="treeStatus === 'error'"
+              v-if="treeStatus !== 'idle' && treeStatus !== 'batch_running'"
               class="action-btn secondary-btn" 
               @click="recoverBatch"
               :disabled="!isAdmin()"
@@ -375,7 +263,7 @@ onUnmounted(() => {
               style="margin-top: 1rem; border-color: #ef4444; color: #ef4444;"
             >
               <RefreshCcw size="20" />
-              Forcer Reprise du Batch (Suite à Erreur/Timeout)
+              Forcer Reprise du Batch GCP (Suite à Erreur, Interruption ou Timeout)
             </button>
             <button 
               v-if="treeStatus !== 'batch_running' && treeStatus !== 'running'"
@@ -385,21 +273,7 @@ onUnmounted(() => {
               :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Réinitialiser état'"
               style="margin-top: 1rem; border-color: #94a3b8; color: #94a3b8; font-size: 0.8rem;"
             >
-              🔄 Réinitialiser l'état (Urgence)
-            </button>
-          </div>
-
-          <div class="actions" v-if="treeStatus === 'running'" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; color: #64748b;">
-              <Activity size="20" class="pulse-animation" />
-              <span>Calcul interactif en cours... (Actualisation auto)</span>
-            </div>
-            <button 
-              class="action-btn" 
-              @click="cancelInteractiveTree()"
-              style="background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
-            >
-              <X size="18" style="vertical-align: middle; margin-right: 6px;" /> Interrompre
+              🔄 Réinitialiser l'état (Efface l'historique Redis)
             </button>
           </div>
           
@@ -514,29 +388,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Tree Preview Section -->
-    <div class="tree-grid fade-in-up" v-if="treeResult">
-      <div class="tree-header">
-         <div style="display: flex; align-items: center; gap: 1.25rem;">
-           <Network size="24" class="tree-icon" /> 
-           <div>
-             <h3>Nouvel Arbre de Compétences Généré</h3>
-             <span class="subtitle-tag">Ceci est une prévisualisation de la taxonomie fusionnée.</span>
-           </div>
-         </div>
-         <div v-if="treeCost" class="tree-cost-badge">
-           Coût de l'opération : ${{ Number(treeCost).toFixed(4) }}
-         </div>
-      </div>
-      <div class="tree-content">
-         <pre class="json-viewer">{{ JSON.stringify(treeResult, null, 2) }}</pre>
-      </div>
-      <div class="tree-actions">
-         <button @click="applyTree" class="action-btn success-btn" :disabled="isTreeLoading">
-            <CheckCircle2 size="18" /> Appliquer cette Taxonomie
-         </button>
-      </div>
-    </div>
+
 
     <div v-if="error" class="error-toast fade-in-up">
       <AlertTriangle size="20" />

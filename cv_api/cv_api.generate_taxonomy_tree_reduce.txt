@@ -75,10 +75,19 @@ Le champ `merge_from` est **OBLIGATOIRE** sur chaque feuille (liste vide si pas 
 
 ---
 
+**5. VALIDITÉ STRICTE DU JSON (CRITIQUE)**
+- Le résultat DOIT être un JSON 100% valide.
+- Fais extrêmement attention à bien mettre une virgule (`,`) pour séparer CHAQUE élément d'une liste ou d'un dictionnaire.
+- NE METS AUCUNE virgule traînante à la fin d'une liste ou d'un dictionnaire (ex: `["a", "b",]` est interdit).
+- Échappe correctement les guillemets dans les descriptions si nécessaire.
+
+---
+
 ### AVANT DE RÉPONDRE — AUTO-VÉRIFICATION :
 1. ✅ Chaque nœud intermédiaire a-t-il ≥ 2 enfants ? (sinon, aplatir)
 2. ✅ Y a-t-il des doublons sémantiques entre groupes au même niveau ? (sinon, fusionner)
 3. ✅ Y a-t-il des nœuds "catch-all" ou trop génériques ? (sinon, supprimer ou renommer)
 4. ✅ Tous les `merge_from` contiennent-ils uniquement des noms de la liste d'entrée ?
+5. ✅ La syntaxe JSON est-elle parfaite (virgules manquantes ou en trop) ?
 
 Retourne UNIQUEMENT le JSON. Aucun commentaire, aucun markdown, aucune explication.

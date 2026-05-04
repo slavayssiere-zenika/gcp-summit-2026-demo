@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-04-30 09:12 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-04 10:31 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 
@@ -52,7 +52,7 @@
 | `gemini_ops_model` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` |
 | `gemini_missions_model` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` |
 | `gemini_cv_model` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` |
-| `gemini_pro_model` | `gemini-3.1-pro-preview"` | `gemini-2.5-pro"` | `gemini-3.1-pro-preview"` |
+| `gemini_pro_model` | `gemini-3.1-flash-lite-preview"` | `gemini-2.5-pro"` | `gemini-3.1-flash-lite-preview"` |
 | `gemini_embedding_model` | `gemini-embedding-001"` | `gemini-embedding-001"` | `gemini-embedding-001"` |
 
 ### 📊 Observabilité

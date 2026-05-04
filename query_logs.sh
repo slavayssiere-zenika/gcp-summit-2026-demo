@@ -1,0 +1,1 @@
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="cv-api" AND textPayload:"Prompt cv_api.generate_taxonomy_tree_deduplicate indisponible"' --project=slavayssiere-sandbox-462015 --limit=5 --format=json

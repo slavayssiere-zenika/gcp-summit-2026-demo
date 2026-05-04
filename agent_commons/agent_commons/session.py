@@ -148,3 +148,60 @@ def clear_hr_candidates_pool(r: redis.Redis, session_id: str) -> None:
         r.delete(f"hr:candidates:{session_id}")
     except Exception as e:
         logger.error("HR candidates pool clear fail [%s]: %s", session_id, e)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Missions Context — mémoire de session pour l'agent Missions [ADR Sprint 17 §3.3]
+# ─────────────────────────────────────────────────────────────────────────────
+# Permet de mémoriser le contexte de la mission en cours (ID, titre, compétences
+# requises, statut) pour que les questions de suivi n'exigent pas un nouvel appel
+# get_mission à chaque tour. TTL 1h — stocké dans le namespace missions:context:{session_id}.
+
+MISSIONS_CONTEXT_TTL = int(os.getenv("MISSIONS_CONTEXT_TTL", "3600"))  # 1h par défaut
+
+
+def store_missions_context(r: redis.Redis, session_id: str, mission_data: dict) -> None:
+    """Persiste le contexte de la mission courante pour la session Missions.
+
+    Args:
+        r:            Client Redis (synchrone, identique à RedisSessionService.r).
+        session_id:   ID de session ADK courant.
+        mission_data: Dict contenant au minimum {mission_id, title}. Peut inclure
+                      {required_skills, status, client, start_date, description}.
+    """
+    try:
+        key = f"missions:context:{session_id}"
+        r.set(key, _json.dumps(mission_data), ex=MISSIONS_CONTEXT_TTL)
+        logger.debug(
+            "Missions context stored for session %s (mission_id=%s)",
+            session_id,
+            mission_data.get("mission_id", "?"),
+        )
+    except Exception as e:
+        logger.error("Missions context store fail [%s]: %s", session_id, e)
+
+
+def get_missions_context(r: redis.Redis, session_id: str) -> dict | None:
+    """Récupère le contexte de mission mémorisé pour la session Missions courante.
+
+    Returns:
+        Dict du contexte mission, ou None si rien en cache ou erreur Redis.
+    """
+    try:
+        key = f"missions:context:{session_id}"
+        raw = r.get(key)
+        if raw:
+            return _json.loads(raw)
+        return None
+    except Exception as e:
+        logger.error("Missions context load fail [%s]: %s", session_id, e)
+        return None
+
+
+def clear_missions_context(r: redis.Redis, session_id: str) -> None:
+    """Invalide explicitement le contexte de mission (ex: quand l'agent change de mission cible)."""
+    try:
+        r.delete(f"missions:context:{session_id}")
+    except Exception as e:
+        logger.error("Missions context clear fail [%s]: %s", session_id, e)
+

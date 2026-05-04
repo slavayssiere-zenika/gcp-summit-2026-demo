@@ -214,8 +214,8 @@ async def list_competency_users(competency_id: int, db: AsyncSession = Depends(g
 @router.post("/bulk_tree", status_code=200)
 async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks, request: Request, db: AsyncSession = Depends(get_db), jwt_payload: dict = Depends(verify_jwt)):
     """(Admin) Import atomique de la taxonomie complète avec fusion, sweep et archivage des orphelins."""
-    if jwt_payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+    if jwt_payload.get("role") not in ("admin", "service_account"):
+        raise HTTPException(status_code=403, detail="Privilèges administrateur ou compte de service requis.")
 
     await db.execute(update(Competency).values(parent_id=None))
     await db.flush()

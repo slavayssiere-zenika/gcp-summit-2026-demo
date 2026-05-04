@@ -35,6 +35,7 @@ ENV LOG_LEVEL=INFO
 ENV TRACE_EXPORTER=grpc
 ENV ROOT_PATH=/comp-api
 ENV APP_VERSION=dev
+ENV SERVICE_NAME=competencies-api
 ENV USE_IAM_AUTH=false
 ENV USERS_API_URL=http://users_api:8000
 ENV CV_API_URL=http://cv_api:8004

@@ -29,7 +29,7 @@ def get_google_access_token() -> str:
         return ""
 
 
-def get_m2m_jwt_token() -> str:
+async def get_m2m_jwt_token() -> str:
     """
     Retrieves the OIDC ID Token from Google Metadata Server (when running on Cloud Run)
     and exchanges it with the Users API to receive a Zenith JWT for inter-service communication.
@@ -59,9 +59,10 @@ def get_m2m_jwt_token() -> str:
             raise Exception("Impossible de générer un ID Token OIDC via ADC.")
 
         import httpx
-        res = httpx.post(f"{USERS_API_URL.rstrip('/')}/service-account/login", json={"id_token": google_id_token}, timeout=5.0)
-        res.raise_for_status()
-        return res.json()["access_token"]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.post(f"{USERS_API_URL.rstrip('/')}/service-account/login", json={"id_token": google_id_token})
+            res.raise_for_status()
+            return res.json()["access_token"]
     except Exception as e:
         logger.error(f"Failed to acquire M2M JWT: {e}")
 

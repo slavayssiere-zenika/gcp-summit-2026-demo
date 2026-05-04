@@ -693,7 +693,7 @@ class DriveService:
         # Tentative OIDC token (production Cloud Run) — validité 1h, éliminé les JWTError 'expired'
         # en cas de backoff Pub/Sub. En local (USE_IAM_AUTH != true) — fallback sur M2M JWT.
         oidc_token = get_google_oidc_id_token()
-        m2m_jwt = get_m2m_jwt_token() if not oidc_token else ""
+        m2m_jwt = await get_m2m_jwt_token() if not oidc_token else ""
         google_access_token = await asyncio.to_thread(get_google_access_token)
         pubsub_topic = PUBSUB_CV_IMPORT_TOPIC
         gcp_project_id = _resolve_gcp_project_id()

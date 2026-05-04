@@ -52,7 +52,7 @@ def override_verify_admin():
     return {"role": "admin"}
 
 def override_verify_jwt():
-    return {"role": "admin"}
+    return {"role": "admin", "sub": "test_user@zenika.com"}
 
 import src.prompts.router as router
 app.dependency_overrides[router.verify_admin] = override_verify_admin
@@ -265,3 +265,43 @@ async def test_analyzer_improve_prompt_with_gemini_markdown(monkeypatch):
         
         res = await analyzer.improve_prompt_with_gemini("orig", {})
         assert res == "better prompt\nline2"
+
+
+# ── /user/me endpoint ──────────────────────────────────────────────────────────
+
+def test_get_user_me_no_prompt_returns_empty():
+    """Régression : Pydantic v2 ValidationError si updated_at sans default.
+    GET /user/me quand aucun prompt n'existe encore → retourne {"key": ..., "value": ""}.
+    """
+    response = client.get("/user/me")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["key"] == "user_test_user@zenika.com"
+    assert data["value"] == ""
+    # updated_at doit être None, pas absent (Pydantic v2)
+    assert "updated_at" in data
+    assert data["updated_at"] is None
+
+
+def test_put_user_me_creates_prompt():
+    """PUT /user/me crée le prompt si inexistant (upsert)."""
+    resp = client.put("/user/me", json={"value": "mon prompt perso"})
+    assert resp.status_code == 200
+    assert resp.json()["value"] == "mon prompt perso"
+    assert resp.json()["key"] == "user_test_user@zenika.com"
+
+
+def test_get_user_me_returns_existing_prompt():
+    """GET /user/me retourne le prompt existant après création."""
+    client.put("/user/me", json={"value": "prompt sauvegardé"})
+    resp = client.get("/user/me")
+    assert resp.status_code == 200
+    assert resp.json()["value"] == "prompt sauvegardé"
+
+
+def test_put_user_me_updates_prompt():
+    """PUT /user/me met à jour le prompt existant."""
+    client.put("/user/me", json={"value": "v1"})
+    resp = client.put("/user/me", json={"value": "v2"})
+    assert resp.status_code == 200
+    assert resp.json()["value"] == "v2"

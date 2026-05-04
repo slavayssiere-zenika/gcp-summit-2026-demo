@@ -65,7 +65,7 @@ import os
 import logging
 
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 

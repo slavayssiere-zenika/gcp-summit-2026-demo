@@ -68,7 +68,8 @@ async def list_tools() -> list[Tool]:
                     "skip": {"type": "integer", "description": "Number of items to skip", "default": 0},
                     "limit": {"type": "integer", "description": "Maximum number of items to return", "default": 10}
                 }
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://competencies"}}
         ),
         Tool(
             name="search_competencies",
@@ -91,7 +92,8 @@ async def list_tools() -> list[Tool]:
                     "limit": {"type": "integer", "description": "Nombre maximum de résultats (augmenter à 20 si la technologie peut avoir plusieurs labels)", "default": 20}
                 },
                 "required": ["query"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://competencies"}}
         ),
         Tool(
             name="get_competency",
@@ -262,7 +264,8 @@ async def list_tools() -> list[Tool]:
                     "user_id": {"type": "integer", "description": "L'ID du consultant"}
                 },
                 "required": ["user_id"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://evaluations"}}
         ),
         Tool(
             name="set_user_competency_score",
@@ -352,7 +355,8 @@ async def list_tools() -> list[Tool]:
                     "top_n": {"type": "integer", "description": "Nombre de consultants similaires à retourner (défaut: 5)", "default": 5}
                 },
                 "required": ["user_id"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://candidates"}}
         ),
         Tool(
             name="list_competency_suggestions",

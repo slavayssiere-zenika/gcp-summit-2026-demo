@@ -5,7 +5,7 @@ import string
 from datetime import timedelta
 from urllib.parse import urlencode
 
-import requests
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
@@ -162,18 +162,19 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code"
     }
-    token_res = requests.post(token_url, data=token_data)
-    if not token_res.ok:
-        raise HTTPException(status_code=400, detail="Failed to get token from Google")
-    
-    access_token_google = token_res.json().get("access_token")
-    
-    userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
-    userinfo_res = requests.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"})
-    if not userinfo_res.ok:
-        raise HTTPException(status_code=400, detail="Failed to get user info from Google")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        token_res = await client.post(token_url, data=token_data)
+        if token_res.is_error:
+            raise HTTPException(status_code=400, detail="Failed to get token from Google")
         
-    user_info = userinfo_res.json()
+        access_token_google = token_res.json().get("access_token")
+        
+        userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
+        userinfo_res = await client.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"})
+        if userinfo_res.is_error:
+            raise HTTPException(status_code=400, detail="Failed to get user info from Google")
+            
+        user_info = userinfo_res.json()
     email = user_info.get("email")
     if not email or not email.endswith("@zenika.com"):
         raise HTTPException(status_code=403, detail="Uniquement les e-mails @zenika.com sont autorisés")

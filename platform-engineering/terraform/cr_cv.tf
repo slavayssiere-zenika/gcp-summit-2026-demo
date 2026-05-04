@@ -5,7 +5,8 @@ resource "google_cloud_run_v2_service" "cv_api" {
   deletion_protection = false
 
   template {
-    service_account = google_service_account.cv_sa.email
+    max_instance_request_concurrency = var.cloudrun_concurrency
+    service_account                  = google_service_account.cv_sa.email
 
     scaling {
       min_instance_count = var.cloudrun_min_instances

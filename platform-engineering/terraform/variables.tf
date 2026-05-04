@@ -44,6 +44,11 @@ variable "cloudrun_max_instances" {
   type        = number
 }
 
+variable "cloudrun_concurrency" {
+  description = "Nombre maximum de requêtes concurrentes par instance Cloud Run"
+  type        = number
+}
+
 # =========================================================
 # Scaling per-service pour le pipeline Bulk Reanalyse CVs
 # Ces APIs reçoivent jusqu'à 15 requêtes simultanées depuis

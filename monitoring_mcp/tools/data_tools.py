@@ -30,11 +30,13 @@ async def get_redis_invalidation_state_internal(pattern: str = "*") -> dict:
         r = redis.from_url(redis_url, socket_timeout=2.0)
 
         keys = []
-        cursor = "0"
-        while cursor != 0:
+        # FIX Gap 2: cursor doit être int 0, pas la string "0".
+        # redis-py retourne un int — comparer string vs int provoque une boucle infinie.
+        cursor = 0
+        while True:
             cursor, data = r.scan(cursor=cursor, match=pattern, count=100)
             keys.extend([k.decode("utf-8") for k in data])
-            if len(keys) >= 100:
+            if cursor == 0 or len(keys) >= 100:
                 break
 
         sample = {k: r.ttl(k) for k in keys[:20]}
@@ -105,10 +107,23 @@ async def inspect_pubsub_dlq_internal(subscription_id: str = "cv-ingestion-dlq-s
         subscriber = pubsub_v1.SubscriberClient()
         subscription_path = subscriber.subscription_path(project_id, subscription_id)
 
+        # FIX Gap 1: ack_deadline_seconds=600 pour éviter la disparition temporaire
+        # des messages durant l'inspection (défaut 10s trop court en prod).
+        # Les messages ne sont jamais acquittés — lecture seule garantie.
         response = subscriber.pull(
             request={"subscription": subscription_path, "max_messages": limit},
             timeout=10.0,
         )
+        # Prolonger le délai d'acquittement pour éviter la re-livraison non désirée
+        if response.received_messages:
+            ack_ids = [rm.ack_id for rm in response.received_messages]
+            subscriber.modify_ack_deadline(
+                request={
+                    "subscription": subscription_path,
+                    "ack_ids": ack_ids,
+                    "ack_deadline_seconds": 600,
+                }
+            )
 
         messages = [
             {

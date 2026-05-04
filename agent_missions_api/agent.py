@@ -11,12 +11,18 @@ import uuid
 import logging
 
 import httpx
+from opentelemetry.propagate import inject
 from google.genai import types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 
 from agent_commons.mcp_client import MCPHttpClient, auth_header_var
-from agent_commons.session import RedisSessionService
+from agent_commons.session import (
+    RedisSessionService,
+    store_missions_context,
+    get_missions_context,
+    clear_missions_context,
+)
 from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.runner import run_agent_and_collect
@@ -87,8 +93,14 @@ async def create_agent(session_id: str | None = None) -> Agent:
         "Tu es spécialisé dans la gestion des missions client et le staffing des consultants."
     )
     try:
+        auth_header = auth_header_var.get()
+        headers = {"Authorization": auth_header} if auth_header else {}
+        inject(headers)
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(f"{prompts_api_url.rstrip('/')}/agent_missions_api.system_instruction/compiled")
+            res = await client.get(
+                f"{prompts_api_url.rstrip('/')}/agent_missions_api.system_instruction/compiled",
+                headers=headers,
+            )
             if res.status_code == 200:
                 instruction_text = res.json()["value"]
             else:
@@ -141,13 +153,28 @@ async def run_agent_query(
     session_service = get_session_service()
 
     app_logger.info("[MISSIONS] Initializing Agent and Runner (session: %s)...", ephemeral_session_id[:8])
+
+    # --- [§3.3] Mémoire cross-session : injection du contexte mission si disponible ---
+    cached_context = None
+    if session_id:
+        try:
+            r = session_service.r
+            cached_context = get_missions_context(r, session_id)
+            if cached_context:
+                app_logger.info(
+                    "[MISSIONS] 🧠 Contexte mission restauré depuis Redis (mission_id=%s)",
+                    cached_context.get("mission_id", "?"),
+                )
+        except Exception as e:
+            app_logger.warning("[MISSIONS] Impossible de lire le contexte mission Redis: %s", e)
+
     agent = await create_agent(ephemeral_session_id)
     runner = Runner(app_name="zenika_missions_assistant", agent=agent, session_service=session_service)
     await session_service.create_session(
         app_name="zenika_missions_assistant", user_id=user_id, session_id=ephemeral_session_id
     )
 
-    response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data = (
+    response_text, steps, thoughts, total_input_tokens, total_output_tokens, last_tool_data, display_type = (
         await run_agent_and_collect(runner, user_id, ephemeral_session_id, query, "missions", "[MISSIONS]")
     )
 
@@ -162,6 +189,25 @@ async def run_agent_query(
             thoughts = [meta.get("thoughts", "")] if meta.get("thoughts") else []
             last_tool_data = meta.get("data")
             app_logger.info("[MISSIONS] Post-processed metadata: %d steps.", len(steps))
+
+            # --- [§3.3] Persistance du contexte mission si un appel get_mission a eu lieu ---
+            if session_id and last_tool_data and isinstance(last_tool_data, dict):
+                mission_id = last_tool_data.get("id") or last_tool_data.get("mission_id")
+                if mission_id:
+                    try:
+                        store_missions_context(session_service.r, session_id, {
+                            "mission_id": mission_id,
+                            "title": last_tool_data.get("title", ""),
+                            "status": last_tool_data.get("status", ""),
+                            "required_skills": last_tool_data.get("required_skills", []),
+                            "client": last_tool_data.get("client", ""),
+                        })
+                        app_logger.info(
+                            "[MISSIONS] 🧠 Contexte mission persisté en Redis (mission_id=%s)",
+                            mission_id,
+                        )
+                    except Exception as e:
+                        app_logger.warning("[MISSIONS] Impossible de persister le contexte mission: %s", e)
     except Exception as e:
         app_logger.error("[MISSIONS] Error in metadata post-processing: %s", e)
 
@@ -185,6 +231,7 @@ async def run_agent_query(
     return {
         "response": response_text,
         "data": last_tool_data,
+        "display_type": display_type,
         "steps": steps,
         "thoughts": "\n".join(thoughts),
         "usage": {

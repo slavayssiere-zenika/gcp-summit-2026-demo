@@ -10,6 +10,10 @@ RUN apt-get update \
 COPY agent_router_api/requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
+# 2. Shared package agent_commons (built as a wheel for clean installation)
+COPY agent_commons/ /agent_commons/
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels /agent_commons/
+
 # ---- Runtime Stage ----
 FROM python:3.11-slim
 
@@ -26,7 +30,7 @@ RUN apt-get update \
 COPY --from=builder /app/wheels /wheels
 COPY agent_router_api/requirements.txt .
 
-RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt agent_commons \
     && rm -rf /wheels
 
 COPY agent_router_api/ ./
@@ -39,6 +43,7 @@ ENV LOG_LEVEL=INFO
 ENV TRACE_EXPORTER=grpc
 ENV ROOT_PATH=/api
 ENV APP_VERSION=dev
+ENV SERVICE_NAME=agent-router
 ENV USERS_API_URL=http://users_api:8000
 ENV AGENT_HR_API_URL=http://agent_hr_api:8080
 ENV AGENT_OPS_API_URL=http://agent_ops_api:8080

@@ -21,6 +21,10 @@ import ConsultantAvailabilityCard from '@/components/agent/ConsultantAvailabilit
 import SystemHealthCard from '@/components/agent/SystemHealthCard.vue'
 import CloudRunLogsViewer from '@/components/agent/CloudRunLogsViewer.vue'
 import DebugPromptCard from '@/components/agent/DebugPromptCard.vue'
+import CompetencyBadge from '@/components/agent/CompetencyBadge.vue'
+import CompetencyList from '@/components/agent/CompetencyList.vue'
+import EvaluationCard from '@/components/agent/EvaluationCard.vue'
+import EvaluationTable from '@/components/agent/EvaluationTable.vue'
 
 const isHealthComponent = (obj: any) => obj && typeof obj.status === 'string' && typeof obj.component === 'string'
 const isHealthData = (arr: any[]) => arr && arr.length > 0 && arr.every((o: any) => isHealthComponent(o))
@@ -29,11 +33,11 @@ const isUserObj = (obj: any) => obj && obj.email && (obj.username || obj.full_na
 const isItemObj = (obj: any) => obj && obj.name && (obj.categories || obj.owner !== undefined || (obj.user_id && !obj.email));
 const isMissionObj = (obj: any) => obj && obj.title && (obj.proposed_team || obj.extracted_competencies || obj.description);
 // Détecte les objets compétences retournés par l'agent (ils ont un id et name mais pas d'email ni user_id)
-const isCompetencyObj = (obj: any) => obj && obj.name && obj.id && !obj.email && !obj.user_id && !obj.categories && !obj.owner && !obj.title;
-// Détecte les évaluations de compétences pures d'un consultant (sans user_id racine)
-const isEvaluationObj = (obj: any) => obj && obj.competency_id && obj.competency_name && obj.ai_score !== undefined && !obj.user_id;
-// Détecte une liste d'évaluations pour plusieurs consultants (résultats de recherche/staffing)
-const isBulkEvaluationsList = (arr: any[]) => arr && Array.isArray(arr) && arr.length > 0 && arr.every((o: any) => o && o.competency_id && o.competency_name && o.ai_score !== undefined && o.user_id !== undefined);
+
+// Heuristiques de reconnaissance pour le fallback 'cards'
+const isCompetencyLike = (obj: any) => obj && obj.name && obj.id && !obj.email && !obj.user_id && !obj.categories && !obj.owner && !obj.title
+const isEvaluationLike = (obj: any) => obj && obj.competency_id && obj.competency_name && obj.ai_score !== undefined
+
 const techKeys = [
   'semantic_embedding', 'raw_content', 'imported_by_id', 'password', 'id', 'user_id', 
   'username', 'name', 'full_name', 'agent', 'response', 'source', 'session_id', 
@@ -50,7 +54,7 @@ const isNumericKeyMap = (obj: any): boolean => {
 const filteredKeys = (obj: any) => obj ? Object.keys(obj).filter(k => !techKeys.includes(k) && !k.startsWith('_')) : [];
 const isProfileObj = (obj: any) => obj && !obj.email && (obj.user_id || obj.summary) && (obj.missions || obj.competencies_keywords || obj.current_role)
 const isAvailabilityObj = (obj: any) => obj && obj.summary && obj.active_missions !== undefined && obj.is_available !== undefined;
-const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj) || isAvailabilityObj(obj) || isEvaluationObj(obj);
+const isBusinessObj = (obj: any) => isUserObj(obj) || isItemObj(obj) || isMissionObj(obj) || isProfileObj(obj) || isAvailabilityObj(obj);
 // Un objet à clés numériques (mapping de masse) n'est pas une donnée business affichable
 const hasBusinessData = (obj: any) => !isNumericKeyMap(obj) && (filteredKeys(obj).length > 0 || isBusinessObj(obj));
 const hasAnyBusinessData = (msg: any) => {
@@ -251,36 +255,11 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <!-- 2. Tableau brut des évaluations (si disponible) -->
-                <template v-if="msg.parsedData && msg.parsedData.length > 0 && !isHealthData(msg.parsedData)">
-                  <div class="dual-section-label" style="margin-top: 1.5rem;">
-                    <span class="dual-section-icon">📋</span> Évaluations de compétences (données brutes)
-                  </div>
-                  <div class="data-table-container">
-                    <table class="zen-table">
-                      <thead>
-                        <tr>
-                          <th v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_') && !['id','user_id','ai_scored_at','user_scored_at','user_comment','ai_justification'].includes(k))" :key="key">{{ key.replace(/_/g,' ').toUpperCase() }}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="(row, idx) in msg.parsedData.slice(0, 20)" :key="idx">
-                          <td v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_') && !['id','user_id','ai_scored_at','user_scored_at','user_comment','ai_justification'].includes(k))" :key="key">
-                            <span v-if="row[key] === null || row[key] === undefined" class="null-badge">—</span>
-                            <span v-else>{{ row[key] }}</span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-if="msg.parsedData.length > 20" class="table-truncation-note">
-                      {{ msg.parsedData.length - 20 }} ligne(s) supplémentaire(s) non affichées
-                    </div>
-                  </div>
-                </template>
               </template>
 
+
               <!-- Table UI (mode normal sans consultantCards) -->
-              <div v-else-if="msg.displayType === 'table' || (Array.isArray(msg.parsedData) && isBulkEvaluationsList(msg.parsedData))" class="data-table-container">
+              <div v-else-if="msg.displayType === 'table' && Array.isArray(msg.parsedData) && msg.parsedData.length > 0" class="data-table-container">
                 <table class="zen-table">
                   <thead>
                     <tr>
@@ -301,7 +280,47 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Dynamic Cards UI (Dedicated Components) -->
+              <!-- === SEMANTIC URI DISPATCH — plural forms (native ADK UiWidgets) === -->
+
+              <!-- ui://consultants / ui://consultant -->
+              <div v-else-if="(msg.displayType === 'consultants' || msg.displayType === 'consultant') && msg.parsedData && msg.parsedData.length > 0" class="consultant-list">
+                <ConsultantCard v-for="(obj, idx) in msg.parsedData" :key="idx" :consultant="obj" />
+              </div>
+
+              <!-- ui://candidates / ui://candidate -->
+              <div v-else-if="(msg.displayType === 'candidates' || msg.displayType === 'candidate') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
+                <CandidateProfileCard v-for="(obj, idx) in msg.parsedData" :key="idx" :profile="obj" />
+              </div>
+
+              <!-- ui://missions / ui://mission -->
+              <div v-else-if="(msg.displayType === 'missions' || msg.displayType === 'mission') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
+                <MissionCard v-for="(obj, idx) in msg.parsedData" :key="idx" :mission="obj" />
+              </div>
+
+              <!-- ui://availabilities / ui://availability -->
+              <div v-else-if="(msg.displayType === 'availabilities' || msg.displayType === 'availability') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
+                <ConsultantAvailabilityCard v-for="(obj, idx) in msg.parsedData" :key="idx" :availability="obj" />
+              </div>
+
+              <!-- ui://items / ui://item -->
+              <div v-else-if="(msg.displayType === 'items' || msg.displayType === 'item') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
+                <ItemCard v-for="(obj, idx) in msg.parsedData" :key="idx" :item="obj" />
+              </div>
+
+              <!-- ui://competencies / ui://competency -->
+              <CompetencyList
+                v-else-if="(msg.displayType === 'competencies' || msg.displayType === 'competency') && msg.parsedData && msg.parsedData.length > 0"
+                :competencies="msg.parsedData"
+              />
+
+              <!-- ui://evaluations / ui://evaluation -->
+              <EvaluationTable
+                v-else-if="(msg.displayType === 'evaluations' || msg.displayType === 'evaluation') && msg.parsedData && msg.parsedData.length > 0"
+                :evaluations="msg.parsedData"
+              />
+
+              <!-- ui://empty et text_only : rien à afficher (le texte LLM suffit) -->
+
               <div v-else-if="msg.displayType === 'cards' && msg.parsedData && msg.parsedData.length > 0"
                    :class="msg.parsedData.every((o: any) => isUserObj(o)) ? 'consultant-list' : 'generic-grid'">
                 <template v-for="(obj, idx) in msg.parsedData" :key="idx">
@@ -311,19 +330,11 @@ onUnmounted(() => {
                   <ConsultantAvailabilityCard v-else-if="isAvailabilityObj(obj)" :availability="obj" />
                   <ItemCard v-else-if="isItemObj(obj)" :item="obj" />
                   
-                  <!-- Generic Fallback Card Render -->
-                  <!-- Compétences : affichage en badge non-cliquable (ne pas confondre leur id avec un user_id) -->
-                  <div v-else-if="isCompetencyObj(obj)" class="competency-result-badge">
-                    <span class="comp-result-name">{{ obj.name }}</span>
-                    <span v-if="obj.description" class="comp-result-desc">{{ obj.description }}</span>
-                    <span v-if="obj.aliases" class="comp-result-alias">{{ obj.aliases }}</span>
-                  </div>
+                  <!-- Compétences → CompetencyBadge -->
+                  <CompetencyBadge v-else-if="isCompetencyLike(obj)" :competency="obj" />
 
-                  <!-- Évaluations de compétences : affichage compact -->
-                  <div v-else-if="isEvaluationObj(obj)" class="competency-result-badge">
-                    <span class="comp-result-name">{{ obj.competency_name }} <span style="color: var(--zenika-red);">({{ obj.ai_score }}/5)</span></span>
-                    <span v-if="obj.ai_justification" class="comp-result-desc" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;" :title="obj.ai_justification">{{ obj.ai_justification }}</span>
-                  </div>
+                  <!-- Évaluations → EvaluationCard -->
+                  <EvaluationCard v-else-if="isEvaluationLike(obj)" :evaluation="obj" />
 
                   <div v-else-if="hasBusinessData(obj)" class="generic-dash-card" @click="(obj.user_id || (obj.id && obj.email)) ? goToUser(obj.user_id || obj.id) : null" :class="{ 'non-clickable': !obj.user_id && !(obj.id && obj.email) }">
                     <div class="card-header" v-if="obj.username || obj.name || obj.full_name">

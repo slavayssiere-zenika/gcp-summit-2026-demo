@@ -13,7 +13,7 @@ class PromptUpdate(PromptBase):
 
 class Prompt(PromptBase):
     key: str
-    updated_at: Optional[datetime]
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

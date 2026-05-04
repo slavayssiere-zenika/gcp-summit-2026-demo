@@ -68,21 +68,31 @@ export function extractDebugPrompt(markdown: string): string | null {
  */
 function extractConsultantCards(steps: any[]): any[] | null {
   if (!steps || steps.length === 0) return null
-  const semanticTools = ['search_candidates_multi_criteria', 'search_best_candidates']
+  const semanticTools = [
+    'search_candidates_multi_criteria',
+    'search_best_candidates',
+    // Ajout : outils de liste directe d'utilisateurs filtrés par compétence
+    'get_users_bulk',
+    'list_users',
+  ]
   // Parcourir en sens inverse pour prendre le dernier résultat
   for (let i = steps.length - 1; i >= 0; i--) {
     const step = steps[i]
     if (step.type === 'result' && i > 0) {
       const callStep = steps[i - 1]
       if (callStep?.type === 'call' && semanticTools.includes(callStep.tool)) {
-        const raw = step.data?.result?.[0]?.text
+        // get_users_bulk / list_users: data est dans step.data.content[0].text (MCP content envelope)
+        const raw =
+          step.data?.result?.[0]?.text ||
+          step.data?.content?.[0]?.text
         if (raw && looksLikeJson(raw)) {
           try {
             const parsed = JSON.parse(raw)
             const arr = Array.isArray(parsed) ? parsed : parsed.items || []
-            // Valider que c'est bien des consultants (user_id + full_name + combined_similarity ou source_tag)
-            if (arr.length > 0 && arr[0].user_id && (arr[0].full_name || arr[0].combined_similarity !== undefined)) {
-              return arr
+            // Valider que c'est bien des consultants (id + full_name)
+            if (arr.length > 0 && (arr[0].user_id || arr[0].id) && arr[0].full_name) {
+              // Normaliser user_id → id pour que ConsultantCard fonctionne avec les deux formats
+              return arr.map((u: any) => ({ ...u, user_id: u.user_id ?? u.id }))
             }
           } catch (_) { /* ignore */ }
         }
@@ -95,9 +105,11 @@ function extractConsultantCards(steps: any[]): any[] | null {
 function unwrapToolData(toolData: any): any[] {
   if (!toolData) return []
 
-  // MCP envelope: { result: [{ type: "text", text: "..." }] }
-  if (typeof toolData === 'object' && Array.isArray(toolData.result)) {
-    const textItem = toolData.result.find((r: any) => r.type === 'text' && r.text)
+  // Normalise: sub-agents return { content: [...] } while root agent uses { result: [...] }
+  // Both are MCP envelopes — treat them identically.
+  const envelope = toolData.result || toolData.content
+  if (typeof toolData === 'object' && Array.isArray(envelope)) {
+    const textItem = envelope.find((r: any) => r.type === 'text' && r.text)
     if (textItem) {
       const raw: string = textItem.text
       if (looksLikeJson(raw)) {
@@ -163,6 +175,13 @@ export const useChatStore = defineStore('chat', {
         let parsedData = null
         const toolData = responseData.data || null
         const steps = responseData.steps || []
+
+        // ── Chemin prioritaire : display_type émis par render_ui_widgets du sous-agent ──
+        // Le backend propage render_ui_widgets ADK → display_type dans la réponse /query.
+        // Ce signal est autoritaire : pas besoin d'inférence heuristique frontend.
+        if (responseData.display_type) {
+          displayType = responseData.display_type
+        }
 
         try {
           const jsonMatch = replyText.match(/\{[\s\S]*\}/)

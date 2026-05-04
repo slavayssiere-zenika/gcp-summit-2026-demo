@@ -7,7 +7,8 @@ resource "google_cloud_run_v2_service" "drive_api" {
   custom_audiences = ["https://${var.base_domain}"]
 
   template {
-    service_account = data.google_service_account.drive_sa.email
+    max_instance_request_concurrency = var.cloudrun_concurrency
+    service_account                  = data.google_service_account.drive_sa.email
     scaling {
       min_instance_count = var.cloudrun_min_instances
       max_instance_count = var.cloudrun_max_instances

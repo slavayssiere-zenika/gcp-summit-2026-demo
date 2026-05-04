@@ -69,7 +69,8 @@ async def list_tools() -> list[Tool]:
                     "skip": {"type": "integer", "default": 0, "description": "Nombre de missions à sauter (pagination)"},
                     "limit": {"type": "integer", "default": 50, "description": "Nombre max de missions à retourner (max 500)"}
                 }
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://missions"}}
         ),
         Tool(
             name="reanalyze_mission",

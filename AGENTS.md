@@ -50,7 +50,27 @@ Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 4. **Configuration Centralisée des Modèles IA** : Il est **STRICTEMENT INTERDIT** de hardcoder des constantes de modèles (ex: `gemini-2.5-flash`) dans le code (comme `agent_router_api`, `agent_hr_api`, `agent_ops_api` ou `cv_api`). Ce référentiel doit être unifié via des variables d'environnement centralisées (facilite l'A/B testing et le tracking FinOps).
 5. **Auto-génération Sécurisée de Data** : Lors de la création d'entités avec contraintes fortes (ex: création dynamique d'utilisateurs sans mot de passe spécifié par l'humain), les tools du LLM **doivent impérativement** auto-générer la dépendance silencieuse plutôt que d'échouer avec une erreur (ex: HTTP 422 Unprocessable Entity).
 6. **Robustesse de Création de Fichiers (Write_To_File)** : Lors de l'utilisation d'outils d'écriture (comme `write_to_file`), les paramètres `TargetFile` et `Overwrite` **DOIVENT IMPÉRATIVEMENT** être générés en tout premier dans l'objet JSON (avant `CodeContent`) pour éviter la saturation de la file de streaming. De plus, il est **strictement interdit** d'écrire des fichiers via des commandes bash (`cat <<EOF` ou `echo`), car une erreur de quote figera le processus en attente d'input, bloquant définitivement l'agent.
-7. **Privilège des Appels API (Environnement Dev)** : Lors de tests ou de vérifications métiers, privilégiez les appels API réels sur l'URL de l'environnement dev (définie par la variable `$DEV_BASE_URL` ou l'output Terraform `dev_url`) plutôt que d'exécuter des scripts locaux. Récupérez le token d'authentification via un appel à `auth/login` avec le compte admin (le mot de passe doit être récupéré dynamiquement via les outputs ou variables de Terraform — ne jamais l'écrire en clair).
+7. **Privilège des Appels API (Environnement Prd)** : Lors de tests ou de vérifications métiers, privilégiez les appels API réels sur la prd (`https://prd.zenika.slavayssiere.fr`) plutôt que d'exécuter des scripts locaux. Récupérez le token d'authentification via la **CLI MCP intégrée** ou via `auth/login` avec le compte admin (le mot de passe DOIT être récupéré dynamiquement depuis Secret Manager — ne jamais l'écrire en clair).
+
+   **CLI MCP Antigravity** (à utiliser en priorité pour les vérifications prd) :
+   ```bash
+   # Depuis la racine du projet :
+   GCLOUD_BIN=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin/gcloud \
+     python3 scripts/mcp_cli.py <commande>
+
+   # Commandes disponibles :
+   python3 scripts/mcp_cli.py tools analytics          # Lister les tools analytics
+   python3 scripts/mcp_cli.py tools monitoring         # Lister les tools monitoring
+   python3 scripts/mcp_cli.py finops daily             # Rapport FinOps du jour
+   python3 scripts/mcp_cli.py errors --hours 2         # Erreurs 5xx récentes
+   python3 scripts/mcp_cli.py redis --pattern 'items:*' # Inspecter clés Redis
+   python3 scripts/mcp_cli.py dlq                      # Inspecter DLQ Pub/Sub
+   python3 scripts/mcp_cli.py health                   # Health check global
+   python3 scripts/mcp_cli.py query 'SELECT ...'       # SQL SELECT sur AlloyDB
+   python3 scripts/mcp_cli.py call analytics get_finops_report --args '{"period":"weekly"}'
+   ```
+
+   **Auth automatique** : La CLI récupère le mot de passe via `gcloud secrets versions access latest --secret=admin-password-prd --project=prod-ia-staffing` et le JWT est mis en cache 55 min dans `~/.cache/zenika_mcp_cli_token.json`.
 8. **Standard Python Imports** : Les imports Python **DOIVENT** être placés en haut du fichier (conformément à la PEP 8). Évitez les imports locaux dans les fonctions, sauf cas exceptionnel de dépendance circulaire.
 9. **Interpréteur Python** : Utilisez systématiquement la commande `python3` au lieu de `python` pour toute exécution de script ou commande dans le terminal de l'utilisateur.
 10. **Failfast & Zéro Erreur Silencieuse** : Il est **STRICTEMENT INTERDIT** d'ignorer silencieusement des erreurs (ex: `except Exception: pass`, ou un simple logger non accompagné d'une levée d'exception). Les services doivent adopter une approche "failfast". Toute exception doit soit être interrompue formelquement (`raise`) pour que le système centralisé gère l'erreur, soit être retournée explicitement sous la forme `{"success": false, "error": ...}` (ex: Tools MCP). Conserver des erreurs silencieuses corrompt la garantie d'intégrité de la plateforme.
@@ -109,7 +129,8 @@ Services orchestrant des LLMs via Google ADK. Ils **consomment** des tools MCP �
 
 ### MCP Natif (services MCP standalone) 🟤
 Services exposant uniquement des tools MCP via HTTP, sans logique métier en base propre :
-- `analytics_mcp` — Données marché BigQuery, tracking FinOps (`log_ai_consumption`), outils GCP infra (Cloud Logging, Cloud Run). Exposé via HTTP (`/mcp/tools` + `/mcp/call`) et non via sidecar stdio. **À terme, à scinder en `analytics_mcp` + `monitoring_mcp`** (voir todo.md ADR12 Axe 3).
+- `analytics_mcp` — Données marché BigQuery, tracking FinOps (`log_ai_consumption`), anomalies de consommation IA. Exposé via HTTP (`/mcp/tools` + `/mcp/call`). Routage prd : `/mcp/analytics/` → rewrite `/mcp/`.
+- `monitoring_mcp` — SRE & Observabilité : Cloud Logging, Cloud Trace, health checks, Redis SCAN, Pub/Sub DLQ, SQL AlloyDB read-only. Routage prd : `/monitoring-mcp/mcp/`.
 
 ### Infrastructure
 - **Frontend** : `frontend` (Vue.js + proxy Nginx pointant `/api/` vers `agent_router_api`).
@@ -730,3 +751,83 @@ services/
 ```
 
 > **Contexte** : Ce pattern a été violé dans `cv_api/src/cvs/router.py` (5 039 lignes) et `competencies_api/src/competencies/router.py` (2 461 lignes) suite à des accumulations incrémentales sans refactoring. Ces fichiers sont en cours de remédiation (session 2026-04-29).
+
+---
+
+## 🤖 15. ANTIGRAVITY TOOLBOX — Accès Direct à la Plateforme Prd
+
+> Cette section décrit comment l'agent Antigravity peut **interroger directement la plateforme prd** pour valider ses analyses, récupérer des données réelles et corréler les findings de code avec l'état de production.
+
+### 15.1 — Serveur MCP `analytics-mcp-prd` (intégré dans Antigravity)
+
+Antigravity dispose d'un **serveur MCP natif `analytics-mcp-prd`** enregistré dans `~/.gemini/antigravity/mcp_config.json`. Ce serveur est un proxy stdio (`scripts/analytics_mcp_proxy.py`) qui s'authentifie automatiquement sur la prd et proxyfie vers `analytics_mcp`.
+
+**Tools disponibles nativement dans Antigravity** (sans passer par la CLI) :
+
+| Tool MCP | Description |
+|---|---|
+| `get_finops_report` | Rapport FinOps prd : coûts IA par user/action/période (`daily`\|`weekly`\|`monthly`) |
+| `get_aiops_dashboard_data` | Dashboard complet AIOps + FinOps (tokens, coûts, tendances) |
+| `detect_usage_anomalies` | Détecte les users dépassant le seuil de tokens/heure (anomaly detection) |
+| `get_top_market_skills` | Top compétences du marché (BigQuery JobTeaser) |
+| `get_market_demand_volume` | Volume d'offres pour une catégorie de compétences |
+| `log_ai_consumption` | Enregistre une consommation IA dans BigQuery (FinOps) |
+
+**RÈGLE** : Pour toute question sur les coûts IA, la consommation des agents, ou les anomalies FinOps en production → **utiliser en priorité les tools MCP `analytics-mcp-prd`** plutôt que de formuler des hypothèses.
+
+### 15.2 — CLI MCP locale (`scripts/mcp_cli.py`)
+
+Pour les requêtes qui nécessitent `monitoring_mcp` (non encore intégré en MCP Antigravity), utiliser la CLI :
+
+```bash
+GCLOUD_BIN=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin/gcloud \
+  python3 scripts/mcp_cli.py <commande>
+```
+
+| Commande CLI | Tool ciblé | Cas d'usage |
+|---|---|---|
+| `finops daily` | `analytics` | Coûts IA du jour |
+| `errors --hours 2` | `monitoring` | Erreurs 5xx prd |
+| `health` | `monitoring` | Santé globale plateforme |
+| `redis --pattern 'cache:*'` | `monitoring` | Inspection cache Redis |
+| `dlq --sub cv-ingestion-dlq-sub` | `monitoring` | Dead letter queue Pub/Sub |
+| `query 'SELECT COUNT(*) FROM cvs'` | `monitoring` | Requête SQL AlloyDB |
+| `call analytics detect_usage_anomalies --args '{}'` | `analytics` | Anomalies tokens |
+
+### 15.3 — Routage prd (référence)
+
+| Service | URL externe | Rewrite vers |
+|---|---|---|
+| `analytics_mcp` tools | `https://prd.zenika.slavayssiere.fr/mcp/analytics/tools` | `/mcp/tools` |
+| `analytics_mcp` call | `https://prd.zenika.slavayssiere.fr/mcp/analytics/call` | `/mcp/call` |
+| `monitoring_mcp` | `https://prd.zenika.slavayssiere.fr/monitoring-mcp/mcp/` | `/mcp/` |
+| Auth login | `https://prd.zenika.slavayssiere.fr/auth/login` | `users_api /login` |
+
+**Auth** : `POST /auth/login` avec `{"email": "admin@zenika.com", "password": "<gcloud secret admin-password-prd>"}`. JWT mis en cache `~/.cache/zenika_mcp_cli_token.json` (55 min).
+
+### 15.4 — Patterns de requête recommandés
+
+#### Vérification FinOps post-implémentation
+```
+→ Utiliser tool MCP `get_finops_report` avec period="daily"
+→ Comparer les coûts avant/après la modification
+→ Détecter les régressions de consommation via `detect_usage_anomalies`
+```
+
+#### Investigation d'incident production
+```
+1. CLI: python3 scripts/mcp_cli.py errors --hours 1
+2. CLI: python3 scripts/mcp_cli.py health
+3. Si DLQ : python3 scripts/mcp_cli.py dlq
+4. Si Redis : python3 scripts/mcp_cli.py redis --pattern 'cache:*'
+5. Si SQL : python3 scripts/mcp_cli.py query 'SELECT ... FROM ...' 
+```
+
+#### Analyse de coût par service Gemini
+```
+→ Tool MCP: get_aiops_dashboard_data (vue agrégée par modèle et par agent)
+→ Filtrer sur action=* pour isoler les agents coûteux
+→ Comparer avec la matrice des modèles (voir KI gemini-models-matrix-2026)
+```
+
+> **🚨 RÈGLE ANTI-HALLUCINATION** : Ne jamais estimer ou inventer des données de production (coûts, nombre de tokens, taux d'erreur). Toujours interroger les tools MCP ou la CLI pour obtenir des chiffres réels. Une estimation sans source MCP est une **hallucination FinOps**.

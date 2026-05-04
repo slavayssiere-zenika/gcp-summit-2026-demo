@@ -69,7 +69,8 @@ async def list_tools() -> list[Tool]:
                     "skip": {"type": "integer", "description": "Number of items to skip", "default": 0},
                     "limit": {"type": "integer", "description": "Maximum number of items to return", "default": 10}
                 }
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://items"}}
         ),
         Tool(
             name="list_categories",
@@ -166,7 +167,8 @@ async def list_tools() -> list[Tool]:
                     "limit": {"type": "integer", "description": "Maximum number of results", "default": 10}
                 },
                 "required": ["query"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://items"}}
         ),
         Tool(
             name="get_items_by_user",
@@ -177,7 +179,8 @@ async def list_tools() -> list[Tool]:
                     "user_id": {"type": "integer", "description": "The user ID"}
                 },
                 "required": ["user_id"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://items"}}
         ),
         Tool(
             name="get_item_stats",

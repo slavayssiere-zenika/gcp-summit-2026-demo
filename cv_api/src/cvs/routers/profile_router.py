@@ -51,6 +51,7 @@ from src.gemini_retry import generate_content_with_retry, embed_content_with_ret
 from src.services.cv_import_service import process_cv_core
 from src.services.search_service import execute_search, scale_bulk_dependencies
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
+from src.services.config import _CV_CACHE
 from src.services.taxonomy_service import run_taxonomy_step, fetch_prompt, get_existing_competencies
 from src.services.finops import log_finops
 from src.services.embedding_service import reindex_embeddings_bg

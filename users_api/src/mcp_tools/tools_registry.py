@@ -16,7 +16,8 @@ def get_mcp_tools() -> list[Tool]:
                     "skip": {"type": "integer", "description": "Number of users to skip", "default": 0},
                     "limit": {"type": "integer", "description": "Maximum number of users to return", "default": 10}
                 }
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://consultants"}}
         ),
         Tool(
             name="get_user",
@@ -52,7 +53,8 @@ def get_mcp_tools() -> list[Tool]:
                     }
                 },
                 "required": ["user_ids"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://consultants"}}
         ),
         Tool(
             name="create_user",
@@ -126,7 +128,8 @@ def get_mcp_tools() -> list[Tool]:
                     "limit": {"type": "integer", "description": "Maximum number of results", "default": 10}
                 },
                 "required": ["query"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://consultants"}}
         ),
         Tool(
             name="toggle_user_status",
@@ -166,7 +169,8 @@ def get_mcp_tools() -> list[Tool]:
                 "properties": {
                     "limit": {"type": "integer", "description": "Maximum results", "default": 10}
                 }
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://consultants"}}
         ),
         Tool(
             name="get_user_availability",
@@ -201,6 +205,7 @@ def get_mcp_tools() -> list[Tool]:
                     }
                 },
                 "required": ["user_ids"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://availabilities"}}
         )
     ]

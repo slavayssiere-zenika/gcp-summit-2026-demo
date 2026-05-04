@@ -26,6 +26,7 @@ from database import get_db
 from src.drive_service import DriveService
 from src.redis_client import get_redis
 from src.auth import verify_jwt
+from src.routers.files_router import _compute_kpi_metric
 
 logger = logging.getLogger(__name__)
 

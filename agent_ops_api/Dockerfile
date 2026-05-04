@@ -45,6 +45,7 @@ ENV LOG_LEVEL=INFO
 ENV TRACE_EXPORTER=grpc
 ENV ROOT_PATH=/agent-ops-api
 ENV APP_VERSION=dev
+ENV SERVICE_NAME=agent-ops
 ENV USERS_API_URL=http://users_api:8000
 ENV ITEMS_API_URL=http://items_api:8001
 ENV COMPETENCIES_API_URL=http://competencies_api:8003

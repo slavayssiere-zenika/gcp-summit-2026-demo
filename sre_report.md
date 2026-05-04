@@ -1,75 +1,72 @@
-# SRE Report (2026-04-29 21:32:44)
+# SRE Report — 2026-05-04 12:04
 
-**Total des erreurs traitées:** 6
+## Résumé exécutif
 
-
-## 🔴 Erreur: error_correction:cv_api:c88044094a13
-- **Service:** `cv_api`
-- **Message:** `(sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.AmbiguousParameterError'>: could not determine data type of parameter $1
-[SQL: 
-        SELECT unnest(competencies_keywords) AS skill,
-               COUNT(DISTINCT user_id)       AS consultant_count
-        FROM cv_profiles
-        WHERE semantic_embedding IS NOT NULL
-          AND competencies_keywords IS NOT NULL
-          AND cardinality(competencies_keywords) > 0
-          AND ($1 IS NULL OR source_tag ILIKE '%' || $1 || '%')
-        GROUP BY skill
-        ORDER BY consultant_count DESC
-        LIMIT $2
-    ]
-[parameters: (None, 10)]
-(Background on this error at: https://sqlalche.me/e/20/f405)`
-- **Règle SRE:** NEVER use a parameter in a SQL `IS NULL` check where its type is ambiguous, as this causes an `asyncpg.exceptions.AmbiguousParameterError`. ALWAYS explicitly cast the parameter to its expected database type (e.g., `CAST($1 AS TEXT)` or `$1::TEXT`). If you encounter any database `ProgrammingError`, you MUST search and analyze the full error logs in GCP Cloud Logging for the relevant service before proceeding.
-
-[INVESTIGATION REQUISE] En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging pour le service 'cv_api' sur le projet GCP 'prod-ia-staffing'.
-- **Statut / Action:** Corrigé dans cv_api/src/cvs/router.py (CAST AS TEXT).
-- **Résolution:** ✅ Prompt supprimé.
-
-## 🔴 Erreur: error_correction:cv_api:bb9e01acfad5
-- **Service:** `cv_api`
-- **Message:** `TreeTaskState.update_progress() got an unexpected keyword argument 'mode'`
-- **Règle SRE:** NEVER pass the 'mode' keyword argument to TreeTaskState.update_progress(). ALWAYS verify the exact method signature before calling it and only provide accepted parameters. If you encounter this TypeError or any similar unexpected keyword argument issues, you MUST actively search and analyze the logs in GCP Cloud Logging to investigate the error context and determine the correct function parameters.
-
-[INVESTIGATION REQUISE] En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging pour le service 'cv_api' sur le projet GCP 'prod-ia-staffing'.
-- **Statut / Action:** Corrigé dans cv_api/src/cvs/router.py (Remplacé par batch_step).
-- **Résolution:** ✅ Prompt supprimé.
-
-## 🔴 Erreur: error_correction:cv_api:17a300d4391b
-- **Service:** `cv_api`
-- **Message:** `name 'auth_token' is not defined`
-- **Règle SRE:** NEVER call the `cv_api` service without providing a valid authentication token. The error `NameError: name 'auth_token' is not defined` is a server-side failure caused by a missing `Authorization` header in the request, which prevents a required dependency from being injected. ALWAYS include a valid bearer token in the `Authorization` header for all `cv_api` calls. If you encounter any `NameError` or similar server-side errors from `cv_api`, you MUST immediately search and analyze the service's logs in GCP Cloud Logging to diagnose the root cause before retrying.
-
-[INVESTIGATION REQUISE] En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging pour le service 'cv_api' sur le projet GCP 'prod-ia-staffing'.
-- **Statut / Action:** Identifié comme faux positif / transient lié à des endpoints spécifiques. Sera surveillé.
-- **Résolution:** ✅ Prompt supprimé.
-
-## 🔴 Erreur: error_correction:agent_router_api:8597819c7b7a
-- **Service:** `agent_router_api`
-- **Message:** `400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'The input token count exceeds the maximum number of tokens allowed 1048576.', 'status': 'INVALID_ARGUMENT'}}`
-- **Règle SRE:** NEVER send excessively large inputs that risk exceeding the 1,048,576 token limit to the `agent_router_api` service. ALWAYS summarize, truncate, or process large documents and long conversation histories in smaller chunks. If you encounter a `400 INVALID_ARGUMENT` error or similar API failures, you must actively query and analyze the logs for the `agent_router_api` service in GCP Cloud Logging to diagnose the root cause before retrying.
-
-[INVESTIGATION REQUISE] En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging pour le service 'agent_router_api' sur le projet GCP 'prod-ia-staffing'.
-- **Statut / Action:** ⚠️ Non corrigé - Nécessite une troncature d'historique (Redis/LLM) via un workflow séparé.
-- **Résolution:** ⏸️ Laissé en base.
-
-## 🔴 Erreur: error_correction:cv_api:a0d033652b85
-- **Service:** `cv_api`
-- **Message:** `QueuePool limit of size 10 overflow 20 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)`
-- **Règle SRE:** CRITICAL DATABASE RULE: The `cv_api` service has a limited database connection pool. NEVER trigger long-running or highly concurrent operations against it. ALWAYS process data in smaller, paginated batches to prevent `sqlalchemy.exc.TimeoutError: QueuePool limit reached` errors. If you suspect a database timeout or connection issue, you MUST analyze the `cv_api` logs in GCP Cloud Logging for "QueuePool" errors before proceeding.
-
-[INVESTIGATION REQUISE] En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging pour le service 'cv_api' sur le projet GCP 'prod-ia-staffing'.
-- **Statut / Action:** Corrigé dans cv_api/database.py (pool_size=50, max_overflow=100).
-- **Résolution:** ✅ Prompt supprimé.
-
-## 🔴 Erreur: error_correction:cv_api:50caf54eed4e
-- **Service:** `cv_api`
-- **Message:** `QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)`
-- **Règle SRE:** NEVER issue high-volume, concurrent requests or requests for large, unfiltered datasets to the `cv_api` service, as this exhausts its database connection pool and causes `sqlalchemy.exc.TimeoutError`. ALWAYS break down large tasks into smaller, sequential requests, utilizing specific filters and pagination. If you encounter any timeout or connection-related errors with `cv_api`, you MUST first search and analyze the logs in GCP Cloud Logging for `sqlalchemy.exc.TimeoutError` or `QueuePool` messages to diagnose the issue before retrying.
-
-[INVESTIGATION REQUISE] En cas d'erreur similaire, vous DEVEZ rechercher les logs dans Cloud Logging pour le service 'cv_api' sur le projet GCP 'prod-ia-staffing'.
-- **Statut / Action:** Corrigé dans cv_api/database.py (pool_size=50, max_overflow=100).
-- **Résolution:** ✅ Prompt supprimé.
+**5 erreurs de production** trouvées dans `prompts_api`. **4 résolues** (code corrigé + prompts supprimés). **1 en monitoring**.
 
 ---
-**Résumé:** 5 erreur(s) résolue(s) et nettoyée(s) de la base de données.
+
+## ✅ Erreurs résolues
+
+### 1. `cv_api` — `NameError: name 'tempfile' is not defined`
+- **Clé** : `error_correction:cv_api:2a06e2cd18df`
+- **Statut** : ✅ Déjà corrigé dans le code source (`import tempfile` présent dans `taxonomy_router.py:9`)
+- **Action** : Prompt supprimé de production.
+
+---
+
+### 2. `cv_api` — `NameError: name '_CV_CACHE' is not defined`
+- **Clé** : `error_correction:cv_api:ad6f85bbc3bc`
+- **Endpoint** : `POST /cache/invalidate-taxonomy`
+- **Cause** : `_CV_CACHE` défini dans `src/services/config.py` mais non importé explicitement dans `profile_router.py`. Le module était importé comme `_svc_config` mais le dictionnaire lui-même n'était pas accessible.
+- **Fix appliqué** :
+  ```python
+  # cv_api/src/cvs/routers/profile_router.py
+  from src.services.config import _CV_CACHE  # ← ajouté
+  ```
+- **Action** : Prompt supprimé de production.
+
+---
+
+### 3. `drive_api` — `NameError: name '_compute_kpi_metric' is not defined`
+- **Clé** : `error_correction:drive_api:b67443bd3dee`
+- **Fichier** : `ingestion_router.py`
+- **Cause** : `_compute_kpi_metric` est définie dans `files_router.py` (ligne 394) mais `ingestion_router.py` l'utilisait sans l'importer.
+- **Fix appliqué** :
+  ```python
+  # drive_api/src/routers/ingestion_router.py
+  from src.routers.files_router import _compute_kpi_metric  # ← ajouté
+  ```
+- **Action** : Prompt supprimé de production.
+
+---
+
+### 4. `agent_router_api` — `400 INVALID_ARGUMENT` (context window overflow)
+- **Clé** : `error_correction:agent_router_api:8597819c7b7a`
+- **Statut** : ✅ Déjà corrigé — handler OPS-003 présent dans `agent.py:320-334` avec session reset automatique.
+- **Action** : Prompt supprimé de production.
+
+---
+
+## ⚠️ En monitoring — Intervention opérateur requise
+
+### 5. `competencies_api` — `QueuePool limit of size 10 overflow 20 reached`
+- **Clé** : `error_correction:competencies_api:a0d033652b85`
+- **Statut** : ⚠️ **Conservé** en production comme garde-fou
+- **Cause** : Saturation du pool de connexions SQLAlchemy lors de bulk operations concurrentes.
+- **État actuel** : Pool configuré via env vars `DB_POOL_SIZE=10` / `DB_MAX_OVERFLOW=20` dans `database.py`. Commentaire doc indique que le dimensionnement est cohérent avec les semaphores batch (max ~9 conns simultanées).
+- **Recommandation** : Augmenter `DB_POOL_SIZE=15` / `DB_MAX_OVERFLOW=30` dans Cloud Run si les bulk scoring jobs s'exécutent en parallèle. Surveiller via Grafana les métriques `pool_checked_out`.
+
+---
+
+## Fichiers modifiés
+
+| Service | Fichier | Type de fix |
+|---------|---------|-------------|
+| `cv_api` | `src/cvs/routers/profile_router.py` | Import manquant `_CV_CACHE` |
+| `drive_api` | `src/routers/ingestion_router.py` | Import manquant `_compute_kpi_metric` |
+
+## Actions à faire (opérateur)
+
+1. **Rebuilder et déployer** `cv_api` et `drive_api` avec `deploy.sh`
+2. **Monitorer** `competencies_api` pool metrics et ajuster `DB_POOL_SIZE` si nécessaire

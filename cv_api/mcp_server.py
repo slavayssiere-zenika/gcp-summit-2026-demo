@@ -112,7 +112,8 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["query"]
-            }
+            },
+            meta={"ui": {"resourceUri": "ui://candidates"}}
         ),
         Tool(
             name="get_user_cv",
