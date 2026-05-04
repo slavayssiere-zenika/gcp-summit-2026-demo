@@ -79,7 +79,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **PUT** `/{item_id}` : Update Item
 - **DELETE** `/{item_id}` : Delete Item
 - **POST** `/bulk` : Create Items Bulk
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp

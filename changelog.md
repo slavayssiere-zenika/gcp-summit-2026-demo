@@ -1,3 +1,49 @@
+## Mise à jour automatique - 2026-05-04 15:08:55
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1293  | 546  |  58% |
+| agent_hr_api     | 1567  | 215  |  86% |
+| agent_missions_api | 1229  | 313  |  75% |
+| agent_ops_api    | 1390  | 200  |  86% |
+| agent_router_api | 2139  | 405  |  81% |
+| analytics_mcp    | 734   | 307  |  58% |
+| competencies_api | 3883  | 1201 |  69% |
+| cv_api           | 6069  | 2064 |  66% |
+| drive_api        | 2481  | 1063 |  57% |
+| items_api        | 1592  | 460  |  71% |
+| missions_api     | 1852  | 518  |  72% |
+| monitoring_mcp   | 983   | 389  |  60% |
+| platform-engineering | 1155  | 885  |  23% |
+| prompts_api      | 1152  | 386  |  66% |
+| tests            | 79    | 3    |  96% |
+| users_api        | 1658  | 572  |  66% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Chore: Nettoyage scripts scratch/patch, reorganisation tests dans tests/
+
+#### Fichiers (non commités)
+- `gent_hr_api/conftest.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_ops_api/conftest.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/routers/folders_router.py` (M)
+- `frontend/vitest.log` (M)
+- `items_api/spec.md` (M)
+- `missions_api/spec.md` (M)
+- `prompts_api/spec.md` (M)
+- `users_api/spec.md` (M)
+
+---
+
 ## Mise à jour automatique - 2026-05-04 12:31:15
 
 ### Couverture de Code
