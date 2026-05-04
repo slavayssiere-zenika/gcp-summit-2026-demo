@@ -9,31 +9,53 @@ Gestion et versioning des system prompts des agents IA. Centralise les instructi
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `src/prompts/router.py` | 281 | ✅ OK (< 300) |
-| `src/prompts/analyzer.py` | 180 | ✅ OK |
-| `src/gemini_retry.py` | 75 | ✅ OK |
-| `src/prompts/schemas.py` | 29 | ✅ OK |
-| `src/prompts/models.py` | ~30 | ✅ OK |
+| `main.py` | 204 | ✅ |
+| `mcp_server.py` | 279 | ✅ |
+| `conftest.py` | 32 | ✅ |
+| `src/prompts/router.py` | 306 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `DATABASE_URL` | Infra | injecté Cloud Run |
-| `REDIS_URL` | Infra | `redis://redis:6379/5` |
-| `GEMINI_MODEL` | Comportement | via env (non hardcodé) |
+| `NPM_CONFIG_PREFIX` | Comportement | `/opt/promptfoo-env` |
+| `PATH` | Comportement | `"/opt/promptfoo-env/bin:${PATH}"` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PORT` | Infra | `8000` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/prompts-api` |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `prompts-api` |
+| `USE_IAM_AUTH` | Comportement | `false` |
 
 ## Redis
 **DB 5** — namespace `prompts:*`
 
 ## Endpoints clés
-- `GET /prompts/by-name/{name}` — récupère un prompt par nom (ex: `extract_cv_info`) — **CRITIQUE** : retourne string vide si 404
-- `POST /prompts/` — création/mise à jour d'un prompt
-- `POST /errors/report` — réception des erreurs 500 des APIs data (boucle feedback LLM)
+- `GET /user/me`
+- `PUT /user/me`
+- `GET /`
+- `GET /{key}`
+- `PUT /{key}`
+- `POST /`
+- `POST /{key}/analyze`
+- `POST /errors/report`
+- `GET /{key}/compiled`
+- `DELETE /{key}`
+- `GET /version`
+- `GET /spec`
+- `GET /mcp/tools`
+- `POST /mcp/call`
+- `GET /users/`
+- `GET /items/`
+- `PUT /items/{item_id}`
+- `POST /items/`
+- `DELETE /items/{item_id}`
+- `PATCH /items/`
 
 ## MCP tools exposés
-- `get_prompt_by_name`, `list_prompts`, `create_prompt`, `update_prompt`
+- `analyze_prompt`, `create_prompt`, `get_my_prompt`, `get_prompt`, `health_check_prompts`, `list_prompts`, `report_service_error_for_prompt`, `update_my_prompt`, `update_prompt`
 
 ## Gotchas connus
 - `GET /prompts/by-name/{name}` retourne `""` (string vide) si le prompt n'existe pas — les services appelants DOIVENT vérifier la réponse avant de l'utiliser comme instruction LLM

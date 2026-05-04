@@ -30,41 +30,72 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `src/auth.py` | ~40 | ✅ OK |
 
 ## Fichiers clés
+| Fichier | Lignes | État |
+|---|---|---|
+| `main.py` | 220 | ✅ |
+| `mcp_server.py` | 868 | ⚠️ |
+| `conftest.py` | 35 | ✅ |
+| `metrics.py` | 4 | ✅ |
+| `src/cvs/router.py` | 40 | ✅ |
+| `src/cvs/routers/analytics_router.py` | 381 | ✅ |
+| `src/cvs/routers/bulk_router.py` | 288 | ✅ |
+| `src/cvs/routers/profile_router.py` | 684 | ⚠️ |
+| `src/cvs/routers/search_router.py` | 479 | ✅ |
+| `src/cvs/routers/taxonomy_router.py` | 963 | ⚠️ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `DATABASE_URL` | Infra | injecté Cloud Run |
-| `REDIS_URL` | Infra | `redis://redis:6379/4` |
+| `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
-| `GEMINI_PRO_MODEL` | Comportement | `gemini-3.1-pro-preview` |
-| `GEMINI_CV_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `GEMINI_PRO_MODEL` | Comportement | `gemini-2.5-pro` |
 | `GEMINI_EMBEDDING_MODEL` | Comportement | `gemini-embedding-001` |
-| `MCP_SIDECAR_URL` | Comportement | `http://cv_mcp:8000` |
+| `PORT` | Infra | `8004` |
+| `MCP_SIDECAR_URL` | Infra | `http://cv_mcp:8000` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/cv-api` |
-| `PROMPTS_API_URL` | Infra | URL de `prompts_api` |
-| `COMPETENCIES_API_URL` | Infra | URL de `competencies_api` |
-| `GCP_PROJECT_ID` | Infra | injecté Cloud Run |
-| `VERTEX_LOCATION` | Comportement | `europe-west1` |
-| `BATCH_GCS_BUCKET` | Infra | injecté Cloud Run (bucket `cv_batch`, **partagé** avec `competencies_api`) |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `cv-api` |
+| `USE_IAM_AUTH` | Comportement | `false` |
+| `USERS_API_URL` | Infra | `http://users_api:8000` |
+| `COMPETENCIES_API_URL` | Infra | `http://competencies_api:8003` |
+| `ITEMS_API_URL` | Infra | `http://items_api:8001` |
+| `DRIVE_API_URL` | Infra | `http://drive_api:8080` |
+| `PROMPTS_API_URL` | Infra | `http://prompts_api:8000` |
+| `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8080` |
+| `PUBSUB_INVOKER_SA_EMAIL` | Comportement | `sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com` |
+| `GCP_PROJECT_ID` | Infra | `your-gcp-project-id` |
 | `BULK_APPLY_SEMAPHORE` | Comportement | `5` |
 | `BULK_EMBED_SEMAPHORE` | Comportement | `10` |
-| `CLOUDRUN_WORKSPACE` | Comportement | injecté Cloud Run |
 | `BULK_SCALE_MIN_INSTANCES` | Comportement | `1` |
+| `CLOUDRUN_WORKSPACE` | Comportement | `dev` |
 
 ## Redis
 **DB 4** — namespace `cv:*`
 
 ## Endpoints clés
-- `POST /cvs/upload` — upload et analyse d'un CV (Gemini multimodal)
-- `POST /cvs/bulk/start` — lancement analyse batch Vertex AI
-- `GET /cvs/bulk/status` — état du pipeline batch
-- `GET /cvs/search` — recherche vectorielle sémantique
-- `GET /cvs/{user_id}` — profil complet d'un consultant
-- `POST /cvs/reanalyze/{user_id}` — réanalyse individuelle
-- `GET /user/{user_id}/missions` — ⚠️ **endpoint critique** — missions d'un consultant, consommé par `competencies_api/scoring_service.py`
-- `GET /bulk-reanalyse/data-quality` — KPIs Data Quality (missions, embeddings, compétences, summary)
+- `GET /ranking/experience`
+- `POST /reindex-embeddings`
+- `GET /reanalyze/status`
+- `GET /analytics/skills-coverage`
+- `POST /reanalyze`
+- `POST /bulk-reanalyse/start`
+- `GET /bulk-reanalyse/status`
+- `POST /bulk-reanalyse/cancel`
+- `POST /bulk-reanalyse/reset`
+- `GET /bulk-reanalyse/data-quality`
+- `POST /bulk-reanalyse/retry-apply`
+- `POST /cache/invalidate-taxonomy`
+- `POST /import`
+- `GET /users/tags/map`
+- `GET /users/tag/{tag}`
+- `GET /user/{user_id}`
+- `GET /user/{user_id}/missions`
+- `GET /user/{user_id}/details`
+- `POST /internal/users/merge`
+- `GET /search`
 
 ## Architecture Service Layer
 ```
@@ -95,7 +126,7 @@ Les deux services ont `roles/storage.objectAdmin` sur ce bucket via leurs servic
 **Règle** : Tout nouveau pipeline batch doit utiliser un préfixe GCS distinct. Ne jamais écrire à la racine du bucket.
 
 ## MCP tools exposés
-- `get_cv_profile`, `search_cvs_semantic`, `list_cvs`, `get_cv_bulk_status`
+- `analyze_cv`, `cancel_bulk_cv_reanalyse`, `find_similar_consultants`, `get_bulk_cv_reanalyse_status`, `get_candidate_rag_context`, `get_cv_status_bulk`, `get_data_quality_report`, `get_most_experienced_consultants`, `get_rag_snippet`, `get_reanalyze_status`, `get_recalculate_tree_status`, `get_skills_coverage`, `get_tags_map`, `get_user_cv`, `get_user_missions`, `get_users_by_tag`, `global_reanalyze_cvs`, `match_mission_to_candidates`, `recalculate_competencies_tree`, `reindex_cv_embeddings`, `search_best_candidates`, `search_candidates_multi_criteria`, `start_bulk_cv_reanalyse`
 
 ## Gotchas connus
 - **RÈGLE CRITIQUE** : `router.py` est désormais un orchestrateur pur (42L). Toute nouvelle logique DOIT aller dans un sous-router `src/cvs/routers/`. Ne JAMAIS réajouter de logique métier dans `router.py`

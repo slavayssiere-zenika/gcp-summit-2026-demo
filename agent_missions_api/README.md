@@ -9,33 +9,53 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 424 | ⚠️ Zone alerte |
-| `test_guardrail.py` | 357 | ⚠️ Zone alerte |
-| `agent.py` | 195 | ✅ OK |
-| `mcp_client.py` | 175 | ✅ OK |
-| `session.py` | ~150 | ✅ OK |
-| `metadata.py` | ~80 | ✅ OK |
+| `main.py` | 381 | ✅ |
+| `conftest.py` | 16 | ✅ |
+| `metrics.py` | 20 | ✅ |
+| `agent.py` | 237 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via secret_key_ref (cr_agent_missions.tf) |
-| `REDIS_URL` | Infra | `redis://redis:6379/12` |
-| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PORT` | Infra | `8080` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `none` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Infra | `http://tempo:4318` |
+| `OTEL_SERVICE_NAME` | Comportement | `agent-missions-api` |
 | `ROOT_PATH` | Comportement | `/agent-missions-api` |
-| `MISSIONS_API_URL` | Infra | URL de `missions_api` |
-| `ANALYTICS_MCP_URL` | Infra | URL de `analytics_mcp` |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `agent-missions` |
+| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `MISSIONS_MCP_URL` | Infra | `http://missions_mcp:8000` |
+| `CV_MCP_URL` | Infra | `http://cv_mcp:8000` |
+| `USERS_MCP_URL` | Infra | `http://users_mcp:8000` |
+| `COMPETENCIES_MCP_URL` | Infra | `http://competencies_mcp:8000` |
+| `PROMPTS_API_URL` | Infra | `http://prompts_api:8000` |
+| `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8080` |
+| `MONITORING_MCP_URL` | Infra | `http://monitoring_mcp:8010` |
+| `REDIS_URL` | Infra | `redis://redis:6379/12` |
+| `USE_GCP_LOGGING` | Infra | `false` |
+| `GCP_PROJECT_ID` | Infra | `local` |
 
 ## Redis
 **DB 12** — namespace `session:missions:*`
 
 ## Endpoints clés
-- `POST /a2a/query` — point d'entrée A2A depuis `agent_router_api`
-- `GET /health`, `GET /metrics`, `GET /version`
+- `GET /version`
+- `POST /query`
+- `POST /a2a/query`
+- `GET /history`
+- `DELETE /history`
+- `GET /spec`
+- `GET /mcp/registry`
 
 ## MCP APIs consommées
-- `missions_api` : `list_missions`, `get_mission_by_id`, `search_missions_semantic`
-- `analytics_mcp` : `log_ai_consumption` (OBLIGATOIRE)
+- `COMPETENCIES_MCP_URL`
+- `CV_MCP_URL`
+- `MISSIONS_MCP_URL`
+- `USERS_MCP_URL`
 
 ## Gotchas connus
 - `main.py` approche la zone bloquante — surveiller lors des prochaines features

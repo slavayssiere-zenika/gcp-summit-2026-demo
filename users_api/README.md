@@ -9,35 +9,54 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `src/users/router.py` | 819 | ⚠️ Zone alerte (> 300) |
-| `src/auth.py` | 117 | ✅ OK |
-| `src/users/schemas.py` | 85 | ✅ OK |
-| `src/users/pubsub.py` | 68 | ✅ OK |
-| `src/users/models.py` | ~40 | ✅ OK |
-| `mcp_server.py` | ~150 | ✅ OK |
-| `main.py` | ~80 | ✅ OK |
+| `main.py` | 272 | ✅ |
+| `mcp_server.py` | 94 | ✅ |
+| `conftest.py` | 68 | ✅ |
+| `metrics.py` | 4 | ✅ |
+| `src/users/auth_router.py` | 273 | ✅ |
+| `src/users/crud_router.py` | 269 | ✅ |
+| `src/users/router.py` | 10 | ✅ |
+| `src/users/system_router.py` | 131 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `DATABASE_URL` | Infra | injecté Cloud Run |
-| `MCP_SIDECAR_URL` | Comportement | `http://users_mcp:8000` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PORT` | Infra | `8000` |
+| `MCP_SIDECAR_URL` | Infra | `http://users_mcp:8000` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/users-api` |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `users-api` |
+| `USE_IAM_AUTH` | Comportement | `false` |
+| `CORS_ORIGINS` | Comportement | `http://localhost:5173,http://localhost:80,http://localhost:8080` |
+| `FRONTEND_URL` | Infra | `http://localhost:5173` |
+| `SERVICE_TOKEN_TTL_MINUTES` | Secret | `90` |
 
 ## Redis
 **DB 0** — namespace `users:*`
 
 ## Endpoints clés
-- `POST /auth/login` — émission de JWT utilisateur
-- `POST /auth/internal/service-token` — token de service longue durée (background tasks)
-- `GET /users/me` — profil courant
-- `GET /users/{id}` — profil par ID (protégé)
-- `POST /users/` — création utilisateur (auto-génération password si absent)
+- `GET /`
+- `GET /search`
+- `POST /bulk`
+- `GET /me`
+- `GET /{user_id}`
+- `POST /`
+- `PUT /{user_id}`
+- `DELETE /{user_id}`
+- `GET /stats`
+- `GET /duplicates`
+- `POST /merge`
+- `GET /version`
+- `GET /spec`
+- `GET /mcp/tools`
+- `POST /mcp/call`
 
 ## MCP tools exposés
-Consommables par les agents via `agent_commons.mcp_client` :
-- `get_user_by_id`, `list_users`, `create_user`, `update_user`, `delete_user`
+_Aucun tool MCP détecté dans `mcp_server.py`._
 
 ## Gotchas connus
 - Les routes statiques (`/spec`, `/health`) doivent être enregistrées **avant** les routes wildcard `/{id}` (sinon 422 int_parsing sur `"spec"`)

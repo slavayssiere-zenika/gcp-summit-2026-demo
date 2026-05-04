@@ -33,13 +33,18 @@ POST /mcp/call  →  mcp_server.py (dispatcher)
 ```
 
 ## Variables d'environnement
-
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `GCP_PROJECT_ID` | Infra | injecté Cloud Run |
-| `ROOT_PATH` | Comportement | `` (vide — voir Gotchas) |
-| `DRIVE_API_URL` | Infra | URL de `drive_api` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PORT` | Infra | `8080` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
+| `ROOT_PATH` | Comportement | `` |
+| `APP_VERSION` | Comportement | `dev` |
+| `ENVIRONMENT` | Comportement | `dev` |
 
 ## Exposition MCP
 - `GET /mcp/tools` — liste des tools disponibles
@@ -47,18 +52,7 @@ POST /mcp/call  →  mcp_server.py (dispatcher)
 - **Pas de sidecar stdio** — exposition HTTP directe
 
 ## MCP tools exposés
-
-| Tool | Module | Description |
-|---|---|---|
-| `get_cloud_run_logs` | `logs_tools` | Logs Cloud Run filtrés par service/sévérité |
-| `get_error_summary` | `logs_tools` | Résumé des erreurs 500 récentes |
-| `get_infrastructure_topology` | `infra_tools` | Topologie traces Cloud Trace |
-| `list_gcp_services_internal` | `infra_tools` | Découverte services Cloud Run actifs |
-| `get_redis_status` | `data_tools` | Métriques Redis (mémoire, keys) |
-| `get_alloydb_status` | `data_tools` | Santé AlloyDB |
-| `get_pubsub_dlq` | `data_tools` | Messages DLQ Pub/Sub |
-| `get_pipeline_health` | `pipeline_tools` | Health checks des microservices |
-| `get_cv_ingestion_status` | `pipeline_tools` | Statut pipeline d'ingestion CV |
+- `check_all_components_health`, `check_component_health`, `execute_read_only_query`, `get_infrastructure_topology`, `get_ingestion_pipeline_status`, `get_redis_invalidation_state`, `get_service_logs`, `inspect_pubsub_dlq`, `list_gcp_services`, `search_cloud_logs_by_trace`
 
 ## Gotchas connus
 - **`ROOT_PATH` vide** : contrairement aux autres services, `ROOT_PATH=""` — fix Dockerfile appliqué 2026-04-28.

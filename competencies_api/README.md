@@ -38,47 +38,50 @@ Le monolithe `router.py` (~2490L) a été décomposé en modules spécialisés.
 ```
 
 ## Variables d'environnement
-
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `DATABASE_URL` | Infra | injecté Cloud Run |
-| `REDIS_URL` | Infra | `redis://redis:6379/3` |
-| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
-| `MCP_SIDECAR_URL` | Comportement | `http://competencies_mcp:8000` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PORT` | Infra | `8003` |
+| `MCP_SIDECAR_URL` | Infra | `http://competencies_mcp:8000` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/comp-api` |
-| `GCP_PROJECT_ID` | Infra | injecté Cloud Run |
-| `VERTEX_LOCATION` | Comportement | `europe-west1` |
-| `BATCH_GCS_BUCKET` | Infra | bucket `cv_batch` partagé avec `cv_api` |
-| `CV_API_URL` | Infra | URL de `cv_api` (missions) |
-| `USERS_API_URL` | Infra | URL de `users_api` (service tokens) |
-| `COMPETENCY_DECAY_LAMBDA` | Comportement | `0.1` (decay temporel scoring v2) |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `competencies-api` |
+| `USE_IAM_AUTH` | Comportement | `false` |
+| `USERS_API_URL` | Infra | `http://users_api:8000` |
+| `CV_API_URL` | Infra | `http://cv_api:8004` |
+| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 
 ## Redis
 **DB 3** — namespace `competencies:*`
 - `competencies:bulk_scoring:status` — état du pipeline Vertex Batch scoring
 
 ## Endpoints clés
-
-| Endpoint | Description |
-|---|---|
-| `GET /` | Arbre complet des compétences (hiérarchique) |
-| `GET /search` | Recherche fulltext nom + aliases |
-| `POST /bulk_tree` | Import atomique taxonomie (Admin) |
-| `POST /user/{id}/assign/bulk` | Affectation massive (appelé par `cv_api`) |
-| `GET /evaluations/user/{id}` | Évaluations d'un consultant (feuilles) |
-| `POST /evaluations/user/{id}/ai-score-all` | Scoring Gemini v2 individuel (BackgroundTask) |
-| `POST /evaluations/bulk-scoring-all` | Scoring IA global avec Semaphore |
-| `GET /bulk-scoring-all/status` | État du pipeline global |
-| `GET /evaluations/scoring-stats` | Statistiques couverture IA (Data Quality) |
-| `GET /stats/coverage` | Métriques Data Quality (consultants avec compétences) |
-| `GET /analytics/agency-coverage` | Heatmap compétences × agences |
-| `GET /analytics/skill-gaps` | Gaps de compétences dans un pool |
-| `GET /analytics/similar-consultants/{id}` | Similarité Jaccard entre consultants |
+- `GET /stats/coverage`
+- `GET /evaluations/scoring-stats`
+- `GET /analytics/agency-coverage`
+- `GET /analytics/skill-gaps`
+- `GET /analytics/similar-consultants/{user_id}`
+- `POST /user/{user_id}/assign/bulk`
+- `POST /user/{user_id}/assign/{competency_id}`
+- `DELETE /user/{user_id}/evaluations`
+- `DELETE /user/{user_id}/remove/{competency_id}`
+- `GET /user/{user_id}`
+- `POST /internal/users/merge`
+- `DELETE /user/{user_id}/clear`
+- `GET /`
+- `GET /search`
+- `POST /suggestions`
+- `GET /suggestions`
+- `PATCH /suggestions/{suggestion_id}/review`
+- `GET /{competency_id}`
+- `GET /{competency_id}/users`
+- `POST /bulk_tree`
 
 ## MCP tools exposés
-- `get_competency_tree`, `create_competency`, `list_evaluations`, `assign_competencies_bulk`
-- `trigger_bulk_scoring`, `get_bulk_scoring_status`
+- `assign_competencies_bulk`, `assign_competency_to_user`, `batch_evaluate_competencies_search`, `batch_evaluate_competencies_users`, `bulk_import_tree`, `bulk_scoring_all`, `clear_user_competencies`, `clear_user_evaluations`, `create_competency`, `create_competency_suggestion`, `delete_competency`, `find_similar_consultants`, `find_skill_gaps`, `get_agency_competency_coverage`, `get_competency`, `get_competency_stats`, `get_user_competency_evaluations`, `list_competencies`, `list_competency_suggestions`, `list_competency_users`, `list_user_competencies`, `remove_competency_from_user`, `review_competency_suggestion`, `search_competencies`, `set_user_competency_score`, `trigger_ai_scoring`, `update_competency`
 
 ## IAM Cloud Run requis
 - `roles/aiplatform.user` → Vertex AI Batch Prediction

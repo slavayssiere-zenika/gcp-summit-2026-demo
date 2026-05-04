@@ -9,36 +9,67 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 542 | ⚠️ Zone alerte |
-| `test_guardrail.py` | 312 | ⚠️ Zone alerte |
-| `mcp_client.py` | 205 | ✅ OK |
-| `agent.py` | 202 | ✅ OK |
-| `session.py` | ~150 | ✅ OK |
-| `metadata.py` | ~80 | ✅ OK |
-| `metrics.py` | ~50 | ✅ OK |
+| `main.py` | 309 | ✅ |
+| `conftest.py` | 39 | ✅ |
+| `metrics.py` | 19 | ✅ |
+| `agent.py` | 210 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `REDIS_URL` | Infra | `redis://redis:6379/11` |
+| `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `PORT` | Infra | `8080` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/agent-ops-api` |
-| `MISSIONS_API_URL` | Infra | URL de `missions_api` |
-| `ITEMS_API_URL` | Infra | URL de `items_api` |
-| `ANALYTICS_MCP_URL` | Infra | URL de `analytics_mcp` |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `agent-ops` |
+| `USERS_API_URL` | Infra | `http://users_api:8000` |
+| `ITEMS_API_URL` | Infra | `http://items_api:8001` |
+| `COMPETENCIES_API_URL` | Infra | `http://competencies_api:8003` |
+| `CV_API_URL` | Infra | `http://cv_api:8004` |
+| `MISSIONS_API_URL` | Infra | `http://missions_api:8009` |
+| `PROMPTS_API_URL` | Infra | `http://prompts_api:8000` |
+| `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8080` |
+| `USERS_MCP_URL` | Infra | `http://users_api:8000` |
+| `ITEMS_MCP_URL` | Infra | `http://items_api:8001` |
+| `COMPETENCIES_MCP_URL` | Infra | `http://competencies_api:8003` |
+| `CV_MCP_URL` | Infra | `http://cv_api:8004` |
+| `MISSIONS_MCP_URL` | Infra | `http://missions_api:8009` |
+| `DRIVE_MCP_URL` | Infra | `http://drive_api:8080` |
+| `PROMPTS_MCP_URL` | Infra | `http://prompts_api:8000` |
+| `LOKI_MCP_URL` | Infra | `http://loki:3100/mcp` |
+| `MONITORING_MCP_URL` | Infra | `http://monitoring_mcp:8010` |
 
 ## Redis
 **DB 11** — namespace `session:ops:*`
 
 ## Endpoints clés
-- `POST /a2a/query` — point d'entrée A2A depuis `agent_router_api`
-- `GET /health`, `GET /metrics`, `GET /version`
+- `GET /`
+- `GET /spec`
+- `POST /query`
+- `POST /a2a/query`
+- `POST /login`
+- `POST /logout`
+- `GET /me`
+- `GET /mcp/registry`
+- `GET /version`
 
 ## MCP APIs consommées
-- `missions_api` : `list_missions`, `get_mission_by_id`, `search_missions_semantic`
-- `items_api` : `list_items`, `get_item_by_id`
-- `analytics_mcp` : `log_ai_consumption` (OBLIGATOIRE)
+- `ANALYTICS_MCP_URL`
+- `COMPETENCIES_API_URL`
+- `COMPETENCIES_MCP_URL`
+- `CV_API_URL`
+- `CV_MCP_URL`
+- `DRIVE_MCP_URL`
+- `ITEMS_API_URL`
+- `ITEMS_MCP_URL`
+- `MISSIONS_API_URL`
+- `MISSIONS_MCP_URL`
+- `USERS_API_URL`
+- `USERS_MCP_URL`
 
 ## Gotchas connus
 - `main.py` approche la zone bloquante — surveiller lors des prochaines features

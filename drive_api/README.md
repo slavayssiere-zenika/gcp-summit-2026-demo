@@ -9,33 +9,60 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `src/router.py` | 1185 | 🚨 Zone bloquante (> 400) — refactoring requis |
-| `src/drive_service.py` | 581 | ⚠️ Zone alerte |
-| `src/schemas.py` | 129 | ✅ OK |
-| `src/google_auth.py` | 100 | ✅ OK |
-| `src/redis_client.py` | ~50 | ✅ OK |
-| `src/models.py` | ~40 | ✅ OK |
+| `main.py` | 219 | ✅ |
+| `mcp_server.py` | 397 | ✅ |
+| `conftest.py` | 71 | ✅ |
+| `src/routers/dlq_router.py` | 411 | ✅ |
+| `src/routers/files_router.py` | 403 | ✅ |
+| `src/routers/folders_router.py` | 471 | ✅ |
+| `src/routers/ingestion_router.py` | 420 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `DATABASE_URL` | Infra | injecté Cloud Run |
-| `REDIS_URL` | Infra | `redis://redis:6379/6` (Dockerfile) |
-| `MCP_SIDECAR_URL` | Comportement | `http://drive_mcp:8000` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PORT` | Infra | `8006` |
+| `MCP_SIDECAR_URL` | Infra | `http://drive_mcp:8000` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/drive-api` |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | Secret | compte de service Drive |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `drive-api` |
+| `USE_IAM_AUTH` | Comportement | `false` |
+| `USERS_API_URL` | Infra | `http://users_api:8000` |
+| `PUBSUB_CV_IMPORT_TOPIC` | Infra | `zenika-cv-import-events-dev` |
+| `GCP_PROJECT_ID` | Infra | `your-gcp-project-id` |
+| `MAX_DRIVE_CV_IMPORT` | Infra | `10` |
+| `REDIS_URL` | Infra | `redis://redis:6379/6` |
 
 ## Redis
 **DB 6** — namespace `drive:*`
 
 ## Endpoints clés
-- `POST /drive/sync` — déclenche la synchronisation d'un dossier Drive
-- `GET /drive/status` — état de la dernière synchronisation
-- `GET /drive/files` — liste des fichiers Drive indexés
+- `GET /dlq/status`
+- `DELETE /dlq/message`
+- `POST /dlq/replay`
+- `GET /status`
+- `GET /files`
+- `GET /files/{google_file_id}`
+- `GET /consultant/search`
+- `POST /retry-errors`
+- `DELETE /errors`
+- `GET /tokens/google`
+- `PATCH /files/{file_id}`
+- `POST /folders`
+- `PATCH /folders/{folder_id}`
+- `GET /folders`
+- `POST /folders/reset-sync`
+- `POST /folders/rebuild-tree`
+- `POST /folders/invalidate-cache`
+- `DELETE /folders/{folder_id}`
+- `GET /ingestion/stats`
+- `GET /ingestion/folder-kpis`
 
 ## MCP tools exposés
-- `sync_drive_folder`, `list_drive_files`, `get_sync_status`
+- `add_drive_folder`, `delete_dlq_message`, `delete_drive_folder`, `get_dlq_status`, `get_drive_file_state`, `get_drive_status`, `get_folder_ingestion_kpis`, `get_ingestion_kpis`, `list_drive_files`, `list_drive_folders`, `replay_dlq`, `reset_drive_folder_sync`, `retry_drive_errors`, `run_quality_gate_batch`, `trigger_drive_sync`, `update_drive_file`
 
 ## Gotchas connus
 - **Compte de service Drive** (`sa-drive-*-v2`) : NE DOIT PAS être supprimé par `terraform destroy` — les droits Drive sont assignés manuellement et non reproductibles automatiquement

@@ -9,38 +9,66 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 536 | ⚠️ Zone alerte |
-| `test_guardrail.py` | 282 | ✅ OK |
-| `agent.py` | 270 | ✅ OK |
-| `mcp_client.py` | 205 | ✅ OK |
-| `session.py` | ~150 | ✅ OK |
-| `metadata.py` | ~80 | ✅ OK |
-| `metrics.py` | ~50 | ✅ OK |
+| `main.py` | 303 | ✅ |
+| `conftest.py` | 39 | ✅ |
+| `metrics.py` | 19 | ✅ |
+| `agent.py` | 277 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `REDIS_URL` | Infra | `redis://redis:6379/10` |
+| `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `PORT` | Infra | `8080` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/agent-hr-api` |
-| `CV_API_URL` | Infra | URL de `cv_api` |
-| `COMPETENCIES_API_URL` | Infra | URL de `competencies_api` |
-| `USERS_API_URL` | Infra | URL de `users_api` |
-| `ANALYTICS_MCP_URL` | Infra | URL de `analytics_mcp` |
+| `APP_VERSION` | Comportement | `dev` |
+| `SERVICE_NAME` | Comportement | `agent-hr` |
+| `USERS_API_URL` | Infra | `http://users_api:8000` |
+| `ITEMS_API_URL` | Infra | `http://items_api:8001` |
+| `COMPETENCIES_API_URL` | Infra | `http://competencies_api:8003` |
+| `CV_API_URL` | Infra | `http://cv_api:8004` |
+| `MISSIONS_API_URL` | Infra | `http://missions_api:8009` |
+| `PROMPTS_API_URL` | Infra | `http://prompts_api:8000` |
+| `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8080` |
+| `USERS_MCP_URL` | Infra | `http://users_mcp:8000` |
+| `ITEMS_MCP_URL` | Infra | `http://items_mcp:8000` |
+| `COMPETENCIES_MCP_URL` | Infra | `http://competencies_mcp:8000` |
+| `CV_MCP_URL` | Infra | `http://cv_mcp:8000` |
+| `MISSIONS_MCP_URL` | Infra | `http://missions_mcp:8000` |
+| `DRIVE_MCP_URL` | Infra | `http://drive_api:8080` |
+| `LOKI_MCP_URL` | Infra | `http://loki:3100/mcp` |
+| `MONITORING_MCP_URL` | Infra | `http://monitoring_mcp:8010` |
 
 ## Redis
 **DB 10** — namespace `session:hr:*` (historique de session par user)
 
 ## Endpoints clés
-- `POST /a2a/query` — point d'entrée A2A depuis `agent_router_api`
-- `GET /health`, `GET /metrics`, `GET /version`
+- `GET /`
+- `GET /spec`
+- `POST /query`
+- `POST /a2a/query`
+- `POST /login`
+- `POST /logout`
+- `GET /me`
+- `GET /mcp/registry`
+- `GET /version`
 
 ## MCP APIs consommées
-- `cv_api` : `search_cvs_semantic`, `get_cv_profile`, `list_cvs`
-- `competencies_api` : `get_competency_tree`, `list_evaluations`
-- `users_api` : `list_users`, `get_user_by_id`
-- `analytics_mcp` : `log_ai_consumption` (OBLIGATOIRE après chaque inférence)
+- `ANALYTICS_MCP_URL`
+- `COMPETENCIES_API_URL`
+- `COMPETENCIES_MCP_URL`
+- `CV_API_URL`
+- `CV_MCP_URL`
+- `DRIVE_MCP_URL`
+- `ITEMS_API_URL`
+- `ITEMS_MCP_URL`
+- `MISSIONS_API_URL`
+- `MISSIONS_MCP_URL`
+- `USERS_API_URL`
+- `USERS_MCP_URL`
 
 ## Gotchas connus
 - Le pool de candidats en session (`session_candidates`) est stocké en Redis par user — il survit entre les tours de conversation pour éviter les re-searches RAG redondantes

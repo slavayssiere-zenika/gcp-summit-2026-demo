@@ -9,18 +9,22 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `mcp_server.py` | 403 | ⚠️ Zone alerte |
-| `mcp_app.py` | 336 | ⚠️ Zone alerte |
-| `auth.py` | ~75 | ✅ OK |
-| `init_pricing.py` | 89 | ✅ OK |
+| `mcp_server.py` | 467 | ⚠️ |
+| `conftest.py` | 25 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `SECRET_KEY` | Secret | via `.env` |
-| `GCP_PROJECT_ID` | Infra | injecté Cloud Run |
-| `BIGQUERY_DATASET` | Infra | injecté Cloud Run |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PYTHONPATH` | Comportement | `/app` |
+| `PORT` | Infra | `8080` |
+| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `LOG_LEVEL` | Comportement | `INFO` |
+| `TRACE_EXPORTER` | Infra | `grpc` |
 | `ROOT_PATH` | Comportement | `/analytics-mcp` |
+| `APP_VERSION` | Comportement | `dev` |
+| `ENVIRONMENT` | Comportement | `dev` |
 
 ## BigQuery
 - Dataset : `ai_analytics` — **localisation OBLIGATOIRE : `europe-west1`**
@@ -34,8 +38,7 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 - **Pas de sidecar stdio** — exposition HTTP directe
 
 ## MCP tools exposés
-- `log_ai_consumption` — **CRITIQUE** : appelé par tous les agents après chaque inférence LLM
-- `get_ai_usage_stats`, `list_model_pricing`, `get_cloud_run_metrics`, `query_cloud_logging`
+- `detect_usage_anomalies`, `get_aiops_dashboard_data`, `get_finops_report`, `get_market_demand_volume`, `get_top_market_skills`, `log_ai_consumption`
 
 ## Gotchas connus
 - **ADR12 Axe 3** : À terme, ce service sera scindé en `analytics_mcp` + `monitoring_mcp` (voir `todo.md`)
