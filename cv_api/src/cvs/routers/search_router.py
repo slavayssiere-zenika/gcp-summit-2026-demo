@@ -427,7 +427,14 @@ async def match_mission_to_candidates(
 
     mission_embedding = None
     if emb_res.status_code == 200:
-        mission_embedding = emb_res.json().get("embedding")
+        from pydantic import BaseModel
+        class EmbResp(BaseModel):
+            embedding: list[float] | None = None
+        try:
+            data = EmbResp.model_validate(emb_res.json())
+            mission_embedding = data.embedding
+        except Exception:
+            mission_embedding = None
 
     if not mission_embedding:
         raise HTTPException(

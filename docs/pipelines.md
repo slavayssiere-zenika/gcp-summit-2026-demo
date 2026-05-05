@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-05-05 20:05 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-05 22:40 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 
@@ -65,7 +65,7 @@
 
 ## 🚀 Pipeline de Déploiement — `scripts/deploy.sh`
 
-> Dernière modification : `2026-04-29` · Cible : `slavayssiere-sandbox-462015` / `europe-west1` · Registre : `z-gcp-summit-services`
+> Dernière modification : `2026-05-05` · Cible : `slavayssiere-sandbox-462015` / `europe-west1` · Registre : `z-gcp-summit-services`
 
 ### Utilisation
 
@@ -149,7 +149,7 @@ deploy.sh [SERVICE] [BUMP_TYPE] [OPTIONS]
 
 ## ⚙️ Pipeline d'Infrastructure — `platform-engineering/manage_env.py`
 
-> Dernière modification : `2026-04-29`
+> Dernière modification : `2026-05-05`
 
 ### Description
 

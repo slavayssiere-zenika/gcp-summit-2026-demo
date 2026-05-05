@@ -33,3 +33,7 @@ opentelemetry-instrumentation-httpx
 opentelemetry-instrumentation-redis
 
 google-cloud-pubsub>=2.18.0
+
+# Tests d'intégration (Testcontainers + émulateur Pub/Sub — obligatoires, nécessitent Docker)
+testcontainers[postgres]>=4.0.0
+grpcio>=1.60.0

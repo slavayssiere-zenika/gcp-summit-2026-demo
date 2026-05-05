@@ -365,7 +365,7 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
         file_state.status = update_data.status
         # Fix #3 : invalider le cache Redis quand un fichier repasse en PENDING
         # pour que discover_files() ne le skippe pas lors du prochain /sync.
-        if str(update_data.status) in ("PENDING", DriveSyncStatus.PENDING.value):
+        if update_data.status == DriveSyncStatus.PENDING or str(update_data.status) == DriveSyncStatus.PENDING.value:
             try:
                 get_redis().delete(f"drive:file:known:{file_id}")
                 logger.info(f"[Cache] drive:file:known:{file_id} invalidé (status → PENDING).")

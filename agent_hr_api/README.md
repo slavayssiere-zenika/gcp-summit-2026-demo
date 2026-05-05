@@ -9,7 +9,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 303 | ✅ |
+| `main.py` | 311 | ✅ |
 | `conftest.py` | 39 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `agent.py` | 277 | ✅ |

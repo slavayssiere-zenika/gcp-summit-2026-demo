@@ -9,9 +9,9 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 210 | ✅ |
-| `mcp_server.py` | 402 | ⚠️ |
-| `conftest.py` | 68 | ✅ |
+| `main.py` | 212 | ✅ |
+| `mcp_server.py` | 113 | ✅ |
+| `conftest.py` | 78 | ✅ |
 | `src/items/admin_router.py` | 91 | ✅ |
 | `src/items/crud_router.py` | 357 | ✅ |
 | `src/items/router.py` | 26 | ✅ |
@@ -38,7 +38,7 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 - Invalidation obligatoire sur POST/PUT/DELETE (`items:list:*`)
 
 ## MCP tools exposés
-- `bulk_create_items`, `create_category`, `create_item`, `delete_item`, `delete_user_items`, `get_item`, `get_item_stats`, `get_item_with_user`, `get_items_by_user`, `health_check`, `list_categories`, `list_items`, `search_items`, `update_item`
+_Aucun tool MCP détecté dans `mcp_server.py`._
 
 ## Gotchas connus
 - `router.py` est en zone bloquante : toute nouvelle feature DOIT passer par un `services/` layer

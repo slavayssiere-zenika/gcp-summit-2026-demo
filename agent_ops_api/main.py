@@ -211,7 +211,15 @@ async def login(request: Request, response: Response):
     async with httpx.AsyncClient() as client:
         res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
         if res.status_code != 200:
-            raise HTTPException(status_code=res.status_code, detail=res.json().get("detail", "Erreur de connexion"))
+            from pydantic import BaseModel
+            class ErrorDetail(BaseModel):
+                detail: str
+            try:
+                err_data = ErrorDetail.model_validate(res.json())
+                detail_msg = err_data.detail
+            except Exception:
+                detail_msg = "Erreur de connexion"
+            raise HTTPException(status_code=res.status_code, detail=detail_msg)
         
         # Forward the cookie from users_api to the client
         for name, value in res.cookies.items():

@@ -103,7 +103,9 @@ async def trigger_bulk_scoring_all(
         async with httpx.AsyncClient(timeout=5.0) as client:
             svc_res = await client.post(f"{USERS_API_URL.rstrip('/')}/internal/service-token", headers={"Authorization": auth_header})
             if svc_res.status_code == 200:
-                svc_token = svc_res.json().get("access_token")
+                from shared.schemas.auth import TokenResponse
+                data = TokenResponse.model_validate(svc_res.json())
+                svc_token = data.access_token
                 if svc_token:
                     bg_auth_header = f"Bearer {svc_token}"
     except Exception as e:

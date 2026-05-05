@@ -296,7 +296,9 @@ class CVStorageService:
                             n_norm = normalize_comp(name)
                             # Contrat intentionnel : /search retourne PaginationResponse mais items
                             # sont des dicts compétences partiels (name, aliases) — parsing manuel OK
-                            for item in res.json().get("items", []):
+                            from shared.schemas.pagination import PaginationResponse
+                            data = PaginationResponse[dict].model_validate(res.json())
+                            for item in data.items:
                                 if normalize_comp(
                                         item.get("name", "")) == n_norm:
                                     return item["id"]

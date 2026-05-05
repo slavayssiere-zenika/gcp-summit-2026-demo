@@ -1,5 +1,5 @@
 import pytest
-from conftest import app
+from main import app
 from fastapi.testclient import TestClient
 
 

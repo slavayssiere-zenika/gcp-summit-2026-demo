@@ -41,19 +41,19 @@ async def test_discover_delta_bottom_up_trashed_file_is_out_of_scope(mock_db, mo
     mock_db.execute.return_value.scalars.return_value.all.return_value = []
     
     # Simuler DriveService
-    with patch("src.discovery_service.DiscoveryService._load_roots", return_value=[{"id": 1, "google_folder_id": "root_id_1", "tag": "tag1", "folder_name": "Root", "excluded_folders": None}]), \
+    with patch("src.services.tree_resolution.TreeResolver.load_roots", return_value=[{"id": 1, "google_folder_id": "root_id_1", "tag": "tag1", "folder_name": "Root", "excluded_folders": None}]), \
          patch("src.drive_service.get_redis", return_value=mock_redis), \
-         patch("src.discovery_service.DiscoveryService._resolve_root_and_parent", new_callable=AsyncMock, return_value=(None, None, None)):
+         patch("src.services.tree_resolution.TreeResolver.resolve_root_and_parent", new_callable=AsyncMock, return_value=(None, None, None)):
         service = DriveService(mock_db)
         
         # Simuler _get_drive_files_generator pour retourner un fichier trashed
         # Et simuler _resolve_root_and_folders
         fake_file = {"id": "trashed_file_id", "name": "CV Trashed", "mimeType": "application/vnd.google-apps.document", "trashed": True, "parents": ["parent1"], "modifiedTime": "2026-05-05T12:00:00Z"}
         
-        service.discovery_service.drive = MagicMock()
-        service.discovery_service.drive.files.return_value.list.return_value.execute.return_value = {
-            "files": [fake_file]
-        }
+        # We need to mock drive_api.get_about and drive_api.list_files
+        service.discovery_service.drive_api = AsyncMock()
+        service.discovery_service.drive_api.get_about.return_value = {"user": {"emailAddress": "test@zenika.com"}}
+        service.discovery_service.drive_api.list_files.return_value = {"files": [fake_file], "nextPageToken": None}
         
         # Simuler _process_single_file_delta
         # _process_single_file_delta doit marquer le fichier en OUT_OF_SCOPE car il existe déjà en BDD

@@ -1,0 +1,304 @@
+F.F......F                                                               [100%]
+=================================== FAILURES ===================================
+_______________________________ test_get_status ________________________________
+
+self = <Coroutine test_get_status>
+
+    def runtest(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        runner = self._request.getfixturevalue(runner_fixture_id)
+        context = contextvars.copy_context()
+        synchronized_obj = _synchronize_coroutine(
+            getattr(*self._synchronization_target_attr), runner, context
+        )
+        with MonkeyPatch.context() as c:
+            c.setattr(*self._synchronization_target_attr, synchronized_obj)
+>           super().runtest()
+
+../test_env/lib/python3.13/site-packages/pytest_asyncio/plugin.py:469: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (), kwargs = {}, coro = <coroutine object test_get_status at 0x117ddce10>
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        coro = func(*args, **kwargs)
+>       runner.run(coro, context=context)
+
+../test_env/lib/python3.13/site-packages/pytest_asyncio/plugin.py:716: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.runners.Runner object at 0x117dfa510>
+coro = <coroutine object test_get_status at 0x117ddce10>
+
+    def run(self, coro, *, context=None):
+        """Run a coroutine inside the embedded event loop."""
+        if not coroutines.iscoroutine(coro):
+            raise ValueError("a coroutine was expected, got {!r}".format(coro))
+    
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+            raise RuntimeError(
+                "Runner.run() cannot be called from a running event loop")
+    
+        self._lazy_init()
+    
+        if context is None:
+            context = self._context
+        task = self._loop.create_task(coro, context=context)
+    
+        if (threading.current_thread() is threading.main_thread()
+            and signal.getsignal(signal.SIGINT) is signal.default_int_handler
+        ):
+            sigint_handler = functools.partial(self._on_sigint, main_task=task)
+            try:
+                signal.signal(signal.SIGINT, sigint_handler)
+            except ValueError:
+                # `signal.signal` may throw if `threading.main_thread` does
+                # not support signals (e.g. embedded interpreter with signals
+                # not registered - see gh-91880)
+                sigint_handler = None
+        else:
+            sigint_handler = None
+    
+        self._interrupt_count = 0
+        try:
+>           return self._loop.run_until_complete(task)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+future = <Task finished name='Task-3' coro=<test_get_status() done, defined at /Library/Frameworks/Python.framework/Versions/3....ython3.13/unittest/mock.py:1438> exception=TypeError('test_get_status() takes 0 positional arguments but 1 was given')>
+
+    def run_until_complete(self, future):
+        """Run until the Future is done.
+    
+        If the argument is a coroutine, it is wrapped in a Task.
+    
+        WARNING: It would be disastrous to call run_until_complete()
+        with the same coroutine twice -- it would wrap it in two
+        different Tasks and that can't be good.
+    
+        Return the Future's result, or raise its exception.
+        """
+        self._check_closed()
+        self._check_running()
+    
+        new_task = not futures.isfuture(future)
+        future = tasks.ensure_future(future, loop=self)
+        if new_task:
+            # An exception is raised if the future didn't complete, so there
+            # is no need to log the "destroy pending task" message
+            future._log_destroy_pending = False
+    
+        future.add_done_callback(_run_until_complete_cb)
+        try:
+            self.run_forever()
+        except:
+            if new_task and future.done() and not future.cancelled():
+                # The coroutine raised a BaseException. Consume the exception
+                # to not log a warning, the caller doesn't have access to the
+                # local task.
+                future.exception()
+            raise
+        finally:
+            future.remove_done_callback(_run_until_complete_cb)
+        if not future.done():
+            raise RuntimeError('Event loop stopped before Future completed.')
+    
+>       return future.result()
+               ^^^^^^^^^^^^^^^
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py:725: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (), keywargs = {}, newargs = (<MagicMock name='get_db' id='4695503072'>,)
+newkeywargs = {}
+
+    @wraps(func)
+    async def patched(*args, **keywargs):
+        with self.decoration_helper(patched,
+                                    args,
+                                    keywargs) as (newargs, newkeywargs):
+>           return await func(*newargs, **newkeywargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: test_get_status() takes 0 positional arguments but 1 was given
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1443: TypeError
+_____________________________ test_get_file_state ______________________________
+
+    @pytest.mark.asyncio
+    async def test_get_file_state():
+        mock_db = AsyncMock()
+        mock_file = MagicMock()
+        mock_file.google_file_id = "test_id"
+        mock_file.status = DriveSyncStatus.PENDING
+        mock_file.revision_id = "r1"
+        mock_file.modified_time = "2023-01-01T00:00:00Z"
+    
+        mock_scalars = MagicMock(scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_file))))
+        mock_db.execute.return_value = mock_scalars
+    
+        app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[verify_jwt] = lambda: {"sub": "123"}
+    
+        response = client.get("/files/test_id")
+    
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_files_router.py:67: AssertionError
+----------------------------- Captured stderr call -----------------------------
+{"asctime": "2026-05-05 22:55:16,168", "levelname": "ERROR", "name": "middleware.http", "message": "HTTP Request Failed", "exc_info": "Traceback (most recent call last):\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/logger.py\", line 141, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py\", line 716, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py\", line 736, in app\n    await route.handle(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py\", line 290, in handle\n    await self.app(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 134, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 120, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 695, in app\n    content = await serialize_response(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<11 lines>...\n    )\n    ^\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py\", line 300, in serialize_response\n    raise ResponseValidationError(\n    ...<3 lines>...\n    )\nfastapi.exceptions.ResponseValidationError: 4 validation errors:\n  {'type': 'string_type', 'loc': ('response', 'file_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_name' id='4699998592'>}\n  {'type': 'string_type', 'loc': ('response', 'parent_folder_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.parent_folder_name' id='4700009680'>}\n  {'type': 'string_type', 'loc': ('response', 'error_message'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.error_message' id='4700008672'>}\n  {'type': 'string_type', 'loc': ('response', 'file_type'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_type' id='4699475312'>}\n\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/src/routers/files_router.py\", line 113, in get_file_state\n    GET /files/{google_file_id}", "http.method": "GET", "http.path": "/files/test_id", "http.status_code": 500, "http.duration_s": 0.0011, "error": "4 validation errors:\n  {'type': 'string_type', 'loc': ('response', 'file_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_name' id='4699998592'>}\n  {'type': 'string_type', 'loc': ('response', 'parent_folder_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.parent_folder_name' id='4700009680'>}\n  {'type': 'string_type', 'loc': ('response', 'error_message'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.error_message' id='4700008672'>}\n  {'type': 'string_type', 'loc': ('response', 'file_type'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_type' id='4699475312'>}\n\n  File \"/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/src/routers/files_router.py\", line 113, in get_file_state\n    GET /files/{google_file_id}", "service": "drive-api", "environment": "dev", "trace_id": "78e3d480dbe07024c6a2456a04388824", "span_id": "ad0dfa0a884b8c7c"}
+{"asctime": "2026-05-05 22:55:16,198", "levelname": "ERROR", "name": "main", "message": "[ServiceToken] Impossible d'obtenir un token de service: [Errno 8] nodename nor servname provided, or not known", "service": "drive-api", "environment": "dev", "trace_id": "78e3d480dbe07024c6a2456a04388824", "span_id": "ad0dfa0a884b8c7c"}
+{"asctime": "2026-05-05 22:55:16,198", "levelname": "ERROR", "name": "root", "message": "Failed to process exception reporting: [Errno 8] nodename nor servname provided, or not known", "service": "drive-api", "environment": "dev", "trace_id": "78e3d480dbe07024c6a2456a04388824", "span_id": "ad0dfa0a884b8c7c"}
+------------------------------ Captured log call -------------------------------
+ERROR    middleware.http:logger.py:159 HTTP Request Failed
+Traceback (most recent call last):
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/logger.py", line 141, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 695, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+    )
+    ^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 300, in serialize_response
+    raise ResponseValidationError(
+    ...<3 lines>...
+    )
+fastapi.exceptions.ResponseValidationError: 4 validation errors:
+  {'type': 'string_type', 'loc': ('response', 'file_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_name' id='4699998592'>}
+  {'type': 'string_type', 'loc': ('response', 'parent_folder_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.parent_folder_name' id='4700009680'>}
+  {'type': 'string_type', 'loc': ('response', 'error_message'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.error_message' id='4700008672'>}
+  {'type': 'string_type', 'loc': ('response', 'file_type'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_type' id='4699475312'>}
+
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/src/routers/files_router.py", line 113, in get_file_state
+    GET /files/{google_file_id}
+ERROR    main:main.py:170 [ServiceToken] Impossible d'obtenir un token de service: [Errno 8] nodename nor servname provided, or not known
+ERROR    root:main.py:215 Failed to process exception reporting: [Errno 8] nodename nor servname provided, or not known
+_______________________________ test_update_file _______________________________
+
+mock_get_redis = <MagicMock name='get_redis' id='4703005600'>
+
+    @pytest.mark.asyncio
+    @patch('src.routers.files_router.get_redis')
+    async def test_update_file(mock_get_redis):
+        mock_db = AsyncMock()
+        mock_file = MagicMock()
+        mock_file.google_file_id = "test_id"
+        mock_file.status = DriveSyncStatus.ERROR
+        mock_file.revision_id = "r1"
+        mock_file.modified_time = "2023-01-01T00:00:00Z"
+    
+        mock_scalars = MagicMock(scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_file))))
+        mock_db.execute.return_value = mock_scalars
+    
+        mock_redis = MagicMock()
+        mock_get_redis.return_value = mock_redis
+    
+        app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[verify_jwt] = lambda: {"sub": "123"}
+    
+        response = client.patch("/files/test_id", json={"status": "PENDING", "user_id": 2})
+    
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_files_router.py:166: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    middleware.http:logger.py:159 HTTP Request Failed
+Traceback (most recent call last):
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/logger.py", line 141, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 695, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+    )
+    ^
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/fastapi/routing.py", line 300, in serialize_response
+    raise ResponseValidationError(
+    ...<3 lines>...
+    )
+fastapi.exceptions.ResponseValidationError: 4 validation errors:
+  {'type': 'string_type', 'loc': ('response', 'file_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_name' id='4702865456'>}
+  {'type': 'string_type', 'loc': ('response', 'parent_folder_name'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.parent_folder_name' id='4702866464'>}
+  {'type': 'string_type', 'loc': ('response', 'error_message'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.error_message' id='4702868144'>}
+  {'type': 'string_type', 'loc': ('response', 'file_type'), 'msg': 'Input should be a valid string', 'input': <MagicMock name='mock.file_type' id='4702869152'>}
+
+  File "/Users/sebastien.lavayssiere/Code/test-open-code/drive_api/src/routers/files_router.py", line 350, in update_file
+    PATCH /files/{file_id}
+ERROR    main:main.py:170 [ServiceToken] Impossible d'obtenir un token de service: [Errno 8] nodename nor servname provided, or not known
+ERROR    root:main.py:215 Failed to process exception reporting: [Errno 8] nodename nor servname provided, or not known
+=============================== warnings summary ===============================
+../test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /Users/sebastien.lavayssiere/Code/test-open-code/test_env/lib/python3.13/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_files_router.py::test_get_status - TypeError: test_get_stat...
+FAILED tests/test_files_router.py::test_get_file_state - assert 500 == 200
+FAILED tests/test_files_router.py::test_update_file - assert 500 == 200
+3 failed, 7 passed, 1 warning in 0.22s

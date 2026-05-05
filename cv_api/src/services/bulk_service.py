@@ -46,7 +46,9 @@ async def _acquire_service_token(auth_header: str) -> str:
                 headers={"Authorization": auth_header},
             )
             if res.status_code == 200:
-                return res.json().get("access_token", auth_header.removeprefix("Bearer ").strip())
+                from shared.schemas.auth import TokenResponse
+                data = TokenResponse.model_validate(res.json())
+                return data.access_token
             logger.warning(f"[bulk_reanalyse] service-token HTTP {res.status_code} — fallback JWT court.")
     except Exception as e:
         logger.warning(f"[bulk_reanalyse] Impossible d'obtenir le service-token: {e} — fallback JWT court.")
@@ -62,7 +64,11 @@ async def _get_cv_extraction_prompt() -> str:
         async with httpx.AsyncClient(timeout=10.0) as hc:
             res = await hc.get(f"{PROMPTS_API_URL.rstrip('/')}/prompts/cv_api.extract_cv_info")
             if res.status_code == 200:
-                prompt = res.json().get("value", "")
+                from pydantic import BaseModel
+                class PromptResp(BaseModel):
+                    value: str
+                data = PromptResp.model_validate(res.json())
+                prompt = data.value
                 if prompt:
                     _CV_CACHE["prompt"] = {"value": prompt, "expires": now + timedelta(minutes=30)}
                     return prompt

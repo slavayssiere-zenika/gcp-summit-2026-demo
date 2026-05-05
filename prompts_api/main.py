@@ -152,7 +152,9 @@ async def get_service_token_fallback() -> str:
                 id_token = res_meta.text
                 res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
                 if res.status_code == 200:
-                    return res.json().get("access_token", "")
+                    from shared.schemas.auth import TokenResponse
+                    data = TokenResponse.model_validate(res.json())
+                    return data.access_token
     except Exception:
         raise
     return ""

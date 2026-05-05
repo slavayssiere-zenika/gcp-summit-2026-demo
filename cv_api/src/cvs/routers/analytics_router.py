@@ -287,7 +287,9 @@ async def reanalyze_cvs(
                 timeout=10.0
             )
             if svc_res.status_code == 200:
-                svc_token = svc_res.json().get("access_token")
+                from shared.schemas.auth import TokenResponse
+                data = TokenResponse.model_validate(svc_res.json())
+                svc_token = data.access_token
                 effective_headers = {"Authorization": f"Bearer {svc_token}"}
                 inject(effective_headers)
                 logger.info("[reanalyze] Token de service longue durée obtenu.")

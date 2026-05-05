@@ -320,7 +320,9 @@ class PubsubService:
                         json={"id_token": oidc_token},
                     )
                     if oidc_res.status_code == 200:
-                        jwt = oidc_res.json().get("access_token", "")
+                        from shared.schemas.auth import TokenResponse
+                        data = TokenResponse.model_validate(oidc_res.json())
+                        jwt = data.access_token
                         logger.info(
                             "[PubSub] OIDC token échangé → JWT applicatif frais obtenu.")
                     else:
@@ -353,7 +355,9 @@ class PubsubService:
                             headers={"Authorization": f"Bearer {jwt}"},
                         )
                         if svc_res.status_code == 200:
-                            jwt = svc_res.json().get("access_token", jwt)
+                            from shared.schemas.auth import TokenResponse
+                            data = TokenResponse.model_validate(svc_res.json())
+                            jwt = data.access_token
                             logger.info(
                                 "[PubSub] Service-token longue durée obtenu (90 min).")
                         else:

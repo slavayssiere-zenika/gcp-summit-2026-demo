@@ -15,3 +15,4 @@ __all__ = [
     "CvProfilesResponse",
     "McpToolResult",
 ]
+from shared.schemas.auth import TokenResponse

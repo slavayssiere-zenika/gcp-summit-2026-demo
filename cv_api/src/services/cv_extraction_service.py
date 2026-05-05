@@ -216,7 +216,9 @@ class CVExtractionService:
                         )
                         if page_res.status_code != 200:
                             break
-                        page_items = page_res.json().get('items', [])
+                        from shared.schemas.pagination import PaginationResponse
+                        data = PaginationResponse[dict].model_validate(page_res.json())
+                        page_items = data.items
                         items.extend(page_items)
                         if len(page_items) < page_size:
                             break

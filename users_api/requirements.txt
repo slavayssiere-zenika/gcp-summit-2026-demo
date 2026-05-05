@@ -34,3 +34,6 @@ opentelemetry-instrumentation-redis
 
 # Tests — Redis in-memory (pas de dépendance infra locale)
 fakeredis>=2.0.0
+
+# Tests d'intégration (Testcontainers — obligatoires, nécessitent Docker)
+testcontainers[postgres,redis]>=4.0.0

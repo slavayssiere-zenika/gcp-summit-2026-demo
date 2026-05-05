@@ -72,9 +72,9 @@ def test_list_missions(mocker):
     response = client.get("/missions", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     data = response.json()
-    assert "missions" in data
+    assert "items" in data
     assert data["total"] == 1
-    assert data["missions"][0]["title"] == "Test Mission"
+    assert data["items"][0]["title"] == "Test Mission"
 
 # Tests STAFF-003 — Détection de conflits de staffing (get_active_missions_for_user)
 # ---------------------------------------------------------------------------
@@ -294,8 +294,7 @@ def test_list_missions_includes_status(mocker):
     response = client.get("/missions", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     data = response.json()
-    missions = data["missions"]
-    assert len(missions) > 0
-    assert "status" in missions[0]
-    assert missions[0]["status"] == "STAFFED"
-
+    items = data["items"]
+    assert len(items) > 0
+    assert "status" in items[0]
+    assert items[0]["status"] == "STAFFED"

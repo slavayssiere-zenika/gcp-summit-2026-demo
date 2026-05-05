@@ -161,7 +161,9 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         if token_res.is_error:
             raise HTTPException(status_code=400, detail="Failed to get token from Google")
         
-        access_token_google = token_res.json().get("access_token")
+        from shared.schemas.auth import TokenResponse
+        data = TokenResponse.model_validate(token_res.json())
+        access_token_google = data.access_token
         
         userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
         userinfo_res = await client.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"})

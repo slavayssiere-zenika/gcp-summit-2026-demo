@@ -198,7 +198,11 @@ async def get_user_cv(user_id: int, skip: int = Query(
         try:
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
             if u_res.status_code == 200:
-                is_anon = u_res.json().get("is_anonymous", False)
+                from pydantic import BaseModel
+                class UserAnonStatus(BaseModel):
+                    is_anonymous: bool = False
+                data = UserAnonStatus.model_validate(u_res.json())
+                is_anon = data.is_anonymous
         except Exception as e:
             logger.warning(
                 f"Failed to fetch user {user_id} for is_anonymous check: {e}")
@@ -292,7 +296,11 @@ async def get_user_cv_details(
         try:
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
             if u_res.status_code == 200:
-                is_anon = u_res.json().get("is_anonymous", False)
+                from pydantic import BaseModel
+                class UserAnonStatus(BaseModel):
+                    is_anonymous: bool = False
+                data = UserAnonStatus.model_validate(u_res.json())
+                is_anon = data.is_anonymous
         except Exception as e:
             logger.warning(
                 f"Failed to fetch user anonymity status for {user_id}: {e}")

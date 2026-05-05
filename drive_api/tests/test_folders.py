@@ -38,8 +38,12 @@ async def override_get_db():
     db.execute = AsyncMock(return_value=result)
     yield db
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[verify_jwt] = override_verify_jwt_admin
+@pytest.fixture(autouse=True)
+def reset_overrides():
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[verify_jwt] = override_verify_jwt_admin
+    yield
+    app.dependency_overrides.clear()
 
 client = TestClient(app)
 AUTH = {"Authorization": "Bearer testtoken"}
@@ -97,7 +101,7 @@ def test_add_folder_duplicate_google_id_returns_400(mocker):
         yield mock_db
 
     app.dependency_overrides[get_db] = override_db
-    mocker.patch("src.routers.folders_router.get_drive_service", side_effect=Exception("no drive"))
+    mocker.patch("src.services.folder_service.get_drive_service", side_effect=Exception("no drive"))
 
     resp = client.post("/folders", json={
         "google_folder_id": "abc123", "tag": "tag1"
@@ -145,8 +149,8 @@ def test_add_folder_success(mocker):
 
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Test Folder"}
-    mocker.patch("src.routers.folders_router.get_drive_service", return_value=mock_drive)
-    mocker.patch("src.routers.folders_router.get_redis", return_value=MagicMock())
+    mocker.patch("src.services.folder_service.get_drive_service", return_value=mock_drive)
+    mocker.patch("src.services.folder_service.get_redis", return_value=MagicMock())
 
     resp = client.post("/folders", json={
         "google_folder_id": "newid", "tag": "new-tag"
@@ -243,7 +247,7 @@ def test_delete_folder_success(mocker):
         yield mock_db
 
     app.dependency_overrides[get_db] = override_db
-    mocker.patch("src.routers.folders_router.get_redis", return_value=MagicMock())
+    mocker.patch("src.services.folder_service.get_redis", return_value=MagicMock())
 
     resp = client.delete("/folders/1", headers=AUTH)
     assert resp.status_code in (200, 204)
@@ -268,7 +272,7 @@ def test_invalidate_cache_success(mocker):
     mock_redis = MagicMock()
     mock_redis.scan_iter.return_value = []  # pas de clés matchantes
     mock_redis.delete.return_value = True
-    mocker.patch("src.routers.folders_router.get_redis", return_value=mock_redis)
+    mocker.patch("src.services.folder_service.get_redis", return_value=mock_redis)
 
     resp = client.post("/folders/invalidate-cache", headers=AUTH)
     assert resp.status_code == 200
@@ -280,7 +284,7 @@ def test_invalidate_cache_deletes_rebuild_lock(mocker):
     """POST /folders/invalidate-cache → supprime drive:sync:rebuild_running."""
     mock_redis = MagicMock()
     mock_redis.scan_iter.return_value = []
-    mocker.patch("src.routers.folders_router.get_redis", return_value=mock_redis)
+    mocker.patch("src.services.folder_service.get_redis", return_value=mock_redis)
 
     resp = client.post("/folders/invalidate-cache", headers=AUTH)
     assert resp.status_code == 200

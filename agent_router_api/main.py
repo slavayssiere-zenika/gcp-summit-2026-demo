@@ -102,7 +102,14 @@ async def health_agents():
             if not isinstance(h_res, Exception) and h_res.status_code == 200:
                 ok = True
             if not isinstance(v_res, Exception) and v_res.status_code == 200:
-                version = v_res.json().get("version", "unknown")
+                from pydantic import BaseModel
+        class VersionResp(BaseModel):
+            version: str
+        try:
+            v_data = VersionResp.model_validate(v_res.json())
+            version = v_data.version
+        except Exception:
+            version = "unknown"
         except Exception as e:
             _logger.warning("[health-probe] Agent '%s' health check failed: %s", agent_name, e)
             ok = False
@@ -146,7 +153,15 @@ async def login(request: Request, response: Response):
     async with httpx.AsyncClient() as client:
         res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
         if res.status_code != 200:
-            raise HTTPException(status_code=res.status_code, detail=res.json().get("detail", "Erreur de connexion"))
+            from pydantic import BaseModel
+            class ErrorDetail(BaseModel):
+                detail: str
+            try:
+                err_data = ErrorDetail.model_validate(res.json())
+                detail_msg = err_data.detail
+            except Exception:
+                detail_msg = "Erreur de connexion"
+            raise HTTPException(status_code=res.status_code, detail=detail_msg)
 
         for name, value in res.cookies.items():
             response.set_cookie(key=name, value=value, httponly=True, samesite="lax")

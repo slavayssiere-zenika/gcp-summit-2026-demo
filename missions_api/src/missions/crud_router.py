@@ -45,7 +45,7 @@ async def list_missions(
             "proposed_team": m.proposed_team or [],
             "fallback_full_scan": m.fallback_full_scan,
         })
-    return {"missions": missions_data, "total": total, "skip": skip, "limit": limit}
+    return {"items": missions_data, "total": total, "skip": skip, "limit": limit}
 
 
 @router.patch("/missions/{mission_id}/status")
@@ -151,11 +151,12 @@ async def delete_all_missions(db: AsyncSession = Depends(database.get_db), token
     user_role = token_payload.get("role", "user")
     if user_role != "admin":
         raise HTTPException(status_code=403, detail="Accès refusé : rôle admin requis.")
-    
+
     await db.execute(delete(MissionStatusHistory))
     await db.execute(delete(Mission))
     await db.commit()
     return {"status": "cleared"}
+
 
 @router.delete("/missions/{mission_id}")
 async def delete_mission(mission_id: int, db: AsyncSession = Depends(database.get_db), token_payload: dict = Depends(verify_jwt)):
@@ -163,7 +164,7 @@ async def delete_mission(mission_id: int, db: AsyncSession = Depends(database.ge
     user_role = token_payload.get("role", "user")
     if user_role not in ("admin", "commercial"):
         raise HTTPException(status_code=403, detail="Accès refusé : rôle admin ou commercial requis.")
-    
+
     result = await db.execute(select(Mission).where(Mission.id == mission_id))
     mission = result.scalars().first()
     if not mission:

@@ -1,3 +1,164 @@
+## Mise à jour automatique - 2026-05-06 00:40:27
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1299  | 551  |  58% |
+| agent_hr_api     | 1575  | 217  |  86% |
+| agent_missions_api | 1229  | 313  |  75% |
+| agent_ops_api    | 1417  | 212  |  85% |
+| agent_router_api | N/A   | N/A  | N/A  |
+| analytics_mcp    | 1082  | 154  |  86% |
+| competencies_api | N/A   | N/A  | N/A  |
+| cv_api           | N/A   | N/A  | N/A  |
+| drive_api        | N/A   | N/A  | N/A  |
+| items_api        | N/A   | N/A  | N/A  |
+| missions_api     | N/A   | N/A  | N/A  |
+| monitoring_mcp   | 1358  | 152  |  89% |
+| platform-engineering | 1155  | 886  |  23% |
+| prompts_api      | N/A   | N/A  | N/A  |
+| shared           | 139   | 0    | 100% |
+| tests            | 79    | 4    |  95% |
+| users_api        | N/A   | N/A  | N/A  |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Fix PEP8 compliance and pipeline test failures
+
+#### Fichiers (non commités)
+- `gent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/main.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/agent.py` (M)
+- `agent_router_api/main.py` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/cache.py` (M)
+- `competencies_api/conftest.py` (M)
+- `competencies_api/main.py` (M)
+- `competencies_api/pytest.ini` (M)
+- `competencies_api/requirements.txt` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/evaluations_router.py` (M)
+- `competencies_api/src/competencies/scoring_router.py` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/main.py` (M)
+- `cv_api/pytest.ini` (M)
+- `cv_api/requirements.txt` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/analytics_router.py` (M)
+- `cv_api/src/cvs/routers/profile_router.py` (M)
+- `cv_api/src/cvs/routers/search_router.py` (M)
+- `cv_api/src/services/bulk_service.py` (M)
+- `cv_api/src/services/cv_extraction_service.py` (M)
+- `cv_api/src/services/cv_storage_service.py` (M)
+- `cv_api/src/services/pubsub_service.py` (M)
+- `cv_api/src/services/taxonomy_batch_service.py` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/main.py` (M)
+- `drive_api/pytest.ini` (M)
+- `drive_api/requirements.txt` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/discovery_service.py` (M)
+- `drive_api/src/routers/files_router.py` (M)
+- `drive_api/src/routers/folders_router.py` (M)
+- `drive_api/src/routers/ingestion_router.py` (M)
+- `drive_api/tests/test_dlq_router.py` (M)
+- `drive_api/tests/test_drive_service_offboarding.py` (M)
+- `drive_api/tests/test_folders.py` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `items_api/cache.py` (M)
+- `items_api/conftest.py` (M)
+- `items_api/main.py` (M)
+- `items_api/mcp_server.py` (M)
+- `items_api/pytest.ini` (M)
+- `items_api/requirements.txt` (M)
+- `items_api/spec.md` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/main.py` (M)
+- `missions_api/pytest.ini` (M)
+- `missions_api/requirements.txt` (M)
+- `missions_api/spec.md` (M)
+- `missions_api/src/missions/crud_router.py` (M)
+- `missions_api/tests/test_crud.py` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/main.py` (M)
+- `prompts_api/pytest.ini` (M)
+- `prompts_api/requirements.txt` (M)
+- `run_tests.sh` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/requirements.txt` (M)
+- `scripts/run_tests.sh` (M)
+- `shared/schemas/__init__.py` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+- `users_api/cache.py` (M)
+- `users_api/conftest.py` (M)
+- `users_api/main.py` (M)
+- `users_api/pytest.ini` (M)
+- `users_api/requirements.txt` (M)
+- `users_api/spec.md` (M)
+- `users_api/src/users/auth_router.py` (M)
+- `users_api/tests/test_integration.py` (M)
+- `analytics_mcp/tests/test_auth.py` (??)
+- `analytics_mcp/tests/test_finops_tools.py` (??)
+- `analytics_mcp/tests/test_market_tools.py` (??)
+- `analytics_mcp/tests/test_mcp_app.py` (??)
+- `analytics_mcp/tests/test_mcp_server_extra.py` (??)
+- `competencies_api/tests/integration/` (??)
+- `cv_api/tests/integration/` (??)
+- `drive_api/output.txt` (??)
+- `drive_api/pytest_output.txt` (??)
+- `drive_api/run_test.py` (??)
+- `drive_api/src/services/` (??)
+- `drive_api/test_debug.py` (??)
+- `drive_api/tests/integration/` (??)
+- `drive_api/tests/test_discovery_service.py` (??)
+- `drive_api/tests/test_discovery_service.py.orig` (??)
+- `drive_api/tests/test_files_router.py` (??)
+- `drive_api/tests/test_folder_service.py` (??)
+- `drive_api/tests/test_folders_router.py` (??)
+- `drive_api/tests/test_google_api_client.py` (??)
+- `drive_api/tests/test_ingestion_kpi_service.py` (??)
+- `drive_api/tests/test_ingestion_router.py` (??)
+- `drive_api/tests/test_tree_resolution.py` (??)
+- `items_api/tests/integration/` (??)
+- `items_api/tools/` (??)
+- `missions_api/tests/integration/` (??)
+- `monitoring_mcp/tests/test_auth.py` (??)
+- `monitoring_mcp/tests/test_data_tools.py` (??)
+- `monitoring_mcp/tests/test_infra_tools.py` (??)
+- `monitoring_mcp/tests/test_logs_tools.py` (??)
+- `monitoring_mcp/tests/test_mcp_app.py` (??)
+- `monitoring_mcp/tests/test_pipeline_tools.py` (??)
+- `prompts_api/tests/integration/` (??)
+- `shared/schemas/auth.py` (??)
+- `users_api/tests/integration/` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-05 22:05:10
 
 ### Couverture de Code

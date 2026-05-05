@@ -32,3 +32,6 @@ python-docx>=1.1.0
 opentelemetry-instrumentation-httpx
 
 opentelemetry-instrumentation-redis
+
+# Tests d'intégration (Testcontainers — pgvector)
+testcontainers[postgres]>=4.0.0

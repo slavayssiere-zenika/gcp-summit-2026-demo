@@ -19,18 +19,20 @@ os.environ["COMPETENCIES_API_URL"] = "http://competencies_api:8003"
 os.environ["USERS_API_URL"] = "http://users_api:8000"
 os.environ["SECRET_KEY"] = "testsecret"
 
-# Remplace le client Redis par un serveur FakeRedis in-memory AVANT l'import de main.
-# cache.py crée `client = redis.from_url(...)` au niveau module → il faut patcher
-# redis.from_url avant que ce code s'exécute.
+# Remplace le client Redis par un serveur FakeRedis in-memory.
 _fake_redis_server = fakeredis.FakeServer()
 _fake_redis_client = fakeredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
 
-with patch("redis.from_url", return_value=_fake_redis_client), \
-        patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+# Mock OTel AVANT l'import de main
+with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     from database import engine, get_db
     from main import app
     from src.auth import verify_jwt
     from src.competencies.models import Base
+
+# Injecte le client fakeredis dans le module cache (lazy init)
+import cache as _cache_module  # noqa: E402
+_cache_module._client = _fake_redis_client
 
 
 if engine:

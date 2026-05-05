@@ -46,6 +46,14 @@ show_help() {
   echo "  --skip-tests       Bypasse la gate de tests unitaires (HOTFIX UNIQUEMENT — apparaîtra dans le summary)"
   echo "  --mutation-tests   Active les tests de mutation mutmut (opt-in, lent ~5-15 min/service)"
   echo "  --mutation-strict  --mutation-tests + bloque le build si score < seuil (défaut: 60%)"
+  echo ""
+  echo "Tests:"
+  echo "  Par défaut, tous les tests sont lancés : unitaires + intégration Testcontainers (nécessite Docker)."
+  echo "  Les tests d'intégration sont dans tests/integration/ de chaque service."
+  echo "  Ils démarrent des conteneurs Docker pour PostgreSQL, Redis et l'émulateur Pub/Sub."
+  echo "  Docker doit être démarré — une vérification automatique bloque le build si indisponible."
+  echo "  Utilisez --skip-tests pour bypasser tous les tests (unitaires + intégration) en mode hotfix."
+
   echo "Note: Par défaut, seuls les services ayant changé depuis leur dernier build sont reconstruits."
   echo "Note: sync_prompts est aussi exécuté automatiquement après tout déploiement."
   echo ""
@@ -436,6 +444,22 @@ has_changes() {
 }
 
 # ==============================================================================
+# Docker Availability Check (prérequis Testcontainers)
+# ==============================================================================
+
+check_docker_available() {
+  # Vérifie que le démon Docker est accessible.
+  # Testcontainers l'exige pour les tests d'intégration (postgres, redis).
+  if ! docker info > /dev/null 2>&1; then
+    echo -e "${RED}❌ [DOCKER] Démon Docker non disponible.${RESET}"
+    echo -e "${RED}   Les tests d'intégration (Testcontainers) ne peuvent pas s'exécuter.${RESET}"
+    echo -e "${RED}   → Démarrez Docker Desktop avant de relancer deploy.sh.${RESET}"
+    exit 1
+  fi
+  echo -e "${GREEN}✅ [DOCKER] Démon disponible — tests d'intégration activés.${RESET}"
+}
+
+# ==============================================================================
 # Test Gate (fail-fast avant chaque docker build)
 # ==============================================================================
 
@@ -731,6 +755,9 @@ build_and_push_standard() {
     DEPLOYS_SKIPPED+=("$SERVICE")
     return 0
   fi
+
+  # ── Vérification Docker (prérequis Testcontainers) ────────────────────────────────────
+  check_docker_available
 
   # ── Gate de test fail-fast ──────────────────────────────────────────────────
   # CURRENT_DEPLOYING_SERVICE vidé avant return 1 pour éviter la double entrée

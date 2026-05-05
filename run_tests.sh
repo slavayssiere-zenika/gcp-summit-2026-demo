@@ -5,7 +5,17 @@ SERVICES=(
   "analytics_mcp" "agent_commons"
 )
 
+# Vérification Docker (prérequis Testcontainers — tests d'intégration obligatoires)
+if ! docker info > /dev/null 2>&1; then
+  echo "❌ [DOCKER] Démon Docker non disponible."
+  echo "   Les tests d'intégration (Testcontainers) nécessitent Docker."
+  echo "   → Démarrez Docker Desktop puis relancez run_tests.sh."
+  exit 1
+fi
+echo "✅ [DOCKER] Démon disponible — tests d'intégration activés."
+
 echo "# Test and Coverage Report" > test_report.txt
+
 
 for service in "${SERVICES[@]}"; do
   if [ -d "$service" ]; then

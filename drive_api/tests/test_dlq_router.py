@@ -266,3 +266,81 @@ def test_replay_dlq_pubsub_error(mocker):
     with get_client() as client:
         resp = client.post("/dlq/replay", headers=AUTH)
     assert resp.status_code in (200, 500)
+
+# ── New Tests for Better Coverage ──
+
+def test_dlq_status_with_invalid_payload(mocker):
+    mock_msg = MagicMock()
+    mock_msg.message.data = b"not base64 or not json"
+    mock_msg.message.message_id = "msg_invalid"
+    mock_msg.ack_id = "ack_invalid"
+    
+    mock_pull_resp = MagicMock()
+    mock_pull_resp.received_messages = [mock_msg]
+    
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread", new=AsyncMock(return_value=mock_pull_resp))
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    
+    with get_client() as client:
+        resp = client.get("/dlq/status", headers=AUTH)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["unknown_files"]) == 1
+
+def test_delete_dlq_message_by_pubsub_id(mocker):
+    import base64
+    import json
+    payload = {"other_key": "val"}
+    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+    
+    msg = MagicMock()
+    msg.message.data = base64.b64decode(encoded)
+    msg.message.message_id = "msg123"
+    msg.ack_id = "ack_target"
+    
+    mock_pull_resp = MagicMock()
+    mock_pull_resp.received_messages = [msg]
+    
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread", new=AsyncMock(return_value=mock_pull_resp))
+    mock_sub = MagicMock()
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=mock_sub)
+    
+    with get_client() as client:
+        resp = client.delete("/dlq/message?pubsub_message_id=msg123", headers=AUTH)
+    
+    assert resp.status_code == 200
+    assert resp.json()["method"] == "repull"
+
+def test_replay_dlq_with_valid_files(mocker):
+    import base64
+    import json
+    payload = {"google_file_id": "file_replay"}
+    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+    
+    msg = MagicMock()
+    msg.message.data = base64.b64decode(encoded)
+    msg.message.message_id = "msg_replay"
+    msg.ack_id = "ack_replay"
+    
+    mock_pull_resp = MagicMock()
+    mock_pull_resp.received_messages = [msg]
+    
+    # Return 1 page then empty
+    call_count = [0]
+    async def fake_to_thread(fn, *args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_pull_resp
+        elif getattr(fn, "__name__", "") == "pull" or "pull" in str(fn):
+            return MagicMock(received_messages=[])
+        return None
+    
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread", side_effect=fake_to_thread)
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    
+    with get_client() as client:
+        resp = client.post("/dlq/replay", headers=AUTH)
+        
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"

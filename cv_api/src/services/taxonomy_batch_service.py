@@ -50,7 +50,9 @@ class TaxonomyBatchService:
                             json={"id_token": oidc_token}
                         )
                         if res.status_code == 200:
-                            short_jwt = res.json().get("access_token", "")
+                            from shared.schemas.auth import TokenResponse
+                            data = TokenResponse.model_validate(res.json())
+                            short_jwt = data.access_token
                 except Exception as e:
                     logger.warning(
                         f"[batch-auth] Impossible de générer le JWT court OIDC: {e}")
@@ -62,7 +64,9 @@ class TaxonomyBatchService:
                         headers={"Authorization": f"Bearer {short_jwt}"}
                     )
                     if res2.status_code == 200:
-                        return res2.json().get("access_token", "")
+                        from shared.schemas.auth import TokenResponse
+                        data = TokenResponse.model_validate(res2.json())
+                        return data.access_token
         except Exception as e:
             logger.error(
                 f"[batch-auth] Erreur fatale génération token autonome: {e}")
