@@ -1,3 +1,21 @@
+# flake8: noqa: E501
+from tools.taxonomy_tools import (
+    handle_recalculate_competencies_tree, handle_get_recalculate_tree_status,
+    handle_get_skills_coverage, handle_global_reanalyze_cvs,
+    handle_get_reanalyze_status, handle_reindex_cv_embeddings,
+    handle_start_bulk_cv_reanalyse, handle_get_bulk_cv_reanalyse_status,
+    handle_cancel_bulk_cv_reanalyse, handle_get_data_quality_report
+)
+from tools.search_tools import (
+    handle_search_best_candidates, handle_get_users_by_tag,
+    handle_get_most_experienced_consultants, handle_get_tags_map,
+    handle_find_similar_consultants, handle_search_candidates_multi_criteria,
+    handle_get_rag_snippet, handle_match_mission_to_candidates
+)
+from tools.profile_tools import (
+    handle_analyze_cv, handle_get_cv_status_bulk, handle_get_user_cv,
+    handle_get_user_missions, handle_get_candidate_rag_context
+)
 import contextvars
 import json
 import os
@@ -36,18 +54,19 @@ provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "cv-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
+        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
 server = Server("cv-api")
+
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -488,6 +507,7 @@ async def list_tools() -> list[Tool]:
         ),
     ]
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
@@ -495,374 +515,77 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         headers = {}
         if auth_header:
             headers["Authorization"] = auth_header
-        # OTel Propagation
         inject(headers)
 
         async with httpx.AsyncClient() as client:
-            if name == "analyze_cv":
-                url = arguments.get("url")
-                source_tag = arguments.get("source_tag")
-                folder_name = arguments.get("folder_name")
-                if not url:
-                    return [TextContent(type="text", text="Error: Missing url argument.")]
-                
-                try:
-                    payload = {"url": url}
-                    if source_tag:
-                        payload["source_tag"] = source_tag
-                    if folder_name:
-                        payload["folder_name"] = folder_name
-                    response = await client.post(f"{API_BASE_URL}/import", json=payload, headers=headers, timeout=60.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 409:
-                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            
-            elif name == "get_cv_status_bulk":
-                user_ids = arguments.get("user_ids", [])
-                if not user_ids:
-                    return [TextContent(type="text", text="[]")]
-                
-                async def check_cv(uid):
-                    try:
-                        res = await client.get(f"{API_BASE_URL}/{uid}", headers=headers, timeout=5.0)
-                        return {"user_id": uid, "has_cv": res.status_code == 200}
-                    except Exception:
-                        return {"user_id": uid, "has_cv": False}
-                        
-                import asyncio
-                results = await asyncio.gather(*(check_cv(uid) for uid in user_ids))
-                return [TextContent(type="text", text=json.dumps(results))]
+            try:
+                if name == "analyze_cv":
+                    return await handle_analyze_cv(client, arguments, headers, API_BASE_URL)
+                elif name == "get_cv_status_bulk":
+                    return await handle_get_cv_status_bulk(client, arguments, headers, API_BASE_URL)
+                elif name == "get_user_cv":
+                    return await handle_get_user_cv(client, arguments, headers, API_BASE_URL)
+                elif name == "get_user_missions":
+                    return await handle_get_user_missions(client, arguments, headers, API_BASE_URL)
+                elif name == "get_candidate_rag_context":
+                    return await handle_get_candidate_rag_context(client, arguments, headers, API_BASE_URL)
 
-            elif name == "search_best_candidates":
-                query = arguments.get("query")
-                limit = arguments.get("limit", 5)
-                skip = arguments.get("skip", 0)
-                agency = arguments.get("agency")
-                if not query:
-                    return [TextContent(type="text", text="Error: Missing query argument.")]
-                
-                try:
-                    params = {"query": query, "limit": limit, "skip": skip}
-                    if agency:
-                        params["agency"] = agency
-                    response = await client.get(f"{API_BASE_URL}/search", params=params, headers=headers, timeout=60.0)
-                    response.raise_for_status()
-                    data = response.json()
-                    if not data:
-                        return [TextContent(type="text", text=f"Aucun candidat ne correspond à la recherche sémantique '{query}' dans la base de CVs.")]
-                    return [TextContent(type="text", text=json.dumps(data, indent=2))]
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 409:
-                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "get_user_cv":
-                user_id = arguments.get("user_id")
-                skip = arguments.get("skip", 0)
-                limit = arguments.get("limit", 50)
-                if not user_id:
-                    return [TextContent(type="text", text="Error: Missing user_id argument.")]
-                
-                try:
-                    params = {"skip": skip, "limit": limit}
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}", params=params, headers=headers, timeout=10.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 409:
-                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "recalculate_competencies_tree":
-                try:
-                    response = await client.post(f"{API_BASE_URL}/recalculate_tree", headers=headers, timeout=120.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 409:
-                        return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "get_users_by_tag":
-                tag = arguments.get("tag")
-                skip = arguments.get("skip", 0)
-                limit = arguments.get("limit", 50)
-                if not tag:
-                    return [TextContent(type="text", text="Error: Missing tag argument.")]
-                
-                try:
-                    params = {"skip": skip, "limit": limit}
-                    response = await client.get(f"{API_BASE_URL}/users/tag/{tag}", params=params, headers=headers, timeout=10.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "get_user_missions":
-                user_id = arguments.get("user_id")
-                skip = arguments.get("skip", 0)
-                limit = arguments.get("limit", 50)
-                if not user_id:
-                    return [TextContent(type="text", text="Error: Missing user_id argument.")]
-                
-                try:
-                    params = {"skip": skip, "limit": limit}
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/missions", params=params, headers=headers, timeout=10.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "global_reanalyze_cvs":
-                try:
-                    params = {}
-                    if arguments.get("tag"): params["tag"] = arguments["tag"]
-                    if arguments.get("user_id"): params["user_id"] = arguments["user_id"]
-                    
-                    response = await client.post(f"{API_BASE_URL}/reanalyze", params=params, headers=headers, timeout=30.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                elif name == "search_best_candidates":
+                    return await handle_search_best_candidates(client, arguments, headers, API_BASE_URL)
+                elif name == "get_users_by_tag":
+                    return await handle_get_users_by_tag(client, arguments, headers, API_BASE_URL)
+                elif name == "get_most_experienced_consultants":
+                    return await handle_get_most_experienced_consultants(client, arguments, headers, API_BASE_URL)
+                elif name == "get_tags_map":
+                    return await handle_get_tags_map(client, headers, API_BASE_URL)
+                elif name == "find_similar_consultants":
+                    return await handle_find_similar_consultants(client, arguments, headers, API_BASE_URL)
+                elif name == "search_candidates_multi_criteria":
+                    return await handle_search_candidates_multi_criteria(client, arguments, headers, API_BASE_URL)
+                elif name == "get_rag_snippet":
+                    return await handle_get_rag_snippet(client, arguments, headers, API_BASE_URL)
+                elif name == "match_mission_to_candidates":
+                    return await handle_match_mission_to_candidates(client, arguments, headers, API_BASE_URL)
 
-            elif name == "get_candidate_rag_context":
-                user_id = arguments.get("user_id")
-                if not user_id:
-                    return [TextContent(type="text", text="Error: Missing user_id argument.")]
-                try:
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/details", headers=headers, timeout=20.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "get_most_experienced_consultants":
-                limit = arguments.get("limit", 5)
-                agency = arguments.get("agency")
-                params = {"limit": limit}
-                if agency:
-                    params["agency"] = agency
-                try:
-                    response = await client.get(f"{API_BASE_URL}/ranking/experience", params=params, headers=headers, timeout=20.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-                except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
-            elif name == "get_reanalyze_status":
-                try:
-                    response = await client.get(f"{API_BASE_URL}/reanalyze/status", headers=headers, timeout=10.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))] 
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-            elif name == "get_recalculate_tree_status":
-                try:
-                    response = await client.get(f"{API_BASE_URL}/recalculate_tree/status", headers=headers, timeout=10.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))] 
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-            elif name == "get_tags_map":
-                try:
-                    response = await client.get(f"{API_BASE_URL}/users/tags/map", headers=headers, timeout=10.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+                elif name == "recalculate_competencies_tree":
+                    return await handle_recalculate_competencies_tree(client, headers, API_BASE_URL)
+                elif name == "get_recalculate_tree_status":
+                    return await handle_get_recalculate_tree_status(client, headers, API_BASE_URL)
+                elif name == "get_skills_coverage":
+                    return await handle_get_skills_coverage(client, arguments, headers, API_BASE_URL)
+                elif name == "global_reanalyze_cvs":
+                    return await handle_global_reanalyze_cvs(client, arguments, headers, API_BASE_URL)
+                elif name == "get_reanalyze_status":
+                    return await handle_get_reanalyze_status(client, headers, API_BASE_URL)
+                elif name == "reindex_cv_embeddings":
+                    return await handle_reindex_cv_embeddings(client, arguments, headers, API_BASE_URL)
+                elif name == "start_bulk_cv_reanalyse":
+                    return await handle_start_bulk_cv_reanalyse(client, headers, API_BASE_URL)
+                elif name == "get_bulk_cv_reanalyse_status":
+                    return await handle_get_bulk_cv_reanalyse_status(client, headers, API_BASE_URL)
+                elif name == "cancel_bulk_cv_reanalyse":
+                    return await handle_cancel_bulk_cv_reanalyse(client, headers, API_BASE_URL)
+                elif name == "get_data_quality_report":
+                    return await handle_get_data_quality_report(client, headers, API_BASE_URL)
 
-            # ── Sprint 0 : re-indexation embeddings ───────────────────────────
-            elif name == "reindex_cv_embeddings":
-                try:
-                    params = {}
-                    if arguments.get("tag"):
-                        params["tag"] = arguments["tag"]
-                    if arguments.get("user_id"):
-                        params["user_id"] = arguments["user_id"]
-                    response = await client.post(f"{API_BASE_URL}/reindex-embeddings", params=params, headers=headers, timeout=30.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+                else:
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
+            except Exception as e:
+                return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Error executing {name}: {str(e)}"}))]
 
-            # ── Sprint A : nouveaux endpoints RAG ─────────────────────────────
-            elif name == "find_similar_consultants":
-                user_id = arguments.get("user_id")
-                if not user_id:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "user_id requis"}))]
-                try:
-                    params = {"limit": arguments.get("limit", 5)}
-                    if arguments.get("agency"):
-                        params["agency"] = arguments["agency"]
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/similar", params=params, headers=headers, timeout=15.0)
-                    response.raise_for_status()
-                    data = response.json()
-                    if not data:
-                        return [TextContent(type="text", text=f"Aucun consultant similaire trouvé pour user_id={user_id}.")]
-                    return [TextContent(type="text", text=json.dumps(data, indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 
-            elif name == "search_candidates_multi_criteria":
-                queries = arguments.get("queries")
-                if not queries:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "queries requis (liste de critères)"}))]
-                try:
-                    payload = {
-                        "queries": queries,
-                        "limit": arguments.get("limit", 10),
-                    }
-                    if arguments.get("weights"):
-                        payload["weights"] = arguments["weights"]
-                    if arguments.get("agency"):
-                        payload["agency"] = arguments["agency"]
-                    response = await client.post(f"{API_BASE_URL}/search/multi-criteria", json=payload, headers=headers, timeout=60.0)
-                    response.raise_for_status()
-                    data = response.json()
-                    if not data:
-                        return [TextContent(type="text", text=f"Aucun candidat correspondant à ces critères combinés.")]
-                    return [TextContent(type="text", text=json.dumps(data, indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+async def main():
+    """Main entry point for the MCP server when run as a script."""
+    from mcp.server.stdio import stdio_server
+    from mcp.server import InitializationOptions
+    options = InitializationOptions(
+        server_name="cv-api",
+        server_version="1.0.0",
+        capabilities={}
+    )
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, options)
 
-            elif name == "get_rag_snippet":
-                user_id = arguments.get("user_id")
-                query = arguments.get("query")
-                if not user_id or not query:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "user_id et query requis"}))]
-                try:
-                    params = {"query": query, "top_k": arguments.get("top_k", 3)}
-                    response = await client.get(f"{API_BASE_URL}/user/{user_id}/rag-snippet", params=params, headers=headers, timeout=45.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            # ── Sprint B : mission matching ────────────────────────────────────
-            elif name == "match_mission_to_candidates":
-                mission_id = arguments.get("mission_id")
-                if not mission_id:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "mission_id requis"}))]
-                try:
-                    params = {
-                        "mission_id": mission_id,
-                        "limit": arguments.get("limit", 10),
-                    }
-                    if arguments.get("agency"):
-                        params["agency"] = arguments["agency"]
-                    response = await client.post(f"{API_BASE_URL}/search/mission-match", params=params, headers=headers, timeout=30.0)
-                    response.raise_for_status()
-                    data = response.json()
-                    if not data:
-                        return [TextContent(type="text", text=f"Aucun candidat correspondant à la mission {mission_id}.")]
-                    return [TextContent(type="text", text=json.dumps(data, indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            # ── Sprint C : analytics corpus ────────────────────────────────────
-            elif name == "get_skills_coverage":
-                try:
-                    params = {"top_n": arguments.get("top_n", 50)}
-                    if arguments.get("agency"):
-                        params["agency"] = arguments["agency"]
-                    response = await client.get(f"{API_BASE_URL}/analytics/skills-coverage", params=params, headers=headers, timeout=15.0)
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            # ── Vertex AI Batch — Ré-analyse Globale ────────────────────────────
-            elif name == "start_bulk_cv_reanalyse":
-                try:
-                    response = await client.post(
-                        f"{API_BASE_URL}/bulk-reanalyse/start",
-                        headers=headers,
-                        timeout=30.0,
-                    )
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 409:
-                        return [TextContent(type="text", text=f"CONFLIT (409) : une ré-analyse est déjà en cours. Utiliser get_bulk_cv_reanalyse_status pour suivre.")]
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            elif name == "get_bulk_cv_reanalyse_status":
-                try:
-                    response = await client.get(
-                        f"{API_BASE_URL}/bulk-reanalyse/status",
-                        headers=headers,
-                        timeout=15.0,
-                    )
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            elif name == "cancel_bulk_cv_reanalyse":
-                try:
-                    response = await client.post(
-                        f"{API_BASE_URL}/bulk-reanalyse/cancel",
-                        headers=headers,
-                        timeout=15.0,
-                    )
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            # ── Data Quality ────────────────────────────────────────────────────
-            elif name == "get_data_quality_report":
-                try:
-                    response = await client.get(
-                        f"{API_BASE_URL}/bulk-reanalyse/data-quality",
-                        headers=headers,
-                        timeout=30.0,
-                    )
-                    response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
-                except httpx.HTTPStatusError as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
-                except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
-            else:
-                return [TextContent(type="text", text=f"Unknown tool: {name}")]
-
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

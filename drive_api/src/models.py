@@ -12,7 +12,10 @@ class DriveSyncStatus(enum.Enum):
     PROCESSING = "PROCESSING"  # En traitement actif dans cv_api (reçu depuis Pub/Sub)
     IMPORTED_CV = "IMPORTED_CV"
     IGNORED_NOT_CV = "IGNORED_NOT_CV"
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"  # Fichier supprimé ou déplacé dans un dossier ignoré
+    DELETED_OK = "DELETED_OK"      # Archivage validé par la cv_api
     ERROR = "ERROR"
+
 
 class DriveFolder(Base):
     __tablename__ = "drive_folders"
@@ -24,6 +27,7 @@ class DriveFolder(Base):
     excluded_folders = Column(JSON, nullable=True, default=list)
     is_initial_sync_done = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
 
 class DriveSyncState(Base):
     __tablename__ = "drive_sync_state"
@@ -45,5 +49,3 @@ class DriveSyncState(Base):
     processing_duration_ms = Column(Integer, nullable=True)  # Durée de traitement LLM mesurée par cv_api (ms)
     file_type = Column(String, nullable=True, default="google_doc")
     # Valeurs : "google_doc" (Google Docs natif) | "docx" (fichier Word .docx)
-
-

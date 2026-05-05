@@ -22,6 +22,7 @@ START_TIME = time.monotonic()
 CURRENT_PROJECT_ID = "slavayssiere-sandbox-462015"
 SANITY_ERROR_COUNT = 0
 
+
 def elapsed() -> str:
     """Retourne le temps écoulé depuis le démarrage du script, formaté en HH:MM:SS."""
     secs = int(time.monotonic() - START_TIME)
@@ -29,34 +30,36 @@ def elapsed() -> str:
     m, s = divmod(rem, 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
 
+
 def generate_antigravity_error_report(task_context: str, error_message: str, tags: list = None):
     """Génère ou met à jour un rapport d'erreur Markdown pour l'Agent Antigravity."""
-    global CURRENT_PROJECT_ID, SANITY_ERROR_COUNT
+    global SANITY_ERROR_COUNT
     SANITY_ERROR_COUNT += 1
     project_id = CURRENT_PROJECT_ID
     report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "antigravity_sanity_error.md")
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
     tags_str = ", ".join(tags) if tags else "sanity-check"
-    
+
     is_new = not os.path.exists(report_file)
     with open(report_file, "a", encoding="utf-8") as f:
         if is_new:
             f.write("# 🚨 Rapport d'Erreur Sanity Check (pour Antigravity)\n\n")
             f.write("> **Directives pour l'Agent Antigravity :**\n")
             f.write("> Analyse ces erreurs, cherche les causes probables et propose une réparation.\n")
-            f.write(f"> 🔎 **IMPORTANT** : Pense à rechercher les logs pertinents directement dans GCP pour le projet `{project_id}` via les outils MCP.\n")
+            f.write(
+                f"> 🔎 **IMPORTANT** : Pense à rechercher les logs pertinents directement dans GCP pour le projet `{project_id}` via les outils MCP.\n")
             f.write("> Une fois résolues, utilise la CLI Antigravity Memory pour logguer la solution.\n\n")
-        
+
         f.write(f"## Erreur interceptée à {timestamp}\n\n")
         f.write(f"- **Contexte** : {task_context}\n")
         f.write(f"- **Projet GCP** : `{project_id}`\n")
         f.write(f"- **Tags** : `{tags_str}`\n")
-        f.write(f"- **Détails de l'erreur** :\n\n")
+        f.write("- **Détails de l'erreur** :\n\n")
         f.write("```text\n")
         f.write(f"{error_message}\n")
         f.write("```\n\n")
         f.write("---\n\n")
-        
+
     # On utilise print car logger n'est défini que plus bas
     print(f"  [!] Rapport d'erreur Antigravity généré/mis à jour : {report_file}")
 
@@ -71,12 +74,12 @@ def discover_versions():
         "cv_api", "prompts_api", "drive_api", "missions_api", "analytics_mcp", "monitoring_mcp",
         "db_migrations", "db_init", "frontend"
     ]
-    
+
     for comp in components:
         # Check environment variable first (e.g. AGENT_API_VERSION)
         env_var_name = f"{comp.upper()}_VERSION"
         env_val = os.environ.get(env_var_name)
-        
+
         if env_val:
             versions[f"{comp}_version"] = env_val
         else:
@@ -87,7 +90,7 @@ def discover_versions():
                     versions[f"{comp}_version"] = f.read().strip()
             else:
                 versions[f"{comp}_version"] = "v0.0.1"
-            
+
     return versions
 
 
@@ -129,6 +132,7 @@ def build_image_urls(registry: str, versions: dict) -> dict:
         images[f"image_{tf_name}"] = f"{registry}/{docker_name}:{version}"
     return images
 
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -136,11 +140,14 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+
 class _ElapsedFilter(logging.Filter):
     """Injecte le temps écoulé dans chaque LogRecord."""
+
     def filter(self, record):
         record.elapsed = elapsed()
         return True
+
 
 logger = logging.getLogger(__name__)
 logger.addFilter(_ElapsedFilter())
@@ -149,9 +156,10 @@ logger.addFilter(_ElapsedFilter())
 for _h in logging.root.handlers:
     _h.addFilter(_ElapsedFilter())
 
+
 class DeploymentError(Exception):
     """Exception levée lors d'un échec de déploiement."""
-    pass
+
 
 def load_config(filepath):
     """Charge la configuration YAML de manière robuste."""
@@ -162,6 +170,7 @@ def load_config(filepath):
             logger.error(f"Erreur lors de la lecture du fichier YAML {filepath}: {exc}")
             raise DeploymentError(f"Format YAML invalide : {exc}")
 
+
 def check_binary_dependencies():
     """Vérifie que les outils nécessaires sont installés."""
     dependencies = ["terraform", "gcloud"]
@@ -169,10 +178,11 @@ def check_binary_dependencies():
     for dep in dependencies:
         if subprocess.run(["which", dep], capture_output=True).returncode != 0:
             missing.append(dep)
-    
+
     if missing:
         raise DeploymentError(f"Dépendances manquantes : {', '.join(missing)}")
     logger.info("[+] Toutes les dépendances binaires sont satisfaites.")
+
 
 TERRAFORM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "terraform")
 
@@ -188,9 +198,10 @@ PERSISTENT_RESOURCES = [
     # dynamiquement dans destroy() en fonction de extra_domains dans le YAML.
 ]
 
+
 def run_cmd(cmd, check=True, capture_output=False, live=False):
     logger.info(f"[*] Running: {' '.join(cmd)}  (elapsed: {elapsed()})")
-    
+
     if live:
         # Mode live : on affiche en temps réel tout en capturant dans un buffer
         process = subprocess.Popen(
@@ -206,7 +217,7 @@ def run_cmd(cmd, check=True, capture_output=False, live=False):
             full_output.append(line)
         process.stdout.close()
         return_code = process.wait()
-        
+
         # On simule un objet simulate CompletedProcess pour la compatibilité
         from argparse import Namespace
         result = Namespace(returncode=return_code, stdout="".join(full_output), stderr="".join(full_output))
@@ -214,7 +225,7 @@ def run_cmd(cmd, check=True, capture_output=False, live=False):
         result = subprocess.run(cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True)
     else:
         result = subprocess.run(cmd, cwd=TERRAFORM_DIR)
-        
+
     if check and result.returncode != 0:
         err_msg = f"[!] Error executing: {' '.join(cmd)}"
         logger.error(err_msg)
@@ -223,22 +234,26 @@ def run_cmd(cmd, check=True, capture_output=False, live=False):
         raise DeploymentError(err_msg)
     return result
 
+
 def resource_exists_in_gcp(resource_type, name, project_id):
     if resource_type == "dns_zone":
-        res = subprocess.run(["gcloud", "dns", "managed-zones", "describe", name, "--project", project_id, "--format=json"], capture_output=True)
+        res = subprocess.run(["gcloud", "dns", "managed-zones", "describe", name,
+                             "--project", project_id, "--format=json"], capture_output=True)
         return res.returncode == 0
     elif resource_type == "ssl_cert":
-        res = subprocess.run(["gcloud", "compute", "ssl-certificates", "describe", name, "--global", "--project", project_id, "--format=json"], capture_output=True)
+        res = subprocess.run(["gcloud", "compute", "ssl-certificates", "describe", name,
+                             "--global", "--project", project_id, "--format=json"], capture_output=True)
         return res.returncode == 0
     elif resource_type == "sa":
-        res = subprocess.run(["gcloud", "iam", "service-accounts", "describe", name, "--project", project_id, "--format=json"], capture_output=True)
+        res = subprocess.run(["gcloud", "iam", "service-accounts", "describe", name,
+                             "--project", project_id, "--format=json"], capture_output=True)
         return res.returncode == 0
     return False
+
 
 def get_tf_args(project_id: str = "slavayssiere-sandbox-462015") -> list:
     """Retourne les arguments -var supplémentaires pour terraform apply/plan/import."""
     return []
-
 
 
 def toggle_prevent_destroy(disable=True):
@@ -267,12 +282,12 @@ def toggle_prevent_destroy(disable=True):
         lines = ["# AUTO-GENERATED by manage_env.py --force. Do NOT commit this file.\n"]
         lines.append("# It is automatically deleted after the operation completes.\n\n")
         for rtype, rname in resources_to_override:
-            lines.append(f'override_resource {{\n')
+            lines.append('override_resource {{\n')
             lines.append(f'  res = {rtype}.{rname}\n')
-            lines.append(f'  values = {{\n')
-            lines.append(f'    lifecycle = []\n')
-            lines.append(f'  }}\n')
-            lines.append(f'}}\n\n')
+            lines.append('  values = {{\n')
+            lines.append('    lifecycle = []\n')
+            lines.append('  }}\n')
+            lines.append('}}\n\n')
         # Note: Terraform override_resource doesn't support lifecycle overrides.
         # Use a simpler approach: generate a .tf.json override with prevent_destroy=false
         override_blocks = {}
@@ -296,8 +311,10 @@ def toggle_prevent_destroy(disable=True):
         else:
             print("    -> Override file not found (already cleaned up).")
 
+
 def init_tf():
     run_cmd(["terraform", "init", "-reconfigure", "-upgrade"])
+
 
 def set_workspace(env):
     # Try to select, if it fails, create it
@@ -309,19 +326,23 @@ def set_workspace(env):
     else:
         logger.info(f"[*] Workspace '{env}' successfully selected.")
 
+
 def import_persistent_resource(env, address, resource_id):
     # Check if resource is in state, silence output to avoid confusing users on first deploy
-    state_res = subprocess.run(["terraform", "state", "list", address], cwd=TERRAFORM_DIR, capture_output=True, text=True)
+    state_res = subprocess.run(["terraform", "state", "list", address],
+                               cwd=TERRAFORM_DIR, capture_output=True, text=True)
     if state_res.returncode != 0 or address not in state_res.stdout:
         print(f"[*] Checking if persistent resource {address} exists in GCP to import it...")
         try:
-            import_res = subprocess.run(["terraform", "import", address, resource_id], cwd=TERRAFORM_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            import_res = subprocess.run(["terraform", "import", address, resource_id],
+                                        cwd=TERRAFORM_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             if import_res.returncode == 0:
                 print(f"    -> Successfully imported {address} into state.")
             else:
                 print(f"    -> {address} does not exist yet (or import failed). It will be created by apply.")
         except subprocess.TimeoutExpired:
             print(f"    -> [!] Import timed out for {address}. Proceeding without it.")
+
 
 def build_importable_resources_map(env, project_id, region, extra_domains=None):
     """
@@ -330,7 +351,7 @@ def build_importable_resources_map(env, project_id, region, extra_domains=None):
     apply sur un environnement dont les ressources existent déjà dans GCP mais pas
     dans le state Terraform (plateforme éphémère recréée).
     """
-    cr_base  = f"projects/{project_id}/locations/{region}/services"
+    cr_base = f"projects/{project_id}/locations/{region}/services"
     mon_base = f"projects/{project_id}/services"
     dns_base = f"projects/{project_id}/managedZones"
 
@@ -375,16 +396,18 @@ def build_importable_resources_map(env, project_id, region, extra_domains=None):
     if extra_domains:
         for d in extra_domains:
             zone_name = d.get("zone_name", "")
-            dns_name  = d.get("dns_name", "")  # ex: "gen-skillz.znk.io."
+            dns_name = d.get("dns_name", "")  # ex: "gen-skillz.znk.io."
             if not zone_name:
                 continue
             tf_zone_addr = f'google_dns_managed_zone.extra_zones["{zone_name}"]'
-            tf_a_addr    = f'google_dns_record_set.extra_a["{zone_name}"]'
-            gcp_zone_id  = f"{dns_base}/{zone_name}"
+            tf_a_addr = f'google_dns_record_set.extra_a["{zone_name}"]'
+            gcp_zone_id = f"{dns_base}/{zone_name}"
             importable_map[tf_zone_addr] = gcp_zone_id
-            importable_map[tf_a_addr]    = f"{gcp_zone_id}/rrsets/{dns_name}/A"
+            importable_map[tf_a_addr] = f"{gcp_zone_id}/rrsets/{dns_name}/A"
 
     return importable_map
+
+
 def import_resources_on_409(output, env, project_id, region, extra_domains=None):
     """
     Analyse la sortie d'un `terraform apply` pour détecter les erreurs 409
@@ -395,8 +418,8 @@ def import_resources_on_409(output, env, project_id, region, extra_domains=None)
 
     # Extrait les adresses Terraform depuis les blocs d'erreur 409
     found_addresses = set()
-    with_pattern   = re.compile(r'with\s+([\w\.\[\]"]+),')
-    in_409_block   = False
+    with_pattern = re.compile(r'with\s+([\w\.\[\]"]+),')
+    in_409_block = False
 
     for line in output.splitlines():
         stripped = line.strip().lstrip('│').strip()
@@ -482,7 +505,7 @@ def get_gcp_quota_parallelism(project_id, region):
     ]
 
     all_quotas = []
-    max_ratio  = 0.0
+    max_ratio = 0.0
 
     print("[*] Lecture des quotas GCP Compute Engine...")
 
@@ -547,7 +570,8 @@ def get_gcp_quota_parallelism(project_id, region):
     print("    +" + "-"*62 + "+")
     for q in sorted(all_quotas, key=lambda x: x["ratio"], reverse=True):
         icon = "[CRIT]" if q["ratio"] > 0.80 else "[WARN]" if q["ratio"] > 0.50 else "[ OK ]"
-        print(f"    | {icon} {q['metric']:<28} {q['scope']:<14} {q['usage']:>5} {q['limit']:>5} {q['ratio']*100:>3.0f}% |")
+        print(
+            f"    | {icon} {q['metric']:<28} {q['scope']:<14} {q['usage']:>5} {q['limit']:>5} {q['ratio']*100:>3.0f}% |")
     print("    +" + "-"*62 + "+")
 
     # Decision du parallelisme
@@ -579,26 +603,31 @@ def deploy(env, base_domain, project_id, config, force=False):
 
     zone_name = f"zone-{env}"
     if resource_exists_in_gcp("dns_zone", zone_name, project_id):
-        import_persistent_resource(env, "google_dns_managed_zone.env_zone", f"projects/{project_id}/managedZones/{zone_name}")
+        import_persistent_resource(env, "google_dns_managed_zone.env_zone",
+                                   f"projects/{project_id}/managedZones/{zone_name}")
         dns_name = f"{env}.{base_domain}."
-        import_persistent_resource(env, "google_dns_record_set.a", f"projects/{project_id}/managedZones/{zone_name}/rrsets/{dns_name}/A")
-        import_persistent_resource(env, "google_dns_record_set.api_a", f"projects/{project_id}/managedZones/{zone_name}/rrsets/api.{dns_name}/A")
+        import_persistent_resource(env, "google_dns_record_set.a",
+                                   f"projects/{project_id}/managedZones/{zone_name}/rrsets/{dns_name}/A")
+        import_persistent_resource(env, "google_dns_record_set.api_a",
+                                   f"projects/{project_id}/managedZones/{zone_name}/rrsets/api.{dns_name}/A")
 
     # Import des zones DNS additionnelles persistantes (ex: zone-gen-skillz pour gen-skillz.znk.io)
     for d in extra_domains:
         extra_zone_name = d.get("zone_name", "")
-        extra_dns_name  = d.get("dns_name", "")
+        extra_dns_name = d.get("dns_name", "")
         if not extra_zone_name:
             continue
         if resource_exists_in_gcp("dns_zone", extra_zone_name, project_id):
             tf_addr = f'google_dns_managed_zone.extra_zones["{extra_zone_name}"]'
             import_persistent_resource(env, tf_addr, f"projects/{project_id}/managedZones/{extra_zone_name}")
             tf_a_addr = f'google_dns_record_set.extra_a["{extra_zone_name}"]'
-            import_persistent_resource(env, tf_a_addr, f"projects/{project_id}/managedZones/{extra_zone_name}/rrsets/{extra_dns_name}/A")
+            import_persistent_resource(
+                env, tf_a_addr, f"projects/{project_id}/managedZones/{extra_zone_name}/rrsets/{extra_dns_name}/A")
 
     ssl_name = f"ssl-{env}"
     if resource_exists_in_gcp("ssl_cert", ssl_name, project_id):
-        import_persistent_resource(env, "google_compute_managed_ssl_certificate.default", f"projects/{project_id}/global/sslCertificates/{ssl_name}")
+        import_persistent_resource(env, "google_compute_managed_ssl_certificate.default",
+                                   f"projects/{project_id}/global/sslCertificates/{ssl_name}")
 
     # NOTE: le SA sa-drive-{env}-v2 est déclaré comme data source (cr_drive.tf) — pas une resource Terraform.
     # Il est créé en dehors du cycle Terraform et est naturellement persistant (jamais détruit par apply/destroy).
@@ -617,7 +646,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         apply_cmd = ["terraform", "apply", "-auto-approve",
                      f"-parallelism={parallelism}", "-lock-timeout=120s"] + get_tf_args(project_id)
 
-        print(f"[*] Terraform Apply...")
+        print("[*] Terraform Apply...")
         res = run_cmd(apply_cmd, check=False, live=True)
 
         if res.returncode != 0:
@@ -648,12 +677,12 @@ def deploy(env, base_domain, project_id, config, force=False):
                 res = run_cmd(apply_cmd, check=False, live=True)
 
         if res.returncode != 0:
-            print(f"[!] Échec définitif de l'apply.")
+            print("[!] Échec définitif de l'apply.")
             sys.exit(res.returncode)
 
     # Post-deploy: Déploiement du Frontend
         print("\n[*] Post-Deploy: Syncing Frontend Assets...")
-        
+
         # 1. Obtenir le nom du bucket de destination
         res = subprocess.run(["terraform", "output", "-json"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
         try:
@@ -672,14 +701,15 @@ def deploy(env, base_domain, project_id, config, force=False):
 
         # 2. Identifier la dernière archive déposée (en utilisant gcloud storage ls)
         print(f"[*] Looking for the latest archive in gs://{SOURCE_ARCHIVES_BUCKET}/...")
-        raw_ls = subprocess.run(["gcloud", "storage", "ls", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
+        raw_ls = subprocess.run(
+            ["gcloud", "storage", "ls", f"gs://{SOURCE_ARCHIVES_BUCKET}/"], capture_output=True, text=True)
         if raw_ls.returncode != 0:
             err_msg = f"Failed to list gs://{SOURCE_ARCHIVES_BUCKET}/"
             print(f"[!] {err_msg}")
             generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "gcloud"])
             sys.exit(1)
-            
-        lines = [l.strip() for l in raw_ls.stdout.split('\n') if l.strip()]
+
+        lines = [line.strip() for line in raw_ls.stdout.split('\n') if line.strip()]
         urls = [line for line in lines if line.startswith("gs://")]
         if not urls:
             print(f"[*] No archives found in gs://{SOURCE_ARCHIVES_BUCKET}/. Skipping frontend sync.")
@@ -687,43 +717,44 @@ def deploy(env, base_domain, project_id, config, force=False):
             # Sort by filename
             urls.sort()
             latest_archive_url = urls[-1]
-            
+
             print(f"[*] Latest archive identified: {latest_archive_url}")
-            
+
             # 3. Télécharger et extraire
             with tempfile.TemporaryDirectory() as tmpdir:
                 archive_path = os.path.join(tmpdir, "archive")
                 print(f"[*] Downloading {latest_archive_url}...")
                 subprocess.run(["gcloud", "storage", "cp", latest_archive_url, archive_path], check=True)
-                
+
                 extract_dir = os.path.join(tmpdir, "extracted")
                 os.makedirs(extract_dir, exist_ok=True)
-                
+
                 print("[*] Extracting archive...")
                 try:
                     if latest_archive_url.endswith(".zip"):
                         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                             zip_ref.extractall(extract_dir)
-                    else: # Fallback to tar
+                    else:  # Fallback to tar
                         with tarfile.open(archive_path, 'r:*') as tar_ref:
                             tar_ref.extractall(extract_dir, filter='data')
                 except Exception as e:
                     err_msg = f"Extraction failed: {e}. Is it a valid tar/zip archive?"
                     print(f"[!] {err_msg}")
-                    generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "extraction"])
+                    generate_antigravity_error_report("Post-Deploy : Sync Frontend",
+                                                      err_msg, ["frontend", "sync", "extraction"])
                     sys.exit(1)
-                    
+
                 # Gérer la structure de l'archive (parfois zippée avec un dossier parent comme dist/ ou app/dist/)
                 # La stratégie infaillible est de localiser le dossier contenant 'index.html' le plus haut possible.
                 sync_dir = extract_dir
                 min_depth = 999
                 found_index = False
-                
+
                 for root, dirs, files in os.walk(extract_dir):
                     # On évite d'aller chercher dans d'éventuels node_modules
                     if "node_modules" in dirs:
                         dirs.remove("node_modules")
-                        
+
                     if "index.html" in files:
                         depth = root.count(os.sep)
                         if depth < min_depth:
@@ -735,31 +766,33 @@ def deploy(env, base_domain, project_id, config, force=False):
                     relative_path = sync_dir.replace(extract_dir, "").lstrip("/")
                     print(f"[*] Found frontend root directory at: '{relative_path}'")
                 else:
-                    print(f"[!] Warning: No index.html found. Will sync root extracted folder.")
-                    
+                    print("[!] Warning: No index.html found. Will sync root extracted folder.")
+
                 # 4. Upload vers le bucket du Load Balancer
                 print(f"[*] Uploading assets to gs://{target_bucket}...")
-                
-                # Le chemin sync_dir doit être terminé par '/' pour rsync pour garantir 
+
+                # Le chemin sync_dir doit être terminé par '/' pour rsync pour garantir
                 # de ne copier que le contenu ("ce qu'il y a dans le dossier")
                 if not sync_dir.endswith("/"):
                     sync_dir += "/"
-                    
+
                 rsync_res = subprocess.run(
-                    ["gcloud", "storage", "rsync", sync_dir, f"gs://{target_bucket}/", "--recursive", "--delete-unmatched-destination-objects"],
+                    ["gcloud", "storage", "rsync", sync_dir,
+                        f"gs://{target_bucket}/", "--recursive", "--delete-unmatched-destination-objects"],
                     capture_output=True, text=True
                 )
-                
+
                 if rsync_res.returncode != 0:
                     err_msg = f"Frontend sync failed:\\n{rsync_res.stderr}"
                     print(f"[!] {err_msg}")
-                    generate_antigravity_error_report("Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "rsync"])
+                    generate_antigravity_error_report("Post-Deploy : Sync Frontend",
+                                                      err_msg, ["frontend", "sync", "rsync"])
                     sys.exit(1)
-                    
-                print(rsync_res.stderr.strip()) # gsutil logs mostly to stderr
-                
+
+                print(rsync_res.stderr.strip())  # gsutil logs mostly to stderr
+
                 output_lower = (rsync_res.stdout + rsync_res.stderr).lower()
-                
+
                 # Simple heuristic: if 'copying' or 'removing' is in the output, something was actually synced
                 if "copying " in output_lower or "removing " in output_lower:
                     print("[*] Frontend changes synced successfully!")
@@ -775,11 +808,10 @@ def deploy(env, base_domain, project_id, config, force=False):
                 else:
                     print("[*] No frontend changes detected. CDN cache invalidation skipped.")
 
-            
         print("\n=======================================================")
         print(f"[*] Post-Deploy: Running Sanity Checks on {env}...")
         print("=======================================================")
-        
+
         # Extrait l'IP et Mdp depuis les outputs Terraform
         out_res = subprocess.run(["terraform", "output", "-json"], cwd=TERRAFORM_DIR, capture_output=True, text=True)
         try:
@@ -798,9 +830,9 @@ def deploy(env, base_domain, project_id, config, force=False):
                 for d in extra_domains:
                     if d.get("dns_name"):
                         all_domains.append(d.get("dns_name").rstrip("."))
-                        
+
             print(f"[*] Check 1/5: Waiting for DNS resolution to IP {lb_ip} for domains: {', '.join(all_domains)}...")
-            
+
             all_resolved = True
             for domain in all_domains:
                 resolved = False
@@ -810,32 +842,34 @@ def deploy(env, base_domain, project_id, config, force=False):
                         if ip == lb_ip:
                             resolved = True
                             break
-                    except Exception: pass
+                    except Exception:
+                        pass
                     time.sleep(10)
-                
+
                 if resolved:
                     print(f"  [+] DNS {domain} resolves correctly to {lb_ip}")
                 else:
                     err_msg = f"DNS resolution timeout (5 mins). {domain} does NOT point to {lb_ip}."
                     print(f"  [-] {err_msg}")
-                    generate_antigravity_error_report("Sanity Check 1/3 : DNS Resolution", err_msg, ["dns", "sanity-check", "timeout"])
+                    generate_antigravity_error_report("Sanity Check 1/3 : DNS Resolution",
+                                                      err_msg, ["dns", "sanity-check", "timeout"])
                     all_resolved = False
                     break
-            
+
             if all_resolved:
-                
+
                 # --- CHECK 2: SSL PROVISIONING ---
-                print(f"\n[*] Check 2/5: Waiting for GCP Managed SSL Certificate provisioning (Can take 15-30 mins)...")
+                print("\n[*] Check 2/5: Waiting for GCP Managed SSL Certificate provisioning (Can take 15-30 mins)...")
                 ssl_ready = False
                 cert_creation_time = "Inconnue"
                 cert_name = f"ssl-{env}"
-                
+
                 for attempt in range(60):
                     res = subprocess.run([
                         "gcloud", "compute", "ssl-certificates", "describe", cert_name,
                         "--global", "--project", project_id, "--format=json"
                     ], capture_output=True, text=True)
-                    
+
                     if res.returncode == 0:
                         try:
                             cert_data = json.loads(res.stdout)
@@ -843,13 +877,13 @@ def deploy(env, base_domain, project_id, config, force=False):
                             managed = cert_data.get("managed", {})
                             status = managed.get("status", "")
                             domain_status = managed.get("domainStatus", {})
-                            
+
                             if status == "ACTIVE":
                                 print(f"  [+] SSL Certificate {cert_name} is fully ACTIVE!")
                                 for d, st in sorted(domain_status.items()):
                                     print(f"      {d:<35} {st}")
                                 ssl_ready = True
-                                
+
                                 # --- Fallback urllib verification for TLS handshake ---
                                 try:
                                     import certifi
@@ -859,7 +893,8 @@ def deploy(env, base_domain, project_id, config, force=False):
                                 ctx_to_use = ctx
                                 break
                             else:
-                                print(f"  [-] Certificate status: {status} (attempt {attempt+1}/60). Retrying in 20s...")
+                                print(
+                                    f"  [-] Certificate status: {status} (attempt {attempt+1}/60). Retrying in 20s...")
                                 for d, st in sorted(domain_status.items()):
                                     # Print details of domains that are not yet active
                                     if st != "ACTIVE":
@@ -869,9 +904,10 @@ def deploy(env, base_domain, project_id, config, force=False):
                             print(f"  [-] Error parsing gcloud output: {e}. Retrying in 20s...")
                             time.sleep(20)
                     else:
-                        print(f"  [-] Failed to fetch certificate status. Retrying in 20s... (Error: {res.stderr.strip()[:100]})")
+                        print(
+                            f"  [-] Failed to fetch certificate status. Retrying in 20s... (Error: {res.stderr.strip()[:100]})")
                         time.sleep(20)
-                
+
                 if ssl_ready:
                     age_str = ""
                     try:
@@ -883,21 +919,22 @@ def deploy(env, base_domain, project_id, config, force=False):
                             age_str = f" [Il y a {mins} minutes]"
                     except Exception:
                         pass
-                    print(f"  [+] Managed SSL Certificate is ACTIVE in GCP API. (Créé le: {cert_creation_time}){age_str}")
-                    print(f"  [*] Waiting for the certificate to propagate to Google Edge nodes (TLS handshake)...")
+                    print(
+                        f"  [+] Managed SSL Certificate is ACTIVE in GCP API. (Créé le: {cert_creation_time}){age_str}")
+                    print("  [*] Waiting for the certificate to propagate to Google Edge nodes (TLS handshake)...")
                     tls_ready = False
-                    
+
                     ctx_fallback = ssl.create_default_context()
                     ctx_fallback.check_hostname = False
                     ctx_fallback.verify_mode = ssl.CERT_NONE
-                    
-                    for attempt in range(90): # Wait up to 30 mins (90 * 20s) for Edge propagation
+
+                    for attempt in range(90):  # Wait up to 30 mins (90 * 20s) for Edge propagation
                         try:
                             req_test = urllib.request.Request(f"https://{front_dns_name}/", method="GET")
                             urllib.request.urlopen(req_test, timeout=10, context=ctx_to_use)
                             tls_ready = True
                             break
-                        except urllib.error.HTTPError as e:
+                        except urllib.error.HTTPError:
                             # 404/400/502 means TLS handshake succeeded!
                             tls_ready = True
                             break
@@ -905,29 +942,33 @@ def deploy(env, base_domain, project_id, config, force=False):
                             err_msg = str(e.reason)
                             if "CERTIFICATE_VERIFY_FAILED" in err_msg:
                                 if "unable to get local issuer certificate" in err_msg:
-                                    print(f"  [!] macOS Python CA Bug detected. Bypassing strict verification...")
+                                    print("  [!] macOS Python CA Bug detected. Bypassing strict verification...")
                                     ctx_to_use = ctx_fallback
                                     tls_ready = True
                                     break
-                            print(f"  [-] TLS propagation not yet complete (attempt {attempt+1}/90). Retrying in 20s... (Error: {err_msg})")
+                            print(
+                                f"  [-] TLS propagation not yet complete (attempt {attempt+1}/90). Retrying in 20s... (Error: {err_msg})")
                             time.sleep(20)
                         except Exception as e:
-                            print(f"  [-] Unexpected error during TLS check (attempt {attempt+1}/90). Retrying in 20s... (Error: {e})")
+                            print(
+                                f"  [-] Unexpected error during TLS check (attempt {attempt+1}/90). Retrying in 20s... (Error: {e})")
                             time.sleep(20)
-                            
+
                     if tls_ready:
-                        print(f"  [+] TLS Handshake successful! The certificate is fully propagated.")
+                        print("  [+] TLS Handshake successful! The certificate is fully propagated.")
                     else:
                         err_msg = "SSL Edge propagation timeout (30 mins). TLS handshake failed. Sanity checks aborted."
                         print(f"  [!] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 2/5 : TLS Handshake", err_msg, ["ssl", "tls", "sanity-check", "timeout"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 2/5 : TLS Handshake", err_msg, ["ssl", "tls", "sanity-check", "timeout"])
                         sys.exit(1)
                 else:
                     err_msg = "SSL provisioning timeout (20 mins). Certificate is not ACTIVE in GCP API. Sanity checks aborted."
                     print(f"  [!] {err_msg}")
-                    generate_antigravity_error_report("Sanity Check 2/5 : SSL Provisioning", err_msg, ["ssl", "sanity-check", "timeout"])
+                    generate_antigravity_error_report("Sanity Check 2/5 : SSL Provisioning",
+                                                      err_msg, ["ssl", "sanity-check", "timeout"])
                     sys.exit(1)
-                
+
                 # --- CHECK 3: FRONTEND ---
                 print(f"\n[*] Check 3/5: Testing Frontend website on https://{front_dns_name}/...")
                 try:
@@ -935,27 +976,30 @@ def deploy(env, base_domain, project_id, config, force=False):
                     req_front = urllib.request.Request(front_url, method="GET")
                     resp_front = urllib.request.urlopen(req_front, timeout=15, context=ctx_to_use)
                     if resp_front.status == 200:
-                        print(f"  [+] Frontend loaded OK (HTTP 200)")
+                        print("  [+] Frontend loaded OK (HTTP 200)")
                     else:
                         err_msg = f"Frontend FAIL (HTTP {resp_front.status})"
                         print(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", f"HTTP_{resp_front.status}"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", f"HTTP_{resp_front.status}"])
                 except urllib.error.HTTPError as e:
                     err_msg = f"Frontend FAIL (HTTP {e.code})"
                     print(f"  [-] {err_msg}")
-                    generate_antigravity_error_report("Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", f"HTTP_{e.code}"])
+                    generate_antigravity_error_report("Sanity Check 3/5 : Frontend",
+                                                      err_msg, ["frontend", "sanity-check", f"HTTP_{e.code}"])
                 except Exception as e:
                     err_msg = f"Frontend FAIL ({type(e).__name__}: {e})"
                     print(f"  [-] {err_msg}")
-                    generate_antigravity_error_report("Sanity Check 3/5 : Frontend", err_msg, ["frontend", "sanity-check", "exception"])
-                
+                    generate_antigravity_error_report("Sanity Check 3/5 : Frontend",
+                                                      err_msg, ["frontend", "sanity-check", "exception"])
+
                 # --- CHECK 4: API LOGIN ---
-                print(f"\n[*] Check 4/5: Testing Web API login with seeded admin user (Waiting for IAM Sync up to 8 mins)...")
-                
+                print("\n[*] Check 4/5: Testing Web API login with seeded admin user (Waiting for IAM Sync up to 8 mins)...")
+
                 url = f"https://{api_dns_name}/auth/login"
                 data = json.dumps({"email": "admin@zenika.com", "password": admin_pwd}).encode("utf-8")
                 req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-                
+
                 login_success = False
                 for attempt in range(16):
                     try:
@@ -965,10 +1009,10 @@ def deploy(env, base_domain, project_id, config, force=False):
                             resp_data = json.loads(response.read().decode('utf-8'))
                             access_token = resp_data.get("access_token")
                             login_success = True
-                            
+
                             # --- CHECK 4.5: SEEDING PROMPTS ---
                             if access_token:
-                                print(f"\n[*] Check 4.5: Seeding system prompts into Prompts API...")
+                                print("\n[*] Check 4.5: Seeding system prompts into Prompts API...")
                                 prompts_to_seed = {
                                     "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
                                     "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
@@ -983,23 +1027,24 @@ def deploy(env, base_domain, project_id, config, force=False):
                                     "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
                                     "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"
                                 }
-                                
+
                                 packaged_dir = os.path.join(os.path.dirname(__file__), "bundled_prompts")
                                 is_container = os.path.exists("/.dockerenv") or "K_SERVICE" in os.environ
-                                base_dir = packaged_dir if (is_container and os.path.exists(packaged_dir)) else os.path.dirname(os.path.dirname(__file__))
-                                
+                                base_dir = packaged_dir if (is_container and os.path.exists(
+                                    packaged_dir)) else os.path.dirname(os.path.dirname(__file__))
+
                                 headers = {
                                     "Content-Type": "application/json",
                                     "Authorization": f"Bearer {access_token}"
                                 }
                                 prompts_url = f"https://{api_dns_name}/api/prompts/"
-                                
+
                                 for p_key, rel_path in prompts_to_seed.items():
                                     file_path = os.path.join(base_dir, rel_path)
                                     if not os.path.exists(file_path):
                                         print(f"  [-] Warning: Prompt file not found {file_path}")
                                         continue
-                                    
+
                                     with open(file_path, "r", encoding="utf-8") as f:
                                         content = f.read()
 
@@ -1025,43 +1070,51 @@ def deploy(env, base_domain, project_id, config, force=False):
                                         upsert_url = prompts_url
 
                                     p_data = json.dumps({"key": p_key, "value": content}).encode("utf-8")
-                                    p_req = urllib.request.Request(upsert_url, data=p_data, headers=headers, method=http_method)
-                                    
+                                    p_req = urllib.request.Request(
+                                        upsert_url, data=p_data, headers=headers, method=http_method)
+
                                     seeded = False
                                     last_error_msg = ""
                                     for attempt in range(8):
                                         try:
                                             p_resp = urllib.request.urlopen(p_req, timeout=15, context=ctx_to_use)
                                             if p_resp.status in [200, 201]:
-                                                print(f"  [+] Successfully {'updated' if http_method == 'PUT' else 'created'} prompt: {p_key}")
+                                                print(
+                                                    f"  [+] Successfully {'updated' if http_method == 'PUT' else 'created'} prompt: {p_key}")
                                                 seeded = True
                                                 break
                                             else:
                                                 last_error_msg = f"HTTP {p_resp.status}"
-                                                print(f"  [-] Failed to seed {p_key} ({last_error_msg}). Retrying... (Attempt {attempt+1}/8)")
+                                                print(
+                                                    f"  [-] Failed to seed {p_key} ({last_error_msg}). Retrying... (Attempt {attempt+1}/8)")
                                         except urllib.error.HTTPError as e:
                                             if e.code >= 500:
-                                                print(f"  [-] API Server Error {e.code} for {p_key} (Possible IAM propagation delay). Retrying in 15s... (Attempt {attempt+1}/8)")
+                                                print(
+                                                    f"  [-] API Server Error {e.code} for {p_key} (Possible IAM propagation delay). Retrying in 15s... (Attempt {attempt+1}/8)")
                                             else:
                                                 last_error_msg = f"HTTP {e.code}"
-                                                print(f"  [-] Error seeding {p_key}: {last_error_msg}. Retrying... (Attempt {attempt+1}/8)")
+                                                print(
+                                                    f"  [-] Error seeding {p_key}: {last_error_msg}. Retrying... (Attempt {attempt+1}/8)")
                                         except Exception as e:
                                             last_error_msg = f"{type(e).__name__}: {e}"
-                                            print(f"  [-] Error seeding {p_key} ({last_error_msg}). Retrying... (Attempt {attempt+1}/8)")
-                                        
+                                            print(
+                                                f"  [-] Error seeding {p_key} ({last_error_msg}). Retrying... (Attempt {attempt+1}/8)")
+
                                         time.sleep(15)
 
                                     if not seeded:
                                         err_msg = f"Failed to seed {p_key} after all attempts. Last error: {last_error_msg}"
                                         print(f"  [!] {err_msg}")
-                                        generate_antigravity_error_report(f"Sanity Check 4.5 : Seeding Prompts ({p_key})", err_msg, ["prompts_api", "sanity-check"])
+                                        generate_antigravity_error_report(f"Sanity Check 4.5 : Seeding Prompts ({p_key})", err_msg, [
+                                                                          "prompts_api", "sanity-check"])
                             break
                         else:
                             print(f"[-] Sanity Test FAIL: Login returned {response.status}")
                             break
                     except urllib.error.HTTPError as e:
                         if e.code >= 500:
-                            print(f"  [-] API Server Error {e.code} (Possible Database IAM propagation delay). Retrying in 30s... (Attempt {attempt+1}/16)")
+                            print(
+                                f"  [-] API Server Error {e.code} (Possible Database IAM propagation delay). Retrying in 30s... (Attempt {attempt+1}/16)")
                             time.sleep(30)
                         elif e.code == 403:
                             # 403 peut être transitoire lors d'un 1er déploiement :
@@ -1072,29 +1125,33 @@ def deploy(env, base_domain, project_id, config, force=False):
                             msg = raw.decode('utf-8', errors='replace') if raw else 'N/A'
                             is_gcp_infra = '<html' in msg.lower() or '<!doctype' in msg.lower()
                             if is_gcp_infra:
-                                print(f"  [-] 403 GCP Infrastructure (IAM not yet propagated). Retrying in 30s... (Attempt {attempt+1}/16)")
+                                print(
+                                    f"  [-] 403 GCP Infrastructure (IAM not yet propagated). Retrying in 30s... (Attempt {attempt+1}/16)")
                                 time.sleep(30)
                             else:
                                 err_msg = f"HTTP 403 (App-level) during login. (Msg: {msg})"
                                 print(f"[-] Sanity Test FAIL: {err_msg}")
-                                generate_antigravity_error_report("Sanity Check 4/5 : API Login", err_msg, ["users_api", "auth", "sanity-check", "HTTP_403"])
+                                generate_antigravity_error_report(
+                                    "Sanity Check 4/5 : API Login", err_msg, ["users_api", "auth", "sanity-check", "HTTP_403"])
                                 break
                         else:
                             # Erreur applicative définitive (400, 401, 422...)
                             msg = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else 'N/A'
                             err_msg = f"HTTP {e.code} during login via POST /auth/login. (Msg: {msg})"
                             print(f"[-] Sanity Test FAIL: {err_msg}")
-                            generate_antigravity_error_report("Sanity Check 4/5 : API Login", err_msg, ["users_api", "auth", "sanity-check", f"HTTP_{e.code}"])
+                            generate_antigravity_error_report(
+                                "Sanity Check 4/5 : API Login", err_msg, ["users_api", "auth", "sanity-check", f"HTTP_{e.code}"])
                             break
                     except Exception as e:
-                        print(f"  [-] Unexpected error Exception request: {e}. Retrying in 30s... (Attempt {attempt+1}/16)")
+                        print(
+                            f"  [-] Unexpected error Exception request: {e}. Retrying in 30s... (Attempt {attempt+1}/16)")
                         time.sleep(30)
-                
+
                 if not login_success:
                     print("[-] Authentication flow totally failed after all attempts.")
-                    
+
                 # --- CHECK 5/5: API MICROSERVICES ---
-                logger.info(f"\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
+                logger.info("\n[*] Check 5/5: Validating all API microservices routing (GET requests)...")
                 # On teste toutes les routes déclarées dans le Load Balancer (lb.tf)
                 health_ready_routes = [
                     "/api/health",                 # agent_router_api
@@ -1111,7 +1168,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                     "/api/analytics/ready",           # analytics_mcp (Deep readiness check)
                     "/monitoring-mcp/health"       # monitoring_mcp
                 ]
-                
+
                 api_routes = []
                 for hr_route in health_ready_routes:
                     api_routes.append(hr_route)
@@ -1119,7 +1176,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                     # Also check /spec and /docs for each prefix
                     api_routes.append(f"{prefix}/spec")
                     api_routes.append(f"{prefix}/docs")
-                
+
                 def check_route(route):
                     api_url = f"https://{api_dns_name}{route}"
                     req_get = urllib.request.Request(api_url, method="GET")
@@ -1128,11 +1185,13 @@ def deploy(env, base_domain, project_id, config, force=False):
                         return f"  [+] {route:<15} -> OK (HTTP {resp.status})"
                     except urllib.error.HTTPError as e:
                         err_msg = f"FAIL (HTTP {e.code} Error) sur {route}"
-                        generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
                         return f"  [-] {route:<15} -> {err_msg}"
                     except Exception as e:
                         err_msg = f"FAIL ({type(e).__name__}: {e}) sur {route}"
-                        generate_antigravity_error_report("Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", "exception"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", "exception"])
                         return f"  [-] {route:<15} -> {err_msg}"
 
                 with ThreadPoolExecutor(max_workers=5) as executor:
@@ -1141,28 +1200,31 @@ def deploy(env, base_domain, project_id, config, force=False):
                         logger.info(future.result())
 
                 # --- CHECK 6/8: ZERO-TRUST VALIDATION (HTTP 401 WITHOUT TOKEN) ---
-                logger.info(f"\n[*] Check 6/8: Validating Zero-Trust security (expecting 401 without token)...")
+                logger.info("\n[*] Check 6/8: Validating Zero-Trust security (expecting 401 without token)...")
                 protected_url = f"https://{api_dns_name}/api/users/me"
                 req_zt = urllib.request.Request(protected_url, method="GET")
                 try:
                     urllib.request.urlopen(req_zt, timeout=10, context=ctx_to_use)
                     err_msg = "Security Breach! Protected endpoint returned 200 OK without a JWT token."
                     logger.error(f"  [-] {err_msg}")
-                    generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", "zero-trust"])
+                    generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust",
+                                                      err_msg, ["security", "sanity-check", "zero-trust"])
                 except urllib.error.HTTPError as e:
                     if e.code == 401:
                         logger.info("  [+] Zero-Trust OK: Access denied (HTTP 401) without token.")
                     else:
                         err_msg = f"Unexpected HTTP status {e.code} during Zero-Trust check."
                         logger.warning(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", f"HTTP_{e.code}"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", f"HTTP_{e.code}"])
                 except Exception as e:
                     err_msg = f"Unexpected error during Zero-Trust check: {e}"
                     logger.warning(f"  [-] {err_msg}")
-                    generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust", err_msg, ["security", "sanity-check", "exception"])
+                    generate_antigravity_error_report("Sanity Check 6/8 : Zero-Trust",
+                                                      err_msg, ["security", "sanity-check", "exception"])
 
                 # --- CHECK 7/8: DATABASE READ-ONLY CONNECTIVITY WITH TOKEN ---
-                logger.info(f"\n[*] Check 7/8: Validating DB read-only connectivity with JWT token...")
+                logger.info("\n[*] Check 7/8: Validating DB read-only connectivity with JWT token...")
                 if access_token:
                     req_db = urllib.request.Request(protected_url, method="GET")
                     req_db.add_header("Authorization", f"Bearer {access_token}")
@@ -1175,16 +1237,18 @@ def deploy(env, base_domain, project_id, config, force=False):
                     except urllib.error.HTTPError as e:
                         err_msg = f"FAIL (HTTP {e.code}) when fetching user profile with valid token."
                         logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 7/8 : DB Read-Only", err_msg, ["db", "sanity-check", f"HTTP_{e.code}"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 7/8 : DB Read-Only", err_msg, ["db", "sanity-check", f"HTTP_{e.code}"])
                     except Exception as e:
                         err_msg = f"Read-Only DB Check FAIL: {e}"
                         logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 7/8 : DB Read-Only", err_msg, ["db", "sanity-check", "exception"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 7/8 : DB Read-Only", err_msg, ["db", "sanity-check", "exception"])
                 else:
                     logger.warning("  [!] Skipping Check 7: No access_token available (Check 4 failed).")
 
                 # --- CHECK 8/8: MCP SIDECAR AVAILABILITY ---
-                logger.info(f"\n[*] Check 8/8: Validating MCP Sidecar tools exposure...")
+                logger.info("\n[*] Check 8/8: Validating MCP Sidecar tools exposure...")
                 # All data APIs and MCP natif expose tools
                 mcp_routes = [
                     "/api/users/mcp/tools",
@@ -1214,18 +1278,21 @@ def deploy(env, base_domain, project_id, config, force=False):
                         else:
                             err_msg = f"HTTP {resp_mcp.status}"
                             logger.error(f"  [-] MCP {mcp_route} FAIL: {err_msg}")
-                            generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{resp_mcp.status}"])
+                            generate_antigravity_error_report(
+                                "Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{resp_mcp.status}"])
                     except urllib.error.HTTPError as e:
                         err_msg = f"FAIL (HTTP {e.code}) on {mcp_route}"
                         logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{e.code}"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{e.code}"])
                     except Exception as e:
                         err_msg = f"MCP {mcp_route} FAIL: {e}"
                         logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", "exception"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", "exception"])
 
                 # --- CHECK 9/9: AIOPS METRICS ---
-                logger.info(f"\n[*] Check 9/9: Validating AIOps metrics endpoint...")
+                logger.info("\n[*] Check 9/9: Validating AIOps metrics endpoint...")
                 if access_token:
                     aiops_url = f"https://{api_dns_name}/api/analytics/metrics/aiops?force=true"
                     req_aiops = urllib.request.Request(aiops_url, method="GET")
@@ -1237,21 +1304,24 @@ def deploy(env, base_domain, project_id, config, force=False):
                         else:
                             err_msg = f"HTTP {resp_aiops.status}"
                             logger.error(f"  [-] AIOps Metrics FAIL: {err_msg}")
-                            generate_antigravity_error_report("Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{resp_aiops.status}"])
+                            generate_antigravity_error_report(
+                                "Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{resp_aiops.status}"])
                     except urllib.error.HTTPError as e:
                         err_msg = f"FAIL (HTTP {e.code}) on /api/analytics/metrics/aiops"
                         logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{e.code}"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{e.code}"])
                     except Exception as e:
                         err_msg = f"AIOps Metrics FAIL: {e}"
                         logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report("Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", "exception"])
+                        generate_antigravity_error_report(
+                            "Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", "exception"])
                 else:
                     logger.warning("  [!] Skipping Check 9: No access_token available (Check 4 failed).")
 
                 # --- CHECK EXTRA DOMAINS: DNS + SSL pour chaque domaine additionnel ---
                 if extra_domains:
-                    print(f"\n[*] Check Extra Domains: Validating additional domains DNS + SSL...")
+                    print("\n[*] Check Extra Domains: Validating additional domains DNS + SSL...")
                     for _d in extra_domains:
                         _host = _d.get("dns_name", "").rstrip(".")  # ex: "gen-skillz.znk.io"
                         if not _host:
@@ -1282,15 +1352,17 @@ def deploy(env, base_domain, project_id, config, force=False):
                             print(f"  [!] SSL {_host} -> not provisioned yet (certificate may take 15-30 mins)")
 
                 # --- INIT: FINOPS PRICING SEEDING ---
-                print(f"\n[*] Post-Deploy: Seeding FinOps Pricing Data (BigQuery)...")
+                print("\n[*] Post-Deploy: Seeding FinOps Pricing Data (BigQuery)...")
                 try:
-                    init_pricing_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "analytics_mcp", "init_pricing.py")
+                    init_pricing_path = os.path.join(os.path.dirname(
+                        os.path.dirname(__file__)), "analytics_mcp", "init_pricing.py")
                     if os.path.exists(init_pricing_path):
                         env_copy = os.environ.copy()
                         env_copy["GCP_PROJECT_ID"] = project_id
                         env_copy["BQ_LOCATION"] = config.get("bq_location", "europe-west1")
                         env_copy["FINOPS_DATASET_ID"] = f"finops_{env}"
-                        res = subprocess.run([sys.executable, init_pricing_path], env=env_copy, capture_output=True, text=True)
+                        res = subprocess.run([sys.executable, init_pricing_path],
+                                             env=env_copy, capture_output=True, text=True)
                         if res.returncode == 0:
                             print("  [+] FinOps Pricing seeded successfully.")
                         else:
@@ -1301,26 +1373,29 @@ def deploy(env, base_domain, project_id, config, force=False):
                     print(f"  [-] Error running init_pricing.py: {e}")
 
             else:
-                logger.error(f"[-] Sanity Test FAIL: DNS resolution timeout.")
+                logger.error("[-] Sanity Test FAIL: DNS resolution timeout.")
                 sys.exit(1)
         else:
             logger.warning("[!] Skipping Sanity check. Missing terraform outputs (lb_ip or admin_password).")
 
         if SANITY_ERROR_COUNT > 0:
-            raise DeploymentError(f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
+            raise DeploymentError(
+                f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
 
     finally:
         if force:
             toggle_prevent_destroy(disable=False)
 
+
 def plan(env):
     init_tf()
     set_workspace(env)
-    
+
     logger.info(f"[*] Generating dry-run (terraform plan) for environment '{env}'...")
     project_id = os.environ.get("TF_VAR_project_id", "slavayssiere-sandbox-462015")
     cmd = ["terraform", "plan"] + get_tf_args(project_id)
     run_cmd(cmd)
+
 
 def destroy(env, project_id, config, force=False):
     init_tf()
@@ -1344,8 +1419,8 @@ def destroy(env, project_id, config, force=False):
             if not _zone:
                 continue
             _tf_zone = f'google_dns_managed_zone.extra_zones["{_zone}"]'
-            _tf_ns   = f'google_dns_record_set.extra_ns_delegation["{_zone}"]'
-            _tf_a    = f'google_dns_record_set.extra_a["{_zone}"]'
+            _tf_ns = f'google_dns_record_set.extra_ns_delegation["{_zone}"]'
+            _tf_a = f'google_dns_record_set.extra_a["{_zone}"]'
             run_cmd(["terraform", "state", "rm", _tf_zone], check=False)
             run_cmd(["terraform", "state", "rm", _tf_ns], check=False)
             run_cmd(["terraform", "state", "rm", _tf_a], check=False)
@@ -1375,14 +1450,16 @@ def destroy(env, project_id, config, force=False):
             time.sleep(15)
             res = run_cmd(cmd, check=False, live=True)
             if res.returncode != 0:
-                print(f"[!] Echec definitif du destroy.")
+                print("[!] Echec definitif du destroy.")
                 sys.exit(res.returncode)
         if SANITY_ERROR_COUNT > 0:
-            raise DeploymentError(f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
+            raise DeploymentError(
+                f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
 
     finally:
         if force:
             toggle_prevent_destroy(disable=False)
+
 
 if __name__ == "__main__":
     # Nettoyage de l'ancien rapport d'erreurs
@@ -1393,19 +1470,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Platform Engineering - Manage Environments")
     parser.add_argument("action", choices=["deploy", "destroy", "plan"], help="Action to perform")
     parser.add_argument("--env", required=True, help="Environment name (dev, uat, prd)")
-    parser.add_argument("--force", action="store_true", help="Force deletion or replacement of protected DNS/SSL resources")
-    
+    parser.add_argument("--force", action="store_true",
+                        help="Force deletion or replacement of protected DNS/SSL resources")
+
     args = parser.parse_args()
 
     try:
         check_binary_dependencies()
-        
+
         # Load YAML Configuration
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "envs", f"{args.env}.yaml")
         if not os.path.exists(config_path):
             logger.error(f"[!] Configuration file not found: {config_path}")
             sys.exit(1)
-            
+
         # Auto-discover component versions from local VERSION files
         local_versions = discover_versions()
 
@@ -1464,10 +1542,11 @@ if __name__ == "__main__":
             destroy(args.env, project_id, final_config, force=args.force)
         elif args.action == "plan":
             plan(args.env)
-            
+
     except DeploymentError as e:
         logger.error(f"DEPLOYMENT FAILED: {e}")
-        generate_antigravity_error_report("Exécution Terraform / Déploiement infra", str(e), ["terraform", "deployment", "infrastructure"])
+        generate_antigravity_error_report("Exécution Terraform / Déploiement infra",
+                                          str(e), ["terraform", "deployment", "infrastructure"])
         total = elapsed()
         print(f"\n{'='*55}")
         print(f"[!] Script terminé avec erreur en {total}.")

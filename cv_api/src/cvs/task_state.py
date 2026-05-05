@@ -10,6 +10,7 @@ REANALYSIS_STALE_TIMEOUT_MINUTES = int(os.getenv("REANALYSIS_STALE_TIMEOUT_MINUT
 # TTL de sécurité absolu sur la clé Redis (4h) : garantit le nettoyage même sans mise à jour
 REANALYSIS_REDIS_TTL_SECONDS = int(os.getenv("REANALYSIS_REDIS_TTL_SECONDS", str(4 * 3600)))
 
+
 class ReanalysisTaskState:
     def __init__(self, redis_url: str = REDIS_URL):
         self._redis = redis.from_url(redis_url, decode_responses=True)
@@ -38,30 +39,30 @@ class ReanalysisTaskState:
         raw_data = await self._redis.get(self._latest_key)
         if not raw_data:
             return
-            
+
         data = json.loads(raw_data)
         data["processed_count"] += processed_inc
         data["error_count"] += error_inc
         data["mismatch_count"] += mismatch_inc
-        
+
         if new_log:
             # On garde les 100 derniers logs pour éviter de saturer Redis
             data["logs"].append(f"[{datetime.now().isoformat()}] {new_log}")
             if len(data["logs"]) > 100:
                 data["logs"] = data["logs"][-100:]
-                
+
         if error_msg:
             data["errors"].append(error_msg)
             if len(data["errors"]) > 20:
                 data["errors"] = data["errors"][-20:]
-                
+
         data["updated_at"] = datetime.now().isoformat()
-        
+
         # Si tout est fini
         if data["processed_count"] + data["error_count"] >= data["total_cvs"]:
             data["status"] = "completed"
             data["end_time"] = datetime.now().isoformat()
-            
+
         # Remettre le TTL absolu à chaque mise à jour
         await self._redis.set(self._latest_key, json.dumps(data), ex=REANALYSIS_REDIS_TTL_SECONDS)
         return data
@@ -118,15 +119,17 @@ class ReanalysisTaskState:
 
         return True
 
+
 # Singleton instance
 task_state_manager = ReanalysisTaskState()
+
 
 class TreeTaskState:
     def __init__(self, redis_url: str = REDIS_URL):
         self._redis = redis.from_url(redis_url, decode_responses=True)
         self._key_prefix = "recalc_tree_task"
         self._latest_key = f"{self._key_prefix}:latest"
-        self._ttl = 4 * 3600  # TTL absolu 4h
+        self._ttl = 7 * 24 * 3600  # TTL absolu 7 jours (au lieu de 4h) pour faciliter les reprises lendemain
 
     async def initialize_task(self):
         """Initialise une nouvelle tâche de recalcul de l'arbre."""
@@ -146,42 +149,56 @@ class TreeTaskState:
             "mode": "interactive",
             "batch_job_id": None,
             "batch_step": None,
-            "service_token": None,  # Token longue durée stocké à t0 (batch/start) — JWT original expiré bien avant la fin du pipeline
+            # Token longue durée stocké à t0 (batch/start) — JWT original expiré bien avant la fin du pipeline
+            "service_token": None,
+            "quality_report": None,
         }
         await self._redis.set(self._latest_key, json.dumps(task_data), ex=self._ttl)
         return task_data
 
-    async def update_progress(self, new_log=None, tree=None, usage=None, error=None, status=None, map_result=None, res_tree=None, completed_pillar=None, sweep_result=None, missing_competencies=None, mode=None, batch_job_id=None, batch_step=None, completed_pillars=None, service_token=None):
+    async def update_progress(
+        self, new_log=None, tree=None, usage=None, error=None, status=None,
+        map_result=None, res_tree=None, completed_pillar=None, sweep_result=None,
+        missing_competencies=None, mode=None, batch_job_id=None, batch_step=None,
+        completed_pillars=None, service_token=None, quality_report=None
+    ):
         """Met à jour l'état d'avancement du calcul de l'arbre."""
         raw_data = await self._redis.get(self._latest_key)
         if not raw_data:
             return
-            
+
         data = json.loads(raw_data)
-        
+
         if mode is not None:
             data["mode"] = mode
-            
+
         if batch_job_id is not None:
             data["batch_job_id"] = batch_job_id
-            
+
         if batch_step is not None:
             data["batch_step"] = batch_step
-            
+
         if new_log:
             data["logs"].append(f"[{datetime.now().isoformat()}] {new_log}")
             if len(data["logs"]) > 100:
                 data["logs"] = data["logs"][-100:]
-                
+
+        # Inject error message into logs automatically for UI visibility
+        if error and status == "error" and not (new_log and error in new_log):
+            error_log = f"❌ Erreur critique : {error}"
+            data["logs"].append(f"[{datetime.now().isoformat()}] {error_log}")
+            if len(data["logs"]) > 100:
+                data["logs"] = data["logs"][-100:]
+
         if tree is not None:
             data["tree"] = tree
-            
+
         if usage is not None:
             data["usage"] = usage
-            
+
         if error:
             data["error"] = error
-            
+
         if map_result is not None:
             data["map_result"] = map_result
 
@@ -193,26 +210,29 @@ class TreeTaskState:
                 data["completed_pillars"] = []
             if completed_pillar not in data["completed_pillars"]:
                 data["completed_pillars"].append(completed_pillar)
-                
+
         if completed_pillars is not None:
             data["completed_pillars"] = completed_pillars
-                
+
         if sweep_result is not None:
             data["sweep_result"] = sweep_result
-            
+
         if missing_competencies is not None:
             data["missing_competencies"] = missing_competencies
 
         if service_token is not None:
             data["service_token"] = service_token
-            
+
+        if quality_report is not None:
+            data["quality_report"] = quality_report
+
         if status:
             data["status"] = status
             if status in ("completed", "error"):
                 data["end_time"] = datetime.now().isoformat()
-                
+
         data["updated_at"] = datetime.now().isoformat()
-            
+
         await self._redis.set(self._latest_key, json.dumps(data), ex=self._ttl)
         return data
 
@@ -230,5 +250,5 @@ class TreeTaskState:
             return False
         return status.get("status") == "running"
 
-tree_task_manager = TreeTaskState()
 
+tree_task_manager = TreeTaskState()

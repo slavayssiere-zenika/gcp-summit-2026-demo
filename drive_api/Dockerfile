@@ -7,7 +7,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY drive_api/requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # ---- Runtime Stage ----
@@ -20,12 +20,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/wheels /wheels
-COPY requirements.txt .
+COPY --from=builder /app/requirements.txt .
 
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
-COPY . .
+COPY shared/ /app/shared/
+COPY drive_api/ .
 
 ENV PYTHONPATH=/app
 ENV PORT=8006

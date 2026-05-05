@@ -3,25 +3,22 @@ Shared imports for drive_api sub-routers."""
 import asyncio
 import logging
 import os as _os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import google.auth
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from google.api_core.exceptions import DeadlineExceeded
-from google.cloud import pubsub_v1
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import verify_jwt
 from src.drive_service import DriveService
 from src.google_auth import get_drive_service, get_google_access_token
-from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
+from src.models import DriveSyncState, DriveSyncStatus
 from src.redis_client import get_redis
-from src.schemas import (FileStateResponse, FileUpdate, FolderCreate,
-                         FolderResponse, FolderStats, FolderUpdate,
-                         PaginatedFilesResponse, StatusResponse)
+from src.schemas import (FileStateResponse, FileUpdate, PaginatedFilesResponse,
+                         StatusResponse)
 
 logger = logging.getLogger(__name__)
 
@@ -35,33 +32,41 @@ def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
         )
     return token_payload
 
+
 router = APIRouter(prefix="", tags=["Drive Files"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["Drive_Public"])
+
 
 @router.get("/status", response_model=StatusResponse)
 async def get_status(db: AsyncSession = Depends(get_db)):
     total = (await db.execute(select(func.count()).select_from(DriveSyncState))).scalar()
-    
-    pending_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.PENDING).subquery())
+
+    pending_q = select(func.count()).select_from(select(DriveSyncState).filter(
+        DriveSyncState.status == DriveSyncStatus.PENDING).subquery())
     pending = (await db.execute(pending_q)).scalar()
 
-    proc_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.PROCESSING).subquery())
+    proc_q = select(func.count()).select_from(select(DriveSyncState).filter(
+        DriveSyncState.status == DriveSyncStatus.PROCESSING).subquery())
     proc = (await db.execute(proc_q)).scalar()
-    
-    imp_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.IMPORTED_CV).subquery())
+
+    imp_q = select(func.count()).select_from(select(DriveSyncState).filter(
+        DriveSyncState.status == DriveSyncStatus.IMPORTED_CV).subquery())
     imp = (await db.execute(imp_q)).scalar()
-    
-    ign_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV).subquery())
+
+    ign_q = select(func.count()).select_from(select(DriveSyncState).filter(
+        DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV).subquery())
     ign = (await db.execute(ign_q)).scalar()
 
-    queued_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.QUEUED).subquery())
+    queued_q = select(func.count()).select_from(select(DriveSyncState).filter(
+        DriveSyncState.status == DriveSyncStatus.QUEUED).subquery())
     queued = (await db.execute(queued_q)).scalar()
-    
-    err_q = select(func.count()).select_from(select(DriveSyncState).filter(DriveSyncState.status == DriveSyncStatus.ERROR).subquery())
+
+    err_q = select(func.count()).select_from(select(DriveSyncState).filter(
+        DriveSyncState.status == DriveSyncStatus.ERROR).subquery())
     err = (await db.execute(err_q)).scalar()
-    
+
     last_p = (await db.execute(select(func.max(DriveSyncState.last_processed_at)))).scalar()
-    
+
     return StatusResponse(
         total_files_scanned=total,
         pending=pending,
@@ -72,7 +77,6 @@ async def get_status(db: AsyncSession = Depends(get_db)):
         errors=err,
         last_processed_time=last_p
     )
-
 
 
 @router.get("/files", response_model=PaginatedFilesResponse)
@@ -91,13 +95,13 @@ async def list_files(
         stmt = stmt.filter(DriveSyncState.folder_id == folder_id)
     if search:
         stmt = stmt.filter(DriveSyncState.parent_folder_name.ilike(f"%{search}%"))
-        
+
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar() or 0
-        
+
     stmt = stmt.order_by(DriveSyncState.last_processed_at.desc().nullslast()).offset(skip).limit(limit)
     files = (await db.execute(stmt)).scalars().all()
-    
+
     return {
         "files": files,
         "total": total,
@@ -120,7 +124,6 @@ async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)
     if not state:
         raise HTTPException(status_code=404, detail=f"Fichier Drive '{google_file_id}' inconnu.")
     return state
-
 
 
 @router.get("/consultant/search")
@@ -188,7 +191,6 @@ async def clear_all_errors(db: AsyncSession = Depends(get_db), _: dict = Depends
     return {"status": "success", "cleared_count": result.rowcount}
 
 
-
 async def _reset_errors_to_pending(db: AsyncSession, force: bool = False) -> dict:
     """
     Logique métier partagée : remet en PENDING les fichiers bloqués.
@@ -205,13 +207,13 @@ async def _reset_errors_to_pending(db: AsyncSession, force: bool = False) -> dic
     Après reset → status = PENDING → le prochain tour de /sync les republiera
     dans Pub/Sub automatiquement.
     """
-    zombie_threshold = datetime.utcnow() - timedelta(minutes=30)
+    zombie_threshold = datetime.now(timezone.utc) - timedelta(minutes=30)
 
     # Reset des ERROR
     stmt_errors = (
         update(DriveSyncState)
         .where(DriveSyncState.status == DriveSyncStatus.ERROR)
-        .values(status=DriveSyncStatus.PENDING, error_message=None, last_processed_at=datetime.utcnow())
+        .values(status=DriveSyncStatus.PENDING, error_message=None, last_processed_at=datetime.now(timezone.utc))
         .returning(DriveSyncState.google_file_id)
     )
     result_errors = await db.execute(stmt_errors)
@@ -229,7 +231,7 @@ async def _reset_errors_to_pending(db: AsyncSession, force: bool = False) -> dic
         .values(
             status=DriveSyncStatus.PENDING,
             error_message="Réinitialisé automatiquement (zombie > 30min)" if not force else "Réinitialisé manuellement (force flush)",
-            last_processed_at=datetime.utcnow()  # réinitialise le timer affiché dans l'UI
+            last_processed_at=datetime.now(timezone.utc)  # réinitialise le timer affiché dans l'UI
         )
         .returning(DriveSyncState.google_file_id)
     )
@@ -269,7 +271,6 @@ async def scheduled_retry_errors(force: bool = False, db: AsyncSession = Depends
     return result
 
 
-
 @public_router.post("/sync")
 async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """
@@ -278,7 +279,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
     Protected by Cloud Run IAM (OIDC token from Scheduler SA), NOT by JWT.
     """
     logger.info("Début de la synchronisation avec Google Drive.")
-    
+
     # 1. Verification synchrone des droits d'accès
     try:
         drive = get_drive_service()
@@ -297,19 +298,20 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
         async with SessionLocal() as session:
             try:
                 service = DriveService(session)
-                
+
                 try:
                     await service.discover_files()
                 except Exception as discover_err:
-                    logger.error(f"Erreur durant la découverte Drive (discover_files), on continue l'ingestion: {discover_err}")
-                
+                    logger.error(
+                        f"Erreur durant la découverte Drive (discover_files), on continue l'ingestion: {discover_err}")
+
                 total_processed = 0
                 while True:
                     processed = await service.ingest_batch()
                     if processed == 0:
                         break
                     total_processed += processed
-                    
+
                 logger.info(f"Fin de la synchronisation avec Google Drive. (CV traités: {total_processed})")
             except Exception as e:
                 logger.error(f"Erreur durant la synchronisation Google Drive: {e}")
@@ -345,7 +347,6 @@ def _get_dlq_subscription_path() -> str:
     return f"projects/{project_id}/subscriptions/{sub_name}"
 
 
-
 @router.patch("/files/{file_id}", response_model=FileStateResponse)
 async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = Depends(get_db)):
     """
@@ -354,10 +355,10 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
     """
     stmt = select(DriveSyncState).filter(DriveSyncState.google_file_id == file_id)
     file_state = (await db.execute(stmt)).scalars().first()
-    
+
     if not file_state:
         raise HTTPException(status_code=404, detail="File not found")
-        
+
     if update_data.user_id is not None:
         file_state.user_id = update_data.user_id
     if update_data.status is not None:
@@ -374,10 +375,10 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
         file_state.error_message = update_data.error_message
     if update_data.processing_duration_ms is not None:
         file_state.processing_duration_ms = update_data.processing_duration_ms
-    
+
     if str(update_data.status) == DriveSyncStatus.IMPORTED_CV.value or update_data.status == DriveSyncStatus.IMPORTED_CV:
-        file_state.imported_at = datetime.utcnow()
-        
+        file_state.imported_at = datetime.now(timezone.utc)
+
     await db.commit()
     await db.refresh(file_state)
     return file_state
@@ -399,5 +400,3 @@ def _compute_kpi_metric(ok: int, total: int, warning_pct: float, critical_pct: f
     else:
         status = "ok"
     return {"value": pct, "pct": pct, "ok": ok, "total": total, "status": status, "unit": unit}
-
-

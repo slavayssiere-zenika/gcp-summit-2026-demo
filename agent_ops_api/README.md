@@ -12,7 +12,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 | `main.py` | 309 | ✅ |
 | `conftest.py` | 39 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 210 | ✅ |
+| `agent.py` | 248 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

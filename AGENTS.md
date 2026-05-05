@@ -37,6 +37,8 @@ Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 - [ ] Fichier `router.py` / `main.py` sous le seuil bloquant défini en §14 ?
 - [ ] `test_zero_trust.py` présent dans la suite pytest du service ?
 - [ ] `@app.exception_handler(Exception)` global implémenté (APIs data uniquement) ?
+- [ ] **Contrat d'interface** : toute réponse HTTP inter-service parsée via `Model.model_validate()` (jamais `.get("clé", [])` silencieux) ? (voir §3 — Contrats d'interface) ?
+- [ ] Pour le frontend : toute réponse paginée parsée via `parsePaginated<T>()` de `@/utils/apiContract.ts` ? (voir §7 — Frontend)
 
 ---
 
@@ -237,6 +239,42 @@ Services exposant uniquement des tools MCP via HTTP, sans logique métier en bas
       return users
   ```
   **Règle universelle** : si l'API cible expose un `nextPageToken`, `next_page_token`, `next`, ou un `total` supérieur au count reçu → boucler. Ne jamais s'arrêter à la première réponse.
+
+- **Contrats d'interface inter-services — Validation Pydantic Fail-Fast (OBLIGATOIRE)** : Toute réponse HTTP inter-service doit être validée via `Model.model_validate()` avec gestion explicite de `ValidationError`. L'utilisation de `.get("clé", [])` est **formellement interdite** pour les réponses structurées — c'est une erreur silencieuse qui masque les ruptures de contrat.
+
+  > **Référence** : ADR-0015 — `shared/schemas/` est la source de vérité unique pour tous les DTOs Pydantic de la plateforme.
+
+  ```python
+  # ✅ CORRECT — pattern obligatoire pour toute réponse inter-service
+  from pydantic import ValidationError
+  from shared.schemas.missions import MissionsResponse   # ou PaginationResponse[dict]
+
+  res = await client.get(f"{CV_API_URL}/user/{user_id}/missions", headers=headers)
+  if res.status_code == 200:
+      try:
+          data = MissionsResponse.model_validate(res.json())
+      except ValidationError as ve:
+          logger.error(
+              "[service] Rupture de contrat API missions",
+              extra={"error": str(ve), "raw_keys": list(res.json().keys())},
+          )
+          break  # ou return — stopper proprement, ne pas continuer avec des données corrompues
+      missions.extend([m.model_dump() for m in data.items])
+
+  # ❌ INTERDIT — parsing silencieux
+  batch = res.json().get("items", [])   # retourne [] sans erreur si la clé change
+  missions.extend(batch)                # bug silencieux impossible à détecter
+  ```
+
+  **Schémas disponibles dans `shared/schemas/`** :
+  | Schema | Import | Usage |
+  |---|---|---|
+  | `PaginationResponse[T]` | `from shared.schemas.pagination import PaginationResponse` | Toute réponse paginée générique |
+  | `MissionsResponse` | `from shared.schemas.missions import MissionsResponse` | Réponses `/user/{id}/missions` |
+  | `UsersResponse` | `from shared.schemas.users import UsersResponse` | Réponses `/users/` |
+  | `McpToolResult` | `from shared.schemas.mcp import McpToolResult` | Réponses protocole MCP sidecar |
+
+  **Cas spéciaux annotés (ne pas migrer)** : les endpoints non-paginés retournant des structures custom (ex: `{"active_missions": [...]}`) sont annotés `# Contrat intentionnel` et documentés dans ADR-0015.
 
 
 ### Agents — Règles d'orchestration MCP 🟣
@@ -449,6 +487,23 @@ L'apparence de la SPA (Vue.js) doit refléter le branding premium de Zenika.
 | `Dockerfile` (frontend) | ⚠️ Validation user requise | Respecte le Container Contract §9 |
 
 - **Gestion des erreurs API (frontend)** : Les erreurs HTTP doivent être interceptées dans les stores Pinia et affichées via le système de notification global (toast). `console.error` seul est insuffisant.
+- **Contrats d'interface API (frontend) — `parsePaginated<T>()` OBLIGATOIRE** : Toute réponse paginée doit être parsée via le helper `parsePaginated<T>()` de `@/utils/apiContract.ts`. L'accès direct à `res.data.items` ou `res.data?.items ?? []` est **formellement interdit** — il ne détecte pas les ruptures de contrat.
+
+  ```typescript
+  // ✅ CORRECT — fail-fast avec log de diagnostic
+  import { parsePaginated } from '@/utils/apiContract';
+  const page = parsePaginated<Mission>(res.data, 'missions', '/user/1/missions');
+  // → page.items / page.total — log console.error() si clé absente
+
+  // Mode strict (pour les appels critiques)
+  const page = parsePaginated<Mission>(res.data, 'missions', endpoint, true);
+  // → lève ContractError si le contrat est brisé
+
+  // ❌ INTERDIT — parsing silencieux
+  const missions = res.data.missions || [];   // ne détecte pas le renommage de clé
+  const missions = res.data?.items ?? [];     // retourne [] silencieusement si clé absente
+  ```
+
 - **Stores Pinia** : Un store = un domaine métier (ex: `useAuthStore`, `useCvStore`). La logique de fetch HTTP appartient au store, pas au composant.
 
 > **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu t'apprêtes à modifier `vite.config.ts` ou `nginx.conf`, tu **DOIS immédiatement t'arrêter** et demander la validation explicite du user avant de procéder.

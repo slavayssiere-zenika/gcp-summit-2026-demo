@@ -9,13 +9,22 @@ session Redis) est importée depuis le package `agent_commons`.
 import logging
 import os
 import uuid
-from datetime import datetime as _dt
+from datetime import datetime as _dt, timezone
 
 import httpx
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.genai import types
 from opentelemetry.propagate import inject
+
+# AgentRegistry requis pour les MCP servers Vertex AI natifs (ex: Cloud Trace)
+# Dépendance optionnelle : nécessite google-adk[a2a] + google-cloud-iamconnectorcredentials
+try:
+    from google.adk.integrations.agent_registry import AgentRegistry
+    _AGENT_REGISTRY_AVAILABLE = True
+except ImportError:
+    _AGENT_REGISTRY_AVAILABLE = False
+    app_logger = None  # sera initialisé plus bas
 
 from agent_commons.finops import estimate_cost_usd, log_tokens_to_bq
 from agent_commons.guardrails import check_hallucination_guardrail
@@ -26,6 +35,14 @@ from agent_commons.runner import run_agent_and_collect
 from agent_commons.session import RedisSessionService
 
 app_logger = logging.getLogger(__name__)
+
+# MCP Server Cloud Trace natif Vertex AI (configuré via var d'env)
+CLOUDTRACE_MCP_SERVER = os.getenv(
+    "CLOUDTRACE_MCP_SERVER",
+    "projects/prod-ia-staffing/locations/global/mcpServers/cloudtrace"
+)
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "prod-ia-staffing")
+GCP_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
 
 # ---------------------------------------------------------------------------
 # MCP Clients — URLs propres à l'agent Ops
@@ -93,18 +110,39 @@ async def create_agent(session_id: str | None = None) -> Agent:
         app_logger.warning("Error fetching system prompt for Ops: %s", e)
 
     # Injection de la date UTC pour les filtrages BigQuery temporels
-    current_datetime_utc = _dt.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    current_datetime_utc = _dt.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     instruction_text += (
         f"\n\n## Contexte Temporel\n"
         f"Date et heure actuelles (UTC) : **{current_datetime_utc}**.\n"
         f"Utilise cette date comme référence pour tous les filtrages temporels BigQuery.\n"
-        f"Exemple : `DATE(timestamp) = '{_dt.utcnow().strftime('%Y-%m-%d')}'`"
+        f"Exemple : `DATE(timestamp) = '{_dt.now(timezone.utc).strftime('%Y-%m-%d')}'`\n\n"
+        f"## Analyse des Traces et Performances\n"
+        f"Tu disposes de l'outil serveur Cloud Trace natif pour interroger directement "
+        f"les traces de requêtes et leurs latences (spans). Utilise-le pour identifier pro-activement "
+        f"les goulots d'étranglement de l'infrastructure. Si tu détectes une trace anormalement lente ou en erreur, "
+        f"récupère l'ID de cette trace et utilise l'outil `search_cloud_logs_by_trace` "
+        f"pour corréler la latence avec les logs d'application correspondants."
     )
 
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_OPS_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
     tools_loaded = await get_cached_tools(_OPS_CLIENTS_MAP, "[Ops]", ttl=300, _cache=_OPS_TOOLS_CACHE)
+
+    # Intégration du serveur Cloud Trace natif Vertex AI via AgentRegistry
+    # AgentRegistry.get_mcp_toolset() retourne un BaseToolset — compatible Agent(tools=[])
+    # Contrairement à types.Tool(mcp_servers=[...]) qui est rejeté par l'ADK LlmAgent validator.
+    cloudtrace_toolset = None
+    if _AGENT_REGISTRY_AVAILABLE and os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true":
+        try:
+            registry = AgentRegistry(project_id=GCP_PROJECT_ID, location=GCP_LOCATION)
+            cloudtrace_toolset = registry.get_mcp_toolset(CLOUDTRACE_MCP_SERVER)
+            app_logger.info("[Ops] ✅ Cloud Trace MCP toolset chargé depuis Vertex AI Agent Registry.")
+        except Exception as e:
+            app_logger.warning("[Ops] ⚠️ Cloud Trace MCP toolset non disponible : %s", e)
+
     OPS_TOOLS = tools_loaded
+    if cloudtrace_toolset is not None:
+        OPS_TOOLS = tools_loaded + [cloudtrace_toolset]
 
     app_logger.info("[Ops] Creating Agent with %d tools...", len(OPS_TOOLS))
     agent = Agent(
@@ -139,7 +177,7 @@ def check_ops_hallucination_guardrail(query: str, response_text: str, steps: lis
         "génère", "genere", "rédige", "redige", "écris", "ecris", "propose"
     ]
     query_lower = query.lower()
-    
+
     is_generative = any(kw in query_lower for kw in generative_keywords)
 
     if is_generative:

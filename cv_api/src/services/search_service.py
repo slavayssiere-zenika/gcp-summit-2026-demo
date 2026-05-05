@@ -20,6 +20,8 @@ from fastapi import HTTPException
 from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials
 from google.cloud import run_v2 as cloudrun_v2
+from pydantic import ValidationError
+from shared.schemas.pagination import PaginationResponse
 from metrics import CV_MISSING_EMBEDDINGS
 from opentelemetry.propagate import inject
 from sqlalchemy import func
@@ -185,7 +187,15 @@ async def execute_search(
                         headers=headers_downstream,
                     )
                     if search_res.status_code == 200:
-                        items = search_res.json().get("items", [])
+                        try:
+                            page_data = PaginationResponse[dict].model_validate(search_res.json())
+                            items = page_data.items
+                        except ValidationError as ve:
+                            logger.warning(
+                                "[search_service] Rupture de contrat API competencies/search",
+                                extra={"skill": skill, "error": str(ve)},
+                            )
+                            items = []
                         if items:
                             canonical_id = items[0]["id"]
                             users_res = await http_client.get(

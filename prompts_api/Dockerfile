@@ -2,7 +2,7 @@
 FROM python:3.11-slim AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
+COPY prompts_api/requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # Stage 2: Node setup and promptfoo installation
@@ -27,11 +27,13 @@ ENV PATH="/opt/promptfoo-env/bin:${PATH}"
 
 # Install Python wheels
 COPY --from=builder /app/wheels /wheels
-COPY requirements.txt .
+COPY --from=builder /app/requirements.txt .
+
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
-COPY . .
+COPY shared/ /app/shared/
+COPY prompts_api/ .
 ENV PYTHONPATH=/app
 
 ENV PORT=8000

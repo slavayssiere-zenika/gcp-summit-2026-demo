@@ -27,6 +27,9 @@ databaseChangeLog:
                   name: "created_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+      rollback:
+        - dropTable:
+            tableName: "drive_folders"
 
   - changeSet:
       id: "2"
@@ -65,6 +68,9 @@ databaseChangeLog:
                   name: "last_processed_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+      rollback:
+        - dropTable:
+            tableName: "drive_sync_state"
 
   - changeSet:
       id: "3"
@@ -78,6 +84,10 @@ databaseChangeLog:
                   type: "varchar"
                   constraints:
                     nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "file_name"
 
   - changeSet:
       id: "4"
@@ -91,6 +101,10 @@ databaseChangeLog:
                   type: "integer"
                   constraints:
                     nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "user_id"
 
   - changeSet:
       id: "5"

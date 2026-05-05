@@ -16,7 +16,7 @@ from typing import List, Optional
 import httpx
 from cache import get_cache, set_cache
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from opentelemetry.propagate import inject
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,7 @@ USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
 router = APIRouter(prefix="", tags=["analytics"], dependencies=[Depends(verify_jwt)])
 
+
 @router.get("/stats/coverage")
 async def get_competency_coverage(_: dict = Depends(verify_jwt), db: AsyncSession = Depends(get_db)):
     """Retourne le nombre de consultants ayant au moins 1 compétence assignée (Data Quality Dashboard)."""
@@ -50,7 +51,9 @@ async def get_scoring_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Statistiques agrégées du scoring IA — utilisé par le Data Quality Dashboard."""
-    total_with_comps = (await db.execute(select(func.count(func.distinct(user_competency.c.user_id))))).scalar_one() or 1
+    total_with_comps = (
+        await db.execute(select(func.count(func.distinct(user_competency.c.user_id))))
+    ).scalar_one() or 1
 
     scored_per_user_sub = (
         select(CompetencyEvaluation.user_id, func.count(CompetencyEvaluation.id).label("scored_count"))
@@ -59,7 +62,8 @@ async def get_scoring_stats(
         .subquery()
     )
     users_ok = (await db.execute(
-        select(func.count()).select_from(scored_per_user_sub).where(scored_per_user_sub.c.scored_count >= min_scored_count)
+        select(func.count()).select_from(scored_per_user_sub)
+        .where(scored_per_user_sub.c.scored_count >= min_scored_count)
     )).scalar_one()
     avg_scored_row = (await db.execute(select(func.avg(scored_per_user_sub.c.scored_count)))).scalar_one()
     avg_scored = round(float(avg_scored_row), 1) if avg_scored_row else 0.0
@@ -96,8 +100,11 @@ async def get_agency_competency_coverage(
                 users = data.get("items", data) if isinstance(data, dict) else data
                 for u in users:
                     uid = u.get("id")
-                    agency = next((tag.get("name", tag.get("value")) for tag in (u.get("tags") or [])
-                                   if isinstance(tag, dict) and tag.get("category") in ("agence", "agency", "Agence")), None)
+                    agency = next(
+                        (tag.get("name", tag.get("value")) for tag in (u.get("tags") or [])
+                         if isinstance(tag, dict) and tag.get("category") in ("agence", "agency", "Agence")),
+                        None
+                    )
                     if uid and agency:
                         agency_map[uid] = agency
     except Exception as e:
@@ -106,12 +113,17 @@ async def get_agency_competency_coverage(
     if not agency_map:
         return AgencyCompetencyCoverage(items=[], total_consultants=0, total_agencies=0)
 
-    from sqlalchemy import case as sa_case
     stmt = (
-        select(user_competency.c.user_id, user_competency.c.competency_id, Competency.name.label("competency_name"), CompetencyEvaluation.ai_score)
+        select(
+            user_competency.c.user_id,
+            user_competency.c.competency_id,
+            Competency.name.label("competency_name"),
+            CompetencyEvaluation.ai_score
+        )
         .join(Competency, user_competency.c.competency_id == Competency.id)
         .outerjoin(CompetencyEvaluation,
-                   (CompetencyEvaluation.user_id == user_competency.c.user_id) & (CompetencyEvaluation.competency_id == user_competency.c.competency_id))
+                   (CompetencyEvaluation.user_id == user_competency.c.user_id) &
+                   (CompetencyEvaluation.competency_id == user_competency.c.competency_id))
         .where(user_competency.c.user_id.in_(list(agency_map.keys())))
         .where(~Competency.id.in_(select(Competency.parent_id).where(Competency.parent_id.isnot(None)).distinct()))
     )
@@ -128,12 +140,16 @@ async def get_agency_competency_coverage(
             agg[key]["scores"].append(row.ai_score)
 
     items = [
-        AgencyCompetencyItem(agency=agency, competency=competency, count=vals["count"],
-                             avg_ai_score=round(sum(vals["scores"]) / len(vals["scores"]), 2) if vals["scores"] else None)
+        AgencyCompetencyItem(
+            agency=agency, competency=competency, count=vals["count"],
+            avg_ai_score=round(sum(vals["scores"]) / len(vals["scores"]), 2) if vals["scores"] else None
+        )
         for (agency, competency), vals in agg.items() if vals["count"] >= min_count
     ]
     items.sort(key=lambda x: (-x.count, x.agency, x.competency))
-    result = AgencyCompetencyCoverage(items=items[:limit], total_consultants=len(agency_map), total_agencies=len(set(agency_map.values())))
+    result = AgencyCompetencyCoverage(
+        items=items[:limit], total_consultants=len(agency_map), total_agencies=len(set(agency_map.values()))
+    )
     set_cache(cache_key, result.model_dump(), 300)
     return result
 
@@ -147,8 +163,12 @@ async def get_skill_gaps(
     if not user_ids:
         return SkillGapResult(gaps=[], pool_size=0)
     pool_size = len(user_ids)
-    comps_stmt = (select(Competency).where(Competency.id.in_(competency_ids)) if competency_ids
-                  else select(Competency).where(~Competency.id.in_(select(Competency.parent_id).where(Competency.parent_id.isnot(None)).distinct())))
+    comps_stmt = (
+        select(Competency).where(Competency.id.in_(competency_ids)) if competency_ids
+        else select(Competency).where(
+            ~Competency.id.in_(select(Competency.parent_id).where(Competency.parent_id.isnot(None)).distinct())
+        )
+    )
     target_comps = (await db.execute(comps_stmt)).scalars().all()
     if not target_comps:
         return SkillGapResult(gaps=[], pool_size=pool_size)
@@ -182,7 +202,9 @@ async def get_similar_consultants(user_id: int, top_n: int = Query(5, ge=1, le=2
     ref_names: dict[int, str] = {r.competency_id: r.name for r in ref_rows}
 
     if not ref_set:
-        return SimilarConsultantsResult(reference_user_id=user_id, reference_competency_count=0, similar_consultants=[])
+        return SimilarConsultantsResult(
+            reference_user_id=user_id, reference_competency_count=0, similar_consultants=[]
+        )
 
     other_rows = (await db.execute(
         select(user_competency.c.user_id, user_competency.c.competency_id, Competency.name)
@@ -198,10 +220,118 @@ async def get_similar_consultants(user_id: int, top_n: int = Query(5, ge=1, le=2
         user_comp_names[row.user_id][row.competency_id] = row.name
 
     results = sorted([
-        SimilarConsultant(user_id=uid, common_competencies=len(ref_set & other_set),
-                          jaccard_score=round(len(ref_set & other_set) / len(ref_set | other_set), 3),
-                          shared_competency_names=sorted([ref_names.get(cid, user_comp_names[uid].get(cid, "")) for cid in ref_set & other_set]))
+        SimilarConsultant(
+            user_id=uid, common_competencies=len(ref_set & other_set),
+            jaccard_score=round(len(ref_set & other_set) / len(ref_set | other_set), 3),
+            shared_competency_names=sorted([
+                ref_names.get(cid, user_comp_names[uid].get(cid, "")) for cid in ref_set & other_set
+            ])
+        )
         for uid, other_set in user_comp_sets.items()
     ], key=lambda x: -x.jaccard_score)[:top_n]
 
-    return SimilarConsultantsResult(reference_user_id=user_id, reference_competency_count=len(ref_set), similar_consultants=results)
+    return SimilarConsultantsResult(
+        reference_user_id=user_id, reference_competency_count=len(ref_set), similar_consultants=results
+    )
+
+
+@router.get("/analytics/taxonomy-quality")
+async def get_taxonomy_quality(db: AsyncSession = Depends(get_db)):
+    """Évalue la qualité globale de la taxonomie (concentration, orphelines, archives)."""
+    from collections import defaultdict
+
+    all_comps = (await db.execute(select(Competency))).scalars().all()
+    total_nodes = len(all_comps)
+    if total_nodes == 0:
+        return {
+            "score": 0, "grade": "D",
+            "metrics": {
+                "balance": {"pct": 0, "ok": 0, "total": 0},
+                "archives": {"pct": 0, "ok": 0, "total": 0}
+            },
+            "issues": ["Taxonomie vide."]
+        }
+
+    nodes_by_parent = defaultdict(list)
+    roots = []
+    archive_id = None
+
+    for c in all_comps:
+        if c.parent_id is None:
+            roots.append(c)
+            if c.name == "Compétences Archives / Non classées":
+                archive_id = c.id
+        else:
+            nodes_by_parent[c.parent_id].append(c)
+
+    def count_subtree(node_id):
+        count = 1
+        for child in nodes_by_parent[node_id]:
+            count += count_subtree(child.id)
+        return count
+
+    pillar_counts = {}
+    for r in roots:
+        if archive_id and r.id == archive_id:
+            continue
+        pillar_counts[r.name] = count_subtree(r.id)
+
+    max_pillar = {"name": "N/A", "pct": 0, "count": 0}
+    archive_count = count_subtree(archive_id) if archive_id else 0
+    active_nodes = total_nodes - archive_count
+
+    if pillar_counts and active_nodes > 0:
+        max_name, max_count = max(pillar_counts.items(), key=lambda x: x[1])
+        max_pillar = {
+            "name": max_name,
+            "count": max_count,
+            "pct": round((max_count / active_nodes) * 100, 1)
+        }
+
+    grade = "A"
+    issues = []
+    score = 100
+
+    if max_pillar["pct"] > 35:
+        issues.append(
+            f"Le pilier '{max_pillar['name']}' concentre {max_pillar['pct']}% des compétences actives (> 35%)."
+        )
+        score -= int(max_pillar["pct"] - 35)
+
+    archive_pct = 0
+    if archive_count > 0:
+        archive_pct = round((archive_count / max(total_nodes, 1)) * 100, 1)
+        if archive_pct > 10:
+            issues.append(f"{archive_pct}% des compétences sont dans les Archives (> 10%).")
+            score -= int(archive_pct)
+
+    score = max(0, min(100, score))
+    if score < 50:
+        grade = "D"
+    elif score < 70:
+        grade = "C"
+    elif score < 90:
+        grade = "B"
+
+    return {
+        "score": score,
+        "grade": grade,
+        "metrics": {
+            "balance": {
+                "pct": max(0, 100 - int(max_pillar["pct"])),
+                "ok": active_nodes - max_pillar["count"],
+                "total": active_nodes
+            },
+            "archives": {
+                "pct": max(0, 100 - int(archive_pct)),
+                "ok": total_nodes - archive_count,
+                "total": total_nodes
+            }
+        },
+        "issues": issues,
+        "details": {
+            "total_nodes": total_nodes,
+            "active_nodes": active_nodes,
+            "pillars_count": len(pillar_counts)
+        }
+    }

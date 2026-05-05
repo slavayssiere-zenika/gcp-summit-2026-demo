@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import { authService } from '../services/auth'
-import { Folder, File, AlertCircle, ChevronRight, ChevronDown, CheckCircle2, User, Loader2, Network, Search, X } from 'lucide-vue-next'
+import { Folder, File, AlertCircle, ChevronRight, ChevronDown, CheckCircle2, User, Loader2, Network, Search, X, RefreshCcw, ExternalLink } from 'lucide-vue-next'
 
 const folders = ref<any[]>([])
 const files = ref<any[]>([])
@@ -77,11 +77,15 @@ const tree = computed(() => {
                     name: consultant, 
                     files: [], 
                     hasNommageError,
-                    hasErrors: false
+                    hasErrors: false,
+                    userId: null
                 }
             }
             
             agencyFolder.consultants[consultant].files.push(file)
+            if (file.user_id && !agencyFolder.consultants[consultant].userId) {
+                agencyFolder.consultants[consultant].userId = file.user_id
+            }
             if (file.status === 'ERROR') {
                 agencyFolder.consultants[consultant].hasErrors = true
             }
@@ -200,6 +204,40 @@ const highlightName = (name: string, query: string): { text: string, match: bool
     }
     return parts
 }
+
+const isReimporting = ref<Record<string, boolean>>({})
+
+const reimportFile = async (file: any) => {
+    isReimporting.value[file.google_file_id] = true
+    try {
+        const headers = { Authorization: `Bearer ${authService.state.token}` }
+        await axios.patch(`/api/drive/files/${file.google_file_id}`, { status: 'PENDING' }, { headers })
+        await axios.post('/api/drive/sync', {}, { headers })
+        file.status = 'PENDING'
+    } catch(e) {
+        console.error("Erreur lors du ré-import du fichier :", e)
+    } finally {
+        isReimporting.value[file.google_file_id] = false
+    }
+}
+
+const reimportConsultant = async (consultant: any) => {
+    isReimporting.value[consultant.name] = true
+    try {
+        const headers = { Authorization: `Bearer ${authService.state.token}` }
+        for (const file of consultant.files) {
+            await axios.patch(`/api/drive/files/${file.google_file_id}`, { status: 'PENDING' }, { headers })
+        }
+        await axios.post('/api/drive/sync', {}, { headers })
+        for (const file of consultant.files) {
+            file.status = 'PENDING'
+        }
+    } catch(e) {
+        console.error("Erreur lors du ré-import du consultant :", e)
+    } finally {
+        isReimporting.value[consultant.name] = false
+    }
+}
 </script>
 
 <template>
@@ -290,6 +328,14 @@ const highlightName = (name: string, query: string): { text: string, match: bool
                     <span v-if="consultant.hasNommageError" class="badge-error" title="Le nom du dossier devrait être 'Prénom Nom'">
                       ⚠️ Problème de nommage
                     </span>
+                    <div class="action-group">
+                      <router-link v-if="consultant.userId" :to="{ name: 'user-detail', params: { id: consultant.userId } }" class="action-btn" title="Voir la fiche utilisateur" @click.stop>
+                        <ExternalLink class="icon-xs" />
+                      </router-link>
+                      <button class="action-btn" @click.stop="reimportConsultant(consultant)" title="Ré-importer tous les CVs du consultant" :disabled="isReimporting[consultant.name]">
+                        <RefreshCcw class="icon-xs" :class="{'spin': isReimporting[consultant.name]}" />
+                      </button>
+                    </div>
                   </div>
                 </div>
                 
@@ -306,6 +352,11 @@ const highlightName = (name: string, query: string): { text: string, match: bool
                           {{ file.error_message.substring(0, 40) }}{{ file.error_message.length > 40 ? '...' : '' }}
                         </span>
                       </div>
+                    </div>
+                    <div class="action-group">
+                      <button class="action-btn" @click="reimportFile(file)" title="Ré-importer ce CV" :disabled="isReimporting[file.google_file_id]">
+                        <RefreshCcw class="icon-xs" :class="{'spin': isReimporting[file.google_file_id]}" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -442,6 +493,7 @@ const highlightName = (name: string, query: string): { text: string, match: bool
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
 }
 
 .file-name {
@@ -505,6 +557,40 @@ const highlightName = (name: string, query: string): { text: string, match: bool
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+
+.action-group {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.action-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #3b82f6;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-xs {
+  width: 14px;
+  height: 14px;
+}
 
 .loading-state {
   display: flex;

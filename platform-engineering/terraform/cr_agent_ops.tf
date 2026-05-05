@@ -126,6 +126,18 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = var.project_id
       }
       env {
+        name  = "GOOGLE_GENAI_USE_VERTEXAI"
+        value = "True"
+      }
+      env {
+        name  = "GOOGLE_CLOUD_LOCATION"
+        value = "global"
+      }
+      env {
+        name  = "CLOUDTRACE_MCP_SERVER"
+        value = "projects/${var.project_id}/locations/global/mcpServers/cloudtrace"
+      }
+      env {
         name  = "REDIS_URL"
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/11"
       }
@@ -191,9 +203,22 @@ resource "google_project_iam_member" "agent_ops_otel_trace" {
   member  = "serviceAccount:${google_service_account.agent_ops_sa.email}"
 }
 
+resource "google_project_iam_member" "agent_ops_trace_user" {
+  project = var.project_id
+  role    = "roles/cloudtrace.user"
+  member  = "serviceAccount:${google_service_account.agent_ops_sa.email}"
+}
+
 resource "google_project_iam_member" "agent_ops_otel_metric" {
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.agent_ops_sa.email}"
+}
+
+# Vertex AI Agent Registry — requis pour AgentRegistry.get_mcp_toolset() (Cloud Trace MCP natif)
+resource "google_project_iam_member" "agent_ops_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.agent_ops_sa.email}"
 }
 

@@ -89,3 +89,13 @@ test_env/
 # =========================
 vtmp/
 *.db
+
+
+talk/credentials.json
+# mutmut — répertoires de sandbox et cache de mutation testing
+**/mutants/
+**/.mutmut-cache
+
+# deploy.sh — logs de run (générés automatiquement)
+deploy_logs/
+talk/token.json

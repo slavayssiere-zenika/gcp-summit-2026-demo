@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import CompetencyNode from '../components/CompetencyNode.vue'
 import StarRating from '../components/StarRating.vue'
-import { Network, RefreshCw, User, X, ExternalLink, Users, BarChart2, Brain, UserCheck } from 'lucide-vue-next'
+import { Network, RefreshCw, User, X, ExternalLink, Users, BarChart2, Brain, UserCheck, Search } from 'lucide-vue-next'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Evaluation {
@@ -24,6 +24,7 @@ interface UserInfo {
 const competencies = ref<any[]>([])
 const loading = ref(true)
 const error = ref('')
+const searchQuery = ref('')
 
 // Sidepanel
 const isSidepanelOpen = ref(false)
@@ -175,6 +176,44 @@ function scoreColor(score: number | null): string {
   return '#ef4444'
 }
 
+const filteredCompetencies = computed(() => {
+  if (!searchQuery.value.trim()) return competencies.value
+
+  const q = searchQuery.value.toLowerCase().trim()
+
+  function filterNode(node: any): any | null {
+    const matchesSelf = 
+      node.name.toLowerCase().includes(q) || 
+      (node.aliases && node.aliases.toLowerCase().includes(q)) || 
+      (node.description && node.description.toLowerCase().includes(q))
+    
+    let filteredSub = []
+    if (node.sub_competencies && node.sub_competencies.length > 0) {
+      for (const child of node.sub_competencies) {
+        const result = filterNode(child)
+        if (result) {
+          filteredSub.push(result)
+        }
+      }
+    }
+
+    if (matchesSelf || filteredSub.length > 0) {
+      return {
+        ...node,
+        sub_competencies: filteredSub
+      }
+    }
+    return null
+  }
+
+  const result = []
+  for (const root of competencies.value) {
+    const f = filterNode(root)
+    if (f) result.push(f)
+  }
+  return result
+})
+
 onMounted(() => { fetchCompetencies() })
 </script>
 
@@ -191,9 +230,16 @@ onMounted(() => { fetchCompetencies() })
     <div class="tree-card glass-panel">
       <div class="card-header">
         <h3>Explorateur Stratégique</h3>
-        <button class="icon-btn" @click="fetchCompetencies" :disabled="loading" title="Actualiser l'arbre" aria-label="Actualiser l'arbre">
-          <RefreshCw size="18" :class="{ 'spin': loading }" />
-        </button>
+        <div class="actions">
+          <div class="search-box">
+            <Search size="16" class="search-icon" />
+            <input type="text" v-model="searchQuery" placeholder="Rechercher une compétence..." />
+            <X size="14" class="clear-search" v-if="searchQuery" @click="searchQuery = ''" />
+          </div>
+          <button class="icon-btn" @click="fetchCompetencies" :disabled="loading" title="Actualiser l'arbre" aria-label="Actualiser l'arbre">
+            <RefreshCw size="18" :class="{ 'spin': loading }" />
+          </button>
+        </div>
       </div>
 
       <div v-if="loading" class="loading-state">
@@ -202,12 +248,14 @@ onMounted(() => { fetchCompetencies() })
       </div>
       <div v-else-if="error" class="error-msg">{{ error }}</div>
       <div v-else-if="competencies.length === 0" class="empty-state">Aucune compétence n'est actuellement définie.</div>
+      <div v-else-if="filteredCompetencies.length === 0" class="empty-state">Aucune compétence ne correspond à "{{ searchQuery }}".</div>
       <div v-else class="tree-view">
         <CompetencyNode
-          v-for="rootNode in competencies"
+          v-for="rootNode in filteredCompetencies"
           :key="rootNode.id"
           :node="rootNode"
           :depth="0"
+          :search-query="searchQuery"
           @select-leaf="onSelectLeaf"
         />
       </div>
@@ -396,6 +444,57 @@ h3 {
   font-weight: 600;
   color: #1A1A1A;
   margin: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: #888;
+}
+
+.clear-search {
+  position: absolute;
+  right: 10px;
+  color: #888;
+  cursor: pointer;
+}
+
+.clear-search:hover {
+  color: #fff;
+}
+
+.search-box input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 30px 8px 32px;
+  font-size: 14px;
+  width: 240px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.search-box input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #E31937;
+  box-shadow: 0 0 0 2px rgba(227, 25, 55, 0.2);
+}
+
+.search-box input::placeholder {
+  color: #888;
 }
 
 .tree-view {

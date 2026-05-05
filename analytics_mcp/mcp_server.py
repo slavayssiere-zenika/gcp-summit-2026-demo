@@ -1,12 +1,14 @@
+# flake8: noqa: E501
+from tools.finops_tools import handle_log_ai_consumption, handle_get_finops_report, handle_detect_usage_anomalies, handle_get_aiops_dashboard_data
+from tools.market_tools import handle_get_top_market_skills, handle_get_market_demand_volume
 import asyncio
 import contextvars
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from google.cloud import bigquery
-from google.protobuf.timestamp_pb2 import Timestamp
 from mcp.server import Server
 from mcp.types import TextContent, Tool
 
@@ -17,6 +19,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # Config
+
+
 def get_gcp_project_id() -> str:
     """
     Résout le GCP project ID dans l'ordre de priorité :
@@ -174,185 +178,28 @@ async def list_tools() -> list[Tool]:
         )
     ]
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-
     try:
         if name == "get_top_market_skills":
-            category = arguments.get("category", "")
-            limit = arguments.get("limit", 10)
-            
-            # UNNEST array in BigQuery and Group By
-            query = f"""
-                SELECT skill, COUNT(*) as demand_count
-                FROM `{TABLE_REF}`,
-                UNNEST(skills) as skill
-                WHERE zenika_category = @category
-                GROUP BY skill
-                ORDER BY demand_count DESC
-                LIMIT @limit
-            """
-            
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("category", "STRING", category),
-                    bigquery.ScalarQueryParameter("limit", "INT64", limit)
-                ]
-            )
-            
-            query_job = client.query(query, job_config=job_config)
-            results = query_job.result()
-            
-            data = [{"skill": row.skill, "demand_count": row.demand_count} for row in results]
-            return [TextContent(type="text", text=json.dumps(data))]
-
+            return await handle_get_top_market_skills(arguments, client, TABLE_REF)
         elif name == "get_market_demand_volume":
-            category = arguments.get("category", "")
-            
-            query = f"""
-                SELECT COUNT(*) as volume
-                FROM `{TABLE_REF}`
-                WHERE zenika_category = @category
-            """
-            
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("category", "STRING", category)
-                ]
-            )
-            
-            query_job = client.query(query, job_config=job_config)
-            results = query_job.result()
-            volume = 0
-            for row in results:
-                volume = row.volume
-                
-            data = {"category": category, "volume": volume}
-            return [TextContent(type="text", text=json.dumps(data))]
-
+            return await handle_get_market_demand_volume(arguments, client, TABLE_REF)
         elif name == "log_ai_consumption":
-            row_to_insert = [
-                {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "user_email": arguments["user_email"],
-                    "action": arguments["action"],
-                    "model": arguments["model"],
-                    "input_tokens": arguments["input_tokens"],
-                    "output_tokens": arguments["output_tokens"],
-                    "unit_cost": arguments.get("unit_cost"),
-                    "is_batch": arguments.get("is_batch", False),
-                    "metadata": json.dumps(arguments.get("metadata", {}))
-                }
-            ]
-            
-            errors = client.insert_rows_json(FINOPS_TABLE_REF, row_to_insert)
-            if errors == []:
-                return [TextContent(type="text", text="Consumption logged successfully.")]
-            else:
-                return [TextContent(type="text", text=f"Errors occurred while logging consumption: {errors}")]
-
+            return await handle_log_ai_consumption(arguments, client, FINOPS_TABLE_REF)
         elif name == "get_finops_report":
-            period = arguments.get("period", "daily")
-            user_email = arguments.get("user_email")
-            
-            date_col = "DATE(timestamp)"
-            if period == "weekly":
-                date_col = "DATE_TRUNC(DATE(timestamp), WEEK)"
-            elif period == "monthly":
-                date_col = "DATE_TRUNC(DATE(timestamp), MONTH)"
-                
-            where_clause = ""
-            params = []
-            if user_email:
-                where_clause = "WHERE user_email = @user_email"
-                params.append(bigquery.ScalarQueryParameter("user_email", "STRING", user_email))
-                
-            # Pricing rules (Flash 1.5/2.0 standard: 0.075$ / 1M input, 0.30$ / 1M output)
-            # We do the math in SQL for speed
-            query = f"""
-                SELECT 
-                    {date_col} as period,
-                    user_email,
-                    action,
-                    SUM(input_tokens) as total_input,
-                    SUM(output_tokens) as total_output,
-                    ROUND(SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)), 6) as estimated_cost_usd
-                FROM `{FINOPS_TABLE_REF}` t
-                LEFT JOIN `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing` p ON t.model = p.model_name
-                {where_clause}
-                GROUP BY 1, 2, 3
-                ORDER BY 1 DESC, 5 DESC
-            """
-            
-            job_config = bigquery.QueryJobConfig(query_parameters=params)
-            query_job = client.query(query, job_config=job_config)
-            results = query_job.result()
-            
-            data = [dict(row) for row in results]
-            # Convert date objects to string for JSON serialization
-            for d in data:
-                if 'period' in d and hasattr(d['period'], 'isoformat'):
-                    d['period'] = d['period'].isoformat()
-                    
-            return [TextContent(type="text", text=json.dumps(data))]
-
+            return await handle_get_finops_report(arguments, client, PROJECT_ID, FINOPS_DATASET_ID, FINOPS_TABLE_REF)
         elif name == "get_aiops_dashboard_data":
-            data = await get_aiops_dashboard_data_internal()
-            return [TextContent(type="text", text=json.dumps(data))]
-
+            return await handle_get_aiops_dashboard_data(get_aiops_dashboard_data_internal)
         elif name == "detect_usage_anomalies":
-            threshold = int(arguments.get("threshold_tokens_per_hour", 50000))
-            hours_back = int(arguments.get("hours_back", 1))
-            query = f"""
-                SELECT
-                    user_email,
-                    SUM(input_tokens + output_tokens) AS total_tokens,
-                    COUNT(*) AS request_count,
-                    MIN(timestamp) AS window_start,
-                    MAX(timestamp) AS window_end
-                FROM `{FINOPS_TABLE_REF}`
-                WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @hours_back HOUR)
-                GROUP BY user_email
-                HAVING total_tokens > @threshold
-                ORDER BY total_tokens DESC
-                LIMIT 20
-            """
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("threshold", "INT64", threshold),
-                    bigquery.ScalarQueryParameter("hours_back", "INT64", hours_back),
-                ]
-            )
-            query_job = await asyncio.to_thread(client.query, query, job_config)
-            results = await asyncio.to_thread(query_job.result)
-            anomalies = []
-            for row in results:
-                anomalies.append({
-                    "user_email": row.user_email,
-                    "total_tokens": row.total_tokens,
-                    "request_count": row.request_count,
-                    "window_start": row.window_start.isoformat() if row.window_start else None,
-                    "window_end": row.window_end.isoformat() if row.window_end else None,
-                    "threshold_exceeded_by": row.total_tokens - threshold,
-                })
-            return [TextContent(type="text", text=json.dumps({
-                "anomalies": anomalies,
-                "threshold_tokens_per_hour": threshold,
-                "hours_back": hours_back,
-                "anomaly_count": len(anomalies),
-                "generated_at": datetime.utcnow().isoformat(),
-            }))]
-
+            return await handle_detect_usage_anomalies(arguments, client, FINOPS_TABLE_REF)
         else:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
-
     except Exception as e:
         logger.exception(f"Error in analytics-mcp tool call '{name}'")
-        return [TextContent(type="text", text=json.dumps({
-            "error": str(e),
-            "tool": name,
-            "status": "failure"
-        }))]
+        return [TextContent(type="text", text=json.dumps({"error": str(e), "tool": name, "status": "failure"}))]
+
 
 async def get_aiops_dashboard_data_internal():
     # 1. Monthly Summary (Current vs Last)
@@ -366,7 +213,7 @@ async def get_aiops_dashboard_data_internal():
         WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
         GROUP BY 1 ORDER BY 1 DESC LIMIT 2
     """
-    
+
     # 2. Daily Evolution (Last 30 Days)
     query_daily = f"""
         SELECT 
@@ -378,14 +225,14 @@ async def get_aiops_dashboard_data_internal():
         WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
         GROUP BY 1 ORDER BY 1 ASC
     """
-    
+
     # 3. Top Users by Count
     query_top_count = f"""
         SELECT user_email, COUNT(*) as count
         FROM `{FINOPS_TABLE_REF}`
         GROUP BY 1 ORDER BY 2 DESC LIMIT 10
     """
-    
+
     # 4. Top Users by Cost
     query_top_cost = f"""
         SELECT user_email, SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)) as cost
@@ -407,20 +254,20 @@ async def get_aiops_dashboard_data_internal():
         FROM `{FINOPS_TABLE_REF}`
         GROUP BY 1 ORDER BY 2 DESC LIMIT 10
     """
-    
+
     # 7. Table des Prix (Reference)
     query_pricing = f"""
         SELECT model_name, input_cost_per_token, output_cost_per_token
         FROM `{PROJECT_ID}.{FINOPS_DATASET_ID}.model_pricing`
         ORDER BY input_cost_per_token DESC, model_name ASC
     """
-    
+
     # Helper pour la requête
     def fetch_data(q):
         if not client:
             raise Exception("BigQuery client is not initialized.")
         return [dict(row) for row in client.query(q).result()]
-        
+
     import asyncio
 
     # Exécution parallèle
@@ -436,9 +283,11 @@ async def get_aiops_dashboard_data_internal():
 
     # Formatting
     for r in monthly_res:
-        if 'month' in r and r['month']: r['month'] = r['month'].isoformat()
+        if 'month' in r and r['month']:
+            r['month'] = r['month'].isoformat()
     for r in daily_res:
-        if 'day' in r and r['day']: r['day'] = r['day'].isoformat()
+        if 'day' in r and r['day']:
+            r['day'] = r['day'].isoformat()
 
     return {
         "monthly": monthly_res,
@@ -448,8 +297,9 @@ async def get_aiops_dashboard_data_internal():
         "top_actions": top_actions_res,
         "top_models": top_models_res,
         "pricing_table": pricing_res,
-        "generated_at": datetime.utcnow().isoformat()
+        "generated_at": datetime.now(timezone.utc).isoformat()
     }
+
 
 async def main():
     """Main entry point for the MCP server when run directly over stdio."""

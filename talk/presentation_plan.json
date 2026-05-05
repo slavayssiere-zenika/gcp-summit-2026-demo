@@ -1,0 +1,417 @@
+{
+  "title": "Gen-Skillz: REX Technique d'une Plateforme IA en Production",
+  "slides": [
+    {
+      "slide_number": 1,
+      "slide_type": "cover",
+      "preferred_color": "Red",
+      "title": "Gen-Skillz: REX Technique d'une Plateforme IA en Production",
+      "subtitle": "De l'Agentique à l'Observabilité sur GCP: Plongée dans la Zenika Console",
+      "speaker_notes": "Bonjour à tous ! Aujourd'hui, on va plonger dans les entrailles de Gen-Skillz, notre plateforme de staffing intelligente. L'idée n'est pas de vous faire un cours, mais de partager notre retour d'expérience, nos galères et nos réussites. On va parler d'architecture, d'IA, de déploiement, et de comment on utilise l'IA pour développer l'IA. Accrochez-vous, ça va être technique !"
+    },
+    {
+      "slide_number": 2,
+      "slide_type": "chapter",
+      "preferred_color": "Blue",
+      "title": "Le Produit: Une Vision Fonctionnelle",
+      "subtitle": "Que fait réellement Gen-Skillz pour un utilisateur ?",
+      "speaker_notes": "Avant de plonger dans le code, commençons par le commencement : à quoi ça sert ? D'un point de vue produit, Gen-Skillz est un écosystème qui transforme nos données RH en intelligence actionnable."
+    },
+    {
+      "slide_number": 3,
+      "slide_type": "text",
+      "preferred_color": "Green",
+      "title": "Consultant 360 & CV-RAG",
+      "subtitle": "Automatiser l'ingestion et la compréhension des profils.",
+      "content": [
+        "**Ingestion Automatisée**: Le `drive_api` surveille un Google Drive partagé pour importer de nouveaux CVs (PDF, Docx).",
+        "**Parsing Intelligent via CV-RAG**: Le `cv_api` utilise un pipeline RAG avec Gemini pour extraire et structurer les informations : résumé, rôle, expériences, et compétences.",
+        "**Normalisation Sémantique**: Les compétences extraites (ex: 'React.js') sont mappées au référentiel interne (`competencies_api`) pour gérer les synonymes et standardiser la taxonomie.",
+        "**Anonymisation Heuristique**: Détection des profils anonymes pour la confidentialité, tout en permettant le staffing prévisionnel."
+      ],
+      "speaker_notes": "Le premier pilier, c'est la vue 360 du consultant. Fini la saisie manuelle. On branche un Google Drive, et notre `drive_api` s'occupe de tout. Derrière, le `cv_api` lance un pipeline de Retrieval-Augmented Generation avec Gemini pour parser le CV, extraire les infos clés et, surtout, les normaliser par rapport à notre référentiel de compétences. C'est la base pour une recherche pertinente."
+    },
+    {
+      "slide_number": 4,
+      "slide_type": "text_image",
+      "preferred_color": "Purple",
+      "title": "Staffing Copilot & Agentique",
+      "subtitle": "Interroger la donnée en langage naturel grâce à une architecture agentique.",
+      "content": [
+        "**Agent Conversationnel**: Le `agent_router_api` est le point d'entrée unique qui orchestre les requêtes en langage naturel.",
+        "**Recherche 'Look-alike'**: Utilise la recherche vectorielle dans AlloyDB/pgvector pour trouver des profils sémantiquement similaires à un consultant donné.",
+        "**Matching de Projet**: Calcule le 'centre de gravité' vectoriel d'une fiche de poste pour identifier les consultants les plus pertinents, au-delà de la simple correspondance de mots-clés.",
+        "**Analyse de Gap Stratégique**: Permet d'identifier les compétences manquantes dans une agence en comparant les profils internes aux tendances du marché extraites via BigQuery."
+      ],
+      "image_prompt": "A user typing a natural language query into a futuristic terminal, with the query transforming into complex data visualizations and showing profiles of people, cyberpunk aesthetic.",
+      "speaker_notes": "Ensuite, le cœur du réacteur : le Copilot. L'utilisateur ne clique pas sur des filtres, il discute avec l'IA. 'Trouve-moi un profil comme Thomas pour une mission DevOps'. L'agent va vectoriser la requête, chercher des profils similaires via pgvector, et même analyser une fiche de poste complète pour trouver le match parfait. C'est là que la magie opère."
+    },
+    {
+      "slide_number": 5,
+      "slide_type": "text",
+      "preferred_color": "Yellow",
+      "title": "Admin & Hygiène des Données",
+      "subtitle": "Maintenir la cohérence et la qualité dans un système distribué.",
+      "content": [
+        "**Fusion de Profils (Merge)**: Un outil admin permet de fusionner des doublons. L'événement est propagé via Google Pub/Sub pour garantir une mise à jour éventuelle dans tous les micro-services (`cv_api`, `items_api`...).",
+        "**Réanalyse de Masse**: Capacité de relancer le pipeline d'extraction Gemini sur toute la base de CVs via une tâche asynchrone, notamment après une mise à jour du modèle d'IA.",
+        "**Gestion de la Taxonomie**: L'IA peut suggérer de nouvelles spécialités en analysant les compétences émergentes dans les CVs récents, maintenant le référentiel à jour.",
+        "**Observabilité des Données**: Des dashboards dans Grafana suivent la qualité des données, comme le taux de CVs non parsés ou les compétences non mappées."
+      ],
+      "speaker_notes": "Avoir des données, c'est bien. Des données propres, c'est mieux. On a intégré des outils d'administration critiques. La fusion de profils, par exemple, n'est pas une simple suppression. C'est un événement Pub/Sub qui garantit que l'identité est mise à jour partout. On peut aussi relancer l'analyse sur des milliers de CVs d'un coup si on améliore notre prompt Gemini."
+    },
+    {
+      "slide_number": 6,
+      "slide_type": "chapter",
+      "preferred_color": "Red",
+      "title": "Au Cœur de l'IA: CVs & Taxonomie",
+      "subtitle": "Plongée technique dans les pipelines d'analyse et de scoring.",
+      "speaker_notes": "Maintenant, mettons les mains dans le cambouis. Comment fonctionnent vraiment ces pipelines d'IA ? On va parler modèles, formats de données et architecture de traitement."
+    },
+    {
+      "slide_number": 7,
+      "slide_type": "text_image",
+      "preferred_color": "Blue",
+      "title": "Pipeline d'Analyse de CVs",
+      "subtitle": "De l'upload du document à l'embedding vectoriel dans AlloyDB.",
+      "content": [
+        "**Orchestration par `cv_api`**: Le micro-service FastAPI dédié qui gère tout le cycle de vie d'un CV.",
+        "**Extraction Structurée avec Gemini**: Appel à l'API Gemini avec un prompt spécifique pour obtenir une sortie JSON structurée (expériences, compétences, etc.).",
+        "**Stockage & Indexation Vectorielle**: Le contenu textuel et les métadonnées sont stockés dans une table PostgreSQL. Les embeddings générés sont insérés dans une colonne `vector` de type `pgvector`.",
+        "**Recherche Hybride**: Les requêtes combinent recherche textuelle classique (SQL LIKE) et recherche de similarité cosinus sur les embeddings pour des résultats plus pertinents."
+      ],
+      "image_prompt": "A futuristic data pipeline with glowing blue lines, processing documents that transform into structured JSON data points, cyberpunk style, dark background.",
+      "speaker_notes": "Le pipeline de CV est orchestré par `cv_api`. On envoie le document à Gemini, en lui demandant un JSON propre. Ce JSON est ensuite disséqué. Le texte est stocké dans Postgres, et surtout, on génère un embedding qui part dans une colonne `pgvector`. C'est ce qui nous permet de faire des recherches sémantiques ultra-rapides directement en SQL."
+    },
+    {
+      "slide_number": 8,
+      "slide_type": "text",
+      "preferred_color": "Green",
+      "title": "Vertex AI Batch: Scaler l'Analyse",
+      "subtitle": "Comment traiter des milliers de CVs à moindre coût.",
+      "content": [
+        "**Réduction des Coûts**: Utilisation de Vertex AI Batch Prediction pour les analyses de masse, offrant un coût jusqu'à 50% inférieur à l'API online.",
+        "**Format d'Entrée JSONL**: Les requêtes sont préparées dans un fichier JSON Lines (`.jsonl`) où chaque ligne est un objet `{\"id\": \"cv_id\", \"request\": {\"contents\": [...]}}`.",
+        "**Stockage sur GCS**: Le fichier JSONL est uploadé sur un bucket GCS partagé (`cv_batch`) dans un préfixe dédié (`bulk-reanalyse/`).",
+        "**State Machine Asynchrone**: Le job Vertex est asynchrone. On a une boucle `asyncio` qui 'poll' l'état du job (`JOB_STATE_SUCCEEDED`, `FAILED`) et stocke l'avancement dans Redis (`BulkTaskManager`)."
+      ],
+      "speaker_notes": "Quand on veut réanalyser 5000 CVs, appeler l'API en ligne 5000 fois, c'est cher et lent. La solution, c'est Vertex AI Batch. On prépare un gros fichier JSONL, on le balance sur GCS, et on lance un job batch. C'est asynchrone, donc on a un petit 'state manager' qui utilise Redis pour suivre l'avancement du job et appliquer les résultats une fois terminé. C'est un pattern crucial pour la scalabilité et le FinOps."
+    },
+    {
+      "slide_number": 9,
+      "slide_type": "text",
+      "preferred_color": "Purple",
+      "title": "Taxonomie & Scoring de Compétences",
+      "subtitle": "Évaluer l'expertise des consultants de manière objective.",
+      "content": [
+        "**Gestion par `competencies_api`**: Ce service gère l'arbre hiérarchique des compétences (Catégorie > Spécialité > Compétence).",
+        "**Scoring IA Objectif**: Un autre pipeline Vertex Batch (`bulk-scoring/`) est utilisé pour noter chaque consultant sur chaque compétence (de 0 à 5).",
+        "**Prompt de Scoring Complexe**: Le prompt demande à Gemini d'agir en tant qu'expert technique et d'évaluer le niveau d'un consultant sur une compétence précise en se basant sur l'ensemble de son CV.",
+        "**Persistance de l'État dans Redis**: Comme pour l'analyse de CV, un `BulkTaskManager` dans Redis suit l'état du job de scoring de masse pour éviter de le lancer plusieurs fois."
+      ],
+      "speaker_notes": "Au-delà de l'extraction, on fait du scoring. Notre `competencies_api` utilise un pipeline similaire pour demander à Gemini : 'Sur une échelle de 0 à 5, quel est le niveau de ce dev sur Kubernetes, en te basant sur son CV ?'. Ça nous donne une évaluation objective et comparable entre les profils. Et bien sûr, c'est aussi un job batch pour pouvoir recalculer les scores de tout le monde d'un coup."
+    },
+    {
+      "slide_number": 10,
+      "slide_type": "chapter",
+      "preferred_color": "Yellow",
+      "title": "Architecture Multi-Agents & MCP",
+      "subtitle": "Comment les services communiquent et collaborent.",
+      "speaker_notes": "On a plein de micro-services, mais comment tout ce petit monde se parle ? On va voir l'architecture de communication, le rôle du routeur et notre protocole maison, le MCP."
+    },
+    {
+      "slide_number": 11,
+      "slide_type": "text_image",
+      "preferred_color": "Red",
+      "title": "Le Cerveau: `agent_router_api`",
+      "subtitle": "Le routeur intelligent qui orchestre les sous-agents spécialisés.",
+      "content": [
+        "**Point d'Entrée Unique**: Toutes les requêtes du front-end arrivent sur `agent_router_api`.",
+        "**Délégation aux Sous-Agents**: Le routeur analyse la requête et la délègue au sous-agent compétent : `agent_hr_api` pour les CVs/compétences, `agent_ops_api` pour les missions.",
+        "**Communication A2A (Agent-to-Agent)**: La communication entre agents se fait via des appels HTTP POST standards. On a banni le SSE pour garder les agents stateless et plus simples à scaler.",
+        "**Cache Sémantique**: Le routeur maintient un cache sémantique dans Redis pour éviter de ré-interroger les LLMs pour des questions similaires."
+      ],
+      "image_prompt": "A central glowing brain node connected to smaller specialized nodes with light beams, representing a neural network of agents, dark background, digital art.",
+      "speaker_notes": "Le chef d'orchestre, c'est `agent_router_api`. Il reçoit la requête de l'utilisateur, la comprend, et la délègue au bon spécialiste. Si ça parle de compétences, il appelle `agent_hr_api`. Si ça parle de missions, c'est `agent_ops_api`. Cette communication se fait en simple HTTP, c'est robuste, stateless et facile à débugger."
+    },
+    {
+      "slide_number": 12,
+      "slide_type": "text",
+      "preferred_color": "Blue",
+      "title": "MCP: Le Langage des Agents",
+      "subtitle": "Le Model Context Protocol pour une découverte dynamique des outils.",
+      "content": [
+        "**Principe du MCP**: Un protocole qui permet à un agent de découvrir dynamiquement les 'outils' (fonctions) exposés par les micro-services de données.",
+        "**Producteurs vs. Consommateurs**: Les APIs data (`users_api`, `cv_api`) sont des 'Producteurs'. Elles exposent un `mcp_server.py`. Les agents (`agent_hr_api`) sont des 'Consommateurs'. Ils utilisent un `mcp_client`.",
+        "**Découverte via `/mcp/tools`**: Un agent peut appeler l'endpoint `/mcp/tools` d'une API pour lister les fonctions disponibles et leurs descriptions, que le LLM utilisera pour décider quoi appeler.",
+        "**Invocation via `/mcp/call`**: L'appel effectif d'une fonction se fait via un POST sur `/mcp/call` avec le nom de l'outil et ses arguments."
+      ],
+      "speaker_notes": "Pour que les agents puissent utiliser les APIs, on a créé le MCP, ou Model Context Protocol. Chaque API data expose ses fonctions comme des 'outils' via un petit serveur MCP. L'agent peut ainsi demander à `cv_api` : 'Quels outils as-tu à me proposer ?'. L'API répond 'J'ai `get_cv_by_id`, `search_cvs_by_skill`...'. Ça rend le système hyper extensible : on ajoute un outil dans une API, et l'agent peut l'utiliser sans qu'on ait à modifier son code."
+    },
+    {
+      "slide_number": 13,
+      "slide_type": "text",
+      "preferred_color": "Green",
+      "title": "Flux de Communication & Résilience",
+      "subtitle": "Les patterns obligatoires pour un système distribué robuste.",
+      "content": [
+        "**Client HTTP `httpx` Standardisé**: Tout appel inter-service DOIT utiliser `httpx.AsyncClient` avec un timeout explicite (`httpx.Timeout(30.0)`). L'absence de timeout est considérée comme un bug.",
+        "**Stratégie de Retry Obligatoire**: Les appels doivent implémenter une boucle de retry avec backoff exponentiel (`asyncio.sleep(2 ** attempt)`) pour gérer les erreurs réseau ou les 5xx temporaires.",
+        "**Propagation du Tracing OTel**: La fonction `inject(headers)` d'OpenTelemetry est appelée avant chaque requête `httpx` pour propager le contexte de trace à travers les services.",
+        "**Propagation de l'Identité JWT**: Le token JWT de l'utilisateur est extrait de la requête entrante et systématiquement propagé dans le header `Authorization` des appels sortants via une `contextvar`."
+      ],
+      "speaker_notes": "Dans un monde de micro-services, le réseau n'est jamais fiable. On a donc des règles strictes. Chaque appel HTTP doit avoir un timeout et une stratégie de retry. C'est non négociable. De même, pour le debug, on propage systématiquement deux choses : le contexte de trace OpenTelemetry pour avoir une vue complète dans Tempo, et le token JWT de l'utilisateur pour la sécurité et l'imputabilité."
+    },
+    {
+      "slide_number": 14,
+      "slide_type": "chapter",
+      "preferred_color": "Purple",
+      "title": "Le Défi de la Qualité de Donnée",
+      "subtitle": "Comment garantir l'intégrité et la cohérence à grande échelle.",
+      "speaker_notes": "Avoir une belle architecture, c'est bien, mais si la donnée est corrompue, tout s'écroule. Voyons comment on s'assure de la qualité et de la cohérence de nos données."
+    },
+    {
+      "slide_number": 15,
+      "slide_type": "text",
+      "preferred_color": "Yellow",
+      "title": "Schéma & Migrations avec Liquibase",
+      "subtitle": "Gérer l'évolution de la base de données de manière contrôlée.",
+      "content": [
+        "**Source de Vérité**: Le dossier `db_migrations/changelogs/` contient les fichiers `changelog.yaml` qui décrivent l'état du schéma de chaque service.",
+        "**Migrations Idempotentes**: Liquibase garantit que les migrations peuvent être appliquées plusieurs fois sans erreur, ce qui est crucial pour les déploiements automatisés.",
+        "**Rollback Obligatoire**: Chaque `changeset` qui modifie le schéma (ex: `ALTER TABLE`) DOIT inclure une section `rollback` explicite pour permettre un retour en arrière propre en cas d'échec du déploiement.",
+        "**Seeding de Données**: Le script `seed_data.py` est synchronisé avec les migrations pour peupler les nouvelles tables avec des données initiales si nécessaire."
+      ],
+      "speaker_notes": "L'évolution du schéma de la base de données est un point critique. On utilise Liquibase. Chaque changement, que ce soit un `ALTER TABLE` ou une nouvelle contrainte, est décrit dans un fichier YAML. La règle d'or : chaque changement doit avoir son `rollback` correspondant. Ça nous a sauvé la mise plus d'une fois lors d'un déploiement qui a mal tourné."
+    },
+    {
+      "slide_number": 16,
+      "slide_type": "text",
+      "preferred_color": "Red",
+      "title": "Cache Redis: Isolation & Invalidation",
+      "subtitle": "Les règles d'or pour un cache efficace et sans bug.",
+      "content": [
+        "**Isolation Stricte des DBs**: Règle critique : chaque micro-service DOIT utiliser un numéro de DB Redis différent (0-15) ou un préfixe de clé unique. Une collision est un bug majeur.",
+        "**Matrice de Référence**: L'attribution des DBs Redis est documentée dans un fichier central (`env-vars-matrix`) pour éviter les conflits.",
+        "**Invalidation sur Mutation**: Toute opération de type POST, PUT, ou DELETE DOIT déclencher une invalidation du cache Redis correspondant. Par exemple, la création d'un item purge les clés de liste (`items:list:*`).",
+        "**Utilisation pour les Tâches Asynchrones**: Redis est aussi utilisé pour gérer l'état des tâches de fond, comme les jobs Vertex AI Batch, via des clés structurées."
+      ],
+      "speaker_notes": "Le cache, c'est un accélérateur formidable, mais aussi une source de bugs vicieux. Notre règle la plus importante : l'isolation. Chaque service a son propre espace dans Redis, soit un DB différent, soit un préfixe. On a une matrice pour suivre ça. Et bien sûr, la règle de base : si tu modifies une donnée, tu invalides le cache. Ça semble évident, mais il faut le systématiser."
+    },
+    {
+      "slide_number": 17,
+      "slide_type": "customer_story",
+      "preferred_color": "Blue",
+      "title": "Cas Concret: La Fusion de Profils",
+      "subtitle": "Assurer la cohérence éventuelle grâce à une architecture événementielle.",
+      "content": [
+        "**Problème**: Deux profils pour le même consultant ('Sébastien L.' et 'Seb Lavayssiere') existent, avec des CVs et des compétences répartis sur les deux.",
+        "**Action**: Un admin utilise l'outil de fusion dans le front-end. `users_api` est appelé pour fusionner les deux entrées.",
+        "**Événement Pub/Sub**: `users_api` publie un événement `user_merged` sur un topic Pub/Sub, contenant l'ID de l'ancien utilisateur et l'ID du nouvel utilisateur.",
+        "**Consommation Asynchrone**: `cv_api`, `competencies_api` et `items_api` sont abonnés à ce topic. Chacun consomme l'événement et met à jour ses propres tables pour ré-attribuer la propriété des CVs, scores et missions au profil unifié."
+      ],
+      "speaker_notes": "Prenons un cas concret : la fusion de deux profils. On ne peut pas juste faire un `UPDATE` dans toutes les bases de données en même temps, ce serait un cauchemar transactionnel. À la place, `users_api` publie un simple message dans Pub/Sub : 'l'utilisateur 123 est maintenant l'utilisateur 456'. Chaque service concerné écoute ce message et fait sa propre mise à jour, à son rythme. C'est le principe de la cohérence éventuelle, et c'est ce qui rend notre architecture découplée et résiliente."
+    },
+    {
+      "slide_number": 18,
+      "slide_type": "chapter",
+      "preferred_color": "Green",
+      "title": "Infrastructure Cloud sur GCP",
+      "subtitle": "Les briques de Google Cloud Platform qui font tourner Gen-Skillz.",
+      "speaker_notes": "Tout ça ne tourne pas sur mon laptop, évidemment. On s'appuie massivement sur GCP. Voyons les choix d'architecture qu'on a faits."
+    },
+    {
+      "slide_number": 19,
+      "slide_type": "text_image",
+      "preferred_color": "Purple",
+      "title": "Compute & Déploiement sur Cloud Run",
+      "subtitle": "Le choix du serverless pour une scalabilité et une simplicité maximales.",
+      "content": [
+        "**Micro-services sur Cloud Run**: Chaque service FastAPI est packagé dans un conteneur et déployé comme un service Cloud Run indépendant.",
+        "**Infrastructure as Code (IaC)**: Toute l'infrastructure GCP est définie dans des fichiers Terraform, dans le dossier `platform-engineering/`, garantissant la reproductibilité.",
+        "**Container Contract**: Nos Dockerfiles respectent des règles strictes : builds multi-stage, exécution en tant qu'utilisateur non-root (`appuser`), et `CMD` sans shell pour la sécurité.",
+        "**Scalabilité Automatique**: Cloud Run scale automatiquement le nombre d'instances de 0 à N en fonction du trafic, ce qui est parfait pour notre charge de travail variable."
+      ],
+      "image_prompt": "A diagram showing Docker containers being lifted by cranes into a futuristic cloud platform labeled 'Cloud Run', with Google Cloud Platform logos subtly integrated, bright and clean aesthetic.",
+      "speaker_notes": "Notre choix pour le compute, c'est Cloud Run. C'est du serverless pour conteneurs. On package nos services FastAPI dans des images Docker, et Cloud Run s'occupe de tout : déploiement, scaling, HTTPS... C'est simple, efficace, et ça scale à zéro, ce qui est génial pour les coûts. Toute notre infra est décrite en Terraform, donc on peut recréer un environnement complet en une seule commande."
+    },
+    {
+      "slide_number": 20,
+      "slide_type": "text",
+      "preferred_color": "Yellow",
+      "title": "Data Layer: AlloyDB, BigQuery, GCS",
+      "subtitle": "La stack de données choisie pour la performance et l'analyse.",
+      "content": [
+        "**Base Transactionnelle**: AlloyDB pour PostgreSQL, pour sa compatibilité totale avec Postgres et ses performances. C'est là qu'on utilise l'extension `pgvector`.",
+        "**Data Warehouse & FinOps**: Google BigQuery est notre entrepôt de données. On y loggue chaque appel à une IA dans la table `ai_usage` (partitionnée par jour, en `europe-west1`) pour le suivi FinOps.",
+        "**Stockage d'Objets**: Google Cloud Storage (GCS) est utilisé pour plusieurs choses : stocker le state Terraform, héberger les fichiers d'entrée/sortie des jobs Vertex AI Batch (`cv_batch` bucket), et archiver les CVs originaux."
+      ],
+      "speaker_notes": "Côté données, on a une stack assez classique mais efficace. AlloyDB pour notre base de données principale, car c'est du Postgres managé et surpuissant, compatible avec `pgvector`. BigQuery pour tout ce qui est analytique, et surtout notre suivi FinOps. Chaque appel à Gemini est loggué là-dedans. Et GCS pour le stockage de fichiers bruts."
+    },
+    {
+      "slide_number": 21,
+      "slide_type": "text",
+      "preferred_color": "Red",
+      "title": "Sécurité & Observabilité",
+      "subtitle": "Les piliers pour opérer une plateforme de production sereinement.",
+      "content": [
+        "**Sécurité Zero-Trust**: Aucun service ne fait confiance à un autre. Chaque endpoint est protégé par une dépendance `verify_jwt` qui valide un token HS256.",
+        "**Principe du Moindre Privilège**: Chaque service Cloud Run a son propre Service Account (IAM) avec les permissions minimales nécessaires pour fonctionner.",
+        "**Stack LGT (Loki, Grafana, Tempo)**: On a une stack d'observabilité complète. Les traces distribuées avec OpenTelemetry et Tempo sont cruciales pour débugger les requêtes qui traversent 5 services.",
+        "**Gestion Globale des Erreurs**: Un handler d'exception global dans chaque API intercepte les erreurs 500, les loggue, et les envoie à `prompts_api` pour analyse et amélioration continue."
+      ],
+      "speaker_notes": "Enfin, deux points non négociables en prod : la sécurité et l'observabilité. On est en mode Zero-Trust : chaque appel d'API, même en interne, doit avoir un JWT valide. Côté observabilité, on a la sainte trinité Loki, Grafana, Tempo. Avoir des traces distribuées, c'est ce qui nous permet de ne pas devenir fous quand un bug survient."
+    },
+    {
+      "slide_number": 22,
+      "slide_type": "chapter",
+      "preferred_color": "Blue",
+      "title": "Déploiement: `manage_env` & Versioning",
+      "subtitle": "Notre chaîne de CI/CD et nos conventions de versioning.",
+      "speaker_notes": "Avoir du code et une infra, c'est bien. Les mettre en production de manière fiable et répétée, c'est le vrai challenge. Parlons de notre processus de déploiement."
+    },
+    {
+      "slide_number": 23,
+      "slide_type": "text",
+      "preferred_color": "Green",
+      "title": "Le Cycle de Vie du Déploiement",
+      "subtitle": "De la modification du code au déploiement sur Cloud Run.",
+      "content": [
+        "**Détection des Changements**: Le script `deploy.sh` est le point d'entrée. Il utilise `git diff` pour détecter quels micro-services ont été modifiés depuis le dernier tag.",
+        "**Bump de Version Automatique**: Si un service a changé, le script incrémente automatiquement la version sémantique (semver) dans son fichier `VERSION` à la racine.",
+        "**Mise à Jour de la Config IaC**: Le script met également à jour la version de l'image à déployer dans les fichiers de configuration Terraform (`platform-engineering/envs/*.yaml`).",
+        "**Build & Push**: Enfin, `deploy.sh` lance le `docker build` de l'image avec le nouveau tag de version et la pousse sur Google Artifact Registry."
+      ],
+      "speaker_notes": "Notre déploiement est semi-automatisé via un script `deploy.sh`. Quand on le lance, il regarde ce qui a changé. Si on a touché au code de `cv_api`, il va automatiquement bumper la version dans le fichier `VERSION` de ce service, mettre à jour la config Terraform pour pointer vers cette nouvelle version, puis builder et pusher l'image Docker. C'est simple et ça évite les erreurs manuelles."
+    },
+    {
+      "slide_number": 24,
+      "slide_type": "text",
+      "preferred_color": "Purple",
+      "title": "Rôle de `deploy.sh` vs `manage_env.py`",
+      "subtitle": "Deux scripts, deux responsabilités distinctes.",
+      "content": [
+        "**`deploy.sh` (L'Orchestrateur)**: Sa responsabilité est de préparer les artefacts. Il gère le versioning, le build et le push des images Docker. Il ne déploie rien directement.",
+        "**`manage_env.py` (L'Exécuteur)**: Ce script Python est un wrapper autour de Terraform. Il prend en charge l'application des changements d'infrastructure (`terraform apply`).",
+        "**Idempotence**: `manage_env.py` est conçu pour être idempotent. On peut le lancer plusieurs fois, il n'appliquera que les changements nécessaires.",
+        "**Séparation des Préoccupations**: Cette séparation est clé. Les développeurs peuvent utiliser `deploy.sh` pour préparer une release, et les Ops peuvent utiliser `manage_env.py` pour la déployer en toute sécurité."
+      ],
+      "speaker_notes": "On a deux scripts principaux. `deploy.sh` prépare tout : il versionne, il build, il push. Son travail s'arrête là. Ensuite, `manage_env.py` prend le relais. C'est notre wrapper Terraform qui va réellement appliquer les changements sur GCP. Cette séparation nous permet de bien distinguer la préparation de l'artefact de son déploiement effectif."
+    },
+    {
+      "slide_number": 25,
+      "slide_type": "text",
+      "preferred_color": "Yellow",
+      "title": "Le Contrat de Versioning",
+      "subtitle": "La version est la propriété exclusive de la CI/CD.",
+      "content": [
+        "**Fichier `VERSION`**: Chaque service a un fichier `VERSION` à sa racine, qui est la source de vérité unique pour sa version.",
+        "**Injection via `APP_VERSION`**: Cette version est injectée comme variable d'environnement (`APP_VERSION`) dans le conteneur Cloud Run. Un endpoint `/version` l'expose pour l'observabilité.",
+        "**Interdiction pour l'Agent IA**: La règle est absolue : l'agent de développement Antigravity a l'interdiction formelle de modifier les fichiers `VERSION` ou les versions dans les fichiers `envs/*.yaml`.",
+        "**Responsabilité Unique**: Seul `deploy.sh` a le droit de modifier les versions. C'est une garantie que chaque changement de code est associé à une nouvelle version traçable."
+      ],
+      "speaker_notes": "Le versioning est sacré. La version d'un service est définie dans un seul fichier `VERSION`. Cette version est ensuite injectée partout, y compris dans le conteneur qui tourne en prod. Et on a une règle absolue, gravée dans le marbre pour notre agent IA : 'Tu ne touches JAMAIS aux numéros de version'. C'est le rôle de la CI, point final."
+    },
+    {
+      "slide_number": 26,
+      "slide_type": "chapter",
+      "preferred_color": "Red",
+      "title": "Dev-in-the-Loop: Coder avec Antigravity",
+      "subtitle": "Comment on utilise une IA pour accélérer notre propre développement.",
+      "speaker_notes": "Pour finir, une partie un peu méta. On utilise une IA, qu'on a baptisée Antigravity, pour nous aider à développer la plateforme. C'est notre 'pair programmer' survitaminé."
+    },
+    {
+      "slide_number": 27,
+      "slide_type": "text_image",
+      "preferred_color": "Blue",
+      "title": "Antigravity: L'Agent Développeur",
+      "subtitle": "Un partenaire de code gouverné par des règles strictes.",
+      "content": [
+        "**Agent LLM spécialisé**: Antigravity est un agent basé sur Gemini, avec un contexte et des outils spécifiques pour interagir avec notre codebase.",
+        "**Golden Rules**: Son comportement est dicté par un ensemble de 'Golden Rules' dans le fichier `AGENTS.md`. Il doit les respecter à la lettre.",
+        "**Périmètre d'Action Limité**: Il a l'interdiction formelle d'exécuter des commandes de déploiement (`docker build`, `gcloud deploy`, `terraform apply`). Son seul rôle est de lire et d'écrire du code source.",
+        "**Validation Humaine**: L'agent propose des modifications de code, mais c'est toujours le développeur humain qui valide, commite et lance le déploiement."
+      ],
+      "image_prompt": "A developer collaborating with a holographic AI assistant, looking at code on a transparent screen, futuristic office setting, cinematic lighting.",
+      "speaker_notes": "Antigravity est notre agent IA interne. On lui donne une tâche, comme 'ajoute un endpoint pour lister les missions archivées', et il écrit le code. Mais il n'est pas libre. Son comportement est contraint par des règles très strictes. La plus importante : il ne déploie jamais rien. Il code, et c'est tout. C'est nous qui gardons le contrôle."
+    },
+    {
+      "slide_number": 28,
+      "slide_type": "text",
+      "preferred_color": "Green",
+      "title": "Workflow de Correction de Bug",
+      "subtitle": "Utiliser la mémoire de l'agent pour capitaliser sur les erreurs passées.",
+      "content": [
+        "**Recherche en Mémoire d'Abord**: Face à une erreur, l'agent a l'obligation d'appeler l'outil `mcp_antigravity-memory_search_past_errors` pour voir si ce bug a déjà été résolu.",
+        "**Application de la Solution**: S'il trouve une solution, il l'applique directement. Sinon, il analyse le problème.",
+        "**Mémorisation Obligatoire**: Une fois le bug corrigé, l'agent DOIT appeler `mcp_antigravity-memory_log_error_and_solution` pour enregistrer le problème et sa solution dans sa base de connaissances.",
+        "**Capitalisation sur l'Expérience**: Ce workflow garantit que l'agent (et l'équipe) ne résout jamais deux fois le même problème. La connaissance est capitalisée automatiquement."
+      ],
+      "speaker_notes": "Son workflow de correction de bug est intéressant. Quand il voit une erreur, il ne fonce pas tête baissée. Il doit d'abord chercher dans sa 'mémoire' si on a déjà eu ce problème. S'il corrige un nouveau bug, il a l'obligation de documenter la solution dans sa base de connaissances avant de finir. C'est une boucle de feedback qui le rend de plus en plus performant."
+    },
+    {
+      "slide_number": 29,
+      "slide_type": "text",
+      "preferred_color": "Purple",
+      "title": "Interaction avec la Production",
+      "subtitle": "Permettre à l'agent d'accéder aux données réelles de manière sécurisée.",
+      "content": [
+        "**Interdiction d'Halluciner**: L'agent ne doit jamais inventer de métriques de production (coûts, erreurs, etc.).",
+        "**Utilisation de `mcp_cli.py`**: Pour interroger l'état de la production (logs, santé des services, contenu de Redis), l'agent utilise un script CLI, `mcp_cli.py`, qui s'authentifie et appelle les outils MCP de monitoring.",
+        "**Accès aux Données FinOps**: Il a un accès direct aux outils de `analytics-mcp-prd` pour obtenir des rapports de coûts réels via des appels comme `get_finops_report`.",
+        "**Analyse Basée sur des Faits**: Cela lui permet de baser ses analyses et ses suggestions sur des données réelles de production, et non sur des suppositions."
+      ],
+      "speaker_notes": "Pour éviter qu'il hallucine des problèmes, on lui a donné un accès en lecture seule à la production. Via un script CLI sécurisé, il peut consulter les logs, vérifier la santé des services, et surtout, obtenir les vrais chiffres de coûts de notre dashboard FinOps. Quand on lui demande 'Est-ce que ma dernière feature a augmenté les coûts ?', il ne devine pas, il va chercher la réponse dans BigQuery."
+    },
+    {
+      "slide_number": 30,
+      "slide_type": "text",
+      "preferred_color": "Yellow",
+      "title": "Qualité de Code & Refactoring",
+      "subtitle": "L'agent comme gardien de la qualité et de l'architecture.",
+      "content": [
+        "**Application des Standards**: L'agent est programmé pour respecter nos standards de code, notamment la conformité PEP8 via des vérifications `flake8`.",
+        "**Lutte contre les 'God Files'**: Il surveille la taille des fichiers. S'il doit ajouter du code à un `router.py` de plus de 400 lignes, il doit refuser et proposer un plan de refactoring d'abord.",
+        "**Pattern 'Service Layer'**: Il est entraîné à extraire la logique métier des routeurs HTTP pour la placer dans des modules de service dédiés, améliorant la séparation des préoccupations.",
+        "**Mise à Jour de la Documentation**: Après chaque modification, il met à jour le `README.md` du service concerné avec un résumé du changement et la nouvelle version."
+      ],
+      "speaker_notes": "Enfin, on l'utilise comme un gardien de la qualité. Il connaît nos règles, comme la taille maximale des fichiers. Si un fichier devient trop gros, il va de lui-même proposer de le découper en suivant notre pattern 'Service Layer'. Il s'assure aussi que le code est propre et que la documentation est à jour. C'est un gain de temps et de rigueur énorme pour l'équipe. Merci de votre attention, et maintenant, place aux questions !"
+    }
+  ],
+  "metadata": {
+    "keywords": [
+      "Gen-Skillz",
+      "IA",
+      "GCP",
+      "Cloud Run",
+      "Microservices",
+      "Agentique",
+      "Gemini",
+      "pgvector",
+      "Terraform",
+      "Observabilité",
+      "FinOps",
+      "REX"
+    ],
+    "technologies": [
+      "FastAPI",
+      "Python",
+      "Vue.js",
+      "Docker",
+      "Google Cloud Platform",
+      "Cloud Run",
+      "AlloyDB",
+      "pgvector",
+      "BigQuery",
+      "Pub/Sub",
+      "Redis",
+      "Terraform",
+      "Liquibase",
+      "OpenTelemetry",
+      "Grafana",
+      "Prometheus",
+      "Gemini",
+      "Vertex AI"
+    ]
+  }
+}

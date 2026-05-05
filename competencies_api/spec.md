@@ -76,6 +76,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **DELETE** `/{competency_id}` : Delete Competency
 - **GET** `/{competency_id}/users` : List Competency Users
 - **POST** `/bulk_tree` : Bulk Import Tree
+- **POST** `/bulk/cleanup-orphans` : Supprime toutes les compétences feuilles orphelines (sans consultants)
 - **POST** `/stats/counts` : Get Competency Stats
 - **POST** `/evaluations/batch/search` : Search Batch Evaluations
 - **POST** `/evaluations/batch/users` : Search Batch Users Evaluations
@@ -93,6 +94,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/analytics/agency-coverage` : Get Agency Competency Coverage
 - **GET** `/analytics/skill-gaps` : Get Skill Gaps
 - **GET** `/analytics/similar-consultants/{user_id}` : Get Similar Consultants
+- **GET** `/analytics/taxonomy-quality` : Get Taxonomy Quality
 - **POST** `/user/{user_id}/assign/bulk` : Assign Competencies Bulk
 - **POST** `/user/{user_id}/assign/{competency_id}` : Assign Competency To User
 - **DELETE** `/user/{user_id}/evaluations` : Clear User Evaluations
@@ -100,7 +102,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/user/{user_id}` : List User Competencies
 - **POST** `/internal/users/merge` : Merge Users
 - **DELETE** `/user/{user_id}/clear` : Clear User Competencies
-- **DELETE** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp

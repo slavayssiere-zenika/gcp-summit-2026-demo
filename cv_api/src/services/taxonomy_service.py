@@ -21,7 +21,7 @@ import database
 import httpx
 from opentelemetry.propagate import inject
 from src.cvs.models import CVProfile
-from src.cvs.task_state import task_state_manager, tree_task_manager
+from src.cvs.task_state import tree_task_manager
 from src.gemini_retry import generate_content_with_retry
 from src.services.config import COMPETENCIES_API_URL, PROMPTS_API_URL
 from src.services.finops import log_finops
@@ -48,13 +48,15 @@ async def fetch_prompt(prompt_name: str, auth_header: str) -> str:
             res_prompt = await http_client.get(
                 f"{PROMPTS_API_URL.rstrip('/')}/{prompt_name}",
                 headers=headers_downstream,
-                timeout=5.0,
+                timeout=15.0,
             )
             res_prompt.raise_for_status()
             return res_prompt.json()["value"]
     except Exception as e:
-        logger.error(f"Prompt {prompt_name} indisponible (erreur: {e}). Arrêt de l'agent (Fail-fast).")
-        raise RuntimeError(f"Critical failure: System prompt '{prompt_name}' could not be fetched from prompts_api. ({e})") from e
+        logger.error(
+            f"Prompt {prompt_name} indisponible (erreur: {type(e).__name__} - {e}). Arrêt de l'agent (Fail-fast).")
+        raise RuntimeError(
+            f"Critical failure: System prompt '{prompt_name}' could not be fetched from prompts_api. ({type(e).__name__} - {e})") from e
 
 
 async def get_existing_competencies(auth_header: str) -> list[str]:

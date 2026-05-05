@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
@@ -14,7 +14,7 @@ if not SECRET_KEY:
 os.environ.pop("SECRET_KEY", None)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15  # 15 minutes
-REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -30,26 +30,29 @@ def get_password_hash(password):
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
-    
+        expire = datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
 security = HTTPBearer(auto_error=False)
+
 
 def _is_user_blacklisted(username: str) -> bool:
     """Vérifie si un utilisateur est blacklisté (suspendu) en Redis (F-05)."""
@@ -61,6 +64,7 @@ def _is_user_blacklisted(username: str) -> bool:
         return _r.exists(f"jwt:blacklist:user:{username}") > 0
     except Exception:
         return False  # Fail-open si Redis indisponible (évite le blocage total)
+
 
 def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     # 1. Try token from Authorization header if present
@@ -81,13 +85,13 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
         except JWTError:
             # If header token is invalid, we don't fail yet, we'll try the cookie
             pass
-    
+
     # 2. Try token from HTTP-Only cookie
     token = request.cookies.get("access_token")
     if not token:
         # Check if we were provided a credentials object that failed
         if credentials:
-             raise HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token invalide ou expiré",
                 headers={"WWW-Authenticate": "Bearer"},
@@ -97,7 +101,7 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
             detail="Token invalide ou manquant",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") == "refresh":

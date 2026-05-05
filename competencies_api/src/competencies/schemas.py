@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -48,11 +48,15 @@ class UserInfo(BaseModel):
     is_active: bool
 
 
-class PaginationResponse(BaseModel):
-    items: List[CompetencyResponse]
+T = TypeVar("T")
+
+
+class PaginationResponse(BaseModel, Generic[T]):
+    items: List[T]
     total: int
     skip: int
     limit: int
+
 
 class MergeInstruction(BaseModel):
     """Instruction de fusion d'un doublon sémantique vers un canonique.
@@ -66,7 +70,7 @@ class MergeInstruction(BaseModel):
 
 class SweepAssignment(BaseModel):
     """Assignation d'une compétence orpheline vers un pilier existant.
-    
+
     Générée par le LLM lors de la phase Sweep du recalcul de la taxonomie.
     Permet de reclassifier les compétences absentes du Reduce dans un pilier existant
     plutôt que de les laisser tomber dans les 'Archives / Non classées'.
@@ -92,12 +96,14 @@ class TreeImportRequest(BaseModel):
 class StatsRequest(BaseModel):
     user_ids: Optional[List[int]] = None
     limit: int = 10
-    sort_order: str = "desc" # "asc" or "desc"
+    sort_order: str = "desc"  # "asc" or "desc"
+
 
 class CompetencyCount(BaseModel):
     id: int
     name: str
     count: int
+
 
 class CompetencyStatsResponse(BaseModel):
     items: List[CompetencyCount]
@@ -126,6 +132,7 @@ class UserScoreRequest(BaseModel):
     score: float = Field(..., ge=0.0, le=5.0, description="Note de 0 à 5 (multiples de 0.5 recommandés)")
     comment: Optional[str] = Field(None, max_length=500)
 
+
 class BatchEvaluationRequest(BaseModel):
     """Évaluations d'un consultant pour plusieurs compétences.
     Accepte 'user_id' (int) ou 'user_ids' (list → premier élément utilisé).
@@ -146,8 +153,10 @@ class BatchEvaluationRequest(BaseModel):
             data["competency_ids"] = [data["competency_id"]]
         return data
 
+
 class BatchEvaluationResponse(BaseModel):
     evaluations: Dict[int, CompetencyEvaluationResponse]
+
 
 class BatchUsersEvaluationRequest(BaseModel):
     """Évaluations de plusieurs consultants pour une compétence.

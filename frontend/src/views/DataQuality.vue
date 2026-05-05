@@ -72,6 +72,10 @@ const scoringLoading = ref(false)
 const driveStats = ref<DriveStats | null>(null)
 const driveLoading = ref(false)
 
+const taxonomyStatus = ref<any>(null)
+const taxonomyQuality = ref<any>(null)
+const taxonomyLoading = ref(false)
+
 const lastRefreshDate = ref<Date | null>(null)
 const relativeTime = ref('')
 let pollId: ReturnType<typeof setInterval>
@@ -217,6 +221,30 @@ const fetchDriveStats = async () => {
   }
 }
 
+const fetchTaxonomy = async () => {
+  taxonomyLoading.value = true
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    
+    const [statusRes, qualityRes] = await Promise.allSettled([
+      axios.get('/api/cv/recalculate_tree/status', { headers }),
+      axios.get('/api/competencies/analytics/taxonomy-quality', { headers })
+    ])
+
+    if (statusRes.status === 'fulfilled') {
+      taxonomyStatus.value = statusRes.value.data
+    }
+    if (qualityRes.status === 'fulfilled') {
+      taxonomyQuality.value = qualityRes.value.data
+    }
+  } catch (e) {
+    console.error('taxonomy status fetch failed', e)
+  } finally {
+    taxonomyLoading.value = false
+  }
+}
+
 const updateRelativeTime = () => {
   if (!lastRefreshDate.value) { relativeTime.value = ''; return }
   const diffMs = Date.now() - lastRefreshDate.value.getTime()
@@ -230,7 +258,7 @@ const updateRelativeTime = () => {
 }
 
 const refresh = async () => {
-  await Promise.all([fetchDq(), fetchScoring(), fetchDriveStats()])
+  await Promise.all([fetchDq(), fetchScoring(), fetchDriveStats(), fetchTaxonomy()])
   lastRefreshDate.value = new Date()
   updateRelativeTime()
 }
@@ -514,7 +542,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       <div class="card-header">
         <FolderOpen :size="18" class="icon-violet" />
         <span>Pipeline Drive — Ingestion des CVs</span>
-        <RouterLink to="/admin/drive-ingestion" class="header-link">
+        <RouterLink to="/admin/bulk-import" class="header-link">
           Dashboard complet <ArrowRight :size="13" />
         </RouterLink>
       </div>
@@ -595,6 +623,53 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       </div>
     </div>
 
+    <!-- ── TAXONOMY QUALITY ── -->
+    <div class="card">
+      <div class="card-header">
+        <Brain :size="18" class="icon-amber" />
+        <span>Pipeline Taxonomie — Quality Gate</span>
+        <RouterLink to="/admin/reanalysis" class="header-link">
+          Gestion de l'arbre <ArrowRight :size="13" />
+        </RouterLink>
+      </div>
+      
+      <div v-if="taxonomyLoading && !taxonomyQuality" class="scoring-idle">
+        <Loader2 :size="16" class="spin" /> Chargement de l'état taxonomie…
+      </div>
+      
+      <div v-if="taxonomyStatus && taxonomyStatus.status === 'batch_running'" class="scoring-idle" style="background: rgba(245, 158, 11, 0.08); color: #b45309; border-bottom: 1px solid rgba(245, 158, 11, 0.2);">
+        <Loader2 :size="16" class="spin icon-amber" /> <strong>Batch Vertex AI en cours...</strong> Le pipeline est en cours d'exécution.
+      </div>
+      
+      <template v-if="taxonomyQuality">
+        <div class="drive-hero">
+          <div class="drive-grade" :style="{ borderColor: taxonomyQuality.grade === 'A' ? '#10b981' : taxonomyQuality.grade === 'B' ? '#3b82f6' : taxonomyQuality.grade === 'C' ? '#f59e0b' : '#ef4444', color: taxonomyQuality.grade === 'A' ? '#10b981' : taxonomyQuality.grade === 'B' ? '#3b82f6' : taxonomyQuality.grade === 'C' ? '#f59e0b' : '#ef4444' }">
+            {{ taxonomyQuality.grade }}
+          </div>
+          <div class="drive-volumes">
+            <div class="dv-item"><span class="dv-n" :class="taxonomyQuality.metrics?.balance?.pct >= 80 ? 'text-ok' : taxonomyQuality.metrics?.balance?.pct >= 60 ? 'text-warn' : 'text-err'">{{ taxonomyQuality.metrics?.balance?.pct ?? 0 }}%</span><span class="dv-l">Balance Piliers</span></div>
+            <div class="dv-item"><span class="dv-n" :class="taxonomyQuality.metrics?.archives?.pct >= 90 ? 'text-ok' : taxonomyQuality.metrics?.archives?.pct >= 70 ? 'text-warn' : 'text-err'">{{ taxonomyQuality.metrics?.archives?.pct ?? 0 }}%</span><span class="dv-l">Santé Archives</span></div>
+            <div class="dv-item"><span class="dv-n">{{ fmt(taxonomyQuality.details?.active_nodes ?? 0) }}</span><span class="dv-l">Compétences</span></div>
+          </div>
+          <div class="drive-score">{{ taxonomyQuality.score }}<span class="drive-score-max">/100</span></div>
+        </div>
+
+        <div v-if="taxonomyQuality.issues && taxonomyQuality.issues.length > 0" class="issues-box">
+          <div v-for="issue in taxonomyQuality.issues" :key="issue" class="issue-line">
+            <AlertTriangle :size="13" class="issue-icon" />
+            <span class="issue-text">{{ issue }}</span>
+          </div>
+        </div>
+        <div v-else class="all-ok">
+          <CheckCircle2 :size="16" /> La taxonomie est saine, bien équilibrée et optimisée.
+        </div>
+      </template>
+      
+      <div v-else-if="!taxonomyLoading" class="scoring-idle">
+        <Activity :size="16" /> Aucun rapport de Quality Gate récupéré pour la taxonomie.
+      </div>
+    </div>
+
     <!-- ── PIPELINE GLOBALE — SYNTHÈSE ── -->
     <div class="card">
       <div class="card-header">
@@ -617,7 +692,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
         </RouterLink>
 
         <!-- Scoring IA -->
-        <RouterLink to="/admin/reanalysis" class="pipeline-card pipeline-card-link">
+        <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
           <div class="pc-icon" :class="scoringStatus.status === 'completed' ? 'pc-icon-grade-a' : scoringStatus.status === 'error' ? 'pc-icon-grade-d' : 'pc-icon-grade-b'"><Zap :size="22" /></div>
           <div class="pc-label">Scoring IA Compétences</div>
           <div class="pc-value" v-if="dqReport?.metrics?.ai_scoring">{{ (dqReport.metrics.ai_scoring as any).pct }}%</div>

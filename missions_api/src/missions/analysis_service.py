@@ -6,11 +6,12 @@ import re
 import traceback
 
 import database
-import docx
 import httpx
 from google import genai
 from google.genai import types
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
+from shared.schemas.pagination import PaginationResponse
 from sqlalchemy import select
 from src.gemini_retry import (embed_content_with_retry,
                               generate_content_with_retry)
@@ -30,6 +31,7 @@ else:
 CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
+
 async def process_mission_core(title: str, description: str, url: str, file_bytes: bytes, file_mime: str, headers: dict, user_email: str, auth_token: str, task_id: str, mission_id: int = None):
     logger = logging.getLogger(__name__)
     if not client:
@@ -41,7 +43,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             # 1. Fetch from Cache
             extract_prompt = await get_cached_prompt(http_client, "missions_api.extract_mission_info", headers)
             base_staffing_prompt = await get_cached_prompt(http_client, "missions_api.staffing_heuristics", headers)
-            
+
             # Preparation du contenu multimodal
             from .document_extractor import extract_document_contents
             gemini_contents, final_description = await extract_document_contents(
@@ -51,7 +53,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
 
             # 2. Extract & Summarize
             model_extract = os.getenv("GEMINI_MISSIONS_MODEL", os.getenv("GEMINI_MODEL"))
-            
+
             try:
                 COMPETENCIES_API_URL_LOCAL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
                 # Pagination scalable : pages de 100 nœuds racines jusqu'à épuisement
@@ -66,7 +68,15 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     )
                     if page_res.status_code != 200:
                         break
-                    page_items = page_res.json().get("items", [])
+                    try:
+                        page_data = PaginationResponse[dict].model_validate(page_res.json())
+                        page_items = page_data.items
+                    except ValidationError as ve:
+                        logger.warning(
+                            "[analysis_service] Rupture de contrat API competencies",
+                            extra={"error": str(ve), "raw_keys": list(page_res.json().keys())},
+                        )
+                        break  # Stopper proprement la pagination
                     items.extend(page_items)
                     if len(page_items) < page_size:
                         break  # dernière page
@@ -81,7 +91,6 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             except Exception as e:
                 logger.warning(f"Failed to fetch competencies tree for mission context: {e}")
 
-
             res_extract = await generate_content_with_retry(
                 client,
                 model=model_extract,
@@ -89,10 +98,10 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema={
-                        "type": "object", 
+                        "type": "object",
                         "properties": {
                             "competencies": {
-                                "type": "array", 
+                                "type": "array",
                                 "items": {"type": "string"},
                                 "description": "Liste de domaines ou compétences parentes larges (ex: Frontend, DevOps, Cloud) au lieu de technologies de niche."
                             },
@@ -101,7 +110,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                                 "type": "integer",
                                 "description": "Durée totale estimée de la mission en jours ouvrés. Extraire depuis des mentions comme '3 mois', '6 semaines', '1 an', '2 sprints'. Convertir : 1 mois = 20 jours, 1 semaine = 5 jours. Retourner 0 si aucune durée n'est mentionnée."
                             }
-                        }, 
+                        },
                         "required": ["competencies", "summary", "mission_duration_days"]
                     }
                 )
@@ -126,7 +135,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         },
                         headers=headers
                     )
-                except Exception: raise
+                except Exception:
+                    raise
             await fast_log_finops("RAG_Mission_Extraction", model_extract, res_extract.usage_metadata)
 
             extracted_data = json.loads(res_extract.text)
@@ -147,11 +157,12 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     c_no_parens = re.sub(r'\(.*?\)', '', c_clean).strip()
                     parens_matches = re.findall(r'\((.*?)\)', c_clean)
                     in_parens = any(p.strip() in known_leaves for p in parens_matches)
-                    
+
                     if c_clean not in known_leaves and c_no_parens not in known_leaves and not in_parens:
                         new_skills.append(c)
                 if new_skills:
-                    logger.info(f"[Mission→Taxonomy] {len(new_skills)} compétences candidates à suggestion : {new_skills}")
+                    logger.info(
+                        f"[Mission→Taxonomy] {len(new_skills)} compétences candidates à suggestion : {new_skills}")
                     suggest_tasks = [
                         http_client.post(
                             f"{COMPETENCIES_API_URL_LOCAL.rstrip('/')}/suggestions",
@@ -164,7 +175,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     await asyncio.gather(*suggest_tasks, return_exceptions=True)
             except Exception as e:
                 logger.warning(f"[Mission→Taxonomy] Échec de la soumission des suggestions : {e}")
-            
+
             # Subsituer la description par le résumé de Gemini si on part d'un doc brut
             if not final_description or len(final_description) < 60:
                 final_description = extracted_data.get("summary", final_description)
@@ -179,16 +190,18 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             if extracted_competencies:
                 payload["skills"] = extracted_competencies
 
-            logger.info(f"Recherche CV_API avec requête POST intégrale")
+            logger.info("Recherche CV_API avec requête POST intégrale")
             cv_res = await http_client.post(f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers)
             is_fallback = False
             if cv_res.status_code == 200:
                 is_fallback = (cv_res.headers.get("X-Fallback-Full-Scan", "false").lower() == "true")
                 missing_embeddings = cv_res.headers.get("X-Missing-Embeddings-Count")
                 if missing_embeddings and int(missing_embeddings) > 0:
-                    logger.warning(f"⚠️ DATA ANOMALY: {missing_embeddings} profils exclus de la recherche CV en raison d'embeddings manquants. Utilisez la ré-analyse de masse.")
+                    logger.warning(
+                        f"⚠️ DATA ANOMALY: {missing_embeddings} profils exclus de la recherche CV en raison d'embeddings manquants. Utilisez la ré-analyse de masse.")
                 cv_res_json = cv_res.json()
-                logger.info(f"CV_API a répondu avec {len(cv_res_json)} résultats bruts. Fallback_full_scan={is_fallback}")
+                logger.info(
+                    f"CV_API a répondu avec {len(cv_res_json)} résultats bruts. Fallback_full_scan={is_fallback}")
 
                 async def _enrich_candidate(p: dict) -> dict | None:
                     """Enrichit un candidat avec ses données users_api ET cv_api (seniority, skills)."""
@@ -213,7 +226,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     if cv_details_res.status_code == 200:
                         cv_details = cv_details_res.json()
                     else:
-                        logger.debug(f"cv_api /user/{u_id}/details indisponible (HTTP {cv_details_res.status_code}), seniority sera inféré.")
+                        logger.debug(
+                            f"cv_api /user/{u_id}/details indisponible (HTTP {cv_details_res.status_code}), seniority sera inféré.")
 
                     # Inférer la seniority depuis years_of_experience si non fournie par l'utilisateur
                     seniority = u_info.get("seniority") or cv_details.get("seniority")
@@ -234,7 +248,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         or cv_details.get("skills")
                         or []
                     )
-                    
+
                     skill_domains = find_domains_for_skills(skills, items)
 
                     return {
@@ -256,7 +270,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             logger.info(f"Candidats préfiltrés (actifs) après recherche: {[c['user_id'] for c in candidates_data]}")
 
             if not candidates_data:
-                skills_str = ", ".join(extracted_competencies) if extracted_competencies else "identifiées pour cette mission"
+                skills_str = ", ".join(
+                    extracted_competencies) if extracted_competencies else "identifiées pour cette mission"
                 proposed_team = [{
                     "user_id": 0,
                     "full_name": "Aucun profil disponible",
@@ -283,7 +298,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     contents=staffing_prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        response_schema={"type": "array", "items": {"type": "object", "properties": {"user_id": {"type": "integer"}, "full_name": {"type": "string"}, "role": {"type": "string"}, "justification": {"type": "string"}, "estimated_days": {"type": "integer"}}, "required": ["user_id", "full_name", "role", "justification", "estimated_days"]}}
+                        response_schema={"type": "array", "items": {"type": "object", "properties": {"user_id": {"type": "integer"}, "full_name": {"type": "string"}, "role": {
+                            "type": "string"}, "justification": {"type": "string"}, "estimated_days": {"type": "integer"}}, "required": ["user_id", "full_name", "role", "justification", "estimated_days"]}}
                     )
                 )
                 await fast_log_finops("RAG_Mission_Staffing", model_staffing, res_staffing.usage_metadata)
@@ -323,7 +339,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         await db.commit()
                         await db.refresh(existing_mission)
                         await task_manager.update_status_success(task_id, existing_mission.id)
-                        from metrics import MISSIONS_CREATED_TOTAL
+                        from metrics import MISSIONS_CREATED_TOTAL  # noqa: F402
                         MISSIONS_CREATED_TOTAL.labels(status="reanalyze_success").inc()
                         break
 
@@ -351,7 +367,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                 await db.commit()
                 await db.refresh(new_mission)
                 await task_manager.update_status_success(task_id, new_mission.id)
-                from metrics import MISSIONS_CREATED_TOTAL
+                from metrics import MISSIONS_CREATED_TOTAL  # noqa: F402
                 MISSIONS_CREATED_TOTAL.labels(status="success").inc()
                 break
 

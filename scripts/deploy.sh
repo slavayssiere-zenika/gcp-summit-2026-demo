@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -eo pipefail
 
 # Configuration
 PROJECT_ID="slavayssiere-sandbox-462015"
@@ -17,10 +17,7 @@ RESET='\033[0m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 
-# Aide (vérifié avant tout autre traitement)
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-  # show_help est défini plus bas, mais on peut le définir ici ou appeler un bloc dédié
-  # Pour simplifier, on s'assure que show_help est accessible ou on déplace sa définition
+show_help() {
   echo -e "${RED}Zenika Console - Déploiement GCP${RESET}"
   echo ""
   echo "Usage: $0 [SERVICE...] [BUMP_TYPE]"
@@ -44,15 +41,23 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  patch (défaut), minor, major, none"
   echo ""
   echo "Options:"
-  echo "  --no-deploy    Construit et pousse les images Docker uniquement, ignore le déploiement Cloud Run"
-  echo "  --skip-unchanged Ignore le build/deploy des services qui n'ont pas changé depuis leur dernier tag"
+  echo "  --no-deploy        Construit et pousse les images Docker uniquement, ignore le déploiement Cloud Run"
+  echo "  --force-all        Force le rebuild de TOUS les services (même ceux sans changement détecté)"
+  echo "  --skip-tests       Bypasse la gate de tests unitaires (HOTFIX UNIQUEMENT — apparaîtra dans le summary)"
+  echo "  --mutation-tests   Active les tests de mutation mutmut (opt-in, lent ~5-15 min/service)"
+  echo "  --mutation-strict  --mutation-tests + bloque le build si score < seuil (défaut: 60%)"
+  echo "Note: Par défaut, seuls les services ayant changé depuis leur dernier build sont reconstruits."
   echo "Note: sync_prompts est aussi exécuté automatiquement après tout déploiement."
   echo ""
   echo "Exemples:"
-
   echo "  $0 all minor"
   echo "  $0 users_api cv_api minor"
   echo "  $0 db_migrations"
+}
+
+# A8 — show_help() extraite en fonction propre (appelable aussi depuis d'autres contextes)
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  show_help
   exit 0
 fi
 
@@ -60,7 +65,25 @@ fi
 DEPLOYS_SUCCESS=()
 DEPLOYS_FAILED=()
 DEPLOYS_SKIPPED=()
+TESTS_SKIPPED=()  # Services dont les tests ont été bypassés via --skip-tests
 CURRENT_DEPLOYING_SERVICE=""
+SKIP_TESTS=false
+SKIP_UNCHANGED=true    # Défaut : rebuild uniquement ce qui a changé (opt-out via --force-all)
+FORCE_ALL=false        # Rebuild tout, même si aucun changement détecté
+RUN_MUTATION_TESTS=false   # Opt-in : --mutation-tests
+MUTATION_STRICT=false      # Opt-in : --mutation-strict (bloque le build si score < seuil)
+MUTATION_SCORE_THRESHOLD=60  # Seuil minimum de mutants tués (%) pour passer la gate
+declare -A COVERAGE_RESULTS   # service -> "75%" | "N/A" | "SKIPPED"
+declare -A MUTATION_RESULTS   # service -> "75% (50/67)" | "N/A" | "SKIPPED"
+
+# Répertoire de logs par run — conservé après exécution pour debug
+LOG_DIR="./deploy_logs/$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$LOG_DIR"
+
+# Tableau global des fichiers temporaires — nettoyé par le trap EXIT/INT/TERM (P0/R3)
+_TMPFILES=()
+_cleanup_tmpfiles() { [ ${#_TMPFILES[@]} -gt 0 ] && rm -f "${_TMPFILES[@]}"; }
+trap '_cleanup_tmpfiles' EXIT INT TERM
 
 get_display_version() {
   local raw_name=$1
@@ -87,7 +110,15 @@ print_summary() {
     echo -e "              ${RED}⚠️ DÉPLOIEMENTS TERMINÉS AVEC ERREURS${RESET}"
   fi
   echo -e "${GREY}============================================================${RESET}"
-  
+
+  if [ ${#TESTS_SKIPPED[@]} -gt 0 ]; then
+    echo -e "${RED}🚨 ATTENTION — TESTS UNITAIRES BYPASSÉS (--skip-tests) :${RESET}"
+    for svc in "${TESTS_SKIPPED[@]}"; do
+      echo -e "   ⚠️  ${svc} (déployé SANS validation des tests)"
+    done
+    echo -e "${RED}   → Ces services doivent être re-déployés avec les tests dès que possible !${RESET}"
+  fi
+
   if [ ${#DEPLOYS_SUCCESS[@]} -gt 0 ]; then
     echo -e "${GREEN}✅ RÉUSSIS :${RESET}"
     for svc in "${DEPLOYS_SUCCESS[@]}"; do
@@ -103,27 +134,27 @@ print_summary() {
       echo -e "   - ${svc}${ver}"
     done
   fi
-  
+
   if [ ${#DEPLOYS_FAILED[@]} -gt 0 ]; then
     local build_failures=()
     local deploy_failures=()
-    
+
     for svc in "${DEPLOYS_FAILED[@]}"; do
-      if [[ "$svc" == *"Build error"* ]]; then
+      if [[ "$svc" == *"Build error"* ]] || [[ "$svc" == *"Tests"* ]]; then
         build_failures+=("$svc")
       else
         deploy_failures+=("$svc")
       fi
     done
-    
+
     if [ ${#build_failures[@]} -gt 0 ]; then
-      echo -e "${RED}❌ ÉCHECS DE BUILD (Docker/Local) :${RESET}"
+      echo -e "${RED}❌ ÉCHECS DE BUILD / TESTS (Docker/Local) :${RESET}"
       for svc in "${build_failures[@]}"; do
         local ver=$(get_display_version "$svc")
         echo -e "   - ${svc}${ver}"
       done
     fi
-    
+
     if [ ${#deploy_failures[@]} -gt 0 ]; then
       echo -e "${RED}❌ ÉCHECS DE DÉPLOIEMENT (Cloud Run/GCP) :${RESET}"
       for svc in "${deploy_failures[@]}"; do
@@ -132,8 +163,150 @@ print_summary() {
       done
     fi
   fi
+
+  # ── Rapport de couverture + mutation des services rebuildés ──────────────────
+  if [ ${#COVERAGE_RESULTS[@]} -gt 0 ]; then
+    local HAS_MUTATION=false
+    [ ${#MUTATION_RESULTS[@]} -gt 0 ] && HAS_MUTATION=true
+
+    echo -e "${GREY}------------------------------------------------------------${RESET}"
+    if [ "$HAS_MUTATION" = true ]; then
+      echo -e "📊 ${GREY}QUALITÉ DE TEST (services rebuildés)${RESET}"
+      echo -e "${GREY}------------------------------------------------------------${RESET}"
+      printf "   %-30s %-18s %s\n" "SERVICE" "COUVERTURE" "MUTATION SCORE"
+      printf "   %-30s %-18s %s\n" "-------" "----------" "--------------"
+    else
+      echo -e "📊 ${GREY}COUVERTURE DE TEST (services rebuildés)${RESET}"
+      echo -e "${GREY}------------------------------------------------------------${RESET}"
+      printf "   %-35s %s\n" "SERVICE" "COUVERTURE"
+      printf "   %-35s %s\n" "-------" "----------"
+    fi
+
+    for svc in "${!COVERAGE_RESULTS[@]}"; do
+      local cov="${COVERAGE_RESULTS[$svc]}"
+      local cov_color="$RESET"
+      local cov_icon="📊"
+      local num
+      num=$(echo "$cov" | tr -d '%❌ ')
+      if [[ "$cov" == "SKIPPED" ]]; then
+        cov_color="$YELLOW"; cov_icon="⏭️ "
+      elif [[ "$cov" == "N/A" ]]; then
+        cov_color="$GREY"; cov_icon="➖ "
+      elif [[ "$num" =~ ^[0-9]+$ ]]; then
+        if [ "$num" -ge 80 ]; then
+          cov_color="$GREEN"; cov_icon="✅"
+        elif [ "$num" -ge 50 ]; then
+          cov_color="$YELLOW"; cov_icon="⚠️ "
+        else
+          cov_color="$RED"; cov_icon="❌"
+        fi
+      fi
+
+      if [ "$HAS_MUTATION" = true ]; then
+        local mut="${MUTATION_RESULTS[$svc]:-—}"
+        local mut_color="$RESET"
+        local mut_icon="🧬"
+        local mut_num
+        mut_num=$(echo "$mut" | grep -oE '^[0-9]+' || echo "")
+        if [[ "$mut" == "SKIPPED" || "$mut" == "—" ]]; then
+          mut_color="$GREY"; mut_icon="➖ "
+        elif [[ "$mut" == *"❌"* ]]; then
+          mut_color="$RED"; mut_icon="❌"
+        elif [[ "$mut_num" =~ ^[0-9]+$ ]]; then
+          if [ "$mut_num" -ge 80 ]; then
+            mut_color="$GREEN"; mut_icon="✅"
+          elif [ "$mut_num" -ge "$MUTATION_SCORE_THRESHOLD" ]; then
+            mut_color="$YELLOW"; mut_icon="⚠️ "
+          else
+            mut_color="$RED"; mut_icon="❌"
+          fi
+        fi
+        printf "   %-30s ${cov_color}%-18s${RESET} ${mut_color}%s %s${RESET}\n" \
+          "$svc" "${cov_icon} ${cov}" "${mut_icon}" "$mut"
+      else
+        printf "   %-35s ${cov_color}%s %s${RESET}\n" "$svc" "$cov_icon" "$cov"
+      fi
+    done
+
+    if [ "$HAS_MUTATION" = true ]; then
+      echo -e "   ${GREY}(seuil mutation: ≥${MUTATION_SCORE_THRESHOLD}% mutants tués)${RESET}"
+    fi
+  fi
+  # ─────────────────────────────────────────────────────────────────────────────
+
   echo -e "${GREY}============================================================${RESET}\n"
-  
+
+  # ── Génération du fichier prompt Antigravity ─────────────────────────────────────────
+  local PROMPT_FILE="${LOG_DIR}/antigravity_prompt.md"
+  local HAS_ERRORS=false
+  {
+    echo "# Rapport de déploiement — $(date '+%Y-%m-%d %H:%M')"
+    echo ""
+    echo "**Contexte** : résultat de \`./scripts/deploy.sh\` sur le mono-repo Zenika."
+    echo "Voici les erreurs et warnings à analyser :"
+    echo ""
+
+    # 1. Logs de tests en échec
+    for f in "${LOG_DIR}"/*_tests.log; do
+      [ -f "$f" ] || continue
+      local svc_name
+      svc_name=$(basename "$f" _tests.log)
+      # Extraire uniquement les lignes importantes (ERRORS, FAILED, ERROR, NameError...)
+      local errors
+      errors=$(grep -E 'ERROR|FAILED|Error|Exception|NameError|ImportError|assert' "$f" \
+        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info' \
+        | head -30)
+      if [ -n "$errors" ]; then
+        HAS_ERRORS=true
+        echo "## ❌ Tests : ${svc_name}"
+        echo '```'
+        echo "$errors"
+        echo '```'
+        # Lignes de contexte : les 20 dernières lignes du log (résumé pytest)
+        echo "**Résumé (fin du log)** :"
+        echo '```'
+        tail -20 "$f"
+        echo '```'
+        echo ""
+      fi
+    done
+
+    # 2. Logs mutmut si échec strict
+    for f in "${LOG_DIR}"/*_mutation.log; do
+      [ -f "$f" ] || continue
+      local svc_name
+      svc_name=$(basename "$f" _mutation.log)
+      local mut_errors
+      mut_errors=$(grep -E 'BadTestExecution|Traceback|Error|FAILED' "$f" | head -10)
+      if [ -n "$mut_errors" ]; then
+        HAS_ERRORS=true
+        echo "## ⚠️  Mutation : ${svc_name}"
+        echo '```'
+        echo "$mut_errors"
+        echo '```'
+        echo ""
+      fi
+    done
+
+    if [ "$HAS_ERRORS" = false ]; then
+      echo "> ✅ Aucune erreur — tous les services ont passé les tests."
+    else
+      echo "---"
+      echo "> Logs complets disponibles dans : \`${LOG_DIR}/\`"
+    fi
+  } > "$PROMPT_FILE"
+
+  # Affichage du chemin (et contenu si erreurs)
+  if [ "$HAS_ERRORS" = true ]; then
+    echo -e "${RED}\n📋 Rapport d'erreurs généré — copiez-collez dans Antigravity :${RESET}"
+    echo -e "${GREY}   Fichier : ${PROMPT_FILE}${RESET}"
+    echo -e "${GREY}   Commande : cat ${PROMPT_FILE}${RESET}\n"
+    cat "$PROMPT_FILE"
+  else
+    echo -e "${GREEN}\n📝 Rapport généré (tout OK) : ${PROMPT_FILE}${RESET}"
+  fi
+  # ──────────────────────────────────────────────────────────────────────────────
+
   exit $exit_code
 }
 
@@ -206,6 +379,11 @@ compute_service_hash() {
   if [[ "$SERVICE" == "agent_hr_api" || "$SERVICE" == "agent_ops_api" || "$SERVICE" == "agent_missions_api" ]]; then
     DIRS_TO_CHECK+=("./agent_commons")
   fi
+  # shared/ est toujours inclus dans le hash de tous les services
+  # → tout changement dans shared/ invalide le hash de TOUS les consumers
+  if [ -d "./shared" ]; then
+    DIRS_TO_CHECK+=("./shared")
+  fi
 
   # Compute a SHA1 hash of all files in the relevant directories
   # Exclude VERSION and HASH files, and common ignore paths
@@ -215,6 +393,29 @@ compute_service_hash() {
 save_service_hash() {
   local SERVICE=$1
   compute_service_hash "$SERVICE" > "${SERVICE}/HASH"
+}
+
+save_shared_hash() {
+  # Sauvegarde le hash de shared/ uniquement une fois que tous les consumers
+  # ont été buildés avec succès. Tant qu'un build échoue, shared/HASH reste
+  # à l'ancienne valeur → le prochain run re-déclenchera le rebuild complet.
+  if [ -d "./shared" ]; then
+    find "./shared" -type f ! -name "HASH" ! -path "*/__pycache__/*" \
+      -exec shasum {} + | sort | shasum | awk '{print $1}' > "shared/HASH"
+  fi
+}
+
+check_shared_changed() {
+  # Retourne 0 (true) si shared/ a changé depuis le dernier build réussi
+  local SHARED_HASH_FILE="shared/HASH"
+  [ ! -d "./shared" ] && return 1           # Pas de dossier shared/ → rien à vérifier
+  [ ! -f "$SHARED_HASH_FILE" ] && return 0  # Pas de HASH → nouveau → changed
+  local SAVED
+  SAVED=$(cat "$SHARED_HASH_FILE")
+  local CURRENT
+  CURRENT=$(find "./shared" -type f ! -name "HASH" ! -path "*/__pycache__/*" \
+    -exec shasum {} + | sort | shasum | awk '{print $1}')
+  [ "$SAVED" != "$CURRENT" ]
 }
 
 has_changes() {
@@ -235,8 +436,202 @@ has_changes() {
 }
 
 # ==============================================================================
-# Helper Functions
+# Test Gate (fail-fast avant chaque docker build)
 # ==============================================================================
+
+run_service_tests() {
+  local SERVICE=$1
+  local TEST_RUNNER="./test_env/bin/pytest"
+
+  # Bypass explicite via --skip-tests
+  if [ "$SKIP_TESTS" = true ]; then
+    echo -e "${YELLOW}[⚠️  TESTS SKIPPED] $SERVICE — bypass via --skip-tests (hotfix uniquement !)${RESET}"
+    TESTS_SKIPPED+=("$SERVICE")
+    return 0
+  fi
+
+  # Vérification de la présence du virtualenv de test
+  if [ ! -f "$TEST_RUNNER" ]; then
+    echo -e "${YELLOW}[⚠️  SKIP TESTS] test_env/bin/pytest introuvable pour $SERVICE.${RESET}"
+    echo -e "${YELLOW}   → Créez le venv : python3 -m venv test_env && test_env/bin/pip install -r scripts/requirements.txt${RESET}"
+    echo -e "${YELLOW}   → Build autorisé sans validation des tests.${RESET}"
+    return 0
+  fi
+
+  # Détection des fichiers de test
+  local HAS_TESTS=false
+  if find "./${SERVICE}/tests" -name 'test_*.py' 2>/dev/null | grep -q .; then
+    HAS_TESTS=true
+  elif find "./${SERVICE}" -maxdepth 1 -name 'test_*.py' 2>/dev/null | grep -q .; then
+    HAS_TESTS=true
+  fi
+
+  if [ "$HAS_TESTS" = false ]; then
+    echo -e "${GREY}[ℹ️  NO TESTS] Aucun test trouvé pour $SERVICE — build autorisé.${RESET}"
+    return 0
+  fi
+
+  echo -e "${RED}--- 🧪 Tests unitaires + couverture : $SERVICE ---${RESET}"
+
+  # Nettoyage du sandbox mutmut résiduel
+  # Problème : mutmut crée mutants/ avec des copies des tests. pytest compile des .pyc
+  # dans tests/__pycache__/ avec __file__ pointant vers mutants/tests/*.py.
+  # Au run pytest suivant, le module importé (mutants/) ne correspond pas au fichier
+  # collecté (tests/) → "import file mismatch".
+  # Fix : supprimer mutants/ ENTIÈREMENT + tests/__pycache__/ pour effacer les .pyc périmés.
+  if [ -d "./${SERVICE}/mutants" ]; then
+    rm -rf "./${SERVICE}/mutants"
+    find "./${SERVICE}" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+    echo -e "${GREY}[ℹ️] Sandbox mutmut nettoyé (mutants/ + __pycache__ supprimés).${RESET}"
+  fi
+
+  # PYTHONPATH : racine du monorepo (pour shared/) + dossier du service
+  # Les agents ajoutent aussi agent_commons
+  local PYTHONPATH_VAL=".:${SERVICE}"
+  if [[ "$SERVICE" == "agent_"* ]]; then
+    PYTHONPATH_VAL=".:${SERVICE}:./agent_commons"
+  fi
+
+  # Fichier temporaire pour capturer la sortie pytest (nécessaire pour parser la couverture)
+  # Enregistré dans _TMPFILES pour nettoyage garanti même en cas de SIGINT/SIGTERM (P0/R3)
+  local TMP_OUTPUT
+  TMP_OUTPUT=$(mktemp)
+  _TMPFILES+=("$TMP_OUTPUT")
+
+  local PYTEST_EXIT=0
+  OTEL_TRACES_EXPORTER=none \
+  OTEL_METRICS_EXPORTER=none \
+  OTEL_LOGS_EXPORTER=none \
+  SECRET_KEY="testsecret" \
+  PYTHONPATH="$PYTHONPATH_VAL" \
+  "$TEST_RUNNER" "./${SERVICE}" -x \
+    --ignore=test_env \
+    --cov="./${SERVICE}" --cov-report=term-missing:skip-covered \
+    2>&1 > "$TMP_OUTPUT" || PYTEST_EXIT=$?
+
+  # Écriture dans le log persistant (jamais cat direct — évite la verbosité terminal)
+  local LOG_FILE="${LOG_DIR}/${SERVICE}_tests.log"
+  cat "$TMP_OUTPUT" > "$LOG_FILE"
+
+  # Extraire le % total depuis la ligne "TOTAL   ...   75%"
+  local COV_PCT
+  COV_PCT=$(grep -E '^TOTAL' "$TMP_OUTPUT" | awk '{print $NF}' | tail -1)
+  # Pas de rm -f manuel : nettoyage délégué au trap global _cleanup_tmpfiles (P0/R3)
+
+  if [ "$PYTEST_EXIT" -eq 0 ]; then
+    COVERAGE_RESULTS["$SERVICE"]="${COV_PCT:-N/A}"
+    echo -e "${GREEN}✅ Tests $SERVICE : OK (couverture: ${COV_PCT:-N/A}) — build autorisé${RESET}"
+    return 0
+  else
+    COVERAGE_RESULTS["$SERVICE"]="${COV_PCT:-N/A} ❌"
+    echo -e "${RED}❌ Tests $SERVICE : ÉCHEC — build bloqué (fail-fast)${RESET}"
+    echo -e "${RED}   → Détails : ${LOG_FILE}${RESET}"
+    DEPLOYS_FAILED+=("$SERVICE (Tests échoués)")
+    return 1
+  fi
+}
+
+# ==============================================================================
+# Mutation Test Gate (opt-in via --mutation-tests / --mutation-strict)
+# ==============================================================================
+
+run_mutation_tests() {
+  local SERVICE=$1
+  local MUTMUT_BIN="./test_env/bin/mutmut"
+
+  # Désactivé par défaut — uniquement si --mutation-tests ou --mutation-strict
+  if [ "$RUN_MUTATION_TESTS" = false ]; then
+    return 0
+  fi
+
+  # Vérification de la présence de mutmut
+  if [ ! -f "$MUTMUT_BIN" ]; then
+    echo -e "${YELLOW}[⚠️  MUTATION SKIP] mutmut introuvable dans test_env.${RESET}"
+    echo -e "${YELLOW}   → test_env/bin/pip install mutmut${RESET}"
+    MUTATION_RESULTS["$SERVICE"]="SKIPPED"
+    return 0
+  fi
+
+  # Vérification de la présence du setup.cfg mutmut
+  if [ ! -f "./${SERVICE}/setup.cfg" ]; then
+    echo -e "${GREY}[ℹ️  MUTATION SKIP] Pas de setup.cfg mutmut pour $SERVICE — skipped.${RESET}"
+    MUTATION_RESULTS["$SERVICE"]="SKIPPED"
+    return 0
+  fi
+
+  echo -e "${YELLOW}--- 🧬 Tests de mutation : $SERVICE ---${RESET}"
+
+  # PYTHONPATH : idem run_service_tests
+  local PYTHONPATH_VAL=".:${SERVICE}"
+  if [[ "$SERVICE" == "agent_"* ]]; then
+    PYTHONPATH_VAL=".:${SERVICE}:./agent_commons"
+  fi
+
+  # mutmut log persistant — stdout silencé (trop verbeux pour le terminal)
+  local MUT_LOG="${LOG_DIR}/${SERVICE}_mutation.log"
+
+  pushd "./${SERVICE}" > /dev/null
+  OTEL_TRACES_EXPORTER=none \
+  OTEL_METRICS_EXPORTER=none \
+  OTEL_LOGS_EXPORTER=none \
+  SECRET_KEY="testsecret" \
+  PYTHONPATH="../${PYTHONPATH_VAL//.\//../}" \
+  "$OLDPWD/$MUTMUT_BIN" run \
+    2>&1 > "$OLDPWD/$MUT_LOG"
+
+  # Collecter les résultats (que le run ait réussi ou non)
+  local MUT_RESULTS_RAW
+  MUT_RESULTS_RAW=$("$OLDPWD/$MUTMUT_BIN" results --all true 2>/dev/null || echo "")
+  popd > /dev/null
+
+  # Extraire les compteurs depuis la sortie brute de mutmut results
+  # Format mutmut 3.x : chaque ligne = "  module.func__mutmut_N: killed|survived|not checked"
+  # Note: on utilise grep + wc -l plutôt que grep -c pour éviter le "0\n0" quand
+  # grep -c ne trouve aucun match (exit 1) et que || echo "0" s'exécute (valeur multi-ligne)
+  local KILLED SURVIVED TOTAL SCORE
+  KILLED=$(echo "$MUT_RESULTS_RAW" | grep ': killed' | wc -l | tr -d ' ')
+  SURVIVED=$(echo "$MUT_RESULTS_RAW" | grep ': survived' | wc -l | tr -d ' ')
+  TOTAL=$(( KILLED + SURVIVED ))
+
+  # Vérifier si mutmut n'a pas pu s'exécuter (phase stats échouée)
+  local UNCHECKED
+  UNCHECKED=$(echo "$MUT_RESULTS_RAW" | grep ': not checked' | wc -l | tr -d ' ')
+
+  if [ "$TOTAL" -eq 0 ] && [ "$UNCHECKED" -gt 0 ]; then
+    echo -e "${YELLOW}⚠️  Mutation $SERVICE : ${UNCHECKED} mutants non testés (sandbox stats) — voir ${MUT_LOG}${RESET}"
+    MUTATION_RESULTS["$SERVICE"]="⚠️ ${UNCHECKED} mutants (non testés)"
+    return 0
+  fi
+
+  if [ "$TOTAL" -eq 0 ]; then
+    echo -e "${GREY}[ℹ️  MUTATION] Aucun mutant généré pour $SERVICE.${RESET}"
+    MUTATION_RESULTS["$SERVICE"]="N/A"
+    return 0
+  fi
+
+  # Score = (Killed / Total) * 100
+  SCORE=$(( KILLED * 100 / TOTAL ))
+  local SCORE_STR="${SCORE}% (${KILLED}/${TOTAL} tués)"
+
+  if [ "$SCORE" -ge "$MUTATION_SCORE_THRESHOLD" ]; then
+    echo -e "${GREEN}✅ Mutation $SERVICE : ${SCORE_STR} ≥ seuil ${MUTATION_SCORE_THRESHOLD}% — OK${RESET}"
+    MUTATION_RESULTS["$SERVICE"]="$SCORE_STR"
+    return 0
+  else
+    MUTATION_RESULTS["$SERVICE"]="${SCORE_STR} ❌"
+    echo -e "${RED}⚠️  Mutation $SERVICE : ${SCORE_STR} < seuil ${MUTATION_SCORE_THRESHOLD}%${RESET}"
+    if [ "$MUTATION_STRICT" = true ]; then
+      echo -e "${RED}❌ [--mutation-strict] Build bloqué — score de mutation insuffisant.${RESET}"
+      echo -e "${RED}   → Renforcez les assertions dans les tests pour tuer plus de mutants.${RESET}"
+      DEPLOYS_FAILED+=("$SERVICE (Mutation score: ${SCORE}% < ${MUTATION_SCORE_THRESHOLD}%)")
+      return 1
+    else
+      echo -e "${YELLOW}   → Score sous le seuil — non bloquant (utilisez --mutation-strict pour bloquer).${RESET}"
+      return 0
+    fi
+  fi
+}
+
 
 update_cloudrun() {
   local SERVICE=$1
@@ -330,19 +725,30 @@ ${GREY}------------------------------------------------------------${RESET}"
 build_and_push_standard() {
   local SERVICE=$1
   local BUMP=${2:-"patch"}
-  
+
   if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_migrations" ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
     echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
     DEPLOYS_SKIPPED+=("$SERVICE")
     return 0
   fi
 
+  # ── Gate de test fail-fast ──────────────────────────────────────────────────
+  # CURRENT_DEPLOYING_SERVICE vidé avant return 1 pour éviter la double entrée
+  # dans DEPLOYS_FAILED via le trap EXIT (P0/R4)
+  run_service_tests "$SERVICE" || { CURRENT_DEPLOYING_SERVICE=""; return 1; }
+  # ── Gate de mutation (opt-in via --mutation-tests / --mutation-strict) ───────
+  run_mutation_tests "$SERVICE" || { CURRENT_DEPLOYING_SERVICE=""; return 1; }
+  # ────────────────────────────────────────────────────────────────────────────
+
   local TAG=$(get_service_tag "$SERVICE" "$BUMP")
   echo "--- Building $SERVICE ($TAG) ---"
   local IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
-  
-  # Build pour Cloud Run (nécessite amd64)
-  docker build --platform linux/amd64 -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" "./${SERVICE}"
+
+  # Build pour Cloud Run (nécessite amd64) — contexte = racine du monorepo
+  # (même pattern que les agents) pour inclure shared/ dans le contexte
+  docker build --platform linux/amd64 \
+    -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" \
+    -f "./${SERVICE}/Dockerfile" .
   
   # Push
   echo "--- Pushing $SERVICE ---"
@@ -356,7 +762,7 @@ build_and_push_standard() {
     if [ "$SERVICE" != "db_migrations" ]; then
       if update_cloudrun "$SERVICE" "$TAG"; then
         DEPLOYS_SUCCESS+=("$SERVICE")
-    save_service_hash "$SERVICE"
+        save_service_hash "$SERVICE"  # P1/R6 — indentation corrigée
       else
         DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
       fi
@@ -380,7 +786,7 @@ build_and_push_standard() {
           --project "$PROJECT_ID" \
           --wait; then
           DEPLOYS_SUCCESS+=("$SERVICE")
-    save_service_hash "$SERVICE"
+          save_service_hash "$SERVICE"  # P1/R6 — indentation corrigée
         else
           DEPLOYS_FAILED+=("$SERVICE (Job execution failed)")
         fi
@@ -392,38 +798,9 @@ build_and_push_standard() {
   fi
 }
 
-build_and_push_agent() {
-  local SERVICE=$1
-  local BUMP=${2:-"patch"}
-  
-  if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "$SERVICE"; then
-    echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
-    DEPLOYS_SKIPPED+=("$SERVICE")
-    return 0
-  fi
-
-  local TAG=$(get_service_tag "$SERVICE" "$BUMP")
-  
-  # Build context doit être la racine pour inclure agent_commons
-  echo "--- Building $SERVICE ($TAG) ---"
-  local AGENT_IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
-  docker build --platform linux/amd64 -t "${AGENT_IMAGE_NAME}:${TAG}" -t "${AGENT_IMAGE_NAME}:latest" -f "./${SERVICE}/Dockerfile" .
-  echo "--- Pushing $SERVICE ---"
-  docker push "${AGENT_IMAGE_NAME}:${TAG}"
-  docker push "${AGENT_IMAGE_NAME}:latest"
-  
-  if [ "$SKIP_CLOUDRUN" = true ]; then
-    echo "--- Skipping update_cloudrun for $SERVICE ---"
-    DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
-  else
-    if update_cloudrun "$SERVICE" "$TAG"; then
-      DEPLOYS_SUCCESS+=("$SERVICE")
-    save_service_hash "$SERVICE"
-    else
-      DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
-    fi
-  fi
-}
+# P1/R5 — build_and_push_agent fusionnée dans build_and_push_standard
+# Les agents utilisent le même pattern Docker (contexte racine, shared/)
+# Le seul comportement différencié (PYTHONPATH agent_commons) est géré dans run_service_tests.
 
 build_and_upload_frontend() {
   local BUMP=${1:-"patch"}
@@ -441,15 +818,18 @@ build_and_upload_frontend() {
     echo "Dossier frontend introuvable"
     exit 1
   fi
-  cd frontend
-  echo "--- NPM Install && Build ---"
-  npm install
+  # P1/R8 — pushd/popd garantit le retour au répertoire racine même si npm échoue (set -eo pipefail)
+  pushd frontend > /dev/null
+  echo "--- NPM ci && Build ---"
+  npm ci   # A2 — npm ci (reproductible, ne modifie pas package-lock.json, ~2-3x plus rapide en CI)
   npm run build
-  cd ..
+  popd > /dev/null
 
   echo "--- Création de l'archive tar.gz ---"
   local TIMESTAMP=$(date +%Y%m%d%H%M%S)
   local ARCHIVE_NAME="frontend-${TIMESTAMP}-${TAG}.tar.gz"
+  # A3 — L'archive locale est enregistrée dans _TMPFILES pour nettoyage automatique après upload
+  _TMPFILES+=("$ARCHIVE_NAME")
 
   tar -czvf "$ARCHIVE_NAME" frontend/dist/
 
@@ -483,25 +863,28 @@ build_and_upload_frontend() {
 sync_system_prompts() {
   echo -e "
 ${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
-  
-  # 1. Récupération des infos via Terraform
-  echo "[*] Récupération du mot de passe admin et de la configuration..."
-  local TF_DIR="platform-engineering/terraform"
-  local ADMIN_PWD=$(cd "$TF_DIR" && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw admin_password 2>/dev/null || echo "")
-  
+
+  # P1/R7 — Récupération du mot de passe via Secret Manager (jamais via terraform output)
+  # terraform output est visible dans 'ps aux' et les logs shell ; Secret Manager est sûr.
+  echo "[*] Récupération du mot de passe admin depuis Secret Manager..."
+  local ADMIN_PWD
+  ADMIN_PWD=$(gcloud secrets versions access latest \
+    --secret=admin-password-dev \
+    --project="$PROJECT_ID" 2>/dev/null || echo "")
+
   if [ -z "$ADMIN_PWD" ]; then
-    echo -e "${YELLOW}[!] Impossible de récupérer le mot de passe admin via Terraform. Skip sync.${RESET}"
-    return
+    echo -e "${YELLOW}[!] Impossible de récupérer le mot de passe admin depuis Secret Manager (admin-password-dev). Skip sync.${RESET}"
+    return 0
   fi
-  
-  # 2. Détermination de l'URL (via dev.yaml ou convention)
-  local BASE_DOMAIN="zenika.slavayssiere.fr" # Valeur par défaut ou extraite du yaml
+
+  # Détermination de l'URL (via dev.yaml ou convention)
+  local BASE_DOMAIN="zenika.slavayssiere.fr"
   if [ -f "platform-engineering/envs/dev.yaml" ]; then
     BASE_DOMAIN=$(grep "base_domain:" platform-engineering/envs/dev.yaml | cut -d'"' -f2)
   fi
   local API_URL="https://api.dev.${BASE_DOMAIN}/api/prompts"
-  
-  # 3. Exécution du script Python
+
+  # Exécution du script Python
   if python3 scripts/sync_prompts.py --url "$API_URL" --password "$ADMIN_PWD"; then
     return 0
   else
@@ -526,8 +909,23 @@ for arg in "$@"; do
     BUMP_TYPE="$arg"
   elif [[ "$arg" == "--no-deploy" ]]; then
     SKIP_CLOUDRUN=true
+  elif [[ "$arg" == "--force-all" ]]; then
+    FORCE_ALL=true
+    SKIP_UNCHANGED=false
+    echo -e "${YELLOW}[--force-all] Rebuild forcé de tous les services, ignorant le cache de hash.${RESET}"
   elif [[ "$arg" == "--skip-unchanged" ]]; then
+    # Alias conservé pour compatibilité — même comportement que le défaut
     SKIP_UNCHANGED=true
+  elif [[ "$arg" == "--skip-tests" ]]; then
+    SKIP_TESTS=true
+    echo -e "${RED}🚨 [--skip-tests] Gate de tests DÉSACTIVÉE — réservé aux hotfixes urgents uniquement !${RESET}"
+  elif [[ "$arg" == "--mutation-tests" ]]; then
+    RUN_MUTATION_TESTS=true
+    echo -e "${YELLOW}[🧬 --mutation-tests] Tests de mutation activés (lent — prévoir ~5-15 min par service).${RESET}"
+  elif [[ "$arg" == "--mutation-strict" ]]; then
+    RUN_MUTATION_TESTS=true
+    MUTATION_STRICT=true
+    echo -e "${YELLOW}[🧬 --mutation-strict] Tests de mutation activés en mode STRICT (bloque si score < ${MUTATION_SCORE_THRESHOLD}%).${RESET}"
   else
     # Normalize input (e.g. agent-api -> agent_api)
     TARGET_SERVICES+=("${arg//-/_}")
@@ -555,6 +953,27 @@ for svc in "${NEW_TARGETS[@]}"; do
     ALL_TASKS+=("$svc")
   fi
 done
+
+# ── Filet de sécurité : si shared/ a changé, forcer le rebuild de TOUS les consumers ──
+# Même si l'utilisateur a spécifié un seul service, shared/ impacte tout le monde
+SHARED_CONSUMERS=("competencies_api" "cv_api" "missions_api" "users_api" \
+  "items_api" "drive_api" "prompts_api" "analytics_mcp" "monitoring_mcp" \
+  "agent_hr_api" "agent_ops_api" "agent_missions_api" "agent_router_api" "frontend")
+
+if check_shared_changed; then
+  echo -e "${YELLOW}⚠️  shared/ a changé depuis le dernier build — expansion automatique vers tous les consumers${RESET}"
+  EXPANDED=false
+  for consumer in "${SHARED_CONSUMERS[@]}"; do
+    if [[ ! " ${ALL_TASKS[*]} " =~ " ${consumer} " ]]; then
+      ALL_TASKS+=("$consumer")
+      echo -e "${YELLOW}   + ${consumer} ajouté automatiquement (contrat impacté)${RESET}"
+      EXPANDED=true
+    fi
+  done
+  if [ "$EXPANDED" = false ]; then
+    echo -e "${YELLOW}   Tous les consumers sont déjà dans la liste.${RESET}"
+  fi
+fi
 
 for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
   CURRENT_DEPLOYING_SERVICE="$TARGET_SERVICE"
@@ -609,7 +1028,7 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
     fi
   elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
     show_progress "$TARGET_SERVICE"
-    build_and_push_agent "$TARGET_SERVICE" "$BUMP_TYPE"
+    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"  # P1/R5 — fusionné avec build_and_push_standard
   elif [ "$TARGET_SERVICE" = "frontend" ]; then
     show_progress "frontend"
     build_and_upload_frontend "$BUMP_TYPE"
@@ -647,6 +1066,12 @@ if [ "$SHOULD_SYNC" = true ]; then
     fi
     CURRENT_DEPLOYING_SERVICE=""
   fi
+fi
+
+# ── Sauvegarde du hash de shared/ si tous les consumers ont été buildés sans échec ──
+if [ ${#DEPLOYS_FAILED[@]} -eq 0 ] && [ -d "./shared" ]; then
+  save_shared_hash
+  echo -e "${GREY}[shared/HASH] Hash mis à jour après build réussi.${RESET}"
 fi
 
 # Le summary de fin est géré par le trap EXIT.

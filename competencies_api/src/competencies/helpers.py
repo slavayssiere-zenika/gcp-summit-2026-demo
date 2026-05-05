@@ -134,8 +134,16 @@ async def _generate_aliases_for_competency(name: str) -> str | None:
     return None
 
 
-def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks, auth_header: str = None):
+def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks, request_or_header):
     """Déclenche de manière asynchrone l'invalidation du cache de la taxonomie dans cv_api."""
+    auth_header = None
+    if isinstance(request_or_header, str):
+        auth_header = request_or_header
+    elif hasattr(request_or_header, "headers"):
+        auth_header = request_or_header.headers.get("Authorization")
+        if not auth_header and request_or_header.cookies.get("access_token"):
+            auth_header = f"Bearer {request_or_header.cookies.get('access_token')}"
+
     async def invalidate():
         try:
             async with httpx.AsyncClient() as http_client:

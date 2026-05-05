@@ -1,8 +1,9 @@
 from typing import List, Optional, Generic, TypeVar
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 T = TypeVar("T")
+
 
 class PaginationResponse(BaseModel, Generic[T]):
     items: List[T]
@@ -19,9 +20,12 @@ class CVImportRequest(BaseModel):
     folder_name: Optional[str] = None
 
 # Output expected from LLM
+
+
 class ExtractedCompetency(BaseModel):
-    name: str # The specific node (e.g. Python)
-    parent: Optional[str] = None # Its parent category (e.g. Langages Backend)
+    name: str  # The specific node (e.g. Python)
+    parent: Optional[str] = None  # Its parent category (e.g. Langages Backend)
+
 
 class ExtractedMission(BaseModel):
     title: str
@@ -31,12 +35,14 @@ class ExtractedMission(BaseModel):
     end_date: Optional[str] = None     # Format: "YYYY-MM", "YYYY", or "present"
     duration: Optional[str] = None     # Explicit duration string from CV (e.g. "2 ans", "18 mois")
     mission_type: Optional[str] = "build"  # audit | conseil | accompagnement | formation | expertise | build
-    competencies: List[str]
+    competencies: List[str] = []
     is_sensitive: Optional[bool] = False
+
 
 class ExtractedEducation(BaseModel):
     degree: Optional[str] = None
     school: Optional[str] = None
+
 
 class ExtractedProfile(BaseModel):
     is_cv: bool
@@ -50,6 +56,7 @@ class ExtractedProfile(BaseModel):
     missions: List[ExtractedMission]
     educations: List[ExtractedEducation] = []
 
+
 class CVImportStep(BaseModel):
     """Représente une étape du pipeline d'ingestion CV avec son statut et sa durée."""
     step: str           # Identifiant technique (ex: 'download', 'llm_parse')
@@ -57,6 +64,7 @@ class CVImportStep(BaseModel):
     status: str         # 'success' | 'warning' | 'error' | 'skipped'
     duration_ms: Optional[int] = None
     detail: Optional[str] = None  # Info complémentaire (nb items, taille, etc.)
+
 
 class CVResponse(BaseModel):
     message: str
@@ -66,12 +74,14 @@ class CVResponse(BaseModel):
     steps: List[CVImportStep] = []
     warnings: List[str] = []
 
+
 class SearchCandidateRequest(BaseModel):
     query: str
     skip: int = 0
     limit: int = 5
     skills: Optional[List[str]] = None
     agency: Optional[str] = None
+
 
 class SearchCandidateResponse(BaseModel):
     user_id: int
@@ -81,15 +91,18 @@ class SearchCandidateResponse(BaseModel):
     username: Optional[str] = None
     is_active: Optional[bool] = None
 
+
 class CVProfileResponse(BaseModel):
     user_id: int
-    source_url: str
+    source_url: Optional[str] = None
     source_tag: Optional[str] = None
     imported_by_id: Optional[int] = None
     is_anonymous: bool = False
+    is_archived: bool = False
     full_name: Optional[str] = None
     email: Optional[str] = None
     username: Optional[str] = None
+
 
 class CVFullProfileResponse(BaseModel):
     user_id: int
@@ -101,10 +114,13 @@ class CVFullProfileResponse(BaseModel):
     missions: List[ExtractedMission] = []
     educations: List[ExtractedEducation] = []
     is_anonymous: bool = False
+    is_archived: bool = False
+
 
 class UserMergeRequest(BaseModel):
     source_id: int
     target_id: int
+
 
 class RankedExperienceResponse(BaseModel):
     user_id: int

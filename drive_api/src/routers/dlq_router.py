@@ -4,26 +4,18 @@ import asyncio
 import base64 as _b64
 import json as _json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
-import google.auth
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
 from google.api_core.exceptions import DeadlineExceeded
 from google.cloud import pubsub_v1
-from sqlalchemy import func, update
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import verify_jwt
-from src.drive_service import DriveService
-from src.google_auth import get_drive_service, get_google_access_token
-from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
-from src.redis_client import get_redis
+from src.models import DriveSyncState, DriveSyncStatus
 from src.routers.files_router import _get_dlq_subscription_path
-from src.schemas import (FileStateResponse, FileUpdate, FolderCreate,
-                         FolderResponse, FolderStats, FolderUpdate,
-                         PaginatedFilesResponse, StatusResponse)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +29,9 @@ def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
         )
     return token_payload
 
+
 router = APIRouter(prefix="", tags=["Drive DLQ"], dependencies=[Depends(verify_jwt)])
+
 
 @router.get("/dlq/status")
 async def get_dlq_status(db: AsyncSession = Depends(get_db)):
@@ -156,7 +150,6 @@ async def get_dlq_status(db: AsyncSession = Depends(get_db)):
         return {"subscription": "unknown", "message_count": -1, "files": [], "unknown_files": [], "error": str(e)}
 
 
-
 @router.delete("/dlq/message")
 async def delete_dlq_message(
     google_file_id: str = "",
@@ -187,7 +180,7 @@ async def delete_dlq_message(
                     .values(
                         status=DriveSyncStatus.IGNORED_NOT_CV,
                         error_message="Supprimé définitivement depuis la DLQ",
-                        last_processed_at=datetime.utcnow()
+                        last_processed_at=datetime.now(timezone.utc)
                     )
                 )
                 await db.execute(stmt)
@@ -267,7 +260,7 @@ async def delete_dlq_message(
                     subscriber.modify_ack_deadline,
                     request={"subscription": sub_path, "ack_ids": other_ack_ids, "ack_deadline_seconds": 0}
                 )
-            
+
             return {"status": "deleted", "method": "repull", "remaining_in_dlq": len(other_ack_ids)}
         finally:
             subscriber.close()
@@ -277,7 +270,6 @@ async def delete_dlq_message(
     except Exception as e:
         logger.error(f"[DLQ] Erreur suppression: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erreur suppression DLQ: {e}")
-
 
 
 @router.post("/dlq/replay")
@@ -352,7 +344,6 @@ async def replay_dlq(db: AsyncSession = Depends(get_db), _: dict = Depends(_requ
                         )
                         unknown_file_ids.append(msg.message.message_id)
 
-
                 if len(messages) < 1000:
                     break
         except Exception as pull_err:
@@ -370,7 +361,7 @@ async def replay_dlq(db: AsyncSession = Depends(get_db), _: dict = Depends(_requ
                 .values(
                     status=DriveSyncStatus.PENDING,
                     error_message="Rejoué depuis DLQ",
-                    last_processed_at=datetime.utcnow()
+                    last_processed_at=datetime.now(timezone.utc)
                 )
                 .returning(DriveSyncState.google_file_id)
             )
@@ -407,5 +398,3 @@ async def replay_dlq(db: AsyncSession = Depends(get_db), _: dict = Depends(_requ
     except Exception as e:
         logger.error(f"[DLQ] Erreur lors du replay: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erreur DLQ replay: {e}")
-
-

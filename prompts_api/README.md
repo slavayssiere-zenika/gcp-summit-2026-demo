@@ -9,10 +9,10 @@ Gestion et versioning des system prompts des agents IA. Centralise les instructi
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 204 | ✅ |
+| `main.py` | 203 | ✅ |
 | `mcp_server.py` | 279 | ✅ |
 | `conftest.py` | 32 | ✅ |
-| `src/prompts/router.py` | 306 | ✅ |
+| `src/prompts/router.py` | 327 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

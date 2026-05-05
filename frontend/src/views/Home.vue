@@ -75,6 +75,13 @@ const md = markdownit({
 const chatStore = useChatStore()
 const userInput = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
+const adjustTextareaHeight = () => {
+  if (!textareaRef.value) return
+  textareaRef.value.style.height = 'auto'
+  textareaRef.value.style.height = `${Math.min(textareaRef.value.scrollHeight, 200)}px`
+}
 
 const scrollToBottom = () => {
   setTimeout(() => {
@@ -91,6 +98,9 @@ const sendQuery = async (queryOverride?: string) => {
   const query = queryOverride || userInput.value.trim()
   if (!query) return
   userInput.value = ''
+  if (textareaRef.value) {
+    textareaRef.value.style.height = 'auto'
+  }
   await chatStore.sendQuery(query)
   scrollToBottom()
 }
@@ -431,13 +441,15 @@ onUnmounted(() => {
 
     <div class="input-area">
       <div class="input-container">
-        <input 
-          type="text" 
+        <textarea 
+          ref="textareaRef"
           v-model="userInput" 
-          @keypress.enter="sendQuery()"
-          placeholder="Posez votre question à l'assistant..."
+          @keydown.enter.exact.prevent="sendQuery()"
+          @input="adjustTextareaHeight"
+          placeholder="Posez votre question à l'assistant... (Maj+Entrée pour un saut de ligne)"
           autocomplete="off"
-        >
+          rows="1"
+        ></textarea>
         <BaseButton @click="resetHistory" variant="ghost" title="Réinitialiser l'historique">
           <Trash2 size="18" />
         </BaseButton>
@@ -780,6 +792,7 @@ onUnmounted(() => {
   border-radius: 18px;
   border: 1px solid #e2e8f0;
   transition: all 0.2s;
+  align-items: flex-end;
 }
 
 .input-container:focus-within {
@@ -788,7 +801,7 @@ onUnmounted(() => {
   box-shadow: 0 0 0 4px rgba(227, 25, 55, 0.1);
 }
 
-input {
+textarea {
   flex: 1;
   background: transparent;
   border: none;
@@ -796,6 +809,12 @@ input {
   padding: 0.75rem 1rem;
   font-size: 1rem;
   color: var(--text-primary);
+  font-family: inherit;
+  resize: none;
+  min-height: 24px;
+  max-height: 200px;
+  line-height: 1.5;
+  overflow-y: auto;
 }
 
 .usage-container {

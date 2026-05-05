@@ -1,72 +1,55 @@
-# SRE Report — 2026-05-04 12:04
+# SRE Report — 2026-05-05 19:23
 
 ## Résumé exécutif
 
-**5 erreurs de production** trouvées dans `prompts_api`. **4 résolues** (code corrigé + prompts supprimés). **1 en monitoring**.
+**3 erreurs** en production. **2 adressées** (code fixé + prompts supprimés). **1 conservée** (QueuePool monitoring).
 
 ---
 
-## ✅ Erreurs résolues
-
-### 1. `cv_api` — `NameError: name 'tempfile' is not defined`
-- **Clé** : `error_correction:cv_api:2a06e2cd18df`
-- **Statut** : ✅ Déjà corrigé dans le code source (`import tempfile` présent dans `taxonomy_router.py:9`)
-- **Action** : Prompt supprimé de production.
+## ✅ `cv_api` — `UndefinedColumnError: cv_profiles.is_archived` (×2)
+- **Clés** : `d86c930abb86`, `2b7e4f88dfde`
+- **Cause** : Liquibase changeset 10 (`addColumn is_archived`) présent dans `db_migrations` mais **image v0.0.30 pas encore exécutée** — la migration a été déclenchée dans le dernier `prd.yaml` (v0.0.30) mais le job Cloud Run est probablement encore en cours ou n'a pas tourné sur la bonne révision.
+- **Action requise** : Aucune correction de code — juste s'assurer que `deploy.sh` a bien exécuté `db_migrations:v0.0.30` en prod.
+- **Prompts** : Supprimés.
 
 ---
 
-### 2. `cv_api` — `NameError: name '_CV_CACHE' is not defined`
-- **Clé** : `error_correction:cv_api:ad6f85bbc3bc`
-- **Endpoint** : `POST /cache/invalidate-taxonomy`
-- **Cause** : `_CV_CACHE` défini dans `src/services/config.py` mais non importé explicitement dans `profile_router.py`. Le module était importé comme `_svc_config` mais le dictionnaire lui-même n'était pas accessible.
-- **Fix appliqué** :
+## ✅ `competencies_api` + `cv_api` — Contrat cassé `MissionsResponse` (`id: int` required)
+- **Cause** : `shared/schemas/missions.py` définissait `MissionItem.id: int` (required). Or `cv_api/get_user_missions` retourne des `ExtractedMission` (extractions LLM) **sans champ `id`** — la validation `MissionsResponse.model_validate()` dans `competencies_api` échouerait à chaque appel scoring.
+
+- **Fix dans `shared/schemas/missions.py`** :
   ```python
-  # cv_api/src/cvs/routers/profile_router.py
-  from src.services.config import _CV_CACHE  # ← ajouté
+  # AVANT
+  id: int                 # required → ValidationError garantie sur missions LLM
+  # APRÈS
+  id: Optional[int] = None   # LLM-extracted missions have no DB id
+  company: Optional[str] = None      # ajouté
+  duration: Optional[str] = None     # ajouté
+  competencies: List[str] = []       # ajouté
+  is_sensitive: Optional[bool] = False  # ajouté
+  mission_type: Optional[str] = None    # ajouté
   ```
-- **Action** : Prompt supprimé de production.
+
+  **Impact** : `competencies_api/scoring_pipeline.py` et `ai_scoring.py` — les deux utilisent `MissionsResponse.model_validate()`.
 
 ---
 
-### 3. `drive_api` — `NameError: name '_compute_kpi_metric' is not defined`
-- **Clé** : `error_correction:drive_api:b67443bd3dee`
-- **Fichier** : `ingestion_router.py`
-- **Cause** : `_compute_kpi_metric` est définie dans `files_router.py` (ligne 394) mais `ingestion_router.py` l'utilisait sans l'importer.
-- **Fix appliqué** :
-  ```python
-  # drive_api/src/routers/ingestion_router.py
-  from src.routers.files_router import _compute_kpi_metric  # ← ajouté
-  ```
-- **Action** : Prompt supprimé de production.
-
----
-
-### 4. `agent_router_api` — `400 INVALID_ARGUMENT` (context window overflow)
-- **Clé** : `error_correction:agent_router_api:8597819c7b7a`
-- **Statut** : ✅ Déjà corrigé — handler OPS-003 présent dans `agent.py:320-334` avec session reset automatique.
-- **Action** : Prompt supprimé de production.
-
----
-
-## ⚠️ En monitoring — Intervention opérateur requise
-
-### 5. `competencies_api` — `QueuePool limit of size 10 overflow 20 reached`
-- **Clé** : `error_correction:competencies_api:a0d033652b85`
-- **Statut** : ⚠️ **Conservé** en production comme garde-fou
-- **Cause** : Saturation du pool de connexions SQLAlchemy lors de bulk operations concurrentes.
-- **État actuel** : Pool configuré via env vars `DB_POOL_SIZE=10` / `DB_MAX_OVERFLOW=20` dans `database.py`. Commentaire doc indique que le dimensionnement est cohérent avec les semaphores batch (max ~9 conns simultanées).
-- **Recommandation** : Augmenter `DB_POOL_SIZE=15` / `DB_MAX_OVERFLOW=30` dans Cloud Run si les bulk scoring jobs s'exécutent en parallèle. Surveiller via Grafana les métriques `pool_checked_out`.
+## ⚠️ Conservé — `competencies_api` QueuePool timeout
+- `error_correction:competencies_api:a0d033652b85`
+- Recommandation : `DB_POOL_SIZE=15 / DB_MAX_OVERFLOW=30` si récurrent en prod.
 
 ---
 
 ## Fichiers modifiés
 
-| Service | Fichier | Type de fix |
-|---------|---------|-------------|
-| `cv_api` | `src/cvs/routers/profile_router.py` | Import manquant `_CV_CACHE` |
-| `drive_api` | `src/routers/ingestion_router.py` | Import manquant `_compute_kpi_metric` |
+| Fichier | Fix |
+|---------|-----|
+| `shared/schemas/missions.py` | `id: int` → `Optional[int] = None` + champs LLM manquants |
 
-## Actions à faire (opérateur)
+## Action opérateur
 
-1. **Rebuilder et déployer** `cv_api` et `drive_api` avec `deploy.sh`
-2. **Monitorer** `competencies_api` pool metrics et ajuster `DB_POOL_SIZE` si nécessaire
+```bash
+cd platform-engineering && python3 manage_env.py deploy --env prd
+```
+
+S'assurer que le job `db_migrations:v0.0.30` s'est bien exécuté (check Cloud Logging `db-migrations-prd`).

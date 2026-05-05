@@ -1,0 +1,18 @@
+# Au-delà du PoC : Architecture Multi-Agents en Production avec le Model Context Protocol (MCP) et GCP
+
+Aujourd'hui, développer un agent IA basique dans un notebook est à la portée de tous, mais l'intégrer de manière pérenne au cœur du système d'information d'une entreprise reste un défi d'ingénierie majeur. Comment passer d'un simple script de démonstration à un écosystème robuste, sécurisé et auditable ? La réponse ne réside pas uniquement dans le choix du modèle de fondation, mais surtout dans l'architecture logicielle sous-jacente. Ce talk propose un retour d'expérience concret sur la construction d'une plateforme multi-agents d'entreprise (la Zenika Console Agent), conçue pour opérer de manière autonome tout en respectant les standards stricts du génie logiciel : Zero-Trust, observabilité et pratiques "failfast".
+
+Nous plongerons techniquement sous le capot de notre architecture orientée micro-services, déployée de façon serverless sur Google Cloud Run. Au cœur de cette plateforme, nous avons adopté le **Model Context Protocol (MCP)** pour découpler drastiquement la logique métier des capacités cognitives. Contrairement aux approches monolithiques habituelles, nos API de données (utilisateurs, missions, compétences) exposent dynamiquement leurs outils via des *sidecars* MCP. Un routeur intelligent motorisé par le *Google Agent Development Kit* (ADK) et Gemini analyse les intentions et délègue l'exécution à des sous-agents spécialisés *stateless*. Cette séparation des préoccupations garantit que les IA restent des consommatrices agnostiques, tandis que la sécurité, la pagination et l'accès aux données (PostgreSQL pgvector, Redis) demeurent sous le contrôle absolu des API métiers traditionnelles.
+
+Pour les équipes DevOps et SRE, opérer des LLMs en production introduit de nouvelles contraintes critiques que nous adresserons en détail. Nous expliquerons comment sécuriser les communications inter-agents via une propagation stricte de tokens JWT (machine-to-machine) et comment nous gérons les traitements lourds asynchrones via les pipelines *Vertex AI Batch*. De plus, nous aborderons la dimension FinOps, absolument indispensable à l'échelle. Grâce à des serveurs MCP natifs dédiés à l'analytique et à l'observabilité, chaque token généré par nos agents est intercepté, tracé et injecté en temps réel dans BigQuery. Cela nous permet d'isoler les coûts par agent, d'identifier les anomalies de consommation et de garantir une scalabilité sous contrainte budgétaire.
+
+En assistant à cette session, les développeurs, architectes et spécialistes IA découvriront comment concevoir des systèmes agentiques résilients et parés pour la production. Vous repartirez avec des *design patterns* concrets pour implémenter le standard MCP dans vos propres API, des stratégies pour orchestrer des workflows multi-agents via HTTP, et les meilleures pratiques GCP pour allier serverless, IA générative et sécurité Zero-Trust. L'ère des agents IA de production a commencé, venez découvrir comment construire les vôtres sans compromettre la stabilité de votre SI.
+
+## Références et mots-clés
+
+* **Mots-clés** : Multi-Agent Architecture, Model Context Protocol (MCP), LLMOps, FinOps IA, Google Cloud Run, Vertex AI, Google ADK, Zero-Trust.
+* **Techniques & Outils** : Python (FastAPI), Google Gemini (Pro/Flash), PostgreSQL (pgvector), Docker, BigQuery.
+* **Concepts mis en avant** : 
+  * *Sidecar Pattern* appliqué au MCP pour l'exposition d'outils.
+  * *Stateless Agents* : Maintenir les LLM sans état.
+  * Gouvernance IA : Tracking FinOps au token près et observabilité distribuée.

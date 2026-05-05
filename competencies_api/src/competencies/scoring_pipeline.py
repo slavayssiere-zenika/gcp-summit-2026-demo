@@ -7,13 +7,12 @@ Contient : _fetch_missions_for_user, _prefetch_all_missions,
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import database
 import httpx
 from google.cloud import storage as gcs_storage
-from opentelemetry.propagate import inject
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import ValidationError
 from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.finops import log_finops
@@ -21,34 +20,54 @@ from src.competencies.models import (Competency, CompetencyEvaluation,
                                      user_competency)
 from src.competencies.scheduler_control import set_scoring_scheduler_enabled
 from src.competencies.scoring_utils import (BATCH_GCS_BUCKET, CV_API_URL,
-                                            GCP_PROJECT_ID, GEMINI_MODEL,
-                                            MISSIONS_FETCH_SEMAPHORE,
+                                            GCP_PROJECT_ID, MISSIONS_FETCH_SEMAPHORE,
                                             SCORING_APPLY_SEMAPHORE,
                                             VERTEX_BATCH_MODEL,
                                             VERTEX_LOCATION,
                                             _build_jsonl_lines,
-                                            _build_scoring_prompt,
                                             _parse_scoring_results_gcs)
+from shared.schemas.missions import MissionsResponse
 
 logger = logging.getLogger(__name__)
+
 
 async def _fetch_missions_for_user(
     user_id: int, headers: dict, sem: asyncio.Semaphore
 ) -> tuple[int, list]:
     """Récupère les missions d'un user depuis cv_api (avec semaphore de concurrence)."""
     async with sem:
+        missions = []
         try:
             async with httpx.AsyncClient(timeout=15.0) as hc:
-                res = await hc.get(
-                    f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions",
-                    headers=headers,
-                )
-                if res.status_code == 200:
-                    return user_id, res.json().get("missions", [])
-                logger.warning(f"[scoring_service] missions user={user_id} HTTP {res.status_code}")
+                skip, limit = 0, 100
+                while True:
+                    res = await hc.get(
+                        f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions?skip={skip}&limit={limit}",
+                        headers=headers,
+                    )
+                    if res.status_code == 200:
+                        try:
+                            data = MissionsResponse.model_validate(res.json())
+                        except ValidationError as ve:
+                            logger.error(
+                                "[scoring_pipeline] Rupture de contrat API missions",
+                                extra={
+                                    "user_id": user_id,
+                                    "error": str(ve),
+                                    "raw_keys": list(res.json().keys()),
+                                },
+                            )
+                            break  # Stopper proprement la pagination
+                        missions.extend([m.model_dump() for m in data.items])
+                        if len(data.items) < limit:
+                            break
+                        skip += limit
+                    else:
+                        logger.warning(f"[scoring_service] missions user={user_id} HTTP {res.status_code}")
+                        break
         except Exception as e:
             logger.warning(f"[scoring_service] missions user={user_id} erreur: {e}")
-    return user_id, []
+    return user_id, missions
 
 
 async def _prefetch_all_missions(
@@ -83,7 +102,6 @@ async def _apply_scoring_results(
     chunk_size = 200  # 200 items par connexion DB
     sample_error = ""
 
-
     async def _process_chunk(chunk: list[tuple[int, int, str, float, str]]):
         nonlocal success, errors, sample_error
         async with database.SessionLocal() as db:
@@ -99,9 +117,9 @@ async def _apply_scoring_results(
                         db.add(ev)
                     ev.ai_score = score
                     ev.ai_justification = justification
-                    ev.ai_scored_at = datetime.utcnow()
+                    ev.ai_scored_at = datetime.now(timezone.utc)
                     ev.scoring_version = "v3-batch"
-                    ev.updated_at = datetime.utcnow()
+                    ev.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     success += 1
                 except Exception as item_e:
@@ -110,7 +128,6 @@ async def _apply_scoring_results(
                         sample_error = str(item_e)
                     logger.error(f"[scoring_service] upsert user={user_id} comp={comp_id}: {item_e}")
                     errors += 1
-
 
     chunks = [results[i:i + chunk_size] for i in range(0, len(results), chunk_size)]
     sem = asyncio.Semaphore(SCORING_APPLY_SEMAPHORE)
@@ -121,7 +138,7 @@ async def _apply_scoring_results(
 
     # Lancement des chunks en parallèle (limité par le sémaphore, donc max N connexions DB)
     await asyncio.gather(*[_sem_worker(c) for c in chunks])
-    
+
     return success, errors, sample_error
 
 
@@ -345,7 +362,7 @@ async def bg_bulk_scoring_vertex(
             )
 
         final_status = "error" if nb_errors > 0 else "completed"
-        
+
         log_msg = (
             f"Pipeline terminé — {nb_success} scores appliqués, "
             f"{nb_errors} erreurs, {skipped_no_mission} ignorés."

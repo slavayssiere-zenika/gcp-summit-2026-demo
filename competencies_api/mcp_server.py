@@ -1,3 +1,23 @@
+# flake8: noqa: E501
+from mcp.server import InitializationOptions
+from tools.user_tools import (
+    handle_assign_competency_to_user, handle_remove_competency_from_user, handle_list_user_competencies,
+    handle_list_competency_users, handle_clear_user_competencies, handle_get_competency_stats,
+    handle_get_agency_competency_coverage, handle_find_similar_consultants
+)
+from tools.tree_tools import (
+    handle_search_competencies, handle_list_competencies, handle_get_competency, handle_create_competency, handle_update_competency,
+    handle_delete_competency, handle_list_competency_suggestions, handle_create_competency_suggestion,
+    handle_review_competency_suggestion
+)
+from tools.batch_tools import (
+    handle_bulk_import_tree, handle_batch_evaluate_competencies_search, handle_batch_evaluate_competencies_users,
+    handle_assign_competencies_bulk, handle_bulk_scoring_all
+)
+from tools.evaluation_tools import (
+    handle_set_user_competency_score, handle_trigger_ai_scoring, handle_get_user_competency_evaluations,
+    handle_clear_user_evaluations, handle_find_skill_gaps
+)
 import asyncio
 import contextvars
 import json
@@ -9,7 +29,7 @@ from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from opentelemetry import propagate, trace
-from opentelemetry.propagate import extract, inject
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -19,7 +39,6 @@ from opentelemetry.trace.propagation.tracecontext import \
     TraceContextTextMapPropagator
 
 mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
-
 
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
@@ -44,14 +63,14 @@ provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "competencies-api-mcp",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
+        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
 tracer = trace.get_tracer(__name__)
@@ -543,241 +562,85 @@ def get_trace_context() -> dict:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    headers = get_trace_headers()
-    auth = mcp_auth_header_var.get(None)
-    if auth:
-        headers["Authorization"] = auth
-    async with httpx.AsyncClient(follow_redirects=True, headers=headers) as client:
-        try:
-            if name == "list_competencies":
-                response = await client.get(f"{API_BASE_URL}/", params=arguments)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
+    with tracer.start_as_current_span(f"mcp.tool.{name}"):
+        auth_header = mcp_auth_header_var.get()
+        headers = {}
+        if auth_header:
+            headers["Authorization"] = auth_header
+        inject(headers)
 
-            elif name == "search_competencies":
-                response = await client.get(f"{API_BASE_URL}/search", params=arguments)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
+        async with httpx.AsyncClient() as client:
+            try:
+                if name == "set_user_competency_score":
+                    return await handle_set_user_competency_score(client, arguments, headers, API_BASE_URL)
+                elif name == "trigger_ai_scoring":
+                    return await handle_trigger_ai_scoring(client, arguments, headers, API_BASE_URL)
+                elif name == "get_user_competency_evaluations":
+                    return await handle_get_user_competency_evaluations(client, arguments, headers, API_BASE_URL)
+                elif name == "clear_user_evaluations":
+                    return await handle_clear_user_evaluations(client, arguments, headers, API_BASE_URL)
+                elif name == "find_skill_gaps":
+                    return await handle_find_skill_gaps(client, arguments, headers, API_BASE_URL)
 
-            elif name == "get_competency":
-                response = await client.get(f"{API_BASE_URL}/{arguments['competency_id']}/")
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
+                elif name == "bulk_import_tree":
+                    return await handle_bulk_import_tree(client, arguments, headers, API_BASE_URL)
+                elif name == "batch_evaluate_competencies_search":
+                    return await handle_batch_evaluate_competencies_search(client, arguments, headers, API_BASE_URL)
+                elif name == "batch_evaluate_competencies_users":
+                    return await handle_batch_evaluate_competencies_users(client, arguments, headers, API_BASE_URL)
+                elif name == "assign_competencies_bulk":
+                    return await handle_assign_competencies_bulk(client, arguments, headers, API_BASE_URL)
+                elif name == "bulk_scoring_all":
+                    return await handle_bulk_scoring_all(client, arguments, headers, API_BASE_URL)
 
-            elif name == "create_competency":
-                response = await client.post(f"{API_BASE_URL}/", json=arguments)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
+                if name == "list_competencies":
+                    return await handle_list_competencies(client, arguments, headers, API_BASE_URL)
+                elif name == "search_competencies":
+                    return await handle_search_competencies(client, arguments, headers, API_BASE_URL)
+                elif name == "get_competency":
+                    return await handle_get_competency(client, arguments, headers, API_BASE_URL)
+                elif name == "create_competency":
+                    return await handle_create_competency(client, arguments, headers, API_BASE_URL)
+                elif name == "update_competency":
+                    return await handle_update_competency(client, arguments, headers, API_BASE_URL)
+                elif name == "delete_competency":
+                    return await handle_delete_competency(client, arguments, headers, API_BASE_URL)
+                elif name == "list_competency_suggestions":
+                    return await handle_list_competency_suggestions(client, arguments, headers, API_BASE_URL)
+                elif name == "create_competency_suggestion":
+                    return await handle_create_competency_suggestion(client, arguments, headers, API_BASE_URL)
+                elif name == "review_competency_suggestion":
+                    return await handle_review_competency_suggestion(client, arguments, headers, API_BASE_URL)
 
-            elif name == "update_competency":
-                comp_id = arguments["competency_id"]
-                data = {k: v for k, v in arguments.items() if k != "competency_id" and v is not None}
-                response = await client.put(f"{API_BASE_URL}/{comp_id}", json=data)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
+                elif name == "assign_competency_to_user":
+                    return await handle_assign_competency_to_user(client, arguments, headers, API_BASE_URL)
+                elif name == "remove_competency_from_user":
+                    return await handle_remove_competency_from_user(client, arguments, headers, API_BASE_URL)
+                elif name == "list_user_competencies":
+                    return await handle_list_user_competencies(client, arguments, headers, API_BASE_URL)
+                elif name == "list_competency_users":
+                    return await handle_list_competency_users(client, arguments, headers, API_BASE_URL)
+                elif name == "clear_user_competencies":
+                    return await handle_clear_user_competencies(client, arguments, headers, API_BASE_URL)
+                elif name == "get_competency_stats":
+                    return await handle_get_competency_stats(client, arguments, headers, API_BASE_URL)
+                elif name == "get_agency_competency_coverage":
+                    return await handle_get_agency_competency_coverage(client, arguments, headers, API_BASE_URL)
+                elif name == "find_similar_consultants":
+                    return await handle_find_similar_consultants(client, arguments, headers, API_BASE_URL)
 
-            elif name == "bulk_import_tree":
-                response = await client.post(f"{API_BASE_URL}/bulk_tree", json={"tree": arguments["tree"]})
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "delete_competency":
-                response = await client.delete(f"{API_BASE_URL}/{arguments['competency_id']}")
-                response.raise_for_status()
-                return [TextContent(type="text", text="Competency deleted successfully")]
-
-            elif name == "assign_competency_to_user":
-                user_id = arguments["user_id"]
-                comp_id = arguments["competency_id"]
-                response = await client.post(f"{API_BASE_URL}/user/{user_id}/assign/{comp_id}")
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "remove_competency_from_user":
-                user_id = arguments["user_id"]
-                comp_id = arguments["competency_id"]
-                response = await client.delete(f"{API_BASE_URL}/user/{user_id}/remove/{comp_id}")
-                response.raise_for_status()
-                return [TextContent(type="text", text="Competency removed from user")]
-
-            elif name == "list_user_competencies":
-                skip = arguments.get("skip", 0)
-                limit = arguments.get("limit", 100)
-                response = await client.get(f"{API_BASE_URL}/user/{arguments['user_id']}", params={"skip": skip, "limit": limit})
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "list_competency_users":
-                response = await client.get(f"{API_BASE_URL}/{arguments['competency_id']}/users")
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-            
-            elif name == "clear_user_competencies":
-                user_id = arguments["user_id"]
-                response = await client.delete(f"{API_BASE_URL}/user/{user_id}/clear")
-                response.raise_for_status()
-                return [TextContent(type="text", text=f"All competencies cleared for user {user_id}")]
-
-            elif name == "get_competency_stats":
-                response = await client.post(f"{API_BASE_URL}/stats/counts", json=arguments)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "get_user_competency_evaluations":
-                user_id = arguments["user_id"]
-                skip = arguments.get("skip", 0)
-                limit = arguments.get("limit", 500)
-                response = await client.get(f"{API_BASE_URL}/evaluations/user/{user_id}", params={"skip": skip, "limit": limit})
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "set_user_competency_score":
-                user_id = arguments["user_id"]
-                competency_id = arguments["competency_id"]
-                body = {"score": arguments["score"]}
-                if arguments.get("comment"):
-                    body["comment"] = arguments["comment"]
-                response = await client.post(
-                    f"{API_BASE_URL}/evaluations/user/{user_id}/competency/{competency_id}/user-score",
-                    json=body
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "trigger_ai_scoring":
-                user_id = arguments["user_id"]
-                response = await client.post(
-                    f"{API_BASE_URL}/evaluations/user/{user_id}/ai-score-all"
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "get_agency_competency_coverage":
-                params = {}
-                if "min_count" in arguments:
-                    params["min_count"] = arguments["min_count"]
-                if "limit" in arguments:
-                    params["limit"] = arguments["limit"]
-                response = await client.get(f"{API_BASE_URL}/analytics/agency-coverage", params=params)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "find_skill_gaps":
-                params = {"user_ids": arguments["user_ids"]}
-                if "competency_ids" in arguments and arguments["competency_ids"]:
-                    params["competency_ids"] = arguments["competency_ids"]
-                if "min_coverage" in arguments:
-                    params["min_coverage"] = arguments["min_coverage"]
-                response = await client.get(f"{API_BASE_URL}/analytics/skill-gaps", params=params)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "find_similar_consultants":
-                user_id = arguments["user_id"]
-                top_n = arguments.get("top_n", 5)
-                response = await client.get(
-                    f"{API_BASE_URL}/analytics/similar-consultants/{user_id}",
-                    params={"top_n": top_n}
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "list_competency_suggestions":
-                params = {}
-                if "status" in arguments:
-                    params["status"] = arguments["status"]
-                if "limit" in arguments:
-                    params["limit"] = arguments["limit"]
-                response = await client.get(f"{API_BASE_URL}/suggestions", params=params)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "create_competency_suggestion":
-                response = await client.post(f"{API_BASE_URL}/suggestions", json=arguments)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "review_competency_suggestion":
-                suggestion_id = arguments.pop("suggestion_id")
-                response = await client.patch(
-                    f"{API_BASE_URL}/suggestions/{suggestion_id}/review",
-                    json=arguments
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "batch_evaluate_competencies_search":
-                response = await client.post(f"{API_BASE_URL}/evaluations/batch/search", json=arguments, timeout=30.0)
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "batch_evaluate_competencies_users":
-                response = await client.post(f"{API_BASE_URL}/evaluations/batch/users", json=arguments, timeout=30.0)
-                response.raise_for_status()
-                raw = response.json()
-                # Filtrer les paires sans score IA pour ne pas surcharger le contexte LLM
-                evaluations = raw.get("evaluations", raw) if isinstance(raw, dict) else raw
-                if isinstance(evaluations, dict):
-                    scored = {
-                        uid: eval_data
-                        for uid, eval_data in evaluations.items()
-                        if eval_data.get("ai_score") is not None
-                    }
-                    result = {
-                        "evaluations": scored,
-                        "scored_count": len(scored),
-                        "total_queried": len(evaluations),
-                        "note": f"{len(evaluations) - len(scored)} consultants sans score IA (CV non analysé) exclus du résultat."
-                    }
                 else:
-                    result = raw
-                return [TextContent(type="text", text=json.dumps(result))]
-
-            elif name == "assign_competencies_bulk":
-                user_id = arguments["user_id"]
-                payload = {"competencies": arguments["competencies"]}
-                response = await client.post(
-                    f"{API_BASE_URL}/user/{user_id}/assign/bulk",
-                    json=payload,
-                    timeout=60.0,
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            elif name == "clear_user_evaluations":
-                user_id = arguments["user_id"]
-                response = await client.delete(
-                    f"{API_BASE_URL}/user/{user_id}/evaluations"
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=f"All evaluations cleared for user {user_id}")]
-
-            elif name == "bulk_scoring_all":
-                force = arguments.get("force", False)
-                semaphore_limit = arguments.get("semaphore_limit", 2)
-                response = await client.post(
-                    f"{API_BASE_URL}/evaluations/bulk-scoring-all",
-                    params={"force": force, "semaphore_limit": semaphore_limit},
-                    timeout=15.0,
-                )
-                response.raise_for_status()
-                return [TextContent(type="text", text=json.dumps(response.json()))]
-
-            else:
-                return [TextContent(type="text", text=f"Unknown tool: {name}")]
-
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 409:
-                return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-            return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+                    return [TextContent(type="text", text=f"Unknown tool: {name}")]
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 409:
+                    return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
+                return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+            except Exception as e:
+                return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 
 
 async def main():
     """Main entry point for the MCP server when run as a script."""
-    from mcp.server.stdio import stdio_server
     options = InitializationOptions(
         server_name="competencies-api",
         server_version="1.0.0",
@@ -786,6 +649,6 @@ async def main():
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, options)
 
-
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())

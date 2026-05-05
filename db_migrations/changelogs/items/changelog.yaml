@@ -68,6 +68,13 @@ databaseChangeLog:
                     primaryKey: true
                     foreignKeyName: "fk_item_category_category"
                     references: "categories(id)"
+      rollback:
+        - dropTable:
+            tableName: "item_category"
+        - dropTable:
+            tableName: "items"
+        - dropTable:
+            tableName: "categories"
   - changeSet:
       id: "2"
       author: "antigravity"
@@ -80,6 +87,10 @@ databaseChangeLog:
                   type: "jsonb"
                   constraints:
                     nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "items"
+            columnName: "metadata_json"
   - changeSet:
       id: "3"
       author: "antigravity"

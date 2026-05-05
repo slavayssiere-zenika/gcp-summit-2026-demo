@@ -14,14 +14,12 @@ from datetime import datetime, timedelta
 
 import database
 import httpx
-from fastapi import BackgroundTasks, Depends, HTTPException, Request
 from google.cloud import storage as gcs_storage
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
+from shared.schemas.pagination import PaginationResponse
 from sqlalchemy import update as sa_update
-from sqlalchemy.dialects.postgresql import JSON
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.sql import func
 from src.cvs.bulk_task_state import bulk_reanalyse_manager
 from src.cvs.models import CVProfile
 from src.gemini_retry import embed_content_with_retry
@@ -130,9 +128,22 @@ async def bg_bulk_reanalyse(service_token: str):
         try:
             async with httpx.AsyncClient(timeout=10.0) as hc:
                 inject({"Authorization": f"Bearer {service_token}"})
-                page_res = await hc.get(f"{COMPETENCIES_API_URL.rstrip('/')}/", params={"skip": 0, "limit": 500}, headers=headers, timeout=10.0)
+                page_res = await hc.get(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                    params={"skip": 0, "limit": 500},
+                    headers=headers,
+                    timeout=10.0,
+                )
                 if page_res.status_code == 200:
-                    items = page_res.json().get("items", [])
+                    try:
+                        page_data = PaginationResponse[dict].model_validate(page_res.json())
+                        items = page_data.items
+                    except ValidationError as ve:
+                        logger.warning(
+                            "[bulk_reanalyse] Rupture de contrat API competencies (taxonomy non chargée)",
+                            extra={"error": str(ve), "raw_keys": list(page_res.json().keys())},
+                        )
+                        items = []
                     if items:
                         ctx, nb_parents, nb_leaves = build_taxonomy_context(items)
                         tree_context = f"\n\n## TAXONOMY:\n{ctx}"
@@ -215,19 +226,24 @@ async def bg_bulk_reanalyse(service_token: str):
             bucket2 = gcs_client2.bucket(BATCH_GCS_BUCKET)
             blobs = await asyncio.to_thread(list, bucket2.list_blobs(prefix=blob_output_prefix))
             for out_blob in blobs:
-                if not out_blob.name.endswith(".jsonl"): continue
+                if not out_blob.name.endswith(".jsonl"):
+                    continue
                 content = await asyncio.to_thread(out_blob.download_as_text)
                 for line in content.splitlines():
-                    if not line.strip(): continue
+                    if not line.strip():
+                        continue
                     try:
                         record = json.loads(line)
                         key = record.get("id") or record.get("key", "")
-                        if key not in cv_index: continue
+                        if key not in cv_index:
+                            continue
                         cv_id, user_id = cv_index[key]
                         candidates = record.get("response", {}).get("candidates", [])
-                        if not candidates: continue
+                        if not candidates:
+                            continue
                         text = _clean_llm_json(candidates[0].get("content", {}).get("parts", [{}])[0].get("text", ""))
-                        results.append((cv_id, user_id, json.loads(text), record.get("response", {}).get("usageMetadata", {})))
+                        results.append((cv_id, user_id, json.loads(text), record.get(
+                            "response", {}).get("usageMetadata", {})))
                     except Exception as e:
                         logger.warning("[bulk_reanalyse] Skipping malformed GCS result line: %s", e)
         except Exception as e:
@@ -259,7 +275,8 @@ async def bg_bulk_reanalyse(service_token: str):
                 await asyncio.sleep(_readiness_step)
                 _waited += _readiness_step
             else:
-                logger.warning(f"[bulk_readiness] {_health_url} non disponible après {_readiness_timeout}s — on continue quand même (retry intégré)")
+                logger.warning(
+                    f"[bulk_readiness] {_health_url} non disponible après {_readiness_timeout}s — on continue quand même (retry intégré)")
         await bulk_reanalyse_manager.update_progress(
             new_log=f"Services prêts — démarrage pipeline {len(results)} CVs (embed={BULK_EMBED_SEMAPHORE} / apply={BULK_APPLY_SEMAPHORE})."
         )
@@ -333,14 +350,14 @@ async def bg_bulk_reanalyse(service_token: str):
                     inject(req_headers)
                     async with httpx.AsyncClient(timeout=30.0) as hc:
                         await _apply_with_retry(hc, "delete",
-                            f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations", headers=req_headers)
                         await _apply_with_retry(hc, "delete",
-                            f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear", headers=req_headers)
                         comps_payload = structured_cv.get("competencies", [])
                         if comps_payload:
                             await _apply_with_retry(hc, "post",
-                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
-                                json={"competencies": comps_payload}, headers=req_headers, timeout=120.0)
+                                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
+                                                    json={"competencies": comps_payload}, headers=req_headers, timeout=120.0)
                         await hc.delete(
                             f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items", headers=req_headers)
                         await _post_missions_bulk(hc, user_id, structured_cv.get("missions", []), req_headers)
@@ -539,14 +556,14 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
                     inject(req_headers)
                     async with httpx.AsyncClient(timeout=30.0) as hc:
                         await _apply_with_retry(hc, "delete",
-                            f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations", headers=req_headers)
                         await _apply_with_retry(hc, "delete",
-                            f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear", headers=req_headers)
                         comps_payload = structured_cv.get("competencies", [])
                         if comps_payload:
                             await _apply_with_retry(hc, "post",
-                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
-                                json={"competencies": comps_payload}, headers=req_headers, timeout=120.0)
+                                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
+                                                    json={"competencies": comps_payload}, headers=req_headers, timeout=120.0)
                         await hc.delete(
                             f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items", headers=req_headers)
                         await _post_missions_bulk(hc, user_id, structured_cv.get("missions", []), req_headers)
@@ -582,4 +599,3 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
         logger.error(f"[retry-apply] Erreur fatale: {e}", exc_info=True)
         await bulk_reanalyse_manager.update_progress(status="error", error=f"[retry-apply] Fatal: {e}")
         await scale_bulk_dependencies(min_instances=0)
-

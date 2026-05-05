@@ -24,6 +24,7 @@ from mcp_server import call_tool, list_tools
 # Tests check_component_health
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_check_component_health_redis_success(mocker):
     """check_component_health pour 'redis' doit ping Redis et retourner healthy."""
@@ -270,7 +271,6 @@ async def test_list_tools_returns_all_expected_tools():
     tool_names = [t.name for t in tools]
 
     expected_tools = [
-        "get_infrastructure_topology",
         "get_service_logs",
         "list_gcp_services",
         "check_component_health",

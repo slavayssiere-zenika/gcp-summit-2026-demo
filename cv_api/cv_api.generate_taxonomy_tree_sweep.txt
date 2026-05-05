@@ -28,4 +28,7 @@ Retourne UNIQUEMENT un objet JSON respectant exactement cette structure :
   ]
 }
 
-Règle absolue : Les champs "canonical" et "pillar" DOIVENT exister exactement avec la même orthographe dans {{RES_TREE}}. Ne rajoute aucun commentaire.
+Règles absolues : 
+1. Les champs "canonical" et "pillar" DOIVENT exister exactement avec la même orthographe dans {{RES_TREE}}.
+2. Utilise IMPÉRATIVEMENT la propriété "name" des objets JSON de l'arbre (ex: "Développement Web") et NON les clés de dictionnaire raccourcies (ex: "dev_web"). Le backend utilise le vrai nom pour la correspondance.
+Ne rajoute aucun commentaire.

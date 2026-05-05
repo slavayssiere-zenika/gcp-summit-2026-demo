@@ -29,12 +29,13 @@ const STATUS_LABELS: Record<string, { label: string; css: string }> = {
 const statusInfo = (status?: string) => STATUS_LABELS[status || 'STAFFED'] || STATUS_LABELS['STAFFED']
 
 const goToDetail = () => {
+  if (!props.mission.id) return
   router.push({ name: 'mission-detail', params: { id: props.mission.id.toString() } })
 }
 </script>
 
 <template>
-  <div class="mission-card glass-morphism clickable" @click="goToDetail">
+  <div class="mission-card glass-morphism" :class="{ clickable: !!mission.id }" @click="goToDetail">
     <div class="card-header">
       <div class="icon-box">
         <Briefcase size="24" />
@@ -42,7 +43,7 @@ const goToDetail = () => {
       <div class="title-area">
         <div class="title-row">
           <h3 class="title">{{ mission.title }}</h3>
-          <span class="id-badge">#{{ mission.id }}</span>
+          <span v-if="mission.id" class="id-badge">#{{ mission.id }}</span>
         </div>
         <span class="mc-status-badge" :class="statusInfo(mission.status).css" aria-label="Statut">
           {{ statusInfo(mission.status).label }}
@@ -74,7 +75,7 @@ const goToDetail = () => {
       </div>
     </div>
 
-    <div class="card-footer">
+    <div v-if="mission.id" class="card-footer">
       <span class="action-text">Voir les détails de la mission</span>
       <ArrowRight size="16" />
     </div>

@@ -13,8 +13,7 @@ Routes :
 
 import logging
 import os
-from datetime import datetime
-from typing import List
+from datetime import datetime, timezone
 
 import httpx
 from cache import delete_cache_pattern
@@ -34,7 +33,7 @@ from src.competencies.schemas import (AiScoreAllResponse,
                                       BatchEvaluationRequest,
                                       BatchEvaluationResponse,
                                       BatchUsersEvaluationRequest,
-                                      CompetencyEvaluationResponse,
+                                      CompetencyEvaluationResponse, PaginationResponse,
                                       UserScoreRequest)
 
 logger = logging.getLogger(__name__)
@@ -109,17 +108,15 @@ async def search_batch_users_evaluations(request: BatchUsersEvaluationRequest, d
     return BatchEvaluationResponse(evaluations=eval_dict)
 
 
-from src.competencies.schemas import PaginationResponse
-@router.get("/evaluations/user/{user_id}", response_model=PaginationResponse)
+@router.get("/evaluations/user/{user_id}", response_model=PaginationResponse[CompetencyEvaluationResponse])
 async def list_user_evaluations(
-    user_id: int, 
+    user_id: int,
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(500, ge=1, le=1000)
 ):
     """Liste toutes les evaluations (feuilles uniquement) pour un utilisateur."""
-    from sqlalchemy import func
-    
+
     leaf_ids = (await db.execute(
         select(user_competency.c.competency_id)
         .where(user_competency.c.user_id == user_id)
@@ -135,10 +132,10 @@ async def list_user_evaluations(
         return {"items": [], "total": 0, "skip": skip, "limit": limit}
 
     total = len(leaf_ids)
-    
+
     # Apply pagination on the leaf IDs
     paginated_leaf_ids = leaf_ids[skip:skip+limit]
-    
+
     if not paginated_leaf_ids:
         return {"items": [], "total": total, "skip": skip, "limit": limit}
 
@@ -155,9 +152,20 @@ async def list_user_evaluations(
     if missing_ids:
         comps = (await db.execute(select(Competency).where(Competency.id.in_(missing_ids)))).scalars().all()
         for c in comps:
-            result.append({"id": 0, "user_id": user_id, "competency_id": c.id, "competency_name": c.name,
-                           "ai_score": None, "ai_justification": None, "ai_scored_at": None,
-                           "user_score": None, "user_comment": None, "user_scored_at": None})
+            result.append({
+                "id": 0,
+                "user_id": user_id,
+                "competency_id": c.id,
+                "name": c.name,           # was: competency_name — aligns with _serialize_evaluation
+                "competency_name": c.name,  # kept for backward compat with frontend
+                "ai_score": None,
+                "ai_justification": None,
+                "ai_scored_at": None,
+                "user_score": None,
+                "user_comment": None,
+                "user_scored_at": None,
+                "created_at": None,
+            })
     return {"items": result, "total": total, "skip": skip, "limit": limit}
 
 
@@ -186,8 +194,8 @@ async def set_user_competency_score(user_id: int, competency_id: int, body: User
     ev = await _get_or_create_evaluation(db, user_id, competency_id)
     ev.user_score = body.score
     ev.user_comment = body.comment
-    ev.user_scored_at = datetime.utcnow()
-    ev.updated_at = datetime.utcnow()
+    ev.user_scored_at = datetime.now(timezone.utc)
+    ev.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(ev)
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
@@ -207,14 +215,13 @@ async def trigger_ai_score_single(user_id: int, competency_id: int, request: Req
     ev = await _get_or_create_evaluation(db, user_id, competency_id)
     ev.ai_score = score
     ev.ai_justification = justification
-    ev.ai_scored_at = datetime.utcnow()
+    ev.ai_scored_at = datetime.now(timezone.utc)
     ev.scoring_version = "v2"
-    ev.updated_at = datetime.utcnow()
+    ev.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(ev)
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
     return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
-
 
 
 @router.post("/evaluations/user/{user_id}/ai-score-all", response_model=AiScoreAllResponse)
@@ -226,7 +233,7 @@ async def trigger_ai_score_all(user_id: int, request: Request, background_tasks:
     """
     auth_header = request.headers.get("Authorization", "")
     user_comp_subq = select(user_competency.c.competency_id).where(user_competency.c.user_id == user_id).subquery()
-    
+
     leaf_ids_stmt = (
         select(user_competency.c.competency_id)
         .where(user_competency.c.user_id == user_id)
@@ -238,7 +245,7 @@ async def trigger_ai_score_all(user_id: int, request: Request, background_tasks:
             .exists()
         )
     )
-    
+
     if only_missing:
         leaf_ids_stmt = leaf_ids_stmt.where(
             ~select(CompetencyEvaluation.id)

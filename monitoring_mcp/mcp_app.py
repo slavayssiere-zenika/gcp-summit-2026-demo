@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 import redis
@@ -122,7 +122,7 @@ async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 
                 return
             try:
                 data = await get_infrastructure_topology(hours_lookback)
-                data["generated_at"] = datetime.utcnow().isoformat()
+                data["generated_at"] = datetime.now(timezone.utc).isoformat()
                 r.set(cache_key, json.dumps(data), ex=3600)
             except Exception as e:
                 logging.error(f"Topology refresh failed: {e}")
@@ -136,7 +136,7 @@ async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 
                     cached_data = json.loads(cached_str)
                     if "generated_at" in cached_data:
                         gen_time = datetime.fromisoformat(cached_data["generated_at"])
-                        age = (datetime.utcnow() - gen_time).total_seconds()
+                        age = (datetime.now(timezone.utc) - gen_time).total_seconds()
                         if age > 300:  # 5 minutes soft TTL
                             background_tasks.add_task(async_background_refresh)
                     return cached_data
@@ -153,7 +153,7 @@ async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 
                     return json.loads(d)
 
         data = await get_infrastructure_topology(hours_lookback)
-        data["generated_at"] = datetime.utcnow().isoformat()
+        data["generated_at"] = datetime.now(timezone.utc).isoformat()
         r.set(cache_key, json.dumps(data), ex=3600)
 
         if acquired:

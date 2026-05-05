@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import database
@@ -20,7 +20,7 @@ import httpx
 from cache import delete_cache_pattern
 from google import genai
 from google.genai import types
-from opentelemetry.propagate import inject
+from pydantic import ValidationError
 from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.helpers import (_compute_recency_weight,
@@ -28,6 +28,7 @@ from src.competencies.helpers import (_compute_recency_weight,
                                       _parse_duration_months)
 from src.competencies.models import (Competency, CompetencyEvaluation,
                                      user_competency)
+from shared.schemas.missions import MissionsResponse
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +67,15 @@ def _serialize_evaluation(ev: CompetencyEvaluation, competency_name: str = "") -
         "id": ev.id,
         "user_id": ev.user_id,
         "competency_id": ev.competency_id,
-        "competency_name": competency_name,
+        "name": competency_name,          # alias — attendu par les réponses paginées et le frontend
+        "competency_name": competency_name,  # conservé pour rétrocompat BatchEvaluationResponse
         "ai_score": ev.ai_score,
         "ai_justification": ev.ai_justification,
         "ai_scored_at": ev.ai_scored_at,
         "user_score": ev.user_score,
         "user_comment": ev.user_comment,
         "user_scored_at": ev.user_scored_at,
+        "created_at": getattr(ev, "created_at", None),
     }
 
 
@@ -98,12 +101,33 @@ async def _compute_ai_score(
     missions = []
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            res = await client.get(f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions", headers=headers)
-            if res.status_code == 200:
-                missions = res.json().get("missions", [])
-                logger.info(f"[_compute_ai_score] Found {len(missions)} missions for user_id={user_id}")
-            else:
-                logger.error(f"[_compute_ai_score] Error fetching missions for user {user_id}: HTTP {res.status_code}")
+            skip, limit = 0, 100
+            while True:
+                res = await client.get(
+                    f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions?skip={skip}&limit={limit}",
+                    headers=headers,
+                )
+                if res.status_code == 200:
+                    try:
+                        data = MissionsResponse.model_validate(res.json())
+                    except ValidationError as ve:
+                        logger.error(
+                            "[ai_scoring] Rupture de contrat API missions",
+                            extra={
+                                "user_id": user_id,
+                                "error": str(ve),
+                                "raw_keys": list(res.json().keys()),
+                            },
+                        )
+                        break  # Stopper proprement la pagination
+                    missions.extend([m.model_dump() for m in data.items])
+                    if len(data.items) < limit:
+                        break
+                    skip += limit
+                else:
+                    logger.error(
+                        f"[_compute_ai_score] Error fetching missions for user {user_id}: HTTP {res.status_code}")
+                    break
     except Exception as e:
         logger.warning(f"[AI Score] Failed to fetch missions for user {user_id}: {e}")
         return None, "Missions non disponibles (erreur réseau)."
@@ -235,15 +259,15 @@ async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], header
         try:
             # 1. Calcul IA (long) SANS maintenir de connexion DB
             score, justification = await _compute_ai_score(user_id, comp_name, headers)
-            
+
             # 2. Persistance courte (checkout d'une connexion DB juste pour écrire)
             async with database.SessionLocal() as db:
                 ev = await _get_or_create_evaluation(db, user_id, comp_id)
                 ev.ai_score = score
                 ev.ai_justification = justification
-                ev.ai_scored_at = datetime.utcnow()
+                ev.ai_scored_at = datetime.now(timezone.utc)
                 ev.scoring_version = "v2"
-                ev.updated_at = datetime.utcnow()
+                ev.updated_at = datetime.now(timezone.utc)
                 await db.commit()
 
             if score is not None:
@@ -253,7 +277,7 @@ async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], header
             await asyncio.sleep(0.3)
         except Exception as e:
             logger.error(f"[AI Score BG] Failed for user={user_id} comp='{comp_name}': {e}")
-            
+
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
     logger.info(f"[AI Score BG] Scoring terminé pour user={user_id} — {len(comp_tuples)} compétences traitées.")
 

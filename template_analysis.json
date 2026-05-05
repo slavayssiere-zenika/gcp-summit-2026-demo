@@ -1,0 +1,258 @@
+{
+  "template_id": "1pxgzUdmW2Nx5G7mVj5tbP69fBaGblZ1v9EhZh_1lE8o",
+  "title": "YYYY-MM-DD - Template Zenika",
+  "masters": [
+    {
+      "objectId": "g31dcd223d0c_0_0"
+    }
+  ],
+  "layouts": [
+    {
+      "objectId": "g31dcd223d0c_0_2",
+      "layoutName": "SECTION_HEADER_1_1_2_1_1_2_1_1",
+      "displayName": "10. Yellow - header",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 3,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_10",
+      "layoutName": "TITLE_3_1_2_6",
+      "displayName": "11. Yellow - text",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_18",
+      "layoutName": "TITLE_3_1_2_4_2",
+      "displayName": "12. Yellow - text+img",
+      "composition": {
+        "IMAGE": 2,
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_27",
+      "layoutName": "SECTION_HEADER_1_1_2_1",
+      "displayName": "20. Red - header",
+      "composition": {
+        "TITLE": 1,
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 3,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_35",
+      "layoutName": "TITLE_3_1_2_5",
+      "displayName": "21. Red - text",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_43",
+      "layoutName": "TITLE_3_1_2_4_2_1",
+      "displayName": "22. Red - text+img",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 2,
+        "SHAPE": 1,
+        "BODY": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_52",
+      "layoutName": "SECTION_HEADER_1_1_2_1_1_1",
+      "displayName": "30. Blue - header",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 3,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_60",
+      "layoutName": "TITLE_3_1_2_5_2",
+      "displayName": "31. Blue - text",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_68",
+      "layoutName": "TITLE_3_1_2_4_2_1_1",
+      "displayName": "32. Blue - text+img",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 2,
+        "SHAPE": 1,
+        "BODY": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_77",
+      "layoutName": "SECTION_HEADER_1_1_2_1_1_2",
+      "displayName": "40. Purple - header",
+      "composition": {
+        "IMAGE": 3,
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_85",
+      "layoutName": "TITLE_3_1_2_5_2_1",
+      "displayName": "41. Purple - text",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_93",
+      "layoutName": "TITLE_3_1_2_4_2_1_1_1",
+      "displayName": "41. Purple - text+img",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 2,
+        "SHAPE": 1,
+        "BODY": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_102",
+      "layoutName": "SECTION_HEADER_1_1",
+      "displayName": "50. Green - header",
+      "composition": {
+        "IMAGE": 3,
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_110",
+      "layoutName": "TITLE_3_1_2_5_2_1_1",
+      "displayName": "51. Green - text",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_118",
+      "layoutName": "TITLE_3_1_2_4_2_1_1_1_1",
+      "displayName": "52. Green - text+img",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "STATIC_TEXT": 1,
+        "IMAGE": 2,
+        "SHAPE": 1,
+        "BODY": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_127",
+      "layoutName": "TITLE_3_1_2_5_1",
+      "displayName": "61. Red - copyright bottom",
+      "composition": {
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "BODY": 1,
+        "STATIC_TEXT": 1,
+        "SLIDE_NUMBER": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_135",
+      "layoutName": "TITLE_3_1_2_4_2_1_1_1_1_1",
+      "displayName": "62. Green - customer story",
+      "composition": {
+        "SLIDE_NUMBER": 1,
+        "IMAGE": 1,
+        "SHAPE": 1,
+        "BODY": 1,
+        "TITLE": 1,
+        "SUBTITLE": 1,
+        "STATIC_TEXT": 2
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_144",
+      "layoutName": "SECTION_HEADER_1_1_1_1_1",
+      "displayName": "63. Blank",
+      "composition": {
+        "STATIC_TEXT": 1,
+        "SLIDE_NUMBER": 1
+      }
+    },
+    {
+      "objectId": "g31dcd223d0c_0_147",
+      "layoutName": "SECTION_HEADER_1_1_1_1_1_1",
+      "displayName": "64. Blank with background",
+      "composition": {
+        "IMAGE": 1,
+        "STATIC_TEXT": 1,
+        "SLIDE_NUMBER": 1
+      }
+    }
+  ]
+}

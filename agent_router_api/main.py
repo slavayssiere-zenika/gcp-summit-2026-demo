@@ -22,10 +22,10 @@ from agent_commons.exception_handler import make_global_exception_handler
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 
 
-
 tracer = setup_telemetry()
 setup_logging()
 _logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,17 +47,21 @@ FastAPIInstrumentor.instrument_app(app, excluded_urls="health,health/agents,read
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
+
 @app.get("/")
 async def root():
     return {"message": "Router Agent API - Use /query for interactions"}
+
 
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
 
+
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
+
 
 @app.get("/spec")
 async def get_spec():
@@ -68,6 +72,7 @@ async def get_spec():
     except Exception as e:
         _logger.debug("[spec] spec.md not found or unreadable: %s", e)
         return Response(content="# Specification introuvable", media_type="text/markdown")
+
 
 @app.get("/health/agents")
 async def health_agents():
@@ -99,7 +104,7 @@ async def health_agents():
             if not isinstance(v_res, Exception) and v_res.status_code == 200:
                 version = v_res.json().get("version", "unknown")
         except Exception as e:
-            logger.warning("[health-probe] Agent '%s' health check failed: %s", agent_name, e)
+            _logger.warning("[health-probe] Agent '%s' health check failed: %s", agent_name, e)
             ok = False
         finally:
             latency_ms = round((time.monotonic() - start) * 1000)
@@ -132,6 +137,7 @@ async def health_agents():
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
+
 @app.post("/login")
 async def login(request: Request, response: Response):
     data = await request.json()
@@ -141,16 +147,18 @@ async def login(request: Request, response: Response):
         res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
         if res.status_code != 200:
             raise HTTPException(status_code=res.status_code, detail=res.json().get("detail", "Erreur de connexion"))
-        
+
         for name, value in res.cookies.items():
             response.set_cookie(key=name, value=value, httponly=True, samesite="lax")
-        
+
         return res.json()
+
 
 @app.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Déconnecté"}
+
 
 @app.get("/me")
 async def get_me(request: Request):

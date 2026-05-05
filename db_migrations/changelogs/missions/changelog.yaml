@@ -42,6 +42,9 @@ databaseChangeLog:
                   name: created_at
                   type: timestamp
                   defaultValueComputed: CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: missions
 
   - changeSet:
       id: "2"
@@ -53,6 +56,10 @@ databaseChangeLog:
               - column:
                   name: prefiltered_candidates
                   type: jsonb
+      rollback:
+        - dropColumn:
+            tableName: missions
+            columnName: prefiltered_candidates
 
   - changeSet:
       id: "3"
@@ -65,6 +72,10 @@ databaseChangeLog:
                   name: fallback_full_scan
                   type: boolean
                   defaultValueBoolean: false
+      rollback:
+        - dropColumn:
+            tableName: missions
+            columnName: fallback_full_scan
 
   - changeSet:
       id: "4"

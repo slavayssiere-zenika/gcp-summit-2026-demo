@@ -60,6 +60,48 @@ const deleteBatchJob = async (jobName: string) => {
   }
 }
 
+const replayBatchJob = async (job: any) => {
+  let step = 'map';
+  const name = (job.display_name || '').toLowerCase();
+  if (name.includes('reduce')) step = 'reduce';
+  else if (name.includes('sweep')) step = 'sweep';
+  
+  if (step === 'sweep') {
+      if (!confirm(`Attention: Vous vous apprêtez à relancer l'étape 'sweep'.\nPlutôt que de rejouer l'ancien résultat, nous allons créer un NOUVEAU job Vertex AI avec vos prompts actuels et l'état en mémoire.\nContinuer ?`)) return;
+      try {
+          const resp = await axios.post('/api/cv/recalculate_tree/batch/sweep/recreate');
+          if (resp.data && resp.data.success) {
+              addLog(`Nouveau Sweep initié sur Vertex AI`);
+              await checkTreeTaskStatus();
+          } else {
+              addLog(`Erreur reprise: ${resp.data?.error}`);
+          }
+      } catch (e: any) {
+          console.error('Failed to replay sweep', e);
+          addLog(`Erreur réseau (Reprise Sweep): ${e.message}`);
+      }
+      return;
+  }
+
+  if (!confirm(`Voulez-vous vraiment relancer le pipeline à partir de l'étape '${step}' en utilisant les résultats de ce job ?\nAttention: Cela écrasera l'état du batch en cours.`)) return;
+
+  try {
+    const resp = await axios.post('/api/cv/recalculate_tree/batch/replay', {
+      batch_job_id: job.name.split('/').pop(),
+      step: step
+    });
+    if (resp.data && resp.data.success) {
+      addLog(`Reprise initiée à partir de ${job.display_name || job.name}`);
+      await checkTreeTaskStatus();
+    } else {
+      addLog(`Erreur reprise: ${resp.data?.error}`);
+    }
+  } catch (e: any) {
+    console.error('Failed to replay batch', e);
+    addLog(`Erreur réseau (Reprise): ${e.message}`);
+  }
+}
+
 const checkBatchProgress = async () => {
   try {
     const resp = await axios.post('/api/cv/recalculate_tree/batch/check')
@@ -109,6 +151,28 @@ const resetBatch = async () => {
   }
 }
 
+const replayCurrentSweep = async () => {
+    if (!treeArtifacts.value.batch_job_id) {
+        alert("Impossible de trouver l'ID du batch récent pour rejouer le sweep.");
+        return;
+    }
+    
+    if (!confirm(`Voulez-vous relancer l'étape 'sweep' ?\nAttention: Assurez-vous d'avoir corrigé les prompts si nécessaire.`)) return;
+
+    try {
+        const resp = await axios.post('/api/cv/recalculate_tree/batch/sweep/recreate');
+        if (resp.data && resp.data.success) {
+            addLog(`Nouveau Sweep initié sur Vertex AI`);
+            await checkTreeTaskStatus();
+        } else {
+            addLog(`Erreur reprise: ${resp.data?.error}`);
+        }
+    } catch (e: any) {
+        console.error('Failed to replay batch', e);
+        addLog(`Erreur réseau (Reprise): ${e.message}`);
+    }
+}
+
 const addLog = (msg: string) => {
   const timestamp = new Date().toLocaleTimeString()
   logs.value.unshift(`[${timestamp}] ${msg}`)
@@ -124,7 +188,8 @@ const checkTreeTaskStatus = async () => {
     if (data && data.status) {
         treeStatus.value = data.status
         treeArtifacts.value = {
-            batch_job_id: data.batch_job_id
+            batch_job_id: data.batch_job_id,
+            batch_step: data.batch_step
         }
         treeCost.value = data.usage?.estimated_cost_usd || null
 
@@ -266,6 +331,17 @@ onUnmounted(() => {
               Forcer Reprise du Batch GCP (Suite à Erreur, Interruption ou Timeout)
             </button>
             <button 
+              v-if="treeStatus === 'error' && treeArtifacts.batch_step === 'sweep'"
+              class="action-btn secondary-btn" 
+              @click="replayCurrentSweep"
+              :disabled="!isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Relancer le Sweep'"
+              style="margin-top: 1rem; border-color: #f59e0b; color: #f59e0b;"
+            >
+              <RefreshCcw size="20" />
+              Relancer le Sweep (Suite à l'échec du Quality Gate)
+            </button>
+            <button 
               v-if="treeStatus !== 'batch_running' && treeStatus !== 'running'"
               class="action-btn secondary-btn" 
               @click="resetBatch"
@@ -338,6 +414,10 @@ onUnmounted(() => {
                                         borderColor: 'transparent', margin: 0 }">
                             {{ job.state.replace('JOB_STATE_', '') }}
                         </span>
+                        <button v-if="isAdmin() && job.state === 'JOB_STATE_SUCCEEDED'" class="action-btn" @click.stop="replayBatchJob(job)" title="Reprendre à partir de ce job"
+                                style="padding: 4px; background: transparent; color: #6366f1; border: none; width: auto; min-width: auto; height: auto; cursor: pointer; margin-right: 8px;">
+                            <RefreshCcw size="16" />
+                        </button>
                         <button v-if="isAdmin()" class="action-btn" @click.stop="deleteBatchJob(job.name)" title="Supprimer ce job"
                                 style="padding: 4px; background: transparent; color: #ef4444; border: none; width: auto; min-width: auto; height: auto; cursor: pointer;">
                             <Trash2 size="16" />

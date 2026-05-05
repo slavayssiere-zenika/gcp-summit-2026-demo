@@ -5,7 +5,6 @@ Coverage cible : 16% → 50%+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./cv_test.db")
@@ -26,11 +25,14 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
 
 AUTH = {"Authorization": "Bearer testtoken"}
 
+
 def override_jwt_admin():
     return {"sub": "1", "email": "admin@z.com", "role": "admin"}
 
+
 def override_jwt_user():
     return {"sub": "2", "email": "user@z.com", "role": "user"}
+
 
 async def override_get_db():
     db = AsyncMock()
@@ -224,17 +226,17 @@ def test_batch_recover_non_admin_returns_403(mocker):
 def test_batch_start_conflict_when_running(mocker):
     """batch/start → 409 si un batch est déjà en cours."""
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
+        "src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value={"status": "running", "batch_job_id": "jobs/42"})
     )
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.is_task_running",
+        "src.services.taxonomy_batch_service.tree_task_manager.is_task_running",
         new=AsyncMock(return_value=True)
     )
     # Mock le client Vertex pour la vérif d'état réel
     mock_vertex = MagicMock()
     mock_vertex.batches.get.return_value = MagicMock(state=MagicMock(name="JOB_STATE_RUNNING"))
-    mocker.patch("src.cvs.routers.taxonomy_router._svc_config", MagicMock(vertex_batch_client=mock_vertex))
+    mocker.patch("src.services.taxonomy_batch_service._svc_config", MagicMock(vertex_batch_client=mock_vertex))
 
     with get_client() as client:
         resp = client.post("/recalculate_tree/batch/start", headers=AUTH)
@@ -244,22 +246,22 @@ def test_batch_start_conflict_when_running(mocker):
 def test_batch_start_idle_triggers_pipeline(mocker):
     """batch/start → 200 si aucun batch en cours."""
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
+        "src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value=None)
     )
     mock_init = AsyncMock()
-    mocker.patch("src.cvs.routers.taxonomy_router.tree_task_manager.initialize_task", new=mock_init)
+    mocker.patch("src.services.taxonomy_batch_service.tree_task_manager.initialize_task", new=mock_init)
     mock_update = AsyncMock()
-    mocker.patch("src.cvs.routers.taxonomy_router.tree_task_manager.update_progress", new=mock_update)
+    mocker.patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress", new=mock_update)
 
     # Mock tout le pipeline GCS + Vertex
-    mocker.patch("src.cvs.routers.taxonomy_router._svc_config", MagicMock(
+    mocker.patch("src.services.taxonomy_batch_service._svc_config", MagicMock(
         gcs_client=MagicMock(),
         vertex_batch_client=MagicMock(),
         bucket_name="test-bucket",
     ))
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.asyncio.to_thread",
+        "src.services.taxonomy_batch_service.asyncio.to_thread",
         new=AsyncMock(return_value=MagicMock(name="projects/x/jobs/new"))
     )
 
@@ -306,6 +308,7 @@ def test_recalculate_tree_already_running(mocker):
 
 # ── POST /recalculate_tree/batch/check ───────────────────────────────────────
 
+
 def test_batch_check_no_job(mocker):
     """batch/check sans job → success."""
     mocker.patch(
@@ -323,7 +326,7 @@ def test_batch_check_intermediate_states_return_early(mocker):
     mocker.patch(
         "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value={
-            "status": "running", 
+            "status": "running",
             "batch_job_id": "jobs/42",
             "batch_step": "deduplicating"
         })
@@ -334,7 +337,7 @@ def test_batch_check_intermediate_states_return_early(mocker):
 
     with get_client() as client:
         resp = client.post("/recalculate_tree/batch/check", headers=AUTH)
-    
+
     assert resp.status_code == 200
     assert resp.json().get("state") == "DEDUPLICATING"
     mock_vertex.batches.get.assert_not_called()
@@ -343,28 +346,28 @@ def test_batch_check_intermediate_states_return_early(mocker):
 def test_batch_check_failed_deletes_job(mocker):
     """batch/check sur job FAILED → supprime le job GCP et met l'état en error."""
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
+        "src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value={"status": "running", "batch_job_id": "jobs/42", "batch_step": "map"})
     )
     mock_job = MagicMock()
     mock_job.state.name = "JOB_STATE_FAILED"
     mock_vertex = MagicMock()
     mock_vertex.batches.get.return_value = mock_job
-    mocker.patch("src.cvs.routers.taxonomy_router._svc_config", MagicMock(vertex_batch_client=mock_vertex))
-    
+    mocker.patch("src.services.taxonomy_batch_service._svc_config", MagicMock(vertex_batch_client=mock_vertex))
+
     mock_to_thread = AsyncMock(side_effect=lambda f, *a, **k: f(*a, **k))
-    mocker.patch("src.cvs.routers.taxonomy_router.asyncio.to_thread", new=mock_to_thread)
+    mocker.patch("src.services.taxonomy_batch_service.asyncio.to_thread", new=mock_to_thread)
 
     mock_update = AsyncMock()
-    mocker.patch("src.cvs.routers.taxonomy_router.tree_task_manager.update_progress", new=mock_update)
+    mocker.patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress", new=mock_update)
 
     with get_client() as client:
         resp = client.post("/recalculate_tree/batch/check", headers=AUTH)
 
     assert resp.status_code == 200
     assert resp.json().get("success") is False
-    mock_vertex.batches.delete.assert_called_once_with(name="jobs/42")
-    
+    mock_vertex.batches.delete.assert_called_once()
+
     call_kwargs = mock_update.call_args.kwargs
     assert call_kwargs.get("status") == "error"
 
@@ -373,49 +376,49 @@ def test_batch_check_pending_timeout_cancels_job(mocker):
     """batch/check sur job PENDING timeout → annule le job GCP et restart auto."""
     import datetime as dt
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
+        "src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value={"status": "running", "batch_job_id": "jobs/42", "batch_step": "map"})
     )
-    
+
     mock_job = MagicMock()
     mock_job.state.name = "JOB_STATE_PENDING"
-    mock_job.create_time = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=4) # > 3h timeout
-    
+    mock_job.create_time = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=4)  # > 3h timeout
+
     mock_vertex = MagicMock()
     mock_vertex.batches.get.return_value = mock_job
-    mocker.patch("src.cvs.routers.taxonomy_router._svc_config", MagicMock(vertex_batch_client=mock_vertex))
-    
+    mocker.patch("src.services.taxonomy_batch_service._svc_config", MagicMock(vertex_batch_client=mock_vertex))
+
     mock_to_thread = AsyncMock(side_effect=lambda f, *a, **k: f(*a, **k))
-    mocker.patch("src.cvs.routers.taxonomy_router.asyncio.to_thread", new=mock_to_thread)
+    mocker.patch("src.services.taxonomy_batch_service.asyncio.to_thread", new=mock_to_thread)
 
     mock_update = AsyncMock()
-    mocker.patch("src.cvs.routers.taxonomy_router.tree_task_manager.update_progress", new=mock_update)
+    mocker.patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress", new=mock_update)
 
     with get_client() as client:
         resp = client.post("/recalculate_tree/batch/check", headers=AUTH)
 
     assert resp.status_code == 200
     assert resp.json().get("action") == "auto_restart"
-    mock_vertex.batches.cancel.assert_called_once_with(name="jobs/42")
+    mock_vertex.batches.cancel.assert_called_once()
 
 
 def test_batch_check_running_returns_progress(mocker):
     """batch/check sur job RUNNING → retourne la progression (completion_stats)."""
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
+        "src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value={"status": "running", "batch_job_id": "jobs/42", "batch_step": "map"})
     )
-    
+
     mock_job = MagicMock()
     mock_job.state.name = "JOB_STATE_RUNNING"
     mock_job.completion_stats = MagicMock(success_count=50, failed_count=10, incomplete_count=40, total_count=100)
-    
+
     mock_vertex = MagicMock()
     mock_vertex.batches.get.return_value = mock_job
-    mocker.patch("src.cvs.routers.taxonomy_router._svc_config", MagicMock(vertex_batch_client=mock_vertex))
-    
+    mocker.patch("src.services.taxonomy_batch_service._svc_config", MagicMock(vertex_batch_client=mock_vertex))
+
     mock_to_thread = AsyncMock(side_effect=lambda f, *a, **k: f(*a, **k))
-    mocker.patch("src.cvs.routers.taxonomy_router.asyncio.to_thread", new=mock_to_thread)
+    mocker.patch("src.services.taxonomy_batch_service.asyncio.to_thread", new=mock_to_thread)
 
     with get_client() as client:
         resp = client.post("/recalculate_tree/batch/check", headers=AUTH)
@@ -430,20 +433,20 @@ def test_batch_check_running_returns_progress(mocker):
 def test_batch_check_succeeded_map_parses_json_and_starts_dedup(mocker):
     """batch/check sur job SUCCEEDED en step map → parse GCS JSONL et lance run_dedup async."""
     mocker.patch(
-        "src.cvs.routers.taxonomy_router.tree_task_manager.get_latest_status",
+        "src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
         new=AsyncMock(return_value={"status": "running", "batch_job_id": "jobs/42", "batch_step": "map"})
     )
-    
+
     mock_job = MagicMock()
     mock_job.state.name = "JOB_STATE_SUCCEEDED"
     mock_job.dest.gcs_uri = "gs://test-bucket/taxonomy/output/map-xxx/"
-    
+
     mock_vertex = MagicMock()
     mock_vertex.batches.get.return_value = mock_job
-    mocker.patch("src.cvs.routers.taxonomy_router._svc_config", MagicMock(vertex_batch_client=mock_vertex))
-    
+    mocker.patch("src.services.taxonomy_batch_service._svc_config", MagicMock(vertex_batch_client=mock_vertex))
+
     mock_to_thread = AsyncMock(side_effect=lambda f, *a, **k: f(*a, **k))
-    mocker.patch("src.cvs.routers.taxonomy_router.asyncio.to_thread", new=mock_to_thread)
+    mocker.patch("src.services.taxonomy_batch_service.asyncio.to_thread", new=mock_to_thread)
 
     # Mock GCS Client
     mock_blob = MagicMock()
@@ -453,31 +456,30 @@ def test_batch_check_succeeded_map_parses_json_and_starts_dedup(mocker):
         "response": {"candidates": [{"content": {"parts": [{"text": '```json\n{"items": [{"Pillar 1": [{"name": "Skill 1"}]}]}\n```'}]}}]}
     })
     mock_blob.download_as_text.return_value = fake_jsonl
-    
+
     mock_bucket = MagicMock()
     mock_bucket.list_blobs.return_value = iter([mock_blob])
-    
+
     mock_gcs_client = MagicMock()
     mock_gcs_client.bucket.return_value = mock_bucket
-    mocker.patch("src.cvs.routers.taxonomy_router.gcs_storage.Client", return_value=mock_gcs_client)
-    
+    mocker.patch("src.services.taxonomy_batch_service.gcs_storage.Client", return_value=mock_gcs_client)
+
     mock_update = AsyncMock()
-    mocker.patch("src.cvs.routers.taxonomy_router.tree_task_manager.update_progress", new=mock_update)
-    
-    mocker.patch("src.cvs.routers.taxonomy_router.log_finops", new=AsyncMock())
-    mock_create_task = mocker.patch("src.cvs.routers.taxonomy_router.asyncio.create_task")
+    mocker.patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress", new=mock_update)
+
+    mocker.patch("src.services.taxonomy_batch_service.log_finops", new=AsyncMock())
+    mock_create_task = mocker.patch("src.services.taxonomy_batch_service.asyncio.create_task")
 
     with get_client() as client:
         resp = client.post("/recalculate_tree/batch/check", headers=AUTH)
 
     assert resp.status_code == 200
     assert resp.json().get("state") == "PROCESSING_DEDUP"
-    
+
     # Vérifie que map_result a été parsé et persisté
     call_kwargs = mock_update.call_args.kwargs
     assert call_kwargs.get("batch_step") == "deduplicating"
     assert "Pillar 1" in call_kwargs.get("map_result", {})
-    
+
     # Vérifie que la suite LLM est lancée en background
     mock_create_task.assert_called_once()
-

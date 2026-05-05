@@ -11,7 +11,7 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 |---|---|---|
 | `main.py` | 210 | ✅ |
 | `mcp_server.py` | 328 | ✅ |
-| `conftest.py` | 30 | ✅ |
+| `conftest.py` | 39 | ✅ |
 | `metrics.py` | 3 | ✅ |
 | `src/missions/analysis_router.py` | 196 | ✅ |
 | `src/missions/crud_router.py` | 175 | ✅ |

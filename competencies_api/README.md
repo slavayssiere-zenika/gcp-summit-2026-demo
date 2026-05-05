@@ -64,6 +64,7 @@ Le monolithe `router.py` (~2490L) a été décomposé en modules spécialisés.
 - `GET /analytics/agency-coverage`
 - `GET /analytics/skill-gaps`
 - `GET /analytics/similar-consultants/{user_id}`
+- `GET /analytics/taxonomy-quality`
 - `POST /user/{user_id}/assign/bulk`
 - `POST /user/{user_id}/assign/{competency_id}`
 - `DELETE /user/{user_id}/evaluations`
@@ -78,7 +79,6 @@ Le monolithe `router.py` (~2490L) a été décomposé en modules spécialisés.
 - `PATCH /suggestions/{suggestion_id}/review`
 - `GET /{competency_id}`
 - `GET /{competency_id}/users`
-- `POST /bulk_tree`
 
 ## MCP tools exposés
 - `assign_competencies_bulk`, `assign_competency_to_user`, `batch_evaluate_competencies_search`, `batch_evaluate_competencies_users`, `bulk_import_tree`, `bulk_scoring_all`, `clear_user_competencies`, `clear_user_evaluations`, `create_competency`, `create_competency_suggestion`, `delete_competency`, `find_similar_consultants`, `find_skill_gaps`, `get_agency_competency_coverage`, `get_competency`, `get_competency_stats`, `get_user_competency_evaluations`, `list_competencies`, `list_competency_suggestions`, `list_competency_users`, `list_user_competencies`, `remove_competency_from_user`, `review_competency_suggestion`, `search_competencies`, `set_user_competency_score`, `trigger_ai_scoring`, `update_competency`

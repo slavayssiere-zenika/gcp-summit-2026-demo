@@ -5,12 +5,11 @@ assignments_router.py — Routes d'assignation compétences/utilisateurs.
 import base64
 import json
 import logging
-from datetime import datetime
-from typing import List
+from datetime import datetime, timezone
 
 from cache import delete_cache_pattern, get_cache, set_cache
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import delete, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -20,7 +19,7 @@ from src.auth import verify_jwt
 from src.competencies.helpers import get_user_from_api, serialize_competency
 from src.competencies.models import (Competency, CompetencyEvaluation,
                                      user_competency)
-from src.competencies.schemas import CompetencyResponse
+from src.competencies.schemas import CompetencyResponse, PaginationResponse
 
 logger = logging.getLogger(__name__)
 CACHE_TTL = 60
@@ -49,7 +48,7 @@ async def assign_competencies_bulk(user_id: int, request: Request, db: AsyncSess
 
     for cid in valid_ids:
         await db.execute(
-            pg_insert(user_competency).values(user_id=user_id, competency_id=cid, created_at=datetime.utcnow())
+            pg_insert(user_competency).values(user_id=user_id, competency_id=cid, created_at=datetime.now(timezone.utc))
             .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
         )
 
@@ -67,7 +66,8 @@ async def assign_competency_to_user(user_id: int, competency_id: int, request: R
     if not comp:
         raise HTTPException(status_code=404, detail="Competency not found")
     await db.execute(
-        pg_insert(user_competency).values(user_id=user_id, competency_id=competency_id, created_at=datetime.utcnow())
+        pg_insert(user_competency).values(user_id=user_id,
+                                          competency_id=competency_id, created_at=datetime.now(timezone.utc))
         .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
     )
     await db.commit()
@@ -97,12 +97,9 @@ async def remove_competency_from_user(user_id: int, competency_id: int, db: Asyn
     return Response(status_code=204)
 
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
-from src.competencies.schemas import CompetencyResponse, PaginationResponse
-
-@router.get("/user/{user_id}", response_model=PaginationResponse)
+@router.get("/user/{user_id}", response_model=PaginationResponse[CompetencyResponse])
 async def list_user_competencies(
-    user_id: int, 
+    user_id: int,
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -112,20 +109,20 @@ async def list_user_competencies(
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
-    
+
     from sqlalchemy import func
     total = (await db.execute(
         select(func.count()).select_from(user_competency)
         .filter(user_competency.c.user_id == user_id)
     )).scalar()
-    
+
     results = (await db.execute(
         select(Competency).join(user_competency, Competency.id == user_competency.c.competency_id)
         .filter(user_competency.c.user_id == user_id)
         .offset(skip).limit(limit)
     )).scalars().all()
     items = [CompetencyResponse(**serialize_competency(c)) for c in results]
-    
+
     resp = PaginationResponse(items=[i.model_dump() for i in items], total=total, skip=skip, limit=limit)
     set_cache(cache_key, resp.model_dump(), CACHE_TTL)
     return resp
@@ -140,7 +137,8 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
     target_comps = (await db.execute(select(user_competency.c.competency_id).where(user_competency.c.user_id == req.target_id))).scalars().all()
     for cid in set(source_comps) - set(target_comps):
         await db.execute(
-            pg_insert(user_competency).values(user_id=req.target_id, competency_id=cid, created_at=datetime.utcnow())
+            pg_insert(user_competency).values(user_id=req.target_id,
+                                              competency_id=cid, created_at=datetime.now(timezone.utc))
             .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
         )
     await db.execute(user_competency.delete().where(user_competency.c.user_id == req.source_id))

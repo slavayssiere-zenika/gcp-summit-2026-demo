@@ -6,12 +6,9 @@ from database import get_db
 from fastapi.testclient import TestClient
 from main import app
 from src.auth import security, verify_jwt
-from src.cvs.models import CVProfile
 from src.cvs.schemas import CVImportStep, CVResponse
-from src.cvs.task_state import tree_task_manager
 
 os.environ['SECRET_KEY'] = 'testsecret'
-
 
 
 # 1. Provide dependency overrides for testing
@@ -19,8 +16,10 @@ async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test", "role": "admin"}
+
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_jwt] = override_verify_jwt
@@ -30,17 +29,21 @@ app.dependency_overrides[security] = lambda: MagicMock(credentials="testtoken")
 client = TestClient(app)
 
 # 2. Basic Tests
+
+
 def test_health(mocker):
     mocker.patch("database.check_db_connection", new=AsyncMock(return_value=True))
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
+
 def test_get_spec_success(mocker):
     mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
     response = client.get("/spec")
     assert response.status_code == 200
     assert "# Spec doc" in response.text
+
 
 def test_get_spec_fail(mocker):
     mocker.patch("builtins.open", side_effect=Exception("Not found"))
@@ -49,6 +52,8 @@ def test_get_spec_fail(mocker):
     assert "# Specification introuvable" in response.text
 
 # 3. Router Tests with Mocks
+
+
 @pytest.fixture
 def mock_httpx(mocker):
     mock = mocker.patch("httpx.AsyncClient")
@@ -56,11 +61,13 @@ def mock_httpx(mocker):
     mock.return_value.__aenter__.return_value = client_instance
     return client_instance
 
+
 @pytest.fixture
 def mock_genai(mocker):
     # Les sous-routers utilisent _svc_config.client (accès attribut).
     # Patcher la source src.services.config.client suffit pour tous.
     return mocker.patch("src.services.config.client")
+
 
 def test_get_user_cv(mocker):
     # Mocking db.query
@@ -89,6 +96,7 @@ def test_get_user_cv(mocker):
     response = client.get("/user/2")
     assert response.status_code == 404
 
+
 def test_search_candidates(mock_genai, mock_httpx, mocker):
     mock_db = AsyncMock()
     mock_db.add = MagicMock()
@@ -96,7 +104,7 @@ def test_search_candidates(mock_genai, mock_httpx, mocker):
     emb_res = MagicMock()
     emb_res.embeddings = [MagicMock(values=[0.1, 0.2, 0.3])]
     mock_genai.aio.models.embed_content = AsyncMock(return_value=emb_res)
-    
+
     # Mock Database cosine response
     mock_result = MagicMock()
     mock_result.all.return_value = [(MagicMock(user_id=1), 0.1), (MagicMock(user_id=2), 0.4)]
@@ -106,7 +114,8 @@ def test_search_candidates(mock_genai, mock_httpx, mocker):
     # Mock HTTPX enrichment
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {"full_name": "Test User", "email": "test@zenika.com", "username": "test", "is_active": True}
+    mock_resp.json.return_value = {"full_name": "Test User",
+                                   "email": "test@zenika.com", "username": "test", "is_active": True}
     mock_httpx.get.return_value = mock_resp
 
     response = client.get("/search?query=test")
@@ -118,6 +127,7 @@ def test_search_candidates(mock_genai, mock_httpx, mocker):
     assert items[0]["similarity_score"] == 0.9  # 1.0 - 0.1
     assert items[0]["full_name"] == "Test User"
 
+
 def test_import_and_analyze_cv(mocker):
     # Setup Mocks
     mock_db = AsyncMock()
@@ -125,13 +135,13 @@ def test_import_and_analyze_cv(mocker):
     mock_db.execute.return_value = MagicMock()
     mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
-    
+
     mock_httpx = mocker.patch("httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
+
     # Mocking _fetch_cv_content
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Dummy CV Text")
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content", return_value="Dummy CV Text")
 
     # Mocking Gemini Client
     mock_genai = mocker.patch("src.services.config.client")
@@ -139,20 +149,20 @@ def test_import_and_analyze_cv(mocker):
     mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": true, "first_name": "John", "last_name": "Doe", "email": "john.doe@test.com", "summary": "Expert Python", "current_role": "Dev", "years_of_experience": 5, "competencies": [{"name": "Python", "parent": "Lang"}], "missions": [], "is_anonymous": false}'
     mock_genai.aio.models.embed_content = AsyncMock()
     mock_genai.aio.models.embed_content.return_value.embeddings = [MagicMock(values=[0.1, 0.2])]
-    
+
     # Mock HTTP responses
     mock_resp_prompts = MagicMock()
     mock_resp_prompts.raise_for_status = MagicMock()
     mock_resp_prompts.json.return_value = {"value": "Prompt"}
-    
+
     mock_resp_users = MagicMock()
     mock_resp_users.status_code = 200
-    mock_resp_users.json.return_value = {"items": [], "id": 1} # user doesn't exist
-    
+    mock_resp_users.json.return_value = {"items": [], "id": 1}  # user doesn't exist
+
     mock_resp_comps = MagicMock()
     mock_resp_comps.status_code = 200
     mock_resp_comps.json.return_value = {"items": []}
-    
+
     mock_resp_create = MagicMock()
     mock_resp_create.status_code = 200
     mock_resp_create.json.return_value = {"id": 1}
@@ -172,13 +182,14 @@ def test_import_and_analyze_cv(mocker):
         if "/users/" in url or "/competencies/" in url:
             return mock_resp_create
         return MagicMock(status_code=200)
-    
+
     client_instance.get.side_effect = get_side_effect
     client_instance.post.side_effect = post_side_effect
 
     # Make Request
-    response = client.post("/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
-    
+    response = client.post(
+        "/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
+
     assert response.status_code == 200
     data = response.json()
     assert "succès" in data["message"]
@@ -212,7 +223,7 @@ def test_import_cv_steps_on_truncated_document(mocker):
     app.dependency_overrides[get_db] = lambda: mock_db
 
     long_text = "A" * 101000  # dépasse le seuil réel de 100000 caractères du router
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value=long_text)
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content", return_value=long_text)
 
     mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
@@ -224,23 +235,33 @@ def test_import_cv_steps_on_truncated_document(mocker):
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
-    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
-    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
-    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 99}
-    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+    prompt_mock = MagicMock()
+    prompt_mock.raise_for_status = MagicMock()
+    prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200)
+    users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200)
+    create_mock.json.return_value = {"id": 99}
+    comps_mock = MagicMock(status_code=200)
+    comps_mock.json.return_value = {"items": []}
 
     def get_se(*a, **kw):
         url = a[0] if a else kw.get("url", "")
-        if "prompts_api" in url: return prompt_mock
-        if "/users/" in url or "search" in url: return users_mock
-        if "/competencies/" in url: return comps_mock
+        if "prompts_api" in url:
+            return prompt_mock
+        if "/users/" in url or "search" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
         return MagicMock(status_code=200)
+
     def post_se(*a, **kw): return create_mock
 
     ci.get.side_effect = get_se
     ci.post.side_effect = post_se
 
-    response = client.post("/import", json={"url": "http://docs.google.com/d/long"}, headers={"Authorization": "Bearer token"})
+    response = client.post("/import", json={"url": "http://docs.google.com/d/long"},
+                           headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     data = response.json()
 
@@ -262,7 +283,8 @@ def test_import_cv_steps_on_zero_competencies(mocker):
     mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Short legal document")
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content",
+                 return_value="Short legal document")
 
     mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
@@ -275,26 +297,36 @@ def test_import_cv_steps_on_zero_competencies(mocker):
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
 
-    prompt_mock = MagicMock(); prompt_mock.raise_for_status = MagicMock(); prompt_mock.json.return_value = {"value": "P"}
-    users_mock = MagicMock(status_code=200); users_mock.json.return_value = {"items": []}
-    create_mock = MagicMock(status_code=200); create_mock.json.return_value = {"id": 42}
-    comps_mock = MagicMock(status_code=200); comps_mock.json.return_value = {"items": []}
+    prompt_mock = MagicMock()
+    prompt_mock.raise_for_status = MagicMock()
+    prompt_mock.json.return_value = {"value": "P"}
+    users_mock = MagicMock(status_code=200)
+    users_mock.json.return_value = {"items": []}
+    create_mock = MagicMock(status_code=200)
+    create_mock.json.return_value = {"id": 42}
+    comps_mock = MagicMock(status_code=200)
+    comps_mock.json.return_value = {"items": []}
 
     def get_se(*a, **kw):
         url = a[0] if a else kw.get("url", "")
-        if "prompts_api" in url: return prompt_mock
-        if "/users/" in url: return users_mock
-        if "/competencies/" in url: return comps_mock
+        if "prompts_api" in url:
+            return prompt_mock
+        if "/users/" in url:
+            return users_mock
+        if "/competencies/" in url:
+            return comps_mock
         return MagicMock(status_code=200)
+
     def post_se(*a, **kw): return create_mock
 
     ci.get.side_effect = get_se
     ci.post.side_effect = post_se
 
-    response = client.post("/import", json={"url": "http://docs.google.com/d/zero"}, headers={"Authorization": "Bearer token"})
+    response = client.post("/import", json={"url": "http://docs.google.com/d/zero"},
+                           headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     data = response.json()
-    
+
     llm_step = next((s for s in data["steps"] if s["step"] == "llm_parse"), None)
     assert llm_step is not None
     assert llm_step["status"] == "warning", "0 compétences doit passer llm_parse en 'warning'"
@@ -326,7 +358,8 @@ def test_cv_response_has_steps_and_warnings():
         competencies_assigned=3,
         steps=[
             CVImportStep(step="download", label="Téléchargement", status="success", duration_ms=100),
-            CVImportStep(step="llm_parse", label="Analyse IA", status="warning", duration_ms=5000, detail="0 compétences"),
+            CVImportStep(step="llm_parse", label="Analyse IA", status="warning",
+                         duration_ms=5000, detail="0 compétences"),
         ],
         warnings=["Doc tronqué", "Email absent"]
     )
@@ -335,24 +368,29 @@ def test_cv_response_has_steps_and_warnings():
     assert r.steps[1].status == "warning"
     assert len(r.warnings) == 2
     assert "Doc tronqué" in r.warnings
+
+
 def test_recalculate_tree(mocker):
     mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=False))
     mocker.patch("src.cvs.task_state.TreeTaskState.initialize_task", new=AsyncMock())
-    
+
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json()["message"] == "Calcul interactif de l'arbre lancé"
 
 
 def test_fetch_cv_content_internal_url(mocker):
-    response = client.post("/import", json={"url": "http://localhost/cv.pdf"}, headers={"Authorization": "Bearer token"})
+    response = client.post("/import", json={"url": "http://localhost/cv.pdf"},
+                           headers={"Authorization": "Bearer token"})
     assert response.status_code == 400
     assert "Internal URLs are not allowed" in response.text
+
 
 def test_fetch_cv_content_invalid_scheme(mocker):
     response = client.post("/import", json={"url": "ftp://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 400
     assert "Invalid URL scheme" in response.text
+
 
 def test_import_cv_no_auth(mocker):
     original_jwt = app.dependency_overrides.get(verify_jwt)
@@ -364,14 +402,16 @@ def test_import_cv_no_auth(mocker):
     app.dependency_overrides[verify_jwt] = original_jwt
     app.dependency_overrides[security] = original_sec
 
+
 def test_import_cv_genai_not_configured(mocker):
     # force client to None
     mocker.patch("src.services.config.client", None)
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="text")
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content", return_value="text")
     mocker.patch("os.path.exists", return_value=False)
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
     assert "GenAI Client not configured" in response.text
+
 
 def test_import_cv_prompt_fail(mocker):
     """
@@ -389,23 +429,26 @@ def test_import_cv_prompt_fail(mocker):
     # Le GET vers prompts_api lève une exception réseau
     client_instance.get.side_effect = Exception("HTTP fetch failed")
 
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="text")
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content", return_value="text")
     # Pas de fichier fallback disponible
     mocker.patch("os.path.exists", return_value=False)
     # Vider le cache prompt pour forcer le fetching HTTP
-    import src.services.cv_import_service as cv_import_service
-    cv_import_service._CV_CACHE["prompt"]["value"] = None
-    cv_import_service._CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min.replace(tzinfo=__import__('datetime').timezone.utc)
+    from src.services.config import _CV_CACHE
+    _CV_CACHE["prompt"]["value"] = None
+    _CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min.replace(
+        tzinfo=__import__('datetime').timezone.utc)
 
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
     assert "Cannot fetch generic prompt" in response.text, \
         f"Le message d'erreur attendu est absent. Reçu: {response.text[:300]}"
 
+
 def test_search_candidates_no_client(mocker):
     mocker.patch("src.services.config.client", None)
     response = client.get("/search?query=test")
     assert response.status_code == 500
+
 
 def test_search_candidates_embed_fail(mocker):
     mock_genai = mocker.patch("src.services.config.client")
@@ -413,6 +456,7 @@ def test_search_candidates_embed_fail(mocker):
     response = client.get("/search?query=test")
     assert response.status_code == 400
     assert "Embedding search query failed" in response.text
+
 
 def test_recalculate_tree_no_auth(mocker):
     original_jwt = app.dependency_overrides.get(verify_jwt)
@@ -424,6 +468,7 @@ def test_recalculate_tree_no_auth(mocker):
     app.dependency_overrides[verify_jwt] = original_jwt
     app.dependency_overrides[security] = original_sec
 
+
 def test_recalculate_tree_bad_token(mocker):
     original_jwt = app.dependency_overrides.get(verify_jwt)
     original_sec = app.dependency_overrides.get(security)
@@ -434,11 +479,13 @@ def test_recalculate_tree_bad_token(mocker):
     app.dependency_overrides[verify_jwt] = original_jwt
     app.dependency_overrides[security] = original_sec
 
+
 def test_recalculate_tree_not_admin(mocker):
     app.dependency_overrides[verify_jwt] = lambda: {"role": "user"}
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
     app.dependency_overrides[verify_jwt] = override_verify_jwt
     assert response.status_code in [401, 403]
+
 
 def test_recalculate_tree_no_client(mocker):
     mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
@@ -447,6 +494,7 @@ def test_recalculate_tree_no_client(mocker):
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
     assert response.status_code == 200
     assert response.json()["status"] == "running"
+
 
 def test_recalculate_tree_already_running(mocker):
     mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
@@ -463,33 +511,35 @@ def test_import_cv_not_a_cv_boolean_check(mocker):
     mock_db.execute.return_value = MagicMock()
     mock_db.execute.return_value.scalars.return_value.first.return_value = None
     app.dependency_overrides[get_db] = lambda: mock_db
-    
+
     mock_httpx = mocker.patch("httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="This is a cake recipe, not a resume.")
+
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content",
+                 return_value="This is a cake recipe, not a resume.")
 
     # Mocking Gemini Client to return is_cv false
     mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
     mock_genai.aio.models.generate_content.return_value.text = '{"is_cv": false, "first_name": null, "last_name": null, "email": null, "competencies": []}'
-    
+
     # Mock HTTP responses for prompts_api
     mock_resp_prompts = MagicMock()
     mock_resp_prompts.json.return_value = {"value": "Prompt"}
-    
+
     def get_side_effect(*args, **kwargs):
         url = args[0] if args else kwargs.get("url", "")
         if "prompts_api" in url:
             return mock_resp_prompts
         return MagicMock(status_code=200)
-    
+
     client_instance.get.side_effect = get_side_effect
 
     # Make Request
-    response = client.post("/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
-    
+    response = client.post(
+        "/import", json={"url": "http://docs.google.com/document/d/123/edit"}, headers={"Authorization": "Bearer token"})
+
     assert response.status_code == 400
     assert "Not a CV" in response.json()["detail"]
 
@@ -507,7 +557,8 @@ def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email
     mock_db.add = MagicMock()
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    mocker.patch("src.services.cv_import_service._fetch_cv_content", return_value="Contenu du CV de test")
+    mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content",
+                 return_value="Contenu du CV de test")
 
     mock_genai = mocker.patch("src.services.config.client")
     mock_genai.aio.models.generate_content = AsyncMock()
@@ -605,11 +656,16 @@ def test_import_cv_folder_name_priority_over_llm(mocker):
     def get_se(*a, **kw):
         url = a[0] if a else kw.get("url", "")
         if "prompts_api" in url:
-            m = MagicMock(); m.raise_for_status = MagicMock(); m.json.return_value = {"value": "P"}; return m
+            m = MagicMock()
+            m.raise_for_status = MagicMock()
+            m.json.return_value = {"value": "P"}
+            return m
         if "search" in url:
             return folder_match_mock
         if "/competencies/" in url:
-            m = MagicMock(status_code=200); m.json.return_value = {"items": []}; return m
+            m = MagicMock(status_code=200)
+            m.json.return_value = {"items": []}
+            return m
         return MagicMock(status_code=200)
 
     ci.get.side_effect = get_se
@@ -632,10 +688,10 @@ def test_import_cv_folder_name_priority_over_llm(mocker):
         f"Un warning de divergence LLM/dossier attendu. Warnings reçus: {data.get('warnings')}"
     )
 
-    # L'étape folder_identity doit être présente (statut warning)
-    folder_step = next((s for s in data["steps"] if s["step"] == "folder_identity"), None)
-    assert folder_step is not None, "L'étape 'folder_identity' doit être présente en cas de divergence"
-    assert folder_step["status"] == "warning"
+    # L'étape user_resolve doit être présente (statut warning)
+    folder_step = next((s for s in data["steps"] if s["step"] == "user_resolve" and s["status"]
+                       == "warning" and "divergence" in (s.get("detail") or "").lower()), None)
+    assert folder_step is not None, "Un warning de divergence doit être présent dans l'étape 'user_resolve'"
 
 
 def test_import_cv_folder_name_single_word_ignored(mocker):
@@ -697,7 +753,6 @@ def test_import_cv_schema_folder_name_optional():
 
     req2 = CVImportRequest(url="https://docs.google.com/document/d/abc/edit", folder_name="Alice Martin")
     assert req2.folder_name == "Alice Martin"
-
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -938,5 +993,3 @@ def test_reanalyze_not_admin(mocker):
         assert response.status_code == 403
     finally:
         app.dependency_overrides[verify_jwt] = override_verify_jwt
-
-

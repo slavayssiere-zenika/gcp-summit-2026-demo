@@ -10,7 +10,6 @@ Key exports:
   - LONG_RUNNING_TOOLS : Set of tools that require a 120s timeout
 """
 
-import asyncio
 import contextvars
 import logging
 import os
@@ -21,6 +20,8 @@ from typing import Any, List, Optional
 import httpx
 from opentelemetry.propagate import inject
 from prometheus_client import Counter
+from pydantic import ValidationError
+from shared.schemas.mcp import McpToolResult
 
 # ---------------------------------------------------------------------------
 # Prometheus metric — defined here so it is imported from a single location
@@ -121,7 +122,17 @@ class MCPHttpClient:
                 )
                 res.raise_for_status()
                 # Sidecar returns {"result": [{"text": "...", "type": "text"}]}
-                result_data = res.json().get("result", [])
+                # McpToolResult.model_validate() échoue si le protocole MCP dérive
+                try:
+                    result = McpToolResult.model_validate(res.json())
+                    result_data = result.result
+                except ValidationError as ve:
+                    logger.error(
+                        "[MCP-HTTP] Rupture de protocole MCP sur outil '%s'",
+                        tool_name,
+                        extra={"error": str(ve), "raw_keys": list(res.json().keys())},
+                    )
+                    raise RuntimeError(f"Contrat MCP brisé sur '{tool_name}': {ve}") from ve
                 logger.info("[MCP-HTTP] Tool '%s' completed in %.2fs", tool_name, time.time() - start_time)
                 return result_data
             except Exception as e:
@@ -213,17 +224,21 @@ def init_mcp_clients() -> None:
     """Lazily initialise all known MCP clients from environment variables."""
     with _mcp_lock:
         if _clients["users"] is None:
-            _clients["users"] = MCPHttpClient(os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000")))
+            _clients["users"] = MCPHttpClient(
+                os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000")))
         if _clients["items"] is None:
-            _clients["items"] = MCPHttpClient(os.getenv("ITEMS_MCP_URL", os.getenv("ITEMS_API_URL", "http://items_mcp:8000")))
+            _clients["items"] = MCPHttpClient(
+                os.getenv("ITEMS_MCP_URL", os.getenv("ITEMS_API_URL", "http://items_mcp:8000")))
         if _clients["competencies"] is None:
-            _clients["competencies"] = MCPHttpClient(os.getenv("COMPETENCIES_MCP_URL", os.getenv("COMPETENCIES_API_URL", "http://competencies_mcp:8000")))
+            _clients["competencies"] = MCPHttpClient(
+                os.getenv("COMPETENCIES_MCP_URL", os.getenv("COMPETENCIES_API_URL", "http://competencies_mcp:8000")))
         if _clients["cv"] is None:
             _clients["cv"] = MCPHttpClient(os.getenv("CV_MCP_URL", os.getenv("CV_API_URL", "http://cv_mcp:8000")))
         if _clients["drive"] is None:
             _clients["drive"] = MCPHttpClient(os.getenv("DRIVE_MCP_URL", "http://drive_mcp:8000"))
         if _clients["missions"] is None:
-            _clients["missions"] = MCPHttpClient(os.getenv("MISSIONS_MCP_URL", os.getenv("MISSIONS_API_URL", "http://missions_mcp:8009")))
+            _clients["missions"] = MCPHttpClient(
+                os.getenv("MISSIONS_MCP_URL", os.getenv("MISSIONS_API_URL", "http://missions_mcp:8009")))
         if _clients["analytics"] is None:
             _clients["analytics"] = MCPHttpClient(os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008"))
         if _clients["monitoring"] is None:
@@ -263,6 +278,7 @@ async def get_analytics_mcp() -> MCPHttpClient:
 async def get_missions_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return _clients["missions"]  # type: ignore[return-value]
+
 
 async def get_monitoring_mcp() -> MCPHttpClient:
     init_mcp_clients()

@@ -50,12 +50,20 @@ databaseChangeLog:
                   name: "created_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+      rollback:
+        - dropTable:
+            tableName: "user_competency"
+        - dropTable:
+            tableName: "competencies"
   - changeSet:
       id: "drop-old-unique"
       author: "antigravity"
       changes:
         - sql:
             sql: "ALTER TABLE competencies DROP CONSTRAINT IF EXISTS competencies_name_key"
+      rollback:
+        - sql:
+            sql: "-- Rollback no-op : la contrainte supprimée était cassant les doublons case-insensitive"
   - changeSet:
       id: "cleanup-competency-duplicates"
       author: "antigravity"
@@ -117,12 +125,18 @@ databaseChangeLog:
                   ) canonicals ON LOWER(c.name) = canonicals.lname
                   WHERE c.id != canonicals.min_id
               );
+      rollback:
+        - sql:
+            sql: "-- Rollback no-op : migration de données irréversible (déduplication). Restaurer depuis un snapshot DB préalable."
   - changeSet:
       id: "case-insensitive-unique-competency"
       author: "antigravity"
       changes:
         - sql:
             sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_competency_name_lower ON competencies (LOWER(name))"
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_unique_competency_name_lower"
   - include:
       file: "changelogs/competencies/003-add-competency-aliases.yaml"
   - include:

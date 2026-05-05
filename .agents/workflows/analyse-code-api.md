@@ -38,6 +38,7 @@ Pour chaque service détecté, vérifie rigoureusement les points de la checklis
 - [ ] **Modèles IA** : Aucun modèle IA hardcodé, utilisation des variables d'environnement.
 - [ ] **Container Contract** : Dockerfile multi-stage (`AS builder`), utilisateur non-root (`USER`), `CMD` sans shell (utilisation de `python3`), et présence d'un `.dockerignore`.
 - [ ] **Analyse Statique (Flake8)** : Exécuter `flake8` sur le code source (`python3 -m pip install flake8 && python3 -m flake8 src/ --select=F821,F822,E901,F841,E722,E402`) pour détecter les variables non définies (F821), les erreurs de syntaxe (E901), les exceptions silencieuses (E722) et forcer les imports globaux PEP 8 (E402).
+- [ ] **Test Coverage des Schémas (100%)** : Tout fichier `schemas.py` contenant des modèles Pydantic doit faire l'objet de tests unitaires dédiés (ex: `test_schemas.py`) garantissant formellement 100% de couverture sur les validateurs et alias.
 - [ ] **Gestion des erreurs** : Absence de `except Exception: pass`. "Failfast" et zéro erreur silencieuse appliqués.
 - [ ] **Health Checks (Liveness/Readiness)** : Découplage strict entre la Liveness (`/health` instantané sans appels externes/DB) et la Readiness (`/ready` ou équivalent pour le test de connectivité BDD/BigQuery/Redis).
 - [ ] **Contrat d'Environnement (ENV Contract)** : Tout appel à `os.getenv` ou `os.environ` dans le code **doit** avoir une déclaration `ENV` correspondante dans le `Dockerfile`.
@@ -51,6 +52,16 @@ Pour chaque service détecté, vérifie rigoureusement les points de la checklis
 - [ ] **Taille des fichiers Python (400 lignes max)** : Aucun fichier `.py` dans `src/` ne doit dépasser **400 lignes**. Vérifier avec `find src/ -name "*.py" | xargs wc -l | sort -rn | head -20`. Tout fichier dépassant ce seuil est un signal d'un "God Module" à décomposer en services ou sous-modules. Exception tolérée uniquement pour les fichiers de migration Liquibase ou les fixtures de test.
 - [ ] **Taille des fonctions Python (50 lignes max)** : Aucune fonction ou méthode ne doit dépasser **50 lignes** de corps (hors docstring et commentaires). Vérifier avec `python3 -m pip install radon && python3 -m radon cc src/ -a -nb` pour mesurer la complexité cyclomatique (toute fonction de rang `C`, `D` ou `F` est une cible de refactoring prioritaire). Une fonction dépassant 50 lignes indique une violation du principe de responsabilité unique (SRP) et nuit à la testabilité.
 - [ ] **Pagination lors de la consommation d'APIs** : Vérifier que tout appel vers une API externe (Google Drive, BigQuery, Cloud Logging, Pub/Sub) ou interne (à la plateforme) qui retourne une liste utilise la pagination ou les page tokens. Rechercher les patterns d'appel unique sans boucle : `grep -rn "\.list(\.execute()\|\.list(" src/` et vérifier la présence d'une boucle `while True` / `nextPageToken` / `skip += limit`. Tout appel `service.files().list(...).execute()` sans `pageToken` ou tout `GET /users/` sans `skip`/`limit` en boucle est un **bug de troncature silencieuse**.
+- [ ] **Contrats d'interface inter-services (ADR-0015)** : Vérifier que toutes les réponses HTTP inter-service sont validées via `model_validate()` et non via `.get("clé", [])` silencieux. Rechercher les violations avec :
+  ```bash
+  # Détecter les parsings silencieux (anti-pattern)
+  grep -rn '\.json()\.\.get\(\|res\.json()\.get(' src/ --include='*.py' | grep -v '# Contrat intentionnel' | grep -v '# Fallback intentionnel'
+  # Vérifier la présence des imports shared/schemas dans les fichiers consommateurs
+  grep -rn 'from shared.schemas' src/ --include='*.py'
+  # Vérifier que model_validate est utilisé sur les réponses inter-service
+  grep -rn 'model_validate' src/ --include='*.py'
+  ```
+  Tout `.get("items", [])` ou `.get("users", [])` sur une réponse `httpx` **sans** `# Contrat intentionnel` est une **violation** — migrer vers `PaginationResponse[dict].model_validate()` ou le schema spécifique dans `shared/schemas/`.
 
 #### 3.2. Spécifique aux APIs Data 🔵
 - [ ] **Zero-Trust** : Endpoints protégés par `dependencies=[Depends(verify_jwt)]` sur le `APIRouter`.
@@ -90,6 +101,11 @@ Pour chaque service détecté, vérifie rigoureusement les points de la checklis
 - [ ] **Tests** : Tests de session, guardrail, et propagation JWT ajoutés.
 - [ ] **Interdiction MCP** : Absence stricte de fichier `mcp_server.py`.
 - [ ] **Code Mutualisé** : Le package `agent_commons` (qui existe déjà) DOIT être utilisé pour tout le code commun (JWT, Guardrails, FinOps, etc.) plutôt que de dupliquer la logique dans chaque agent.
+- [ ] **Contrat MCP (ADR-0015)** : `MCPHttpClient.call_tool()` doit utiliser `McpToolResult.model_validate()` (via `agent_commons/mcp_client.py`). Vérifier que le fichier `agent_commons/agent_commons/mcp_client.py` contient `McpToolResult.model_validate()` et **non** `.get("result", [])`. Ce check est global — une violation dans `agent_commons` affecte les 4 agents simultanément.
+  ```bash
+  # Vérifier la présence du pattern correct dans mcp_client.py
+  grep -n 'McpToolResult\|model_validate\|\.get("result"' agent_commons/agent_commons/mcp_client.py
+  ```
 
 ### Étape 4 : Génération du Rapport
 Une fois l'audit terminé, génère un artefact détaillé (ex: `rapport_audit_apis.md`). 

@@ -1,26 +1,18 @@
 """ingestion_router.py — Ingestion KPIs, quality gate, batch-retry, history.
 Shared imports for drive_api sub-routers."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-import google.auth
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
-from google.api_core.exceptions import DeadlineExceeded
-from google.cloud import pubsub_v1
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import verify_jwt
 from src.drive_service import DriveService
-from src.google_auth import get_drive_service, get_google_access_token
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.redis_client import get_redis
-from src.routers.files_router import _compute_kpi_metric
-from src.schemas import (FileStateResponse, FileUpdate, FolderCreate,
-                         FolderResponse, FolderStats, FolderUpdate,
-                         PaginatedFilesResponse, StatusResponse)
+from src.routers.files_router import _compute_kpi_metric, _reset_errors_to_pending
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +26,9 @@ def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
         )
     return token_payload
 
+
 router = APIRouter(prefix="", tags=["Drive Ingestion"], dependencies=[Depends(verify_jwt)])
+
 
 @router.get("/ingestion/stats")
 async def get_ingestion_stats(db: AsyncSession = Depends(get_db)):
@@ -42,7 +36,7 @@ async def get_ingestion_stats(db: AsyncSession = Depends(get_db)):
     Retourne les KPIs de data quality pour le pipeline d'ingestion Drive → CV.
     Utilisé par AdminDriveIngestion pour afficher le grade global et les métriques.
     """
-    from sqlalchemy import and_, or_
+    from sqlalchemy import and_
 
     total = (await db.execute(select(func.count()).select_from(DriveSyncState))).scalar() or 0
     imported = (await db.execute(
@@ -122,7 +116,7 @@ async def get_ingestion_stats(db: AsyncSession = Depends(get_db)):
     freshness_status = "ok"
     reference_time = last_imported_at or last_processed
     if reference_time:
-        diff_hours = (datetime.utcnow() - reference_time).total_seconds() / 3600
+        diff_hours = (datetime.now(timezone.utc) - reference_time).total_seconds() / 3600
         freshness_hours = round(diff_hours, 1)
         if diff_hours > 48:
             freshness_status = "critical"
@@ -149,7 +143,7 @@ async def get_ingestion_stats(db: AsyncSession = Depends(get_db)):
     if freshness_status != "ok":
         issues.append(f"Pipeline inactif depuis {freshness_hours}h")
     if errors > 0 and total > 0 and (errors / total) > 0.1:
-        issues.append(f"{errors} fichiers en erreur ({round(errors/total*100,1)}%) — lancez un Quality Gate Batch")
+        issues.append(f"{errors} fichiers en erreur ({round(errors/total*100, 1)}%) — lancez un Quality Gate Batch")
 
     recommendation = (
         "\u2705 Pipeline en bonne santé." if not issues
@@ -172,10 +166,9 @@ async def get_ingestion_stats(db: AsyncSession = Depends(get_db)):
             "Durée de traitement": kpi_duration,
         },
         "score": score, "grade": grade,
-        "computed_at": datetime.utcnow().isoformat(),
+        "computed_at": datetime.now(timezone.utc).isoformat(),
         "issues": issues, "recommendation": recommendation,
     }
-
 
 
 @router.get("/ingestion/folder-kpis")
@@ -184,7 +177,6 @@ async def get_folder_kpis(db: AsyncSession = Depends(get_db)):
     Retourne les KPIs d'ingestion par folder/agence.
     Utilisé par AdminDriveIngestion pour le tableau par agence.
     """
-    from sqlalchemy import and_, or_
 
     folders = (await db.execute(select(DriveFolder))).scalars().all()
     result = []
@@ -265,7 +257,6 @@ async def get_folder_kpis(db: AsyncSession = Depends(get_db)):
     return result
 
 
-
 @router.get("/ingestion/history")
 async def get_ingestion_history(limit: int = 50, db: AsyncSession = Depends(get_db)):
     """Retourne les dernières ingestions réussies avec horodatages."""
@@ -287,7 +278,6 @@ async def get_ingestion_history(limit: int = 50, db: AsyncSession = Depends(get_
         }
         for r in rows
     ]
-
 
 
 @router.post("/ingestion/batch-retry")
@@ -321,7 +311,6 @@ async def ingestion_batch_retry(
     }
 
 
-
 @router.post("/ingestion/quality-gate-batch")
 async def quality_gate_batch(
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -339,7 +328,7 @@ async def quality_gate_batch(
     """
     from sqlalchemy import and_, or_
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     reason_breakdown: dict[str, int] = {}
     all_fixed_ids: list[str] = []
 
@@ -417,4 +406,3 @@ async def quality_gate_batch(
             else "Aucun CV incomplet détecté — data quality satisfaisante."
         ),
     }
-

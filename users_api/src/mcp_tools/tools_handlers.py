@@ -8,6 +8,7 @@ from mcp.types import TextContent
 
 API_BASE_URL = os.getenv("USERS_API_URL", "http://localhost:8000")
 
+
 async def handle_tool_call(name: str, arguments: dict, headers: dict, client: httpx.AsyncClient) -> list[TextContent]:
     """Exécute l'outil MCP demandé via l'API Users."""
     try:
@@ -145,24 +146,28 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
             user_ids = arguments.get("user_ids", [])
             if not user_ids:
                 return [TextContent(type="text", text="[]")]
-            
+
             async def fetch_user_avail(uid):
                 try:
                     res = await client.get(f"{API_BASE_URL}/{uid}", timeout=5.0)
-                    if res.status_code != 200: return None
+                    if res.status_code != 200:
+                        return None
                     udata = res.json()
                     unavail = udata.get("unavailability_periods", [])
-                    
+
                     active_m = []
                     missions_api_url = os.getenv("MISSIONS_API_URL", "http://missions_api:8009")
                     try:
                         m_res = await client.get(f"{missions_api_url}/missions/user/{uid}/active", timeout=5.0)
                         if m_res.status_code == 200:
+                            # Contrat intentionnel : /missions/user/{uid}/active retourne
+                            # {"active_missions": [...]} — ce n'est PAS une PaginationResponse.
+                            # Ne pas migrer vers model_validate(PaginationResponse) sans changer l'API.
                             active_m = m_res.json().get("active_missions", [])
                     except Exception as e:
                         logging.error(f"[get_users_availability_bulk] missions_api indisponible pour user {uid}: {e}")
                         raise
-                    
+
                     return {
                         "user_id": uid,
                         "unavailability_periods": unavail,
@@ -173,7 +178,7 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
                 except Exception as err:
                     logging.error(f"[get_users_availability_bulk] Erreur sur user {uid}: {err}")
                     raise
-                    
+
             results = await asyncio.gather(*(fetch_user_avail(uid) for uid in user_ids))
             results = [r for r in results if r is not None]
             return [TextContent(type="text", text=json.dumps(results))]

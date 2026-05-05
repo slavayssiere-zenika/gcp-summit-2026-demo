@@ -5,34 +5,26 @@ from contextlib import asynccontextmanager
 
 import database
 import httpx
-from database import Base, engine
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 # 2. Initialize FastAPI
 from logger import LoggingMiddleware, setup_logging
-from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
 from src.prompts import router
 from src.prompts.router import verify_jwt
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
+    pass
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    pass
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    pass
 
 
 # 1. Setup DB Schema
@@ -61,7 +53,6 @@ app.add_middleware(
 )
 
 
-
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
@@ -72,9 +63,11 @@ Instrumentator().instrument(app).expose(app)
 
 # 6. Include Router
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
 
 @app.get("/ready")
 async def ready(response: Response):
@@ -83,11 +76,13 @@ async def ready(response: Response):
     response.status_code = 503
     return {"status": "unhealthy"}
 
+
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
 
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
 
 @app.get("/spec")
 async def get_spec():
@@ -98,6 +93,8 @@ async def get_spec():
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
 # Rule §3 (AGENTS.md): Toute logique métier expose un proxy vers son MCP sidecar
+
+
 @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 @app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
@@ -133,8 +130,6 @@ app.include_router(protected_router)  # /spec MUST be registered before /{key} w
 app.include_router(router.router, prefix="", tags=["prompts"])
 
 
-
-
 async def get_service_token_fallback() -> str:
     import logging
     import os
@@ -144,7 +139,7 @@ async def get_service_token_fallback() -> str:
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token
-        
+
     try:
         users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
         async with httpx.AsyncClient() as client:
@@ -158,8 +153,10 @@ async def get_service_token_fallback() -> str:
                 res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
                 if res.status_code == 200:
                     return res.json().get("access_token", "")
-    except Exception: raise
+    except Exception:
+        raise
     return ""
+
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
@@ -167,7 +164,8 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     try:
         from opentelemetry.propagate import inject
         inject(headers)
-    except Exception: raise
+    except Exception:
+        raise
 
     async with httpx.AsyncClient() as client:
         try:
@@ -184,21 +182,22 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             logging.error(f"Failed to report error to prompts_api: {e}")
             raise e
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    
+
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    
+
     try:
         if not token:
             token = await get_service_token_fallback()
-    
+
         if token:
             await report_exception_to_prompts_api("prompts_api", error_msg, trace_context, token)
-    
+
     except Exception as fallback_e:
         logging.error(f"Failed to process exception reporting: {fallback_e}")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})

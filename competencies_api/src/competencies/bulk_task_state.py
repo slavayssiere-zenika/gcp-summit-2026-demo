@@ -4,10 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import redis.asyncio as redis
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/3") # Note: using the competencies_api redis db
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/3")  # Note: using the competencies_api redis db
 
 BULK_REDIS_TTL_SECONDS = 8 * 3600
 BULK_STALE_TIMEOUT_MINUTES = 180
+
 
 class BulkScoringTaskManager:
     """State machine Redis pour le pipeline de bulk scoring des compétences."""
@@ -103,7 +104,7 @@ class BulkScoringTaskManager:
                 # Normalise en naive UTC pour la comparaison
                 if updated_at.tzinfo is not None:
                     updated_at = updated_at.replace(tzinfo=None)
-                age = datetime.utcnow() - updated_at
+                age = datetime.now(timezone.utc) - updated_at
                 if age > timedelta(minutes=BULK_STALE_TIMEOUT_MINUTES):
                     await self.update_progress(
                         status="error",
@@ -116,5 +117,6 @@ class BulkScoringTaskManager:
 
     async def reset(self):
         await self._redis.delete(self.KEY)
+
 
 bulk_scoring_manager = BulkScoringTaskManager()

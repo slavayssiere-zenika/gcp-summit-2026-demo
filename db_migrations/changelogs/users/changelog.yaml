@@ -56,6 +56,9 @@ databaseChangeLog:
                   name: "created_at"
                   type: "datetime"
                   defaultValueDate: "NOW()"
+      rollback:
+        - dropTable:
+            tableName: "users"
   - changeSet:
       id: "2"
       author: "antigravity"
@@ -69,6 +72,13 @@ databaseChangeLog:
               - column:
                   name: "google_id"
                   type: "varchar"
+      rollback:
+        - dropColumn:
+            tableName: "users"
+            columnName: "picture_url"
+        - dropColumn:
+            tableName: "users"
+            columnName: "google_id"
   - changeSet:
       id: "3"
       author: "antigravity"
@@ -83,6 +93,10 @@ databaseChangeLog:
                     nullable: true
                     foreignKeyName: "fk_users_merged_into"
                     references: "users(id)"
+      rollback:
+        - dropColumn:
+            tableName: "users"
+            columnName: "merged_into_id"
   - changeSet:
       id: "4"
       author: "antigravity"
@@ -96,6 +110,10 @@ databaseChangeLog:
                   defaultValueBoolean: false
                   constraints:
                     nullable: false
+      rollback:
+        - dropColumn:
+            tableName: "users"
+            columnName: "is_anonymous"
 
   - changeSet:
       id: "5"
@@ -107,6 +125,9 @@ databaseChangeLog:
             tableName: "users"
             columnName: "email"
             columnDataType: "varchar"
+      rollback:
+        - sql:
+            sql: "-- Rollback no-op : impossible de restaurer les NULL sans snapshot préalable"
 
   - changeSet:
       id: "6"
@@ -119,6 +140,10 @@ databaseChangeLog:
                   name: "unavailability_periods"
                   type: "json"
                   defaultValue: "[]"
+      rollback:
+        - dropColumn:
+            tableName: "users"
+            columnName: "unavailability_periods"
 
   - changeSet:
       id: "7"

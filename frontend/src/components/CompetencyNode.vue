@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ChevronRight, ChevronDown, Folder, FileCode2 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -10,6 +10,10 @@ const props = defineProps({
   depth: {
     type: Number,
     default: 0
+  },
+  searchQuery: {
+    type: String,
+    default: ''
   }
 })
 
@@ -17,6 +21,16 @@ const emit = defineEmits(['select-leaf'])
 
 // Initialize state (folded by default if it has children)
 const isExpanded = ref(false)
+
+watch(() => props.searchQuery, (newVal) => {
+  if (newVal) {
+    if (props.node.sub_competencies && props.node.sub_competencies.length) {
+      isExpanded.value = true
+    }
+  } else {
+    isExpanded.value = false
+  }
+})
 
 const toggle = () => {
   if (props.node.sub_competencies && props.node.sub_competencies.length) {
@@ -71,6 +85,7 @@ const hasChildren = props.node.sub_competencies && props.node.sub_competencies.l
         :key="child.id" 
         :node="child"
         :depth="depth + 1"
+        :search-query="searchQuery"
         @select-leaf="$emit('select-leaf', $event)"
       />
     </div>

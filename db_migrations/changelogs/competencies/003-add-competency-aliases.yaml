@@ -11,3 +11,7 @@ databaseChangeLog:
                   type: "varchar"
                   constraints:
                     nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "competencies"
+            columnName: "aliases"

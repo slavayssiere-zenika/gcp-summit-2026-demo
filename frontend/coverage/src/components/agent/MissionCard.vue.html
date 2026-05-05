@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">95.45% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>22/22</span>
+                <span class='fraction'>21/22</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">80.95% </span>
+                <span class="strong">74.07% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>17/21</span>
+                <span class='fraction'>20/27</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>21/21</span>
+                <span class='fraction'>20/20</span>
             </div>
         
             
@@ -332,7 +332,8 @@
 <a name='L267'></a><a href='#L267'>267</a>
 <a name='L268'></a><a href='#L268'>268</a>
 <a name='L269'></a><a href='#L269'>269</a>
-<a name='L270'></a><a href='#L270'>270</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L270'></a><a href='#L270'>270</a>
+<a name='L271'></a><a href='#L271'>271</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -364,6 +365,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">9x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -376,7 +378,7 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -408,7 +410,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -632,12 +634,13 @@ const STATUS_LABELS: Record&lt;string, { label: string; css: string }&gt; = {
 const statusInfo = (status?: string) =&gt; STATUS_LABELS[status || 'STAFFED'] || <span class="branch-1 cbranch-no" title="branch not covered" >STATUS_LABELS['STAFFED']</span>
 &nbsp;
 const goToDetail = () =&gt; {
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (!props.mission.id) <span class="cstat-no" title="statement not covered" >return</span>
   router.push({ name: 'mission-detail', params: { id: props.mission.id.toString() } })
 }
 &lt;/script&gt;
 &nbsp;
 &lt;template&gt;
-  &lt;div class="mission-card glass-morphism clickable" @click="goToDetail"&gt;
+  &lt;div class="mission-card glass-morphism" :class="{ clickable: !!mission.id }" @click="goToDetail"&gt;
     &lt;div class="card-header"&gt;
       &lt;div class="icon-box"&gt;
         &lt;Briefcase size="24" /&gt;
@@ -645,7 +648,7 @@ const goToDetail = () =&gt; {
       &lt;div class="title-area"&gt;
         &lt;div class="title-row"&gt;
           &lt;h3 class="title"&gt;{{ mission.title }}&lt;/h3&gt;
-          &lt;span class="id-badge"&gt;#{{ mission.id }}&lt;/span&gt;
+          &lt;span v-if="mission.id" class="id-badge"&gt;#{{ mission.id<span class="branch-1 cbranch-no" title="branch not covered" > }}&lt;/span&gt;</span>
         &lt;/div&gt;
         &lt;span class="mc-status-badge" :class="statusInfo(mission.status).css" aria-label="Statut"&gt;
           {{ statusInfo(mission.status).label }}
@@ -677,9 +680,9 @@ const goToDetail = () =&gt; {
       &lt;/div&gt;
     &lt;/div&gt;
 &nbsp;
-    &lt;div class="card-footer"&gt;
+    &lt;div v-if="mission.id" class="card-footer"&gt;
       &lt;span class="action-text"&gt;Voir les détails de la mission&lt;/span&gt;
-      &lt;ArrowRight size="16" /&gt;
+      &lt;ArrowRight size="16"<span class="branch-1 cbranch-no" title="branch not covered" > /&gt;</span>
     &lt;/div&gt;
   &lt;/div&gt;
 &lt;/template&gt;
@@ -877,7 +880,7 @@ const goToDetail = () =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-29T21:35:46.483Z
+                at 2026-05-05T16:24:06.534Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

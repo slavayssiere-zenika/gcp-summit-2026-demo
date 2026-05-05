@@ -52,7 +52,7 @@ POST /mcp/call  →  mcp_server.py (dispatcher)
 - **Pas de sidecar stdio** — exposition HTTP directe
 
 ## MCP tools exposés
-- `check_all_components_health`, `check_component_health`, `execute_read_only_query`, `get_infrastructure_topology`, `get_ingestion_pipeline_status`, `get_redis_invalidation_state`, `get_service_logs`, `inspect_pubsub_dlq`, `list_gcp_services`, `search_cloud_logs_by_trace`
+- `check_all_components_health`, `check_component_health`, `execute_read_only_query`, `get_ingestion_pipeline_status`, `get_redis_invalidation_state`, `get_service_logs`, `inspect_pubsub_dlq`, `list_gcp_services`, `search_cloud_logs_by_trace`
 
 ## Gotchas connus
 - **`ROOT_PATH` vide** : contrairement aux autres services, `ROOT_PATH=""` — fix Dockerfile appliqué 2026-04-28.

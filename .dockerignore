@@ -2,14 +2,18 @@
 .gitignore
 .env
 .pytest_cache
+**/.pytest_cache/
 __pycache__
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 env/
 venv/
+**/.venv/
 test_env/
+**/test_env/
 .agents/
 .vscode/
 .idea/
@@ -19,6 +23,16 @@ wheels/
 *~
 .DS_Store
 reports/
+**/coverage/
+# Node
 frontend/node_modules/
 frontend/dist/
 frontend/.npm/
+**/node_modules/
+# Infrastructure (pas dans les images applicatives)
+platform-engineering/
+scripts/
+
+# mutmut
+**/mutants/
+**/.mutmut-cache

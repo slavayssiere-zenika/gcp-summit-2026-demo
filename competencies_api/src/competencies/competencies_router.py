@@ -21,15 +21,14 @@ enregistrées AVANT les routes wildcard (/{competency_id}).
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
 from database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      Request, Response)
-from pydantic import BaseModel
-from sqlalchemy import delete, func, update
+from sqlalchemy import delete, func, update, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,9 +46,8 @@ from src.competencies.schemas import (CompetencyCount, CompetencyCreate,
                                       CompetencyStatsResponse,
                                       CompetencySuggestionCreate,
                                       CompetencySuggestionResponse,
-                                      CompetencyUpdate, MergeInstruction,
-                                      PaginationResponse, StatsRequest,
-                                      SuggestionReviewRequest,
+                                      CompetencyUpdate, PaginationResponse,
+                                      StatsRequest, SuggestionReviewRequest,
                                       TreeImportRequest)
 
 logger = logging.getLogger(__name__)
@@ -58,7 +56,7 @@ CACHE_TTL = 60
 router = APIRouter(prefix="", tags=["competencies"], dependencies=[Depends(verify_jwt)])
 
 
-@router.get("/", response_model=PaginationResponse)
+@router.get("/", response_model=PaginationResponse[CompetencyResponse])
 async def list_competencies(
     skip: int = Query(0, ge=0), limit: int = Query(10, ge=1, le=2000), db: AsyncSession = Depends(get_db)
 ):
@@ -85,7 +83,7 @@ async def list_competencies(
     return result
 
 
-@router.get("/search", response_model=PaginationResponse)
+@router.get("/search", response_model=PaginationResponse[CompetencyResponse])
 async def search_competencies(query: str = Query(..., min_length=1), limit: int = Query(10, ge=1, le=100), db: AsyncSession = Depends(get_db)):
     """Recherche full-text sur le nom et les aliases de compétences."""
     from sqlalchemy import or_
@@ -94,9 +92,11 @@ async def search_competencies(query: str = Query(..., min_length=1), limit: int 
     if cached:
         return PaginationResponse(**cached)
     results = (await db.execute(
-        select(Competency).filter(or_(Competency.name.ilike(f"%{query}%"), Competency.aliases.ilike(f"%{query}%"))).limit(limit)
+        select(Competency).filter(or_(Competency.name.ilike(
+            f"%{query}%"), Competency.aliases.ilike(f"%{query}%"))).limit(limit)
     )).scalars().all()
-    response = PaginationResponse(items=[serialize_competency(c) for c in results], total=len(results), skip=0, limit=limit)
+    response = PaginationResponse(items=[serialize_competency(c)
+                                  for c in results], total=len(results), skip=0, limit=limit)
     set_cache(cache_key, response.model_dump(), CACHE_TTL)
     return response
 
@@ -116,7 +116,7 @@ async def create_competency_suggestion(payload: CompetencySuggestionCreate, db: 
 
     if existing:
         existing.occurrence_count += 1
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(existing)
         return CompetencySuggestionResponse.model_validate(existing)
@@ -174,12 +174,12 @@ async def review_competency_suggestion(
             db.add(new_comp)
             await db.flush()
             delete_cache_pattern("competencies:*")
-            trigger_taxonomy_cache_invalidation(bg_tasks, request.headers.get("Authorization"))
+            trigger_taxonomy_cache_invalidation(bg_tasks, request)
         suggestion.status = "ACCEPTED"
     else:
         suggestion.status = "REJECTED"
 
-    suggestion.updated_at = datetime.utcnow()
+    suggestion.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(suggestion)
     return CompetencySuggestionResponse.model_validate(suggestion)
@@ -239,6 +239,15 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
             name = name.strip()
             aliases = data.get("aliases") if isinstance(data, dict) else None
             desc = data.get("description", "Généré par Model IA") if isinstance(data, dict) else "Catégorie"
+
+            if isinstance(data, dict) and "merge_from" in data and isinstance(data["merge_from"], list):
+                from src.competencies.schemas import MergeInstruction
+                merge_from_list = [str(m).strip() for m in data["merge_from"] if str(m).strip()]
+                if merge_from_list:
+                    if payload.merges is None:
+                        payload.merges = []
+                    payload.merges.append(MergeInstruction(canonical=name, merge_from=merge_from_list))
+
             existing = (await db.execute(select(Competency).filter(Competency.name.ilike(name)))).scalars().first()
             if existing:
                 existing.parent_id = parent_id
@@ -269,12 +278,13 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
                 sub = data.get("sub") or data.get("sub_competencies")
             elif isinstance(data, list):
                 sub = data
-                
+
             if isinstance(sub, dict):
                 await upsert_level(sub, node_id)
             elif isinstance(sub, list):
                 for item in sub:
-                    sub_name = (str(item[0]) if isinstance(item, list) and item else item.get("name", str(item)) if isinstance(item, dict) else str(item)).strip()
+                    sub_name = (str(item[0]) if isinstance(item, list) and item else item.get(
+                        "name", str(item)) if isinstance(item, dict) else str(item)).strip()
                     leaf = (await db.execute(select(Competency).filter(Competency.name.ilike(sub_name)))).scalars().first()
                     if not leaf:
                         leaf = await check_grammatical_conflict(db, sub_name)
@@ -282,7 +292,8 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
                         leaf.parent_id = node_id
                         touched_ids.add(leaf.id)
                     else:
-                        new_leaf = Competency(name=sub_name, description="Compétence feuille ajoutée via taxonomie", parent_id=node_id)
+                        new_leaf = Competency(
+                            name=sub_name, description="Compétence feuille ajoutée via taxonomie", parent_id=node_id)
                         db.add(new_leaf)
                         await db.flush()
                         touched_ids.add(new_leaf.id)
@@ -306,7 +317,7 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
                     if not dup or dup.id == canonical.id:
                         continue
                     for uid in (await db.execute(select(user_competency.c.user_id).where(user_competency.c.competency_id == dup.id))).scalars().all():
-                        await db.execute(pg_insert(user_competency).values(user_id=uid, competency_id=canonical.id, created_at=datetime.utcnow()).on_conflict_do_nothing(index_elements=["user_id", "competency_id"]))
+                        await db.execute(pg_insert(user_competency).values(user_id=uid, competency_id=canonical.id, created_at=datetime.now(timezone.utc)).on_conflict_do_nothing(index_elements=["user_id", "competency_id"]))
                     await db.execute(user_competency.delete().where(user_competency.c.competency_id == dup.id))
                     existing_eval_users = (await db.execute(select(CompetencyEvaluation.user_id).where(CompetencyEvaluation.competency_id == canonical.id))).scalars().all()
                     q = update(CompetencyEvaluation).where(CompetencyEvaluation.competency_id == dup.id)
@@ -332,10 +343,15 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
                     continue
                 pillar = (await db.execute(select(Competency).filter(Competency.name.ilike(pillar_name)))).scalars().first()
                 if not pillar:
+                    logger.warning(
+                        f"[bulk_tree] Sweep ignoré : le pilier '{pillar_name}' n'existe pas "
+                        f"en base pour la compétence '{comp_name}'."
+                    )
                     continue
                 comp = (await db.execute(select(Competency).filter(Competency.name.ilike(comp_name)))).scalars().first()
                 if not comp:
-                    comp = Competency(name=comp_name, description="Compétence rattachée via Sweep taxonomique", parent_id=pillar.id)
+                    comp = Competency(
+                        name=comp_name, description="Compétence rattachée via Sweep taxonomique", parent_id=pillar.id)
                     db.add(comp)
                     await db.flush()
                     touched_ids.add(comp.id)
@@ -350,7 +366,8 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
         archive_name = "Compétences Archives / Non classées"
         archives = (await db.execute(select(Competency).filter(Competency.name == archive_name))).scalars().first()
         if not archives:
-            archives = Competency(name=archive_name, description="Compétences conservées mais absentes de la dernière taxonomie calculée.")
+            archives = Competency(
+                name=archive_name, description="Compétences conservées mais absentes de la dernière taxonomie calculée.")
             db.add(archives)
             await db.flush()
         touched_ids.add(archives.id)
@@ -361,9 +378,58 @@ async def bulk_import_tree(payload: TreeImportRequest, bg_tasks: BackgroundTasks
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'import: {str(e)}")
 
     delete_cache_pattern("competencies:*")
-    trigger_taxonomy_cache_invalidation(bg_tasks, request.headers.get("Authorization"))
+    trigger_taxonomy_cache_invalidation(bg_tasks, request)
     return {"message": f"Taxonomie fusionnée avec succès !{' ' + str(len(merge_log)) + ' fusion(s).' if merge_log else ''}{' ' + str(len(sweep_log)) + ' sweep(s).' if sweep_log else ''}",
             "merges": merge_log}
+
+
+@router.post("/bulk/cleanup-orphans", summary="Supprime toutes les compétences feuilles orphelines (sans consultants)")
+async def cleanup_orphan_competencies(request: Request, bg_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), jwt_payload: dict = Depends(verify_jwt)):
+    """Supprime les compétences feuilles qui ne sont liées à aucun consultant (Quality Gate)."""
+    if jwt_payload.get("role") not in ("admin", "service_account"):
+        raise HTTPException(status_code=403, detail="Accès refusé.")
+
+    try:
+        total_deleted = 0
+        uc_ids_query = select(user_competency.c.competency_id).distinct()
+        # Ne considérer comme liaison valide que les évaluations où l'IA ou le user a mis un score > 0
+        ce_ids_query = select(CompetencyEvaluation.competency_id).where(
+            or_(
+                CompetencyEvaluation.ai_score > 0,
+                CompetencyEvaluation.user_score > 0
+            )
+        ).distinct()
+
+        while True:
+            # Sous-requête dynamique pour identifier les parents actuels
+            parent_ids_query = select(Competency.parent_id).where(Competency.parent_id.is_not(None)).distinct()
+
+            # Trouver les compétences feuilles n'ayant aucune liaison
+            orphan_query = select(Competency.id).where(
+                Competency.id.not_in(parent_ids_query)
+            ).where(
+                Competency.id.not_in(uc_ids_query)
+            ).where(
+                Competency.id.not_in(ce_ids_query)
+            )
+
+            orphans = (await db.execute(orphan_query)).scalars().all()
+
+            if not orphans:
+                break
+
+            await db.execute(delete(Competency).where(Competency.id.in_(orphans)))
+            await db.commit()
+            total_deleted += len(orphans)
+
+        if total_deleted > 0:
+            delete_cache_pattern("competencies:*")
+            trigger_taxonomy_cache_invalidation(bg_tasks, request)
+
+        return {"success": True, "deleted_count": total_deleted}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur lors du nettoyage: {str(e)}")
 
 
 @router.post("/", response_model=CompetencyResponse, status_code=201)
@@ -379,7 +445,8 @@ async def create_competency(competency: CompetencyCreate, bg_tasks: BackgroundTa
     if conflict:
         if conflict.name.lower() == competency.name.lower():
             return CompetencyResponse(**serialize_competency(conflict))
-        raise HTTPException(status_code=409, detail=f"Une variante grammaticale de '{competency.name}' existe déjà : '{conflict.name}'.")
+        raise HTTPException(
+            status_code=409, detail=f"Une variante grammaticale de '{competency.name}' existe déjà : '{conflict.name}'.")
     if not competency.aliases:
         gen_aliases = await _generate_aliases_for_competency(competency.name)
         if gen_aliases:
@@ -443,12 +510,14 @@ async def delete_competency(competency_id: int, db: AsyncSession = Depends(get_d
 @router.post("/stats/counts", response_model=CompetencyStatsResponse)
 async def get_competency_stats(req: StatsRequest, db: AsyncSession = Depends(get_db)):
     """Statistiques de compétences (comptage par utilisateur, filtrable sur une cohorte)."""
-    stmt = select(Competency.id, Competency.name, func.count(user_competency.c.user_id).label("count")).join(user_competency, Competency.id == user_competency.c.competency_id)
+    stmt = select(Competency.id, Competency.name, func.count(user_competency.c.user_id).label(
+        "count")).join(user_competency, Competency.id == user_competency.c.competency_id)
     if req.user_ids is not None:
         if not req.user_ids:
             return CompetencyStatsResponse(items=[])
         stmt = stmt.where(user_competency.c.user_id.in_(req.user_ids))
     stmt = stmt.group_by(Competency.id, Competency.name)
-    stmt = stmt.order_by(func.count(user_competency.c.user_id).asc() if req.sort_order.lower() == "asc" else func.count(user_competency.c.user_id).desc()).limit(req.limit)
+    stmt = stmt.order_by(func.count(user_competency.c.user_id).asc() if req.sort_order.lower() ==
+                         "asc" else func.count(user_competency.c.user_id).desc()).limit(req.limit)
     results = (await db.execute(stmt)).all()
     return CompetencyStatsResponse(items=[CompetencyCount(id=r[0], name=r[1], count=r[2]) for r in results])

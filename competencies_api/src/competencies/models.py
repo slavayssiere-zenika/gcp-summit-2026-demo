@@ -78,7 +78,6 @@ class CompetencyEvaluation(Base):
     competency = relationship("Competency", back_populates="evaluations")
 
 
-
 class CompetencySuggestion(Base):
     """Suggestion de compétence issue d'une analyse de mission ou CV.
 
