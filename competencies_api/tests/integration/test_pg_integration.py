@@ -5,12 +5,19 @@ Valide les comportements PostgreSQL-specific invisibles en SQLite :
 1. ON CONFLICT DO NOTHING dans assignments_router.py:38
 2. Pagination réelle PostgreSQL
 3. delete_cache_pattern() avec scan_iter(match=pattern) sur vrai Redis
+4. Contrat d'interface shared/schemas/pagination.py (model_validate) — ADR-0015
 
 Note : Les routes competencies_api sont montées à la racine (pas de préfixe).
 """
+import sys
+import os
+
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import create_engine, text
 
+# Racine du monorepo pour résoudre shared/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 pytestmark = pytest.mark.integration
 
@@ -61,24 +68,35 @@ def test_on_conflict_do_nothing_verified_in_postgres(postgres_container):
 
 
 def test_list_competencies_real_postgres(client):
-    """Valide la liste des compétences sur vrai PostgreSQL."""
+    """Valide la liste des compétences sur vrai PostgreSQL + contrat PaginationResponse."""
+    from shared.schemas.pagination import PaginationResponse
+
     for name in ["Python", "Go", "Rust"]:
         client.post("/", json={"name": name, "category": "Tech"})
 
     resp = client.get("/")
     assert resp.status_code == 200
-    data = resp.json()
-    items = data.get("items", data.get("competencies", []))
-    assert len(items) >= 3
+
+    # Validation du contrat shared/schemas (Golden Rules §3 — ADR-0015)
+    try:
+        data = PaginationResponse[dict].model_validate(resp.json())
+    except ValidationError as ve:
+        pytest.fail(
+            f"Rupture de contrat competencies_api (shared/schemas/pagination.py) : {ve}\n"
+            f"Réponse brute : {resp.json()}"
+        )
+    assert len(data.items) >= 3, f"Attendu >= 3 compétences, trouvé {len(data.items)}"
 
 
 def test_isolation_between_tests_no_state_leak(client):
     """Valide que wipe_competencies_db garantit une isolation parfaite."""
+    from shared.schemas.pagination import PaginationResponse
+
     resp = client.get("/")
     assert resp.status_code == 200
-    data = resp.json()
-    total = data.get("total", len(data.get("items", data.get("competencies", []))))
-    assert total == 0, f"State-leak : {total} compétences persistent entre les tests"
+
+    data = PaginationResponse[dict].model_validate(resp.json())
+    assert data.total == 0, f"State-leak : {data.total} compétences persistent entre les tests"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -5,11 +5,18 @@ Contrairement aux tests unitaires (SQLite + fakeredis), ces tests tournent contr
 de vrais conteneurs PostgreSQL et Redis pour détecter les bugs silencieux :
 - Comportements SQL spécifiques à PostgreSQL (types, contraintes)
 - Comportement réel du cache Redis sur les patterns de lecture
+
+4. Contrat d'interface shared/schemas/pagination.py (model_validate) — ADR-0015
 """
+import os
+import sys
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
+# Racine du monorepo pour résoudre shared/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 pytestmark = pytest.mark.integration
 
@@ -22,12 +29,19 @@ def pg_redis_setup(wipe_pg_db, wipe_redis_integration):
 
 @pytest.fixture
 def mock_users_api(monkeypatch):
-    """Mock httpx.AsyncClient pour éviter les appels réseau vers users_api."""
+    """Mock httpx.AsyncClient conforme au contrat shared/schemas/users.py.
+
+    La réponse simulée utilise UserItem pour garantir que si le schéma change,
+    le mock sera invalidé lors de la validation (pas un dict codé en dur opaque).
+    """
+    from shared.schemas.users import UserItem
+
+    # Construire la réponse à partir du schema — fail-fast si UserItem change
+    user = UserItem(id=1, email="test@zenika.com", username="testuser", is_active=True)
+
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "id": 1, "username": "testuser", "email": "test@zenika.com", "is_active": True,
-    }
+    mock_resp.json.return_value = user.model_dump()
     mock_resp.raise_for_status = MagicMock()
 
     async def fake_get(*args, **kwargs):
@@ -51,15 +65,24 @@ def test_create_category_real_postgres(client):
 
 
 def test_list_categories_pagination_real_postgres(client):
-    """Valide que la pagination retourne les bons totaux avec PostgreSQL."""
+    """Valide la pagination + contrat PaginationResponse avec PostgreSQL."""
+    from shared.schemas.pagination import PaginationResponse
+
     for i in range(5):
         client.post("/categories", json={"name": f"Cat-{i}", "description": "x"})
 
     resp = client.get("/categories?skip=0&limit=3")
     assert resp.status_code == 200
-    data = resp.json()
-    assert len(data["items"]) == 3
-    assert data["total"] >= 5
+
+    try:
+        data = PaginationResponse[dict].model_validate(resp.json())
+    except ValidationError as ve:
+        pytest.fail(
+            f"Rupture de contrat items_api/categories (shared/schemas/pagination.py) : {ve}\n"
+            f"Réponse brute : {resp.json()}"
+        )
+    assert len(data.items) == 3
+    assert data.total >= 5
 
 
 def test_create_item_with_real_postgres(client, mock_users_api):
@@ -79,13 +102,16 @@ def test_create_item_with_real_postgres(client, mock_users_api):
 
 def test_isolation_between_tests_no_state_leak(client):
     """Valide que le wipe_pg_db entre tests garantit une isolation parfaite."""
-    # Ce test ne devrait voir aucune catégorie (wipe_pg_db a tout supprimé)
+    from shared.schemas.pagination import PaginationResponse
+
     resp = client.get("/categories?skip=0&limit=100")
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["total"] == 0, (
-        f"State-leak détecté : {data['total']} catégories persistent entre les tests"
+
+    data = PaginationResponse[dict].model_validate(resp.json())
+    assert data.total == 0, (
+        f"State-leak détecté : {data.total} catégories persistent entre les tests"
     )
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

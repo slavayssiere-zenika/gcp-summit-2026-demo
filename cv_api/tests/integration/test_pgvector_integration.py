@@ -1,17 +1,24 @@
 """
 Tests d'intégration cv_api — nécessitent Docker + image pgvector/pgvector:pg16.
 
-Ces tests couvrent 3 types PostgreSQL-only totalement invisibles en SQLite :
+Ces tests couvrent 4 types PostgreSQL-only totalement invisibles en SQLite :
 1. Vector(3072) — pgvector : colonne semantic_embedding + requêtes cosine distance
 2. JSONB          — missions, extracted_competencies, educations
 3. ARRAY(String)  — competencies_keywords + jsonb_array_length() SQL
+4. Contrat d'interface shared/schemas/cv_profiles.py (model_validate) — ADR-0015
 
 Ces bugs seraient SILENCIEUX avec SQLite (pas d'erreur, comportement différent).
 """
+import os
+import sys
+
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+# Racine du monorepo pour résoudre shared/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 pytestmark = pytest.mark.integration
 
@@ -219,3 +226,43 @@ def test_array_string_competencies(db_session):
     assert row is not None
     assert "Python" in row[0], f"Mot-clé 'Python' attendu dans {row[0]}"
     assert "FastAPI" in row[0], f"Mot-clé 'FastAPI' attendu dans {row[0]}"
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# 4. Contrat d'interface API HTTP (shared/schemas)
+# ───────────────────────────────────────────────────────────────────────────────
+
+def test_list_cv_profiles_contract_shared_schemas(client):
+    """
+    Valide que GET /users/tag/{tag} respecte le contrat shared/schemas/cv_profiles.py.
+
+    Utilise CvProfilesResponse.model_validate() conformément aux Golden Rules §3.
+    Ce test détecterait immédiatement toute rupture de contrat (renommage de clé,
+    suppression de champ, changement de type) entre cv_api et ses consumers.
+
+    Note : /users/tag/{tag} retourne toujours un PaginationResponse (liste vide
+    si aucun CV avec ce tag), sans dépendance aux données préalables.
+    """
+    from shared.schemas.cv_profiles import CvProfilesResponse
+
+    resp = client.get(
+        "/users/tag/__test_nonexistent_tag__",
+        headers={"Authorization": "Bearer test_token"},
+    )
+    assert resp.status_code == 200, (
+        f"GET /users/tag/... échoué : {resp.status_code} {resp.text}"
+    )
+
+    try:
+        data = CvProfilesResponse.model_validate(resp.json())
+    except Exception as ve:
+        pytest.fail(
+            f"Rupture de contrat cv_api (shared/schemas/cv_profiles.py) : {ve}\n"
+            f"Réponse brute : {resp.json()}"
+        )
+    # Liste vide attendue (tag inexistant) — le contrat doit tenir même à vide
+    assert isinstance(data.items, list), "data.items doit être une liste"
+    assert isinstance(data.total, int), "data.total doit être un entier"
+    assert data.total == 0, f"Attendu 0 CV pour tag inexistant, obtenu {data.total}"
+
+

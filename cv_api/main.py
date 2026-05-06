@@ -182,7 +182,8 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             )
         except Exception as e:
             logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
+            # Ne pas re-raise : cette fonction est best-effort.
+            # Un échec du reporting ne doit JAMAIS crasher une background task.
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
