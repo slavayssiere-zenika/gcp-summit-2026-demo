@@ -287,3 +287,50 @@ databaseChangeLog:
         - dropColumn:
             tableName: "drive_sync_state"
             columnName: "file_type"
+
+  - changeSet:
+      id: "14"
+      author: "antigravity"
+      comment: "Migration TIMESTAMP → TIMESTAMPTZ pour toutes les colonnes datetime de drive_api. Nécessaire pour la compatibilité avec datetime.now(timezone.utc) (aware) et asyncpg qui refuse le mix naive/aware."
+      changes:
+        - modifyDataType:
+            tableName: "drive_folders"
+            columnName: "created_at"
+            newDataType: "timestamptz"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "modified_time"
+            newDataType: "timestamptz"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "last_processed_at"
+            newDataType: "timestamptz"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "queued_at"
+            newDataType: "timestamptz"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "imported_at"
+            newDataType: "timestamptz"
+      rollback:
+        - modifyDataType:
+            tableName: "drive_folders"
+            columnName: "created_at"
+            newDataType: "timestamp"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "modified_time"
+            newDataType: "timestamp"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "last_processed_at"
+            newDataType: "timestamp"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "queued_at"
+            newDataType: "timestamp"
+        - modifyDataType:
+            tableName: "drive_sync_state"
+            columnName: "imported_at"
+            newDataType: "timestamp"

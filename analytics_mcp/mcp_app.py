@@ -118,7 +118,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                 return
             try:
                 data = await get_aiops_dashboard_data_internal()
-                r.set(cache_key, json.dumps(data), ex=3600*24)
+                r.set(cache_key, json.dumps(data), ex=3600 * 24)
             except Exception as e:
                 import logging
                 logging.error(f"Background refresh failed: {e}")
@@ -135,15 +135,11 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                     from datetime import datetime
                     if "generated_at" in cached_data:
                         gen_str = cached_data["generated_at"]
-                        try:
-                            # Parse standard ISO format
-                            gen_time = datetime.fromisoformat(gen_str)
-                            age = (datetime.now(timezone.utc) - gen_time).total_seconds()
-                            if age > 3600:
-                                # Stale! Schedule background refresh and return old data
-                                background_tasks.add_task(async_background_refresh)
-                        except Exception:
-                            raise
+                        gen_time = datetime.fromisoformat(gen_str)
+                        age = (datetime.now(timezone.utc) - gen_time).total_seconds()
+                        if age > 3600:
+                            # Stale! Schedule background refresh and return old data
+                            background_tasks.add_task(async_background_refresh)
                     return cached_data
             except Exception as re:
                 import logging
@@ -163,7 +159,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
 
             # Execution (Parallelisée en backend)
             data = await get_aiops_dashboard_data_internal()
-            r.set(cache_key, json.dumps(data), ex=3600*24)
+            r.set(cache_key, json.dumps(data), ex=3600 * 24)
             return data
         finally:
             if acquired:
@@ -313,12 +309,7 @@ async def get_spec():
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception:
-        raise
-
+    inject(headers)
     async with httpx.AsyncClient() as client:
         try:
             await client.post(
@@ -332,7 +323,7 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             )
         except Exception as e:
             logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
+            # Ne pas re-raise : cette fonction est best-effort.
 
 
 @app.exception_handler(Exception)

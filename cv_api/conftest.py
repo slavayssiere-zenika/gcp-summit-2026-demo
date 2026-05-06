@@ -1,8 +1,13 @@
-from fastapi.testclient import TestClient
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-import os
-import sys
+# Scripts de debug manuels à la racine cv_api/ — exclus de la collecte pytest.
+# deploy.sh invoque pytest avec "./cv_api" comme chemin explicite (bypass pytest.ini).
+# test_client.py importe main → src.auth → os.environ.pop("SECRET_KEY") → 401 sur tous les tests suivants.
+collect_ignore = ["test_client.py", "test_fastapi.py", "test_validation.py"]
+
+from fastapi.testclient import TestClient  # noqa: E402
+import pytest  # noqa: E402
+from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
 
 # Assure que la racine du monorepo est dans sys.path pour résoudre `shared/`
 _MONOREPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

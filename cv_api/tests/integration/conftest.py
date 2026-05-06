@@ -117,12 +117,23 @@ def client(pgvector_container, integration_env_cv):
     from main import app
     from src.auth import verify_jwt
 
+    # Sauvegarder les overrides existants (conftest racine) pour les restaurer après
+    _prev_get_db = app.dependency_overrides.get(get_db)
+    _prev_verify_jwt = app.dependency_overrides.get(verify_jwt)
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[verify_jwt] = override_verify_jwt
 
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
 
-    app.dependency_overrides.pop(get_db, None)
-    app.dependency_overrides.pop(verify_jwt, None)
+    # Restaurer les overrides précédents au lieu de les supprimer
+    if _prev_get_db is not None:
+        app.dependency_overrides[get_db] = _prev_get_db
+    else:
+        app.dependency_overrides.pop(get_db, None)
 
+    if _prev_verify_jwt is not None:
+        app.dependency_overrides[verify_jwt] = _prev_verify_jwt
+    else:
+        app.dependency_overrides.pop(verify_jwt, None)

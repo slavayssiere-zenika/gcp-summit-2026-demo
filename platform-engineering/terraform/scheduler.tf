@@ -153,3 +153,33 @@ resource "google_cloud_scheduler_job" "scoring_batch_polling" {
     }
   }
 }
+
+# ==============================================================
+# Data Quality Snapshots — Toutes les 4h
+# Déclenche cv_api/pubsub/data-quality-snapshot → Pub/Sub → BigQuery
+# Visualisation dans Looker Studio (table finops_{env}.data_quality_history)
+# ==============================================================
+resource "google_cloud_scheduler_job" "data_quality_snapshot" {
+  name             = "data-quality-snapshot-${terraform.workspace}"
+  description      = "Snapshot de la qualité des données (score, grade, métriques) toutes les 4h vers BigQuery via Pub/Sub."
+  schedule         = "0 */4 * * *"
+  time_zone        = "Europe/Paris"
+  attempt_deadline = "120s"
+  region           = var.region
+  project          = var.project_id
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.cv_api.uri}/pubsub/data-quality-snapshot"
+    body        = base64encode("{\"trigger\":\"scheduler\"}")
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    oidc_token {
+      service_account_email = google_service_account.cv_sa.email
+      audience              = google_cloud_run_v2_service.cv_api.uri
+    }
+  }
+}

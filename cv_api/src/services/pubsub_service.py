@@ -195,17 +195,13 @@ class PubsubService:
                 logger.error(
                     f"[PubSub/BG] Erreur inattendue pour {bg_google_file_id}: {ex}",
                     exc_info=True)
-                try:
-                    async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                        await patch_client.patch(
-                            f"{
-                                bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
-                            json={"status": "ERROR",
-                                  "error_message": f"Erreur inattendue: {ex}"},
-                            headers=bg_headers
-                        )
-                except Exception:
-                    raise
+                async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                    await patch_client.patch(
+                        f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
+                        json={"status": "ERROR",
+                              "error_message": f"Erreur inattendue: {ex}"},
+                        headers=bg_headers
+                    )
 
     @staticmethod
     async def handle_pubsub_cv_import(
@@ -442,7 +438,8 @@ class PubsubService:
                             "error_message": f"Erreur de setup pipeline: {e}"},
                         headers=headers
                     )
-            except Exception:
-                pass
+            except Exception as patch_err:
+                logger.warning(
+                    f"[PubSub] Impossible de notifier drive_api (ERROR setup): {patch_err}")
 
         return {"status": "accepted"}

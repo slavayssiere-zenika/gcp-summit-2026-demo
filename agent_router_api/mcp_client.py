@@ -6,6 +6,11 @@ from typing import Any, List, Optional
 import httpx
 from metrics import AGENT_TOOL_CALLS_TOTAL
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
+
+# McpToolResult est défini localement dans agent_commons.mcp_client (copie de shared/schemas/mcp.py)
+# Le Dockerfile n'inclut PAS shared/ dans les images agents — uniquement agent_commons/.
+from agent_commons.mcp_client import McpToolResult
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
 user_id_var = contextvars.ContextVar("user_id", default="anonymous")
@@ -25,10 +30,11 @@ LONG_RUNNING_TOOLS = {
     "get_aiops_dashboard_data",
 }
 
+
 class MCPHttpClient:
     def __init__(self, url: str):
         self.url = url
-        self._initialized = True # HTTP is inherently stateless, no active stream to initialize
+        self._initialized = True  # HTTP is inherently stateless, no active stream to initialize
 
     async def connect(self):
         # No-op since we don't hold connection streams
@@ -50,25 +56,33 @@ class MCPHttpClient:
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info(f"[MCP-HTTP] Calling tool '{tool_name}' on {self.url} with args: {arguments}")
         start_time = time.time()
-        
+
         headers = {}
         inject(headers)
         auth = auth_header_var.get(None)
         if auth:
             headers["Authorization"] = auth
-        
+
         async with httpx.AsyncClient(headers=headers) as client:
             try:
                 timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
                 res = await client.post(
-                    f"{self.url.rstrip('/')}/mcp/call", 
+                    f"{self.url.rstrip('/')}/mcp/call",
                     json={"name": tool_name, "arguments": arguments},
                     timeout=timeout
                 )
                 res.raise_for_status()
-                # The sidecar will return {"result": [{"text": "...", "type": "text"}]}
-                result_data = res.json().get("result", [])
-                
+                # McpToolResult.model_validate() détecte tout drift de protocole MCP
+                try:
+                    mcp_result = McpToolResult.model_validate(res.json())
+                    result_data = mcp_result.result
+                except ValidationError as ve:
+                    logger.error(
+                        "[MCP-HTTP] Rupture de contrat protocole MCP pour '%s': %s",
+                        tool_name, ve
+                    )
+                    raise
+
                 duration = time.time() - start_time
                 logger.info(f"[MCP-HTTP] Tool '{tool_name}' completed in {duration:.2f}s")
                 return result_data
@@ -90,7 +104,7 @@ class MCPSseClient:
 
         from mcp.client.session import ClientSession
         from mcp.client.sse import sse_client
-        
+
         async with AsyncExitStack() as stack:
             streams = await stack.enter_async_context(sse_client(self.url))
             session = await stack.enter_async_context(ClientSession(*streams))
@@ -107,7 +121,7 @@ class MCPSseClient:
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info(f"[MCP-SSE] Calling tool '{tool_name}' on {self.url} with args: {arguments}")
         start_time = time.time()
-        
+
         try:
             async with AsyncExitStack() as stack:
                 headers = {}
@@ -115,12 +129,12 @@ class MCPSseClient:
                 auth = auth_header_var.get(None)
                 if auth:
                     headers["Authorization"] = auth
-                
+
                 streams = await stack.enter_async_context(sse_client(self.url, headers=headers))
                 session = await stack.enter_async_context(ClientSession(*streams))
                 await session.initialize()
                 res = await session.call_tool(tool_name, arguments)
-                
+
                 duration = time.time() - start_time
                 logger.info(f"[MCP-SSE] Tool '{tool_name}' completed in {duration:.2f}s")
                 return [c.model_dump() for c in res.content]
@@ -136,9 +150,11 @@ class MCPSseClient:
                     else:
                         sub_errs.append(str(sub_e))
                 err_msg = f"{err_msg} -> " + " | ".join(sub_errs)
-                
+
             logger.error(f"[MCP-SSE] Tool '{tool_name}' FAILED after {duration:.2f}s: {err_msg}")
             raise RuntimeError(f"Loki MCP error: {err_msg}")
+
+
 # Global clients
 users_mcp_client: Optional[MCPHttpClient] = None
 items_mcp_client: Optional[MCPHttpClient] = None
@@ -150,10 +166,11 @@ analytics_mcp_client: Optional[MCPHttpClient] = None
 loki_mcp_client: Optional[MCPSseClient] = None
 _mcp_lock = threading.Lock()
 
+
 def init_mcp_clients():
     global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client, loki_mcp_client
     import os
-    
+
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))
     items_url = os.getenv("ITEMS_MCP_URL", os.getenv("ITEMS_API_URL", "http://items_mcp:8000"))
     comps_url = os.getenv("COMPETENCIES_MCP_URL", os.getenv("COMPETENCIES_API_URL", "http://competencies_mcp:8000"))
@@ -181,33 +198,41 @@ def init_mcp_clients():
         if loki_mcp_client is None:
             loki_mcp_client = MCPSseClient(loki_url)
 
+
 async def get_users_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return users_mcp_client
+
 
 async def get_items_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return items_mcp_client
 
+
 async def get_competencies_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return competencies_mcp_client
+
 
 async def get_loki_mcp() -> MCPSseClient:
     init_mcp_clients()
     return loki_mcp_client
 
+
 async def get_cv_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return cv_mcp_client
+
 
 async def get_drive_mcp() -> MCPHttpClient:
     init_mcp_clients()
     return drive_mcp_client
 
+
 async def get_analytics_mcp() -> MCPHttpClient:
     await init_mcp_clients()
     return analytics_mcp_client
+
 
 async def get_missions_mcp() -> MCPHttpClient:
     init_mcp_clients()

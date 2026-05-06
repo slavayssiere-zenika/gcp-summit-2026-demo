@@ -17,21 +17,22 @@ import google.oauth2.id_token
 import httpx
 from database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
-                     Request)
+                     Request, status)
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth import verify_jwt
 from src.competencies.ai_scoring import _bulk_scoring_all_bg
 from src.competencies.bulk_task_state import bulk_scoring_manager
-from src.competencies.models import Competency, user_competency
+from src.competencies.models import CompetencyEvaluation, user_competency
 from src.competencies.scheduler_control import set_scoring_scheduler_enabled
 from src.competencies.scoring_service import (BATCH_GCS_BUCKET, GCP_PROJECT_ID,
-                                              VERTEX_BATCH_MODEL,
                                               VERTEX_LOCATION,
                                               _apply_scoring_results,
-                                              _parse_scoring_results_gcs,
                                               bg_bulk_scoring_vertex)
+
+USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,6 @@ async def trigger_bulk_scoring_all(
                              message=f"Scoring IA lancé pour {total} consultant(s) via {'Vertex AI Batch' if gcp_project and gcs_bucket else 'pipeline séquentiel'}.")
 
 
-
 @router.get("/bulk-scoring-all/status")
 async def get_bulk_scoring_status(_: dict = Depends(verify_jwt)):
     """Retourne l'état courant du batch de scoring en arrière-plan."""
@@ -237,11 +237,11 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
     )
     nb_success, nb_errors, sample_err = await _apply_scoring_results(results)
     final_status = "error" if nb_errors > 0 else "completed"
-    
+
     log_msg = f"[resume] Terminé — {nb_success} scores appliqués, {nb_errors} erreurs."
     if sample_err:
         log_msg += f" Raison de l'erreur: {sample_err[:150]}..."
-        
+
     await bulk_scoring_manager.update_progress(
         status=final_status,
         success_inc=nb_success,
@@ -251,7 +251,6 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
     logger.info(f"[resume] Apply terminé — {nb_success} scores, {nb_errors} erreurs.")
     # Pipeline terminé — pause le Cloud Scheduler keepalive
     await set_scoring_scheduler_enabled(False)
-
 
 
 @scheduler_router.post("/bulk-scoring-all/resume")
@@ -324,5 +323,3 @@ async def resume_bulk_scoring(
         new_log=f"[resume keepalive] {label} (state={state_name})"
     )
     return {"action": "polling", "state": state_name}
-
-

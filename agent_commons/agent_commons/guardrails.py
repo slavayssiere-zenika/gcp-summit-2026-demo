@@ -21,9 +21,13 @@ Key exports:
 
   - check_name_grounding_guardrail(response_text, steps)
       Guardrail 4: warns when proper names in the response are absent from tool results.
+
+  - check_ops_metrics_guardrail(response_text, steps)
+      Guardrail P0-2: detects hallucinated numeric metrics in OPS agent responses.
 """
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -31,6 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Guardrail 1 — Zero tool calls
 # ---------------------------------------------------------------------------
+
 
 def check_hallucination_guardrail(
     response_text: str,
@@ -223,6 +228,103 @@ def check_empty_candidate_guardrail(
         )
 
     return response_text, steps, last_tool_data
+
+
+# ---------------------------------------------------------------------------
+# Guardrail OPS-METRICS (P0-2) — Hallucinated chiffered metrics detection
+# ---------------------------------------------------------------------------
+
+#: Regex matching monetary values, token counts, percentages, latency figures
+#: that strongly suggest the agent invented metrics rather than reading them
+#: from a tool result.
+_METRICS_PATTERN = re.compile(
+    r'(\$[\d,.]+|[\d,.]+\s*(?:tokens?|USD|€|\$|ms|s\b|%)|'
+    r'[\d,.]+\s*(?:appels?|requêtes?|erreurs?|calls?))',
+    re.IGNORECASE,
+)
+
+#: OPS tools whose successful invocation grants the right to cite numeric data.
+FINOPS_MONITORING_TOOLS: frozenset = frozenset({
+    "get_finops_report",
+    "detect_usage_anomalies",
+    "get_aiops_dashboard_data",
+    "get_service_logs",
+    "check_component_health",
+    "check_all_components_health",
+    "get_infrastructure_topology",
+    "list_gcp_services",
+    "get_market_demand_volume",
+    "get_top_market_skills",
+    "run_bigquery_query",
+    "execute_sql_query",
+    "search_cloud_logs_by_trace",
+})
+
+
+def check_ops_metrics_guardrail(
+    response_text: str,
+    steps: list[dict],
+    agent_prefix: str = "[Ops]",
+) -> tuple[str, list[dict]]:
+    """Guardrail P0-2: warn when Ops response contains chiffered metrics without tool data.
+
+    If the Ops agent produces a response containing monetary values, token counts,
+    percentages, or latency figures WITHOUT having called any recognised FinOps or
+    monitoring tool first, the metrics are almost certainly hallucinated.
+
+    This guardrail injects a ``GUARDRAIL_OPS_METRICS`` warning step and prepends
+    a visible notice to the response so the user is alerted.
+
+    Args:
+        response_text: Raw response text collected from the event stream.
+        steps:         List of step dicts already collected.
+        agent_prefix:  Log prefix string (e.g. ``"[Ops]"``).
+
+    Returns:
+        Tuple ``(response_text, steps)`` — both possibly modified.
+    """
+    # Skip if no chiffered metrics found in the response
+    if not _METRICS_PATTERN.search(response_text):
+        return response_text, steps
+
+    # Check whether at least one FinOps/monitoring tool was called
+    tool_calls_made = {
+        s.get("tool", "")
+        for s in steps
+        if s.get("type") == "call"
+    }
+    finops_tools_called = bool(tool_calls_made & FINOPS_MONITORING_TOOLS)
+
+    if finops_tools_called:
+        return response_text, steps  # Data is grounded — no warning needed
+
+    logger.warning(
+        "%s ⚠️ GUARDRAIL_OPS_METRICS: Response contains numeric metrics but NO "
+        "FinOps/monitoring tool was called. Metrics may be hallucinated. "
+        "Tools called: %s",
+        agent_prefix,
+        tool_calls_made or "none",
+    )
+    steps = list(steps)  # avoid mutating caller's list
+    steps.insert(0, {
+        "type": "warning",
+        "tool": "GUARDRAIL_OPS_METRICS",
+        "args": {
+            "message": (
+                "GUARDRAIL P0-2 DÉCLENCHÉ : Des métriques chiffrées ont été produites "
+                "sans appel préalable aux outils FinOps ou monitoring. "
+                "Ces valeurs (coûts, tokens, latences) peuvent être hallucinées. "
+                "Relancez la requête pour obtenir des données réelles."
+            )
+        },
+    })
+    response_text = (
+        "⚠️ ATTENTION : Les métriques ci-dessous n'ont pas été lues depuis les outils "
+        "de monitoring — elles peuvent être inventées. Veuillez relancer la recherche "
+        "pour obtenir des données réelles.\n\n"
+        + response_text
+    )
+    return response_text, steps
 
 
 # ---------------------------------------------------------------------------

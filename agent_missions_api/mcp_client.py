@@ -8,6 +8,11 @@ from typing import Any, List, Optional
 import httpx
 from metrics import AGENT_TOOL_CALLS_TOTAL
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
+
+# McpToolResult est défini localement dans agent_commons.mcp_client (copie de shared/schemas/mcp.py)
+# Le Dockerfile n'inclut PAS shared/ dans les images agents — uniquement agent_commons/.
+from agent_commons.mcp_client import McpToolResult
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
@@ -63,7 +68,16 @@ class MCPHttpClient:
                     timeout=timeout
                 )
                 res.raise_for_status()
-                result_data = res.json().get("result", [])
+                # McpToolResult.model_validate() détecte tout drift de protocole MCP
+                try:
+                    mcp_result = McpToolResult.model_validate(res.json())
+                    result_data = mcp_result.result
+                except ValidationError as ve:
+                    logger.error(
+                        "[MCP-HTTP] Rupture de contrat protocole MCP pour '%s': %s",
+                        tool_name, ve
+                    )
+                    raise
                 duration = time.time() - start_time
                 logger.info("[MCP-HTTP] Tool '%s' completed in %.2fs", tool_name, duration)
                 return result_data

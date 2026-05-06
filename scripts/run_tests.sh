@@ -28,7 +28,23 @@ DOCKER_AVAILABLE=true
 check_docker_available || DOCKER_AVAILABLE=false
 
 # ─── Vérification syntaxique Python (py_compile) ────────────────────────────
-echo "=== py_compile : vérification syntaxique de tous les fichiers Python ==="
+# IMPORTANT: on cible python3.11 — le runtime Cloud Run réel.
+# python3 local (3.13) accepte des syntaxes (f-strings multilignes §PEP 701)
+# que 3.11 rejette avec SyntaxError. Ce gate doit simuler la cible de prod.
+echo "=== py_compile : vérification syntaxique (cible: python 3.11 — runtime Cloud Run) ==="
+
+# Sélectionner l'interpréteur python3.11 selon disponibilité
+if command -v python3.11 &>/dev/null; then
+    PY311="python3.11"
+elif docker info >/dev/null 2>&1; then
+    # Fallback via Docker si python3.11 absent en local
+    PY311="docker run --rm -v $(pwd):/app -w /app python:3.11-slim python3"
+    echo "   (python3.11 absent — utilisation de docker python:3.11-slim)"
+else
+    PY311="python3"
+    echo "   ⚠️  python3.11 introuvable et Docker absent — py_compile avec $(python3 --version) (non représentatif de la prod)"
+fi
+
 SYNTAX_ERRORS=$(find . -name "*.py" \
     -not -path "*/__pycache__/*" \
     -not -path "*/test_env/*" \
@@ -37,15 +53,16 @@ SYNTAX_ERRORS=$(find . -name "*.py" \
     -not -path "*/.gcloud/*" \
     -not -path "*/google-cloud-sdk/*" \
     -not -path "*/platform-engineering/terraform/scratch*" \
-    | xargs python3 -m py_compile 2>&1 || true)
+    | xargs $PY311 -m py_compile 2>&1 || true)
 if [ -n "$SYNTAX_ERRORS" ]; then
-    echo "❌ BLOQUANT : Erreurs de syntaxe Python détectées (SyntaxError / IndentationError) :"
+    echo "❌ BLOQUANT : Erreurs de syntaxe Python détectées (incompatible python3.11 / Cloud Run) :"
     echo "$SYNTAX_ERRORS"
     echo ""
     echo "   Corrigez les erreurs ci-dessus avant de continuer."
+    echo "   ⚠️  Rappel : les f-strings multilignes (PEP 701) sont valides en 3.12+ uniquement."
     exit 1
 fi
-echo "✅ Syntaxe Python OK — aucune SyntaxError/IndentationError détectée."
+echo "✅ Syntaxe Python OK — aucune SyntaxError/IndentationError détectée (python 3.11 compat)."
 
 echo "Démarrage des tests en parallèle (Docker: $DOCKER_AVAILABLE)..."
 

@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import Base
 from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, ForeignKey,
@@ -26,7 +26,7 @@ class DriveFolder(Base):
     folder_name = Column(String, nullable=True)  # Nom du dossier Drive (ex: "Marie Dupont")
     excluded_folders = Column(JSON, nullable=True, default=list)
     is_initial_sync_done = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class DriveSyncState(Base):
@@ -38,14 +38,14 @@ class DriveSyncState(Base):
     revision_id = Column(String, nullable=True)
     status = Column(Enum(DriveSyncStatus, native_enum=False), default=DriveSyncStatus.PENDING, index=True)
     user_id = Column(Integer, nullable=True)
-    modified_time = Column(DateTime, nullable=True)
-    last_processed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    modified_time = Column(DateTime(timezone=True), nullable=True)
+    last_processed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     # Nom du dossier parent direct du fichier (nomenclature Zenika "Prénom Nom")
     parent_folder_name = Column(String, nullable=True)
     error_message = Column(String, nullable=True)
     # Colonnes de timing pour les KPIs data quality — renseignées au fil des transitions d'état
-    queued_at = Column(DateTime, nullable=True)          # Horodatage du passage en QUEUED (publication Pub/Sub)
-    imported_at = Column(DateTime, nullable=True)        # Horodatage du passage en IMPORTED_CV (cv_api callback)
+    queued_at = Column(DateTime(timezone=True), nullable=True)      # Horodatage du passage en QUEUED (publication Pub/Sub)
+    imported_at = Column(DateTime(timezone=True), nullable=True)    # Horodatage du passage en IMPORTED_CV (cv_api callback)
     processing_duration_ms = Column(Integer, nullable=True)  # Durée de traitement LLM mesurée par cv_api (ms)
     file_type = Column(String, nullable=True, default="google_doc")
     # Valeurs : "google_doc" (Google Docs natif) | "docx" (fichier Word .docx)

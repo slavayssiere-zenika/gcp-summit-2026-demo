@@ -27,7 +27,10 @@ except ImportError:
     app_logger = None  # sera initialisé plus bas
 
 from agent_commons.finops import estimate_cost_usd, log_tokens_to_bq
-from agent_commons.guardrails import check_hallucination_guardrail
+from agent_commons.guardrails import (
+    check_hallucination_guardrail,
+    check_ops_metrics_guardrail,
+)
 from agent_commons.mcp_client import MCPHttpClient, auth_header_var
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.metadata import extract_metadata_from_session
@@ -231,8 +234,11 @@ async def run_agent_query(
         auth_header=auth_header_var.get(),
     )
 
-    # --- Guardrail anti-hallucination ---
+    # --- Guardrail 1 : anti-hallucination (zéro appel d'outil) ---
     response_text, steps = check_ops_hallucination_guardrail(query, response_text, steps)
+
+    # --- Guardrail P0-2 : métriques chiffrées sans données FinOps réelles ---
+    response_text, steps = check_ops_metrics_guardrail(response_text, steps, "[Ops]")
 
     return {
         "response": response_text,

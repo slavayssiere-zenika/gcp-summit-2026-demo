@@ -57,6 +57,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/spec` : Get Spec
 - **POST** `/pubsub/import-cv` : Handle Pubsub Cv Import
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
+- **POST** `/pubsub/data-quality-snapshot` : Trigger Data Quality Snapshot
 - **POST** `/cache/invalidate-taxonomy` : Force Invalidate Taxonomy Cache
 - **POST** `/import` : Import And Analyze Cv
 - **GET** `/users/tags/map` : Get All User Tags
@@ -94,6 +95,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/bulk-reanalyse/data-quality` : Get Data Quality Report
 - **POST** `/bulk-reanalyse/retry-apply` : Retry Bulk Apply
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp

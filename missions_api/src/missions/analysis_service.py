@@ -119,24 +119,21 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             analytics_mcp_url = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
 
             async def fast_log_finops(action, model, usage):
-                try:
-                    inject(headers)
-                    await http_client.post(
-                        f"{analytics_mcp_url.rstrip('/')}/mcp/call",
-                        json={
-                            "name": "log_ai_consumption",
-                            "arguments": {
-                                "user_email": user_email,
-                                "action": action,
-                                "model": model,
-                                "input_tokens": usage.prompt_token_count,
-                                "output_tokens": usage.candidates_token_count
-                            }
-                        },
-                        headers=headers
-                    )
-                except Exception:
-                    raise
+                inject(headers)
+                await http_client.post(
+                    f"{analytics_mcp_url.rstrip('/')}/mcp/call",
+                    json={
+                        "name": "log_ai_consumption",
+                        "arguments": {
+                            "user_email": user_email,
+                            "action": action,
+                            "model": model,
+                            "input_tokens": usage.prompt_token_count,
+                            "output_tokens": usage.candidates_token_count
+                        }
+                    },
+                    headers=headers
+                )
             await fast_log_finops("RAG_Mission_Extraction", model_extract, res_extract.usage_metadata)
 
             extracted_data = json.loads(res_extract.text)
@@ -309,7 +306,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             try:
                 emb_res = await embed_content_with_retry(client, model=os.getenv("GEMINI_EMBEDDING_MODEL"), contents=search_context)
                 vector_data = emb_res.embeddings[0].values
-            except Exception:
+            except Exception as e:
+                logger.warning(f"[analysis_service] Embedding mission échoué (best-effort): {e}")
                 vector_data = None
 
             # 5. Save to DB decoupled

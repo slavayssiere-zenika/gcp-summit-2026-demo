@@ -384,7 +384,7 @@ get_service_tag() {
 compute_service_hash() {
   local SERVICE=$1
   local DIRS_TO_CHECK=("./${SERVICE}")
-  if [[ "$SERVICE" == "agent_hr_api" || "$SERVICE" == "agent_ops_api" || "$SERVICE" == "agent_missions_api" ]]; then
+  if [[ "$SERVICE" == "agent_"* ]]; then
     DIRS_TO_CHECK+=("./agent_commons")
   fi
   # shared/ est toujours inclus dans le hash de tous les services
@@ -395,12 +395,21 @@ compute_service_hash() {
 
   # Compute a SHA1 hash of all files in the relevant directories
   # Exclude VERSION and HASH files, and common ignore paths
-  find "${DIRS_TO_CHECK[@]}" -type f ! -name "VERSION" ! -name "HASH" ! -path "*/__pycache__/*" ! -path "*/.venv/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/.DS_Store" -exec shasum {} + | sort | shasum | awk '{print $1}'
+  find "${DIRS_TO_CHECK[@]}" -type f \
+    ! -name "VERSION" ! -name "HASH" ! -name "FILE_HASHES" \
+    ! -name ".coverage" ! -name "coverage.json" ! -name "pytest.log" \
+    ! -name "*.db" ! -name "*.pyc" ! -name ".mutmut-cache" \
+    ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" ! -path "*/mutants/*" \
+    ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+    ! -path "*/dist/*" ! -path "*/.DS_Store" \
+    -exec shasum {} + | sort > "/tmp/hash_${SERVICE}"
+  shasum "/tmp/hash_${SERVICE}" | awk '{print $1}'
 }
 
 save_service_hash() {
   local SERVICE=$1
   compute_service_hash "$SERVICE" > "${SERVICE}/HASH"
+  cp "/tmp/hash_${SERVICE}" "${SERVICE}/FILE_HASHES"
 }
 
 save_shared_hash() {
@@ -408,8 +417,15 @@ save_shared_hash() {
   # ont été buildés avec succès. Tant qu'un build échoue, shared/HASH reste
   # à l'ancienne valeur → le prochain run re-déclenchera le rebuild complet.
   if [ -d "./shared" ]; then
-    find "./shared" -type f ! -name "HASH" ! -path "*/__pycache__/*" \
-      -exec shasum {} + | sort | shasum | awk '{print $1}' > "shared/HASH"
+    find "./shared" -type f \
+      ! -name "HASH" ! -name "FILE_HASHES" \
+      ! -name ".coverage" ! -name "coverage.json" ! -name "pytest.log" \
+      ! -name "*.db" ! -name "*.pyc" ! -name ".mutmut-cache" \
+      ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" ! -path "*/mutants/*" \
+      ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+      ! -path "*/dist/*" ! -path "*/.DS_Store" \
+      -exec shasum {} + | sort > "shared/FILE_HASHES"
+    shasum "shared/FILE_HASHES" | awk '{print $1}' > "shared/HASH"
   fi
 }
 
@@ -421,9 +437,21 @@ check_shared_changed() {
   local SAVED
   SAVED=$(cat "$SHARED_HASH_FILE")
   local CURRENT
-  CURRENT=$(find "./shared" -type f ! -name "HASH" ! -path "*/__pycache__/*" \
-    -exec shasum {} + | sort | shasum | awk '{print $1}')
-  [ "$SAVED" != "$CURRENT" ]
+  find "./shared" -type f \
+    ! -name "HASH" ! -name "FILE_HASHES" \
+    ! -name ".coverage" ! -name "coverage.json" ! -name "pytest.log" \
+    ! -name "*.db" ! -name "*.pyc" ! -name ".mutmut-cache" \
+    ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" ! -path "*/mutants/*" \
+    ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+    ! -path "*/dist/*" ! -path "*/.DS_Store" \
+    -exec shasum {} + | sort > "/tmp/current_shared_hashes"
+  CURRENT=$(shasum "/tmp/current_shared_hashes" | awk '{print $1}')
+  
+  if [ "$SAVED" != "$CURRENT" ]; then
+    return 0 # changed
+  else
+    return 1 # not changed
+  fi
 }
 
 has_changes() {
@@ -439,6 +467,14 @@ has_changes() {
   if [ "$SAVED_HASH" == "$CURRENT_HASH" ]; then
     return 1 # Pas de changement
   else
+    if [ -f "${SERVICE}/FILE_HASHES" ]; then
+      echo -e "${GREY}   Détails des changements pour $SERVICE :${RESET}"
+      diff "${SERVICE}/FILE_HASHES" "/tmp/hash_${SERVICE}" | grep -E '^[<>]' | sed 's/^< /   [-] (Ancien) /; s/^> /   [+] (Nouveau) /' | awk '{print $1, $2, $4}' || true
+      echo ""
+    else
+      echo -e "${GREY}   (Détails non disponibles ce coup-ci, initialisation du tracking...)${RESET}"
+      echo ""
+    fi
     return 0 # Changements détectés
   fi
 }
@@ -750,7 +786,7 @@ build_and_push_standard() {
   local SERVICE=$1
   local BUMP=${2:-"patch"}
 
-  if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_migrations" ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
+  if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
     echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
     DEPLOYS_SKIPPED+=("$SERVICE")
     return 0
@@ -882,8 +918,9 @@ build_and_upload_frontend() {
     DEPLOYS_SUCCESS+=("frontend")
     save_service_hash "frontend"
   else
-    echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform."
-    DEPLOYS_FAILED+=("frontend (Bucket introuvable)")
+    echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform. Déploiement ignoré."
+    DEPLOYS_SUCCESS+=("frontend (Build only)")
+    save_service_hash "frontend"
   fi
 }
 
@@ -989,6 +1026,25 @@ SHARED_CONSUMERS=("competencies_api" "cv_api" "missions_api" "users_api" \
 
 if check_shared_changed; then
   echo -e "${YELLOW}⚠️  shared/ a changé depuis le dernier build — expansion automatique vers tous les consumers${RESET}"
+  
+  if [ -f "shared/FILE_HASHES" ] && [ -f "/tmp/current_shared_hashes" ]; then
+    echo -e "${GREY}   Détails des changements dans shared/ :${RESET}"
+    diff "shared/FILE_HASHES" "/tmp/current_shared_hashes" | grep -E '^[<>]' | sed 's/^< /   [-] (Ancien) /; s/^> /   [+] (Nouveau) /' | awk '{print $1, $2, $4}' || true
+    
+    # Vérification stricte du contrat d'interface (shared/schemas/)
+    if diff "shared/FILE_HASHES" "/tmp/current_shared_hashes" | grep -E '^[<>]' | grep -q 'shared/schemas/'; then
+      echo -e "${YELLOW}🚨 Modification détectée dans shared/schemas/ (contrat d'interface) !${RESET}"
+      if [ "$BUMP_TYPE" == "patch" ] || [ "$BUMP_TYPE" == "none" ]; then
+        echo -e "${YELLOW}   → Upgrade automatique du bump de '${BUMP_TYPE}' à 'minor'.${RESET}"
+        BUMP_TYPE="minor"
+      fi
+    fi
+    echo ""
+  else
+    echo -e "${GREY}   (Détails non disponibles ce coup-ci, initialisation du tracking...)${RESET}"
+    echo ""
+  fi
+
   EXPANDED=false
   for consumer in "${SHARED_CONSUMERS[@]}"; do
     if [[ ! " ${ALL_TASKS[*]} " =~ " ${consumer} " ]]; then

@@ -63,8 +63,7 @@ class CVExtractionService:
                     raise HTTPException(
                         status_code=400,
                         detail=(
-                            f"Accès refusé pour le DOCX Drive (HTTP {
-                                resp.status_code}). "
+                            f"Accès refusé pour le DOCX Drive (HTTP {resp.status_code}). "
                             "Vérifiez les scopes OAuth2 du Service Account (drive.readonly minimum requis)."
                         ),
                     )
@@ -75,10 +74,7 @@ class CVExtractionService:
                 if len(resp.content) > _MAX_DOCX_SIZE:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Fichier DOCX trop volumineux ({
-                            len(
-                                resp.content) //
-                            1024} Ko > 10 Mo max).",
+                        detail=f"Fichier DOCX trop volumineux ({len(resp.content) // 1024} Ko > 10 Mo max).",
                     )
                 # Les fichiers DOCX sont des archives ZIP — magic bytes =
                 # PK\x03\x04
@@ -111,8 +107,7 @@ class CVExtractionService:
                         detail="Le fichier DOCX est vide ou illisible (aucun texte extrait).",
                     )
                 logger.info(
-                    f"[_fetch_cv_content] DOCX extrait — {
-                        len(text)} chars, file_id={file_id}")
+                    f"[_fetch_cv_content] DOCX extrait — {len(text)} chars, file_id={file_id}")
                 return text
 
         # ── Branche Google Doc natif ─────────────────────────────────────────
@@ -144,8 +139,7 @@ class CVExtractionService:
                         raise HTTPException(
                             status_code=400,
                             detail=(
-                                f"Accès refusé par l'API Drive (HTTP {
-                                    resp.status_code}). "
+                                f"Accès refusé par l'API Drive (HTTP {resp.status_code}). "
                                 "Vérifiez les scopes OAuth2 du Service Account "
                                 "(drive.readonly ou drive.file minimum requis)."
                             ),

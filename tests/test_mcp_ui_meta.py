@@ -5,7 +5,6 @@ utilisent des URIs valides de la taxonomie sémantique UiWidget.
 Ces tests sont des tests de contrat : ils garantissent qu'aucune URI invalide
 ou mal typée ne peut être injectée dans le système de dispatch frontend.
 """
-import json
 import pytest
 
 # Registre des URIs sémantiques valides (taxonomie officielle)
@@ -127,7 +126,7 @@ class TestMissionsApiUiMeta:
 
 
 class TestItemsApiUiMeta:
-    FILEPATH = "../items_api/mcp_server.py"
+    FILEPATH = "../items_api/tools/items.py"
 
     @pytest.mark.parametrize("tool_name,expected_uri", ITEMS_API_EXPECTED.items())
     def test_tool_has_valid_uri(self, tool_name, expected_uri):

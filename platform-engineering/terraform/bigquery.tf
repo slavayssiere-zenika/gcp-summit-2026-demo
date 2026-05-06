@@ -95,6 +95,36 @@ resource "google_project_iam_member" "analytics_job_user" {
   member  = "serviceAccount:${google_service_account.analytics_sa.email}"
 }
 
+resource "google_bigquery_table" "data_quality_history" {
+  dataset_id          = google_bigquery_dataset.finops.dataset_id
+  table_id            = "data_quality_history"
+  deletion_protection = false
+
+  time_partitioning {
+    type  = "DAY"
+    field = "computed_at"
+  }
+
+  schema = <<EOF
+[
+  {"name":"computed_at","type":"TIMESTAMP","mode":"REQUIRED","description":"Horodatage du snapshot"},
+  {"name":"total_cvs","type":"INTEGER","mode":"REQUIRED","description":"Nombre total de CVs"},
+  {"name":"users_with_cv","type":"INTEGER","mode":"REQUIRED","description":"Consultants avec CV"},
+  {"name":"score","type":"INTEGER","mode":"REQUIRED","description":"Score global 0-100"},
+  {"name":"grade","type":"STRING","mode":"REQUIRED","description":"Grade A/B/C/D"},
+  {"name":"embedding_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec embedding sémantique"},
+  {"name":"missions_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec missions"},
+  {"name":"competencies_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec compétences extraites"},
+  {"name":"summary_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec summary"},
+  {"name":"current_role_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec current_role"},
+  {"name":"competency_assignment_pct","type":"INTEGER","mode":"REQUIRED","description":"% consultants avec compétences assignées"},
+  {"name":"ai_scoring_pct","type":"INTEGER","mode":"REQUIRED","description":"% consultants avec scoring IA suffisant"},
+  {"name":"issues_count","type":"INTEGER","mode":"REQUIRED","description":"Nombre d'anomalies détectées"},
+  {"name":"trigger","type":"STRING","mode":"NULLABLE","description":"Source du déclenchement : scheduler | batch_completed | manual"}
+]
+EOF
+}
+
 resource "google_bigquery_table" "model_pricing" {
   dataset_id = google_bigquery_dataset.finops.dataset_id
   table_id   = "model_pricing"

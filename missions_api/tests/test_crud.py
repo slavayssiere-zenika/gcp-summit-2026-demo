@@ -10,32 +10,42 @@ from src.auth import verify_jwt
 os.environ['SECRET_KEY'] = 'testsecret'
 
 
-
 # 1. Provide dependency overrides for testing
 async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[verify_jwt] = override_verify_jwt
+
+@pytest.fixture(autouse=True)
+def reset_overrides():
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[verify_jwt] = override_verify_jwt
+    yield
+    app.dependency_overrides.clear()
+
 
 client = TestClient(app)
 
 # 2. Basic Tests
+
+
 def test_health(mocker):
     mocker.patch("database.check_db_connection", new=AsyncMock(return_value=True))
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
+
 def test_get_spec_success(mocker):
     mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
     response = client.get("/spec")
     assert response.status_code == 200
     assert "# Spec doc" in response.text
+
 
 def test_get_spec_fail(mocker):
     mocker.patch("builtins.open", side_effect=Exception("Not found"))
@@ -44,6 +54,8 @@ def test_get_spec_fail(mocker):
     assert "# Specification introuvable" in response.text
 
 # 3. Router Tests with Mocks
+
+
 @pytest.fixture
 def mock_httpx(mocker):
     mock = mocker.patch("src.missions.analysis_service.httpx.AsyncClient")
@@ -51,9 +63,11 @@ def mock_httpx(mocker):
     mock.return_value.__aenter__.return_value = client_instance
     return client_instance
 
+
 @pytest.fixture
 def mock_genai(mocker):
     return mocker.patch("src.missions.analysis_service.client")
+
 
 def test_list_missions(mocker):
     mock_db = AsyncMock()
@@ -78,6 +92,7 @@ def test_list_missions(mocker):
 
 # Tests STAFF-003 — Détection de conflits de staffing (get_active_missions_for_user)
 # ---------------------------------------------------------------------------
+
 
 def test_get_active_missions_for_user_staffed(mocker):
     """STAFF-003 : Un user staffé sur une mission doit apparaître dans active_missions."""
@@ -194,6 +209,7 @@ def test_get_active_missions_multiple_missions(mocker):
 
 def override_verify_jwt_commercial():
     return {"sub": "commercial@zenika.com", "role": "commercial"}
+
 
 def override_verify_jwt_user():
     return {"sub": "user@zenika.com", "role": "user"}

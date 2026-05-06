@@ -252,3 +252,54 @@ resource "google_service_account_iam_member" "pubsub_token_creator" {
 }
 
 data "google_project" "project" {}
+
+# ==============================================================
+# Data Quality Snapshots — Pub/Sub → BigQuery (native subscription)
+# Chaque snapshot est publié par cv_api (scheduler 4h + post-batch)
+# La BigQuery Subscription écrit directement sans consumer Python.
+# ==============================================================
+
+resource "google_pubsub_topic" "data_quality_events" {
+  name = "zenika-data-quality-events-${terraform.workspace}"
+
+  # 1 jour : un snapshot toutes les 4h = max 6 messages/jour, très faible volume
+  message_retention_duration = "86400s"
+
+  labels = {
+    environment = terraform.workspace
+    managed_by  = "terraform"
+  }
+}
+
+# BigQuery Subscription native : écrit directement les messages dans la table data_quality_history
+resource "google_pubsub_subscription" "data_quality_bq_sub" {
+  name  = "data-quality-bq-sub-${terraform.workspace}"
+  topic = google_pubsub_topic.data_quality_events.id
+
+  bigquery_config {
+    table               = "${var.project_id}:finops_${terraform.workspace}.data_quality_history"
+    use_topic_schema    = false
+    write_metadata      = false
+    drop_unknown_fields = true
+  }
+
+  depends_on = [
+    google_bigquery_table.data_quality_history,
+    google_project_iam_member.pubsub_bq_writer
+  ]
+}
+
+# cv_sa peut publier des snapshots dans ce topic
+resource "google_pubsub_topic_iam_member" "cv_api_dq_publisher" {
+  project = var.project_id
+  topic   = google_pubsub_topic.data_quality_events.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.cv_sa.email}"
+}
+
+# Le SA système Pub/Sub doit pouvoir streamer vers BigQuery (requis pour BigQuery Subscription)
+resource "google_project_iam_member" "pubsub_bq_writer" {
+  project = var.project_id
+  role    = "roles/bigquery.dataEditor"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}

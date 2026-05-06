@@ -13,12 +13,16 @@ from google.genai import types
 import src.services.config as _svc_config
 from src.cvs.routers._shared import BATCH_GCS_BUCKET
 from src.cvs.task_state import tree_task_manager
+from src.services.data_quality_publisher import publish_data_quality_snapshot
 from src.services.finops import log_finops
 from src.services.taxonomy_service import fetch_prompt as _fetch_prompt
 from src.services.taxonomy_service import get_existing_competencies as _get_existing_competencies
 from src.gemini_retry import generate_content_with_retry
 
 logger = logging.getLogger(__name__)
+
+# Maintien des références fortes pour les tâches en arrière-plan (évite le GC sous Python 3.13+)
+_background_tasks = set()
 
 
 class TaxonomyBatchService:
@@ -539,7 +543,9 @@ class TaxonomyBatchService:
                         logger.error(f"Erreur background dedup: {e}")
                         await tree_task_manager.update_progress(status="error", error=f"Erreur Deduplicate: {str(e)}")
 
-                asyncio.create_task(run_dedup())
+                task = asyncio.create_task(run_dedup())
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
                 return {"success": True, "state": "PROCESSING_DEDUP"}
 
             elif batch_step == "reduce":
@@ -662,7 +668,20 @@ class TaxonomyBatchService:
                                 timeout=180.0
                             )
                             if res.status_code == 200:
-                                await tree_task_manager.update_progress(status="completed", new_log="Taxonomie appliquée avec succès !")
+                                await tree_task_manager.update_progress(
+                                    status="completed",
+                                    new_log="Taxonomie appliqu\u00e9e avec succ\u00e8s !"
+                                )
+                                # Snapshot data quality post-batch (non-bloquant)
+                                _dq_bg = asyncio.create_task(
+                                    publish_data_quality_snapshot(
+                                        db=None,
+                                        auth_header=f"Bearer {sweep_service_token}",
+                                        trigger="batch_completed",
+                                    )
+                                )
+                                _background_tasks.add(_dq_bg)
+                                _dq_bg.add_done_callback(_background_tasks.discard)
                                 return {"success": True, "state": "COMPLETED"}
                             else:
                                 await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
@@ -800,7 +819,20 @@ class TaxonomyBatchService:
                             timeout=180.0
                         )
                         if res.status_code == 200:
-                            await tree_task_manager.update_progress(status="completed", new_log="Taxonomie appliquée avec succès !")
+                            await tree_task_manager.update_progress(
+                                status="completed",
+                                new_log="Taxonomie appliqu\u00e9e avec succ\u00e8s !"
+                            )
+                            # Snapshot data quality post-batch (non-bloquant)
+                            _dq_bg2 = asyncio.create_task(
+                                publish_data_quality_snapshot(
+                                    db=None,
+                                    auth_header=f"Bearer {auth_token}",
+                                    trigger="batch_completed",
+                                )
+                            )
+                            _background_tasks.add(_dq_bg2)
+                            _dq_bg2.add_done_callback(_background_tasks.discard)
                             return {"success": True, "state": "COMPLETED"}
                         else:
                             error_msg = f"Erreur d'application en base: {

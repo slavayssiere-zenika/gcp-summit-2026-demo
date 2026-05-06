@@ -1,3 +1,144 @@
+## Mise à jour automatique - 2026-05-06 11:16:57
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1440  | 551  |  62% |
+| agent_hr_api     | 1582  | 220  |  86% |
+| agent_missions_api | 1236  | 316  |  74% |
+| agent_ops_api    | 1425  | 215  |  85% |
+| agent_router_api | 2367  | 427  |  82% |
+| analytics_mcp    | 1074  | 148  |  86% |
+| competencies_api | 4246  | 1321 |  69% |
+| cv_api           | 6781  | 2323 |  66% |
+| drive_api        | 3798  | 529  |  86% |
+| items_api        | 1719  | 454  |  74% |
+| missions_api     | 2020  | 508  |  75% |
+| monitoring_mcp   | 1367  | 165  |  88% |
+| platform-engineering | 1155  | 886  |  23% |
+| prompts_api      | 1288  | 390  |  70% |
+| shared           | 139   | 0    | 100% |
+| tests            | 79    | 4    |  95% |
+| users_api        | 1803  | 585  |  68% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Add shared/schemas model_validate to integration tests + fix cv_api bugs
+- Add psycopg2-binary to test_env requirements
+- Add py_compile gate to run_tests and git-push
+- Fix ModuleNotFoundError shared in agent_commons
+
+#### Fichiers (non commités)
+- `gent_commons/agent_commons/guardrails.py` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/mcp_client.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/agent_missions_api.system_instruction.txt` (M)
+- `agent_missions_api/mcp_client.py` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent.py` (M)
+- `agent_ops_api/agent_ops_api.system_instruction.txt` (M)
+- `agent_ops_api/mcp_client.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/a2a_tools.py` (M)
+- `agent_router_api/agent_router_api.system_instruction.txt` (M)
+- `agent_router_api/mcp_client.py` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/mcp_app.py` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/scoring_router.py` (M)
+- `competencies_api/tests/integration/conftest.py` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/conftest.py` (M)
+- `cv_api/pytest.ini` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/router.py` (M)
+- `cv_api/src/services/config.py` (M)
+- `cv_api/src/services/cv_extraction_service.py` (M)
+- `cv_api/src/services/pubsub_service.py` (M)
+- `cv_api/src/services/taxonomy_batch_service.py` (M)
+- `cv_api/tests/integration/conftest.py` (M)
+- `db_migrations/Dockerfile` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `docs/pipelines.md` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/models.py` (M)
+- `frontend/HASH` (D)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `items_api/spec.md` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `missions_api/src/missions/analysis_service.py` (M)
+- `missions_api/tests/integration/conftest.py` (M)
+- `missions_api/tests/test_analysis.py` (M)
+- `missions_api/tests/test_crud.py` (M)
+- `missions_api/tests/test_security_upload.py` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/tests/test_mcp_app.py` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/terraform/bigquery.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/pubsub.tf` (M)
+- `platform-engineering/terraform/scheduler.tf` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/prompts_api.error_correction.txt` (M)
+- `prompts_api/spec.md` (M)
+- `prompts_api/tests/integration/conftest.py` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/run_tests.sh` (M)
+- `shared/HASH` (D)
+- `temp_pubsub.py` (D)
+- `tests/test_mcp_ui_meta.py` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+- `users_api/spec.md` (M)
+- `users_api/tests/integration/conftest.py` (M)
+- `agent_commons/tests/test_guardrail_ops_metrics.py` (??)
+- `agent_hr_api/FILE_HASHES` (??)
+- `agent_missions_api/FILE_HASHES` (??)
+- `agent_ops_api/FILE_HASHES` (??)
+- `agent_router_api/FILE_HASHES` (??)
+- `agent_router_api/tests/test_circuit_breaker.py` (??)
+- `analytics_mcp/FILE_HASHES` (??)
+- `competencies_api/FILE_HASHES` (??)
+- `cv_api/FILE_HASHES` (??)
+- `cv_api/src/cvs/routers/data_quality_router.py` (??)
+- `cv_api/src/services/data_quality_publisher.py` (??)
+- `cv_api/tests/test_data_quality_publisher.py` (??)
+- `drive_api/FILE_HASHES` (??)
+- `items_api/FILE_HASHES` (??)
+- `missions_api/FILE_HASHES` (??)
+- `monitoring_mcp/FILE_HASHES` (??)
+- `prompts_api/FILE_HASHES` (??)
+- `scripts/a.txt` (??)
+- `scripts/b.txt` (??)
+- `scripts/test_diff.sh` (??)
+- `users_api/FILE_HASHES` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-06 00:40:27
 
 ### Couverture de Code

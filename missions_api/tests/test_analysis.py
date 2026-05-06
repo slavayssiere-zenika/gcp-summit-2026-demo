@@ -10,19 +10,26 @@ from src.auth import verify_jwt
 os.environ['SECRET_KEY'] = 'testsecret'
 
 
-
 # 1. Provide dependency overrides for testing
 async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[verify_jwt] = override_verify_jwt
+
+@pytest.fixture(autouse=True)
+def reset_overrides():
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[verify_jwt] = override_verify_jwt
+    yield
+    app.dependency_overrides.clear()
+
 
 client = TestClient(app)
+
 
 @pytest.fixture
 def mock_httpx(mocker):
@@ -31,28 +38,30 @@ def mock_httpx(mocker):
     mock.return_value.__aenter__.return_value = client_instance
     return client_instance
 
+
 @pytest.fixture
 def mock_genai(mocker):
     return mocker.patch("src.missions.analysis_service.client")
+
 
 def test_create_and_analyze_mission(mocker, mock_httpx, mock_genai):
     mock_db = AsyncMock()
     app.dependency_overrides[get_db] = lambda: mock_db
     mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
     mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
-    
+
     # Mock GenAI Extraction
     mock_extract_res = MagicMock()
     mock_extract_res.text = '{"competencies": ["Java", "Spring"]}'
     mock_extract_res.usage_metadata = MagicMock(prompt_token_count=10, candidates_token_count=20)
-    
+
     # Mock GenAI Staffing
     mock_staffing_res = MagicMock()
     mock_staffing_res.text = '[{"user_id": 1, "full_name": "Test User", "role": "Tech Lead", "justification": "Good", "estimated_days": 10}]'
     mock_staffing_res.usage_metadata = MagicMock(prompt_token_count=50, candidates_token_count=30)
-    
+
     mock_genai.aio.models.generate_content = AsyncMock(side_effect=[mock_extract_res, mock_staffing_res])
-    
+
     # Mock Embeddings
     mock_emb_res = MagicMock()
     mock_emb_res.embeddings = [MagicMock(values=[0.1, 0.2])]
@@ -61,16 +70,16 @@ def test_create_and_analyze_mission(mocker, mock_httpx, mock_genai):
     # Mock HTTPX Calls
     mock_prompt1 = MagicMock(status_code=200)
     mock_prompt1.json.return_value = {"value": "Prompt Extract"}
-    
+
     mock_prompt2 = MagicMock(status_code=200)
     mock_prompt2.json.return_value = {"value": "Prompt Staffing"}
-    
+
     mock_cv_search = MagicMock(status_code=200)
     mock_cv_search.json.return_value = [{"user_id": 1, "similarity_score": 0.95}]
-    
+
     mock_user_info = MagicMock(status_code=200)
     mock_user_info.json.return_value = {"full_name": "Test User", "unavailability_periods": [], "is_active": True}
-    
+
     mock_analytics = MagicMock(status_code=200)
 
     def side_effect(*args, **kwargs):
@@ -84,13 +93,13 @@ def test_create_and_analyze_mission(mocker, mock_httpx, mock_genai):
         if "/users/" in url:
             return mock_user_info
         return MagicMock(status_code=200)
-    
+
     mock_httpx.get.side_effect = side_effect
     mock_httpx.post.return_value = mock_analytics
-    
+
     request_data = {"title": "New Mission", "description": "Need Java developer."}
     response = client.post("/missions", data=request_data, headers={"Authorization": "Bearer fake_token"})
-    
+
     assert response.status_code == 202
     res_data = response.json()
     assert "task_id" in res_data

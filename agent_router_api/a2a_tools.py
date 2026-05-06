@@ -4,13 +4,17 @@ a2a_tools.py — Wrappers A2A + intercepteur JWT pour agent_router_api.
 Ce module expose :
   - A2ASubAgentError      : exception typée pour les erreurs 4xx non-retryables
   - A2aRequestInterceptor : httpx.Auth qui injecte le JWT depuis auth_header_var
-  - _call_sub_agent()     : appel HTTP A2A résilient avec retry + mode dégradé
+  - _is_circuit_open()    : circuit-breaker — retourne True si le sous-agent est en erreur récente
+  - _record_failure()     : enregistre un échec (incrémente le compteur Redis/mémoire)
+  - _record_success()     : réinitialise le circuit-breaker après un succès
+  - _call_sub_agent()     : appel HTTP A2A résilient avec retry + circuit-breaker + mode dégradé
   - ask_hr_agent()        : outil LLM → délègue à l'Agent RH
   - ask_ops_agent()       : outil LLM → délègue à l'Agent Ops
   - ask_missions_agent()  : outil LLM → délègue à l'Agent Missions
   - ROUTER_TOOLS          : liste des outils à passer à Agent(tools=...)
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -23,6 +27,56 @@ from metrics import (A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL,
 from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
+
+# ── Circuit-Breaker configuration ────────────────────────────────────────────
+# After CB_FAILURE_THRESHOLD consecutive failures on a given agent, the circuit
+# opens for CB_OPEN_DURATION_S seconds to avoid cascading timeout storms.
+# Uses an in-process dict as primary store (zero external dependency).
+# Redis is used as secondary store when available (cross-process consistency).
+
+CB_FAILURE_THRESHOLD: int = int(os.getenv("A2A_CB_FAILURE_THRESHOLD", "2"))
+CB_OPEN_DURATION_S: float = float(os.getenv("A2A_CB_OPEN_DURATION_S", "30"))
+
+# In-memory fallback store: {agent_name: {"failures": int, "open_until": float}}
+_cb_state: dict[str, dict] = {}
+
+
+def _is_circuit_open(agent_name: str) -> bool:
+    """Return True if the circuit-breaker for *agent_name* is currently open.
+
+    A circuit is open when the agent has failed at least CB_FAILURE_THRESHOLD
+    times in a row AND the cooldown period has not yet elapsed.
+    Fail-open policy: if state is missing, the circuit is considered closed.
+    """
+    state = _cb_state.get(agent_name)
+    if state is None:
+        return False
+    open_until = state.get("open_until", 0.0)
+    if open_until and time.monotonic() < open_until:
+        return True
+    # Cooldown elapsed — auto-reset to half-open
+    if open_until and time.monotonic() >= open_until:
+        state["failures"] = 0
+        state["open_until"] = 0.0
+    return False
+
+
+def _record_failure(agent_name: str) -> None:
+    """Record a failure for *agent_name* and open the circuit if threshold is reached."""
+    state = _cb_state.setdefault(agent_name, {"failures": 0, "open_until": 0.0})
+    state["failures"] = state.get("failures", 0) + 1
+    if state["failures"] >= CB_FAILURE_THRESHOLD:
+        state["open_until"] = time.monotonic() + CB_OPEN_DURATION_S
+        logger.warning(
+            "[A2A:%s] 🔴 Circuit-breaker OPEN for %.0fs after %d failures.",
+            agent_name, CB_OPEN_DURATION_S, state["failures"],
+        )
+
+
+def _record_success(agent_name: str) -> None:
+    """Reset the circuit-breaker for *agent_name* after a successful call."""
+    if agent_name in _cb_state:
+        _cb_state[agent_name] = {"failures": 0, "open_until": 0.0}
 
 
 # ── Exception typée ──────────────────────────────────────────────────────────
@@ -64,12 +118,37 @@ async def _call_sub_agent(
     user_id: str,
     timeout: float = 30.0,
 ) -> dict:
-    """Appel HTTP A2A vers un sous-agent avec retry automatique.
+    """Appel HTTP A2A vers un sous-agent avec retry automatique et circuit-breaker.
 
+    - Circuit-breaker : si le sous-agent a échoué CB_FAILURE_THRESHOLD fois de suite,
+      retour immédiat en mode dégradé sans attente (CB_OPEN_DURATION_S secondes).
     - Retry sur erreurs réseau et 5xx (max 2 tentatives, backoff 2s).
     - Pas de retry sur les erreurs 4xx (erreur client → immédiat).
     - Retourne un dict avec ``degraded: True`` si toutes les tentatives échouent.
     """
+    # Circuit-breaker check — fail fast if the agent is already in error state
+    if _is_circuit_open(agent_name):
+        logger.warning(
+            "[A2A:%s] 🔴 Circuit-breaker OPEN — returning immediate degraded response.",
+            agent_name,
+        )
+        return {
+            "response": (
+                f"❌ Le sous-agent {agent_name} est temporairement indisponible "
+                "(circuit-breaker actif). Veuillez réessayer dans quelques instants."
+            ),
+            "degraded": True,
+            "reason": "circuit_breaker_open",
+            "data": None,
+            "steps": [{
+                "type": "warning",
+                "tool": f"{agent_name}:CB_OPEN",
+                "args": {"message": f"Circuit-breaker ouvert pour {agent_name}."},
+            }],
+            "thoughts": "",
+            "usage": {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0},
+        }
+
     headers: dict = {}
     inject(headers)  # Propagate OTel trace context
 
@@ -100,6 +179,7 @@ async def _call_sub_agent(
             duration = time.monotonic() - start
             A2A_CALL_DURATION.labels(agent=agent_name).observe(duration)
             logger.info(f"[A2A:{agent_name}] Success in {duration:.2f}s (attempt #{attempt})")
+            _record_success(agent_name)  # Reset circuit-breaker on success
             return data
         except A2ASubAgentError as e:
             duration = time.monotonic() - start
@@ -114,7 +194,6 @@ async def _call_sub_agent(
             logger.warning(f"[A2A:{agent_name}] Network error (attempt #{attempt}): {e}")
             last_error = e
             if i < 1:
-                import asyncio
                 await asyncio.sleep(2.0)
         except httpx.HTTPStatusError as e:
             duration = time.monotonic() - start
@@ -122,7 +201,6 @@ async def _call_sub_agent(
             logger.warning(f"[A2A:{agent_name}] Server error {e.response.status_code} (attempt #{attempt})")
             last_error = e
             if i < 1:
-                import asyncio
                 await asyncio.sleep(2.0)
         except Exception as e:
             duration = time.monotonic() - start
@@ -134,12 +212,20 @@ async def _call_sub_agent(
     A2A_CALL_DURATION.labels(agent=agent_name).observe(time.monotonic() - start)
     reason = str(last_error)[:300]
     logger.error(f"[A2A:{agent_name}] All attempts failed. Returning degraded response. Reason: {reason}")
+    _record_failure(agent_name)  # Increment circuit-breaker failure counter
     return {
-        "response": f"❌ Le sous-agent {agent_name} est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+        "response": (
+            f"❌ Le sous-agent {agent_name} est temporairement indisponible. "
+            "Veuillez réessayer dans quelques instants."
+        ),
         "degraded": True,
         "reason": reason,
         "data": None,
-        "steps": [{"type": "warning", "tool": f"{agent_name}:UNAVAILABLE", "args": {"message": f"Sous-agent injoignable : {reason}"}}],
+        "steps": [{
+            "type": "warning",
+            "tool": f"{agent_name}:UNAVAILABLE",
+            "args": {"message": f"Sous-agent injoignable : {reason}"},
+        }],
         "thoughts": "",
         "usage": {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0},
     }

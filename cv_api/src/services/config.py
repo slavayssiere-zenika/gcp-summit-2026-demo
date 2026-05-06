@@ -8,10 +8,13 @@ les autres modules du service layer.
 Règle AGENTS.md §4 : aucun modèle IA hardcodé — utiliser les variables d'environnement.
 """
 
+import logging
 import os
 from datetime import datetime, timezone
 
 from google import genai
+
+logger = logging.getLogger(__name__)
 
 # ── URLs des microservices internes ──────────────────────────────────────────
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -80,4 +83,3 @@ _CV_CACHE: dict = {
     # Cache du rapport data quality (TTL 30s — aligné sur le polling frontend)
     "data_quality": {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)},
 }
-

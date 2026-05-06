@@ -21,18 +21,24 @@ from src.auth import verify_jwt
 os.environ['SECRET_KEY'] = 'testsecret'
 
 
-
 # ── Dependency Overrides ──────────────────────────────────────────────────────
 
 async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test@zenika.com", "email": "test@zenika.com", "role": "admin"}
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[verify_jwt] = override_verify_jwt
+
+@pytest.fixture(autouse=True)
+def reset_overrides():
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[verify_jwt] = override_verify_jwt
+    yield
+    app.dependency_overrides.clear()
+
 
 client = TestClient(app)
 
@@ -42,7 +48,7 @@ AUTH_HEADER = {"Authorization": "Bearer fake_token"}
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _post_mission_with_file(content: bytes, content_type: str, filename: str = "test.pdf",
-                             title: str = "Test Mission", description: str = "Description"):
+                            title: str = "Test Mission", description: str = "Description"):
     """Helper : soumet POST /missions avec un fichier."""
     return client.post(
         "/missions",

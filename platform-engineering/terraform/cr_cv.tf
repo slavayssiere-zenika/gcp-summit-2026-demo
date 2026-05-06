@@ -196,6 +196,12 @@ resource "google_cloud_run_v2_service" "cv_api" {
         name  = "BULK_SCALE_MIN_INSTANCES"
         value = var.bulk_scale_min_instances
       }
+      env {
+        # Topic Pub/Sub pour les snapshots de data quality (→ BigQuery via BigQuery Subscription).
+        # Format : projects/{project_id}/topics/zenika-data-quality-events-{workspace}
+        name  = "DATA_QUALITY_PUBSUB_TOPIC"
+        value = google_pubsub_topic.data_quality_events.id
+      }
     }
 
     # Conteneur Sidecar (MCP)
