@@ -79,6 +79,55 @@ def _record_success(agent_name: str) -> None:
         _cb_state[agent_name] = {"failures": 0, "open_until": 0.0}
 
 
+# ── Confidence scorer ─────────────────────────────────────────────────────────────
+
+# Guardrail tool names that reduce confidence (set for O(1) lookup)
+_GUARDRAIL_TOOLS: frozenset[str] = frozenset({
+    "GUARDRAIL_HALLUCINATION",
+    "GUARDRAIL_OPS_METRICS",
+    "GUARDRAIL_ID_INVENTION",
+    "GUARDRAIL_GROUNDING",
+    "GUARDRAIL_COM006",
+    "GUARDRAIL_GROUNDING_HR",
+})
+
+
+def _compute_confidence(steps: list[dict]) -> float:
+    """Compute a confidence score (0.0 – 1.0) from a sub-agent's execution steps.
+
+    Scoring rules (cumulative, floored at 0.0):
+      - Base score: 1.0
+      - No tool calls detected : -0.3 (risk of hallucination — no grounding)
+      - Per guardrail warning step: -0.2 (a guardrail fired, trust is reduced)
+      - TOOL_BUDGET warning present: -0.1 (context overflow risk)
+
+    Args:
+        steps: The ``steps`` list from the A2A response payload.
+
+    Returns:
+        Confidence score in [0.0, 1.0] (rounded to 2 decimal places).
+    """
+    if not steps:
+        return 0.5  # Unknown — no execution trace
+
+    call_count = sum(1 for s in steps if s.get("type") == "call")
+    warning_steps = [s for s in steps if s.get("type") == "warning"]
+
+    score = 1.0
+
+    if call_count == 0:
+        score -= 0.3  # No tool called — high hallucination risk
+
+    for step in warning_steps:
+        tool = step.get("tool", "")
+        if tool in _GUARDRAIL_TOOLS:
+            score -= 0.2  # A guardrail fired
+        elif tool == "TOOL_BUDGET":
+            score -= 0.1  # Context overflow risk
+
+    return round(max(0.0, min(1.0, score)), 2)
+
+
 # ── Exception typée ──────────────────────────────────────────────────────────
 
 class A2ASubAgentError(Exception):
@@ -261,10 +310,11 @@ async def ask_hr_agent(query: str, user_id: str = "") -> dict:
         "agent": "hr_agent",
         "response": data.get("response"),
         "data": data.get("data"),
-        "display_type": data.get("display_type"),  # Propagé depuis render_ui_widgets ADK
+        "display_type": data.get("display_type"),
         "steps": data.get("steps", []),
         "thoughts": data.get("thoughts", ""),
-        "usage": data.get("usage", {})
+        "usage": data.get("usage", {}),
+        "confidence": _compute_confidence(data.get("steps", [])),
     })}
 
 
@@ -298,7 +348,8 @@ async def ask_ops_agent(query: str, user_id: str = "") -> dict:
         "display_type": data.get("display_type"),
         "steps": data.get("steps", []),
         "thoughts": data.get("thoughts", ""),
-        "usage": data.get("usage", {})
+        "usage": data.get("usage", {}),
+        "confidence": _compute_confidence(data.get("steps", [])),
     })}
 
 
@@ -336,7 +387,8 @@ async def ask_missions_agent(query: str, user_id: str = "") -> dict:
         "display_type": data.get("display_type"),
         "steps": data.get("steps", []),
         "thoughts": data.get("thoughts", ""),
-        "usage": data.get("usage", {})
+        "usage": data.get("usage", {}),
+        "confidence": _compute_confidence(data.get("steps", [])),
     })}
 
 

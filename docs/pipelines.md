@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-05-06 09:16 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-06 10:50 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 

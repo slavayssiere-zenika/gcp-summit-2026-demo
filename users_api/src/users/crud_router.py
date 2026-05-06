@@ -80,9 +80,10 @@ async def list_users(
 async def search_users(
     query: str = Query(..., min_length=1),
     limit: int = Query(10, ge=1, le=100),
+    is_anonymous: Optional[bool] = Query(None, description="Filtrer par statut anonyme. None=tous, False=consultants réels, True=anonymes."),
     db: AsyncSession = Depends(get_db)
 ):
-    cache_key = f"users:search:{query}:{limit}"
+    cache_key = f"users:search:{query}:{limit}:{str(is_anonymous).lower()}"
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
@@ -94,10 +95,17 @@ async def search_users(
         User.full_name.ilike(f"%{query}%"),
         User.username.ilike(f"%{query}%")
     )
-    
-    total = (await db.execute(select(func.count()).select_from(User).filter(search_filter))).scalar()
-    users = (await db.execute(select(User).filter(search_filter).limit(limit))).scalars().all()
-    
+
+    base_query = select(User).filter(search_filter)
+    count_query = select(func.count()).select_from(User).filter(search_filter)
+
+    if is_anonymous is not None:
+        base_query = base_query.filter(User.is_anonymous == is_anonymous)
+        count_query = count_query.filter(User.is_anonymous == is_anonymous)
+
+    total = (await db.execute(count_query)).scalar()
+    users = (await db.execute(base_query.limit(limit))).scalars().all()
+
     result = PaginationResponse(items=[map_user_to_response(u) for u in users], total=total, skip=0, limit=limit)
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result

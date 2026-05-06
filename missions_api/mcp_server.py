@@ -212,7 +212,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Request failed: {str(e)}"}))]
             elif name == "list_missions":
                 skip = arguments.get("skip", 0)
                 limit = arguments.get("limit", 50)
@@ -243,7 +243,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Request failed: {str(e)}"}))]
             elif name == "get_mission":
                 mission_id = arguments.get("mission_id")
                 try:
@@ -251,7 +251,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Request failed: {str(e)}"}))]
             elif name == "get_mission_candidates":
                 mission_id = arguments.get("mission_id")
                 try:
@@ -311,7 +311,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 except Exception as e:
                     return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
             else:
-                return [TextContent(type="text", text=f"Unknown tool: {name}")]
+                return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
 
 async def main():
     from mcp.server import InitializationOptions

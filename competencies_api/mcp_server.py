@@ -630,11 +630,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return await handle_find_similar_consultants(client, arguments, headers, API_BASE_URL)
 
                 else:
-                    return [TextContent(type="text", text=f"Unknown tool: {name}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 409:
-                    return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-                return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
+                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres."}))]
+                return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
             except Exception as e:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
-import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge, Search } from 'lucide-vue-next'
+import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge, Search, Wand2, ShieldCheck } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
 
@@ -61,9 +61,68 @@ const performMerge = async (candidate: any) => {
     isLoading.value = false
   }
 }
-const activeTab = ref<'doublons' | 'anonymes'>('doublons')
+const activeTab = ref<'doublons' | 'anonymes' | 'remediation'>('doublons')
 const anonymousUsers = ref<any[]>([])
 const isLoadingAnon = ref(false)
+
+// ── Remédiation Auto ──────────────────────────────────────────────────────────
+const remediationCandidates = ref<any[]>([])  // résultat dry-run
+const remediationCount = ref<number | null>(null)
+const remediationMessage = ref('')
+const isAnalyzing = ref(false)
+const isApplying = ref(false)
+const remediationApplied = ref(false)
+
+const runDryRun = async () => {
+  isAnalyzing.value = true
+  remediationCandidates.value = []
+  remediationCount.value = null
+  remediationMessage.value = ''
+  remediationApplied.value = false
+  error.value = ''
+  try {
+    const res = await axios.post(
+      '/api/cv/internal/remediate-anonymous-profiles',
+      {},
+      {
+        params: { dry_run: true },
+        headers: { Authorization: `Bearer ${authService.state.token}` },
+      }
+    )
+    remediationCandidates.value = res.data.profiles || []
+    remediationCount.value = res.data.candidates_to_fix ?? remediationCandidates.value.length
+    remediationMessage.value = res.data.message || ''
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || 'Erreur lors de l\'analyse'
+  } finally {
+    isAnalyzing.value = false
+  }
+}
+
+const runApply = async () => {
+  if (!confirm(`Corriger ${remediationCount.value} profil(s) anonymes ? Cette action est irréversible.`)) return
+  isApplying.value = true
+  error.value = ''
+  successResponse.value = ''
+  try {
+    const res = await axios.post(
+      '/api/cv/internal/remediate-anonymous-profiles',
+      {},
+      {
+        params: { dry_run: false },
+        headers: { Authorization: `Bearer ${authService.state.token}` },
+      }
+    )
+    successResponse.value = res.data.message || 'Remédiation lancée en arrière-plan.'
+    remediationApplied.value = true
+    remediationCandidates.value = []
+    remediationCount.value = null
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || 'Erreur lors de la correction'
+  } finally {
+    isApplying.value = false
+  }
+}
 
 const fetchAnonymousUsers = async () => {
   isLoadingAnon.value = true
@@ -201,6 +260,10 @@ onMounted(() => {
       <button class="tab-btn" :class="{ active: activeTab === 'anonymes' }" @click="activeTab = 'anonymes'">
         Profils Anonymes
       </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'remediation' }" @click="activeTab = 'remediation'">
+        <Wand2 size="14" style="display:inline;vertical-align:middle;margin-right:5px" />
+        Remédiation Auto
+      </button>
     </div>
 
     <div v-if="activeTab === 'doublons'" class="glass-panel mt-4">
@@ -334,6 +397,96 @@ onMounted(() => {
          </div>
       </div>
     </div>
+
+    <!-- ── Remédiation Auto ──────────────────────────────────────────────────── -->
+    <div v-if="activeTab === 'remediation'" class="glass-panel mt-4">
+      <div class="panel-header d-flex-between">
+        <h3><Wand2 size="18" style="display:inline;vertical-align:middle;margin-right:8px" /> Remédiation Automatique des Faux-Anonymes</h3>
+      </div>
+
+      <div class="remediation-explainer">
+        <ShieldCheck size="16" />
+        <span>
+          Détecte les consultants incorrectement marqués <code>is_anonymous=true</code>
+          alors que leur email est un email Zenika réel (pas <code>@anonymous.zenika.com</code>).
+          Deux étapes : <strong>Analyser</strong> pour lister les candidats,
+          puis <strong>Corriger</strong> pour appliquer la correction en tâche de fond.
+        </span>
+      </div>
+
+      <!-- Étape 1 : Analyser -->
+      <div class="remediation-step">
+        <div class="step-badge">1</div>
+        <div class="step-body">
+          <div class="step-title">Analyser (dry-run)</div>
+          <div class="step-desc">Identifie les profils à corriger sans modifier la base.</div>
+          <button
+            class="action-btn validate-btn"
+            @click="runDryRun"
+            :disabled="isAnalyzing"
+            style="margin-top:10px"
+          >
+            <RotateCw size="14" :class="{ spin: isAnalyzing }" />
+            {{ isAnalyzing ? 'Analyse en cours…' : 'Lancer l\'analyse' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Résultat dry-run -->
+      <div v-if="remediationCount !== null" class="remediation-result">
+        <div v-if="remediationCount === 0" class="result-ok">
+          <CheckCircle2 size="20" />
+          <span>Aucun faux-anonyme détecté — la base est propre ✅</span>
+        </div>
+        <div v-else>
+          <div class="result-warning">
+            <AlertTriangle size="16" />
+            <span>{{ remediationMessage }}</span>
+          </div>
+          <div class="candidate-table-wrapper">
+            <table class="candidate-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Email</th>
+                  <th>Nom complet</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in remediationCandidates" :key="c.id">
+                  <td class="id-cell">
+                    <RouterLink :to="'/user/' + c.id" class="text-link">{{ c.id }}</RouterLink>
+                  </td>
+                  <td>{{ c.email }}</td>
+                  <td>{{ c.full_name || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="remediationCount > remediationCandidates.length" class="table-truncated">
+              … et {{ remediationCount - remediationCandidates.length }} autre(s) non affichés (voir logs)
+            </div>
+          </div>
+
+          <!-- Étape 2 : Appliquer -->
+          <div class="remediation-step" style="margin-top:1.5rem">
+            <div class="step-badge step-badge-red">2</div>
+            <div class="step-body">
+              <div class="step-title">Corriger (apply)</div>
+              <div class="step-desc">Lance la correction en arrière-plan (Cloud Run). Consultez les logs pour le suivi.</div>
+              <button
+                class="action-btn validate-btn"
+                @click="runApply"
+                :disabled="isApplying || remediationApplied"
+                style="margin-top:10px; background: #7c3aed; box-shadow: 0 4px 12px rgba(124,58,237,0.25);"
+              >
+                <Wand2 size="14" :class="{ spin: isApplying }" />
+                {{ isApplying ? 'Correction en cours…' : remediationApplied ? '✓ Correction lancée' : `Corriger ${remediationCount} profil(s)` }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -394,4 +547,59 @@ onMounted(() => {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .mt-4 { margin-top: 2rem; }
+
+/* ── Remédiation Auto ── */
+.remediation-explainer {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 10px; padding: 12px 16px; font-size: 0.83rem; color: #3730a3;
+  margin-bottom: 1.5rem;
+}
+.remediation-explainer code {
+  background: rgba(99,102,241,0.1); padding: 1px 5px; border-radius: 4px;
+  font-size: 0.78rem; font-family: monospace;
+}
+.remediation-step {
+  display: flex; align-items: flex-start; gap: 14px;
+  background: rgba(255,255,255,0.7); border: 1px solid #e2e8f0;
+  border-radius: 12px; padding: 16px 20px;
+}
+.step-badge {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: #4f46e5; color: white; font-size: 0.85rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.step-badge-red { background: #7c3aed; }
+.step-body { flex: 1; }
+.step-title { font-size: 0.92rem; font-weight: 700; color: #1e293b; }
+.step-desc { font-size: 0.8rem; color: #64748b; margin-top: 3px; }
+
+.remediation-result { margin-top: 1.25rem; }
+.result-ok {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(16,163,74,0.08); border: 1px solid rgba(16,163,74,0.25);
+  border-radius: 10px; padding: 12px 16px; font-size: 0.85rem;
+  font-weight: 600; color: #166534;
+}
+.result-warning {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);
+  border-radius: 10px; padding: 12px 16px; font-size: 0.85rem;
+  font-weight: 600; color: #92400e; margin-bottom: 1rem;
+}
+.candidate-table-wrapper { overflow-x: auto; border-radius: 10px; border: 1px solid #e2e8f0; }
+.candidate-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.candidate-table th {
+  padding: 8px 14px; text-align: left; font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8;
+  background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+}
+.candidate-table td { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
+.candidate-table tr:last-child td { border-bottom: none; }
+.candidate-table tr:hover td { background: rgba(99,102,241,0.03); }
+.id-cell { font-variant-numeric: tabular-nums; font-weight: 700; }
+.table-truncated {
+  padding: 8px 14px; font-size: 0.78rem; color: #94a3b8;
+  background: #f8fafc; border-top: 1px solid #e2e8f0; font-style: italic;
+}
 </style>

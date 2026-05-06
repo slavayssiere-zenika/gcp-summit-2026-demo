@@ -19,7 +19,7 @@ async def handle_remove_competency_from_user(client, arguments: dict, headers: d
     comp_id = arguments["competency_id"]
     response = await client.delete(f"{api_base_url}/user/{user_id}/remove/{comp_id}")
     response.raise_for_status()
-    return [TextContent(type="text", text="Competency removed from user")]
+    return [TextContent(type="text", text=json.dumps({"message": "Competency removed from user"}))]
 
 
 async def handle_list_user_competencies(client, arguments: dict, headers: dict, api_base_url: str):

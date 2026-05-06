@@ -3,12 +3,14 @@
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0ec8585cb465dfcaabca14e79e3979947483a86f  ./users_api/src/mcp_tools/tools_handlers.py
 1f9cd3848db0c58827475a042a843f84a1a1f290  ./users_api/src/users/router.py
+21bc4a0bd9b6a83891435b98f09b75820109f8e6  ./users_api/spec.md
 2c5b8975a591f0a005fc402e99c0eedc49076d33  ./users_api/logger.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
 30ffd1013d5e764b903168154d2eb18fd4641862  ./users_api/requirements.txt
 312bc6b6e6e21ad1dd1f482fad8a4005fd6593a7  ./users_api/src/users/system_router.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 38c8379aa51ab0c7ba2942ae013d363f3d6aaa3a  ./users_api/src/auth.py
+38f4c2610da2741f3a10ec13ed60e93d818a1e89  ./users_api/src/users/crud_router.py
 43d645bad4be76820c88438898c63b3689f053d4  ./users_api/metrics.py
 4463186b90cec5594a0da28960912357cef35ed6  ./users_api/conftest.py
 4d334eebb6fee5640fd55c5015454c53e74c847e  ./users_api/tests/test_mcp_tools.py
@@ -16,7 +18,6 @@
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 5348c382f0be3745318dc29ade252ad3d90f8279  ./users_api/src/users/pubsub.py
 57689b03dd01224526a53147206677b0d3b86084  ./users_api/tests/integration/conftest.py
-6045bd9ed39fb61d6f6ebd181c2a127aa69392a0  ./users_api/Dockerfile
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 8094de5965c281c45bfa370b097e8c8eff16ec42  ./users_api/README.md
 869f18522d513135119a8c36fa36d848cb1d1ea2  ./users_api/src/users/models.py
@@ -25,8 +26,8 @@
 8fc862ab06534a95dd9cbcbfc4389da29eb332ae  ./users_api/tests/integration/test_pg_integration.py
 950d47877c6bd5bda0cfc050315d5acc532f2eb8  ./users_api/pytest.ini
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
-977fe3d5733ccfa5c3da18b0c6985be080198ca2  ./users_api/spec.md
 9c39f85ba36682f1fe6897fbc2324f25854df0dd  ./users_api/tests/test_zero_trust.py
+9cc1c21eab14f8078966c755c2bfa3c929ba83d0  ./users_api/Dockerfile
 ac7730fcf39281dc5ffdb40f6a8d486c9364823a  ./users_api/mcp_server.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b9b8b4b30829e84a760b2f3a05673258cedd66f0  ./users_api/src/mcp_tools/tools_registry.py
@@ -36,7 +37,6 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/src/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/src/users/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/tests/integration/__init__.py
 da5834fcf46954d4a43ec10114e2f56e2d8f6a9b  ./users_api/mcp_app.py
-db6080e9ae9acb6b9fd75ea9e1562fa902c7b367  ./users_api/src/users/crud_router.py
 e0befc8b965428f10216f5c58b82092a64505bf0  ./users_api/cache.py
 e1175990711b70be7e0701f484ad16cea440f1a0  ./users_api/database.py
 ee25cb8f34bdbab308eb27080c45514ff44cdb33  ./users_api/src/users/auth_router.py

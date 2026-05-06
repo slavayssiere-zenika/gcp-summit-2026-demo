@@ -226,7 +226,7 @@ print_summary() {
           elif [ "$mut_num" -ge "$MUTATION_SCORE_THRESHOLD" ]; then
             mut_color="$YELLOW"; mut_icon="⚠️ "
           else
-            mut_color="$RED"; mut_icon="❌"
+            mut_color="$YELLOW"; mut_icon="⚠️ "
           fi
         fi
         printf "   %-30s ${cov_color}%-18s${RESET} ${mut_color}%s %s${RESET}\n" \
@@ -678,8 +678,8 @@ run_mutation_tests() {
     MUTATION_RESULTS["$SERVICE"]="$SCORE_STR"
     return 0
   else
-    MUTATION_RESULTS["$SERVICE"]="${SCORE_STR} ❌"
-    echo -e "${RED}⚠️  Mutation $SERVICE : ${SCORE_STR} < seuil ${MUTATION_SCORE_THRESHOLD}%${RESET}"
+    MUTATION_RESULTS["$SERVICE"]="${SCORE_STR} ⚠️"
+    echo -e "${YELLOW}⚠️  Mutation $SERVICE : ${SCORE_STR} < seuil ${MUTATION_SCORE_THRESHOLD}%${RESET}"
     if [ "$MUTATION_STRICT" = true ]; then
       echo -e "${RED}❌ [--mutation-strict] Build bloqué — score de mutation insuffisant.${RESET}"
       echo -e "${RED}   → Renforcez les assertions dans les tests pour tuer plus de mutants.${RESET}"
@@ -899,11 +899,18 @@ build_and_upload_frontend() {
   echo "--- Upload vers Google Cloud Storage ($FRONTEND_BUCKET) ---"
   gcloud storage cp "$ARCHIVE_NAME" "gs://${FRONTEND_BUCKET}/"
 
+  if [ "$SKIP_CLOUDRUN" = true ]; then
+    echo "--- Skipping deployment to environment bucket for frontend ---"
+    DEPLOYS_SUCCESS+=("frontend (Archive only)")
+    save_service_hash "frontend"
+    return 0
+  fi
+
   echo "--- Déploiement vers le bucket de l'environnement DEV et gestion du cache ---"
   local DEV_BUCKET
   DEV_BUCKET=$(cd platform-engineering/terraform && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
 
-  if [ -n "$DEV_BUCKET" ]; then
+  if [[ -n "$DEV_BUCKET" && ! "$DEV_BUCKET" =~ "Warning:" ]]; then
     echo "-> Synchronisation des fichiers vers gs://${DEV_BUCKET}..."
     gcloud storage rsync frontend/dist/ "gs://${DEV_BUCKET}/" --recursive --delete-unmatched-destination-objects
     
@@ -918,8 +925,8 @@ build_and_upload_frontend() {
     DEPLOYS_SUCCESS+=("frontend")
     save_service_hash "frontend"
   else
-    echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform. Déploiement ignoré."
-    DEPLOYS_SUCCESS+=("frontend (Build only)")
+    echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform (ou output vide). Déploiement ignoré."
+    DEPLOYS_SUCCESS+=("frontend (Build & Archive only)")
     save_service_hash "frontend"
   fi
 }

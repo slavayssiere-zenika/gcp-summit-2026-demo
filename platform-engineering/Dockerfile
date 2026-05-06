@@ -1,9 +1,9 @@
 # ==========================================
 # Builder Stage: Fetch Terraform & deps
 # ==========================================
-FROM google/cloud-sdk:slim AS builder
+FROM google/cloud-sdk:567.0.0-slim AS builder
 
-ENV TERRAFORM_VERSION="1.7.5"
+ENV TERRAFORM_VERSION="1.15.1"
 RUN apt-get update && apt-get install -y wget unzip \
     && wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip \
     && unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/ \
@@ -16,7 +16,7 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt --target=/tmp/deps
 # ==========================================
 # Final Stage: Run as non-root
 # ==========================================
-FROM google/cloud-sdk:slim
+FROM google/cloud-sdk:567.0.0-slim
 
 # Create non-root user
 RUN useradd -m -s /bin/bash appuser

@@ -12,6 +12,7 @@ from database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      Request)
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,7 @@ from src.services.config import _CV_CACHE
 from src.services.cv_import_service import process_cv_core
 from src.services.taxonomy_service import (fetch_prompt,
                                            get_existing_competencies)
+from shared.schemas.users import UsersResponse
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -198,11 +200,7 @@ async def get_user_cv(user_id: int, skip: int = Query(
         try:
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
             if u_res.status_code == 200:
-                from pydantic import BaseModel
-                class UserAnonStatus(BaseModel):
-                    is_anonymous: bool = False
-                data = UserAnonStatus.model_validate(u_res.json())
-                is_anon = data.is_anonymous
+                is_anon = u_res.json().get("is_anonymous", False)
         except Exception as e:
             logger.warning(
                 f"Failed to fetch user {user_id} for is_anonymous check: {e}")
@@ -296,11 +294,7 @@ async def get_user_cv_details(
         try:
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
             if u_res.status_code == 200:
-                from pydantic import BaseModel
-                class UserAnonStatus(BaseModel):
-                    is_anonymous: bool = False
-                data = UserAnonStatus.model_validate(u_res.json())
-                is_anon = data.is_anonymous
+                is_anon = u_res.json().get("is_anonymous", False)
         except Exception as e:
             logger.warning(
                 f"Failed to fetch user anonymity status for {user_id}: {e}")
@@ -424,3 +418,142 @@ async def handle_user_pubsub_events(
     except Exception as e:
         logger.error(f"Error processing Pub/Sub event: {e}")
         return {"status": "error", "detail": str(e)}
+
+
+@router.post("/internal/remediate-anonymous-profiles")
+async def remediate_anonymous_profiles(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    dry_run: bool = Query(True, description="Si True, ne modifie rien — retourne seulement le compte de profils à corriger."),
+    token_payload: dict = Depends(verify_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remédiation des profils incorrectement marqués comme anonymes.
+
+    Identifie les utilisateurs en base (via users_api) ayant is_anonymous=True
+    mais dont l'email n'est pas @anonymous.zenika.com (= vrais consultants mal flaggés).
+    En mode dry_run=False, envoie un PATCH pour corriger is_anonymous=False sur chaque profil.
+
+    Protégé admin uniquement. Exécuté en background pour les volumes importants.
+    """
+    if token_payload.get("role") not in ("admin", "service_account"):
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    headers_downstream = {"Authorization": auth_header}
+    inject(headers_downstream)
+
+    async def _run_remediation(dry: bool, hdrs: dict) -> None:
+        skip, limit, total_fixed, total_scanned = 0, 100, 0, 0
+        logger.info("[remediate-anon] Démarrage remédiation (dry_run=%s).", dry)
+
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            while True:
+                # Récupère uniquement les users anonymes par page
+                res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/",
+                    params={"skip": skip, "limit": limit, "is_anonymous": "true"},
+                    headers=hdrs,
+                )
+                if res.status_code != 200:
+                    logger.error("[remediate-anon] Erreur users_api /: HTTP %s", res.status_code)
+                    break
+
+                try:
+                    page = UsersResponse.model_validate(res.json())
+                except ValidationError as ve:
+                    logger.error("[remediate-anon] Rupture contrat UsersResponse: %s", ve)
+                    break
+
+                if not page.items:
+                    break
+
+                total_scanned += len(page.items)
+
+                for user in page.items:
+                    email = getattr(user, "email", "") or ""
+                    # Un vrai consultant a un email @zenika.com (pas @anonymous.zenika.com)
+                    if email and "@anonymous.zenika.com" not in email.lower():
+                        logger.info(
+                            "[remediate-anon] user_id=%s email=%s marqué anonyme à tort%s.",
+                            user.id, email, " → correction" if not dry else " (dry_run)"
+                        )
+                        if not dry:
+                            patch_res = await http_client.put(
+                                f"{USERS_API_URL.rstrip('/')}/{user.id}",
+                                json={"is_anonymous": False},
+                                headers=hdrs,
+                            )
+                            if patch_res.status_code == 200:
+                                total_fixed += 1
+                            else:
+                                logger.warning(
+                                    "[remediate-anon] Échec PATCH user_id=%s: HTTP %s — %s",
+                                    user.id, patch_res.status_code, patch_res.text
+                                )
+                        else:
+                            total_fixed += 1  # compte dans dry_run aussi
+
+                if len(page.items) < limit:
+                    break
+                skip += limit
+
+        logger.info(
+            "[remediate-anon] Terminé — scanned=%d, %s=%d.",
+            total_scanned,
+            "would_fix" if dry else "fixed",
+            total_fixed,
+        )
+
+    if dry_run:
+        # En dry_run, on exécute directement pour retourner le résultat synchrone
+        # (volume attendu faible — pas besoin de background)
+        skip, limit, candidates = 0, 100, []
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            while True:
+                res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/",
+                    params={"skip": skip, "limit": limit, "is_anonymous": "true"},
+                    headers=headers_downstream,
+                )
+                if res.status_code != 200:
+                    raise HTTPException(status_code=502, detail=f"users_api error: HTTP {res.status_code}")
+
+                try:
+                    page = UsersResponse.model_validate(res.json())
+                except ValidationError as ve:
+                    raise HTTPException(status_code=502, detail=f"Rupture contrat users_api: {ve}")
+
+                if not page.items:
+                    break
+
+                for user in page.items:
+                    email = getattr(user, "email", "") or ""
+                    if email and "@anonymous.zenika.com" not in email.lower():
+                        candidates.append({"id": user.id, "email": email,
+                                           "full_name": getattr(user, "full_name", None)})
+
+                if len(page.items) < limit:
+                    break
+                skip += limit
+
+        return {
+            "dry_run": True,
+            "candidates_to_fix": len(candidates),
+            "profiles": candidates[:50],  # cap à 50 pour la lisibilité
+            "message": (
+                f"{len(candidates)} profil(s) incorrectement anonymes détectés. "
+                "Relancez avec dry_run=false pour les corriger."
+            ),
+        }
+
+    # Mode effectif — traitement en background (volume potentiellement élevé)
+    background_tasks.add_task(_run_remediation, False, dict(headers_downstream))
+    return {
+        "dry_run": False,
+        "status": "accepted",
+        "message": "Remédiation lancée en arrière-plan. Consultez les logs Cloud Run pour le détail.",
+    }

@@ -1,5 +1,5 @@
 # ---- Build Stage ----
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
@@ -12,7 +12,7 @@ COPY monitoring_mcp/requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # ---- Runtime Stage ----
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1

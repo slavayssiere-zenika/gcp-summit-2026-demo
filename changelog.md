@@ -1,3 +1,180 @@
+## Mise à jour automatique - 2026-05-06 12:50:09
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1606  | 502  |  69% |
+| agent_hr_api     | 1582  | 220  |  86% |
+| agent_missions_api | 1236  | 316  |  74% |
+| agent_ops_api    | 1425  | 215  |  85% |
+| agent_router_api | 2496  | 417  |  83% |
+| analytics_mcp    | 1074  | 148  |  86% |
+| competencies_api | 4255  | 1321 |  69% |
+| cv_api           | 6955  | 2311 |  67% |
+| drive_api        | 3745  | 476  |  87% |
+| items_api        | 1719  | 454  |  74% |
+| missions_api     | 2031  | 508  |  75% |
+| monitoring_mcp   | 1367  | 165  |  88% |
+| platform-engineering | 1155  | 886  |  23% |
+| prompts_api      | 1288  | 390  |  70% |
+| shared           | 139   | 0    | 100% |
+| tests            | 78    | 3    |  96% |
+| users_api        | 1821  | 587  |  68% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_commons/agent_commons/runner.py` (M)
+- `agent_commons/agent_commons/schemas.py` (M)
+- `agent_hr_api/Dockerfile` (M)
+- `agent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/pytest.ini` (M)
+- `agent_hr_api/requirements.txt` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/Dockerfile` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/pytest.ini` (M)
+- `agent_missions_api/requirements.txt` (M)
+- `agent_ops_api/Dockerfile` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/pytest.ini` (M)
+- `agent_ops_api/requirements.txt` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/Dockerfile` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/a2a_tools.py` (M)
+- `agent_router_api/pytest.ini` (M)
+- `agent_router_api/requirements.txt` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/Dockerfile` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/pytest.ini` (M)
+- `analytics_mcp/requirements.txt` (M)
+- `competencies_api/Dockerfile` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/mcp_server.py` (M)
+- `competencies_api/pytest.ini` (M)
+- `competencies_api/requirements.txt` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/tests/test_mcp_tools.py` (M)
+- `competencies_api/tools/tree_tools.py` (M)
+- `competencies_api/tools/user_tools.py` (M)
+- `cv_api/Dockerfile` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/conftest.py` (M)
+- `cv_api/pytest.ini` (M)
+- `cv_api/requirements.txt` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/profile_router.py` (M)
+- `cv_api/src/services/cv_storage_service.py` (M)
+- `cv_api/src/services/data_quality_publisher.py` (M)
+- `cv_api/src/services/taxonomy_batch_service.py` (M)
+- `cv_api/test_client.py` (D)
+- `cv_api/test_fastapi.py` (D)
+- `cv_api/test_validation.py` (D)
+- `cv_api/tests/test_data_quality_publisher.py` (M)
+- `cv_api/tests/test_mcp_tools.py` (M)
+- `db_init/Dockerfile` (M)
+- `db_migrations/Dockerfile` (M)
+- `drive_api/Dockerfile` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/pytest.ini` (M)
+- `drive_api/requirements.txt` (M)
+- `drive_api/run_test.py` (D)
+- `drive_api/spec.md` (M)
+- `drive_api/test_debug.py` (D)
+- `frontend/Dockerfile` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/views/AdminDeduplication.vue` (M)
+- `frontend/vitest.log` (M)
+- `items_api/Dockerfile` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `items_api/pytest.ini` (M)
+- `items_api/requirements.txt` (M)
+- `missions_api/Dockerfile` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/mcp_server.py` (M)
+- `missions_api/pytest.ini` (M)
+- `missions_api/requirements.txt` (M)
+- `missions_api/spec.md` (M)
+- `missions_api/tests/test_mcp_tools.py` (M)
+- `monitoring_mcp/Dockerfile` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/pytest.ini` (M)
+- `monitoring_mcp/requirements.txt` (M)
+- `platform-engineering/Dockerfile` (M)
+- `platform-engineering/bundled_prompts/agent_hr_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/agent_missions_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/agent_ops_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/agent_router_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/cv_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/missions_api/requirements.txt` (M)
+- `platform-engineering/bundled_prompts/prompts_api/requirements.txt` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/terraform/bigquery.tf` (M)
+- `platform-engineering/terraform/providers.tf` (M)
+- `platform-engineering/terraform/pubsub.tf` (M)
+- `platform-engineering/terraform/scratch_unroll.py` (M)
+- `prompts_api/Dockerfile` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/requirements.txt` (M)
+- `prompts_api/spec.md` (M)
+- `run_tests.sh` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/run_tests.sh` (M)
+- `test_auth.py` (D)
+- `test_competencies_500.py` (D)
+- `test_db.py` (D)
+- `test_none.py` (D)
+- `test_pyd.py` (D)
+- `test_pydantic_generic.py` (D)
+- `test_tokens.py` (D)
+- `users_api/Dockerfile` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+- `users_api/pytest.ini` (M)
+- `users_api/requirements.txt` (M)
+- `users_api/setup.cfg` (D)
+- `users_api/spec.md` (M)
+- `users_api/src/auth.py` (M)
+- `users_api/src/mcp_tools/tools_handlers.py` (M)
+- `users_api/src/users/crud_router.py` (M)
+- `users_api/tests/test_mcp_tools.py` (M)
+- `agent_commons/tests/test_runner_tool_budget.py` (??)
+- `agent_router_api/tests/test_confidence_scorer.py` (??)
+- `cv_api/src/services/batch_parsers.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-06 11:16:57
 
 ### Couverture de Code

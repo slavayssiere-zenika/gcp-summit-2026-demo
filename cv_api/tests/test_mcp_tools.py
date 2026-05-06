@@ -1,14 +1,22 @@
-# Patch USERS_API_URL, COMPETENCIES_API_URL, CV_API_URL
+"""Tests des outils MCP de cv_api.
+
+Les variables d'environnement sont isolées via une fixture session-scoped
+pour éviter toute contamination des autres suites de tests.
+"""
 import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from mcp_server import call_tool, mcp_auth_header_var
 
-os.environ['SECRET_KEY'] = 'testsecret'
 
-
-os.environ["CV_API_URL"] = "http://test-cv"
+@pytest.fixture(autouse=True, scope="session")
+def mcp_tools_env(session_mocker):
+    """Isole les variables d'environnement requises par mcp_server pour toute la session."""
+    session_mocker.patch.dict(os.environ, {
+        "SECRET_KEY": "testsecret",
+        "CV_API_URL": "http://test-cv",
+    })
 
 
 

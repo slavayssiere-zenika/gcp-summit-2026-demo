@@ -38,7 +38,7 @@ async def handle_delete_competency(client, arguments: dict, headers: dict, api_b
 
     response = await client.delete(f"{api_base_url}/{arguments['competency_id']}")
     response.raise_for_status()
-    return [TextContent(type="text", text="Competency deleted successfully")]
+    return [TextContent(type="text", text=json.dumps({"message": "Competency deleted successfully"}))]
 
 
 async def handle_list_competency_suggestions(client, arguments: dict, headers: dict, api_base_url: str):

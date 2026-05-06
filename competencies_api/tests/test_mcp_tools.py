@@ -25,7 +25,9 @@ async def test_mcp_tools_list_competencies(mock_httpx_mcp):
     mock_httpx_mcp.get.return_value = mock_resp
 
     result = await call_tool("list_competencies", {"skip": 0, "limit": 10})
-    assert "total" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert "total" in data
 
 
 @pytest.mark.asyncio
@@ -35,7 +37,9 @@ async def test_mcp_tools_get_competency(mock_httpx_mcp):
     mock_httpx_mcp.get.return_value = mock_resp
 
     result = await call_tool("get_competency", {"competency_id": 1})
-    assert "Python" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert data["name"] == "Python"
 
 
 @pytest.mark.asyncio
@@ -45,7 +49,9 @@ async def test_mcp_tools_create_competency(mock_httpx_mcp):
     mock_httpx_mcp.post.return_value = mock_resp
 
     result = await call_tool("create_competency", {"name": "Python"})
-    assert "Python" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert data["name"] == "Python"
 
 
 @pytest.mark.asyncio
@@ -54,7 +60,9 @@ async def test_mcp_tools_delete_competency(mock_httpx_mcp):
     mock_httpx_mcp.delete.return_value = mock_resp
 
     result = await call_tool("delete_competency", {"competency_id": 1})
-    assert "deleted" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert "message" in data
 
 
 @pytest.mark.asyncio
@@ -64,7 +72,9 @@ async def test_mcp_tools_assign_to_user(mock_httpx_mcp):
     mock_httpx_mcp.post.return_value = mock_resp
 
     result = await call_tool("assign_competency_to_user", {"user_id": 1, "competency_id": 1})
-    assert "assigned" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert data["status"] == "assigned"
 
 
 @pytest.mark.asyncio
@@ -73,7 +83,9 @@ async def test_mcp_tools_remove_from_user(mock_httpx_mcp):
     mock_httpx_mcp.delete.return_value = mock_resp
 
     result = await call_tool("remove_competency_from_user", {"user_id": 1, "competency_id": 1})
-    assert "removed" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert "message" in data
 
 
 @pytest.mark.asyncio
@@ -83,13 +95,17 @@ async def test_mcp_tools_list_user_competencies(mock_httpx_mcp):
     mock_httpx_mcp.get.return_value = mock_resp
 
     result = await call_tool("list_user_competencies", {"user_id": 1})
-    assert "Python" in result[0].text
+    data = json.loads(result[0].text)
+    
+    assert data[0]["name"] == "Python"
 
 
 @pytest.mark.asyncio
 async def test_mcp_tools_unknown(mock_httpx_mcp):
     result = await call_tool("unknown_foo", {})
-    assert "Unknown tool" in result[0].text
+    data = json.loads(result[0].text)
+    assert data.get("success") is False
+    assert "Unknown tool" in data.get("error", "")
 
 
 @pytest.mark.asyncio
@@ -120,6 +136,7 @@ async def test_mcp_tools_get_user_evaluations(mock_httpx_mcp):
     result = await call_tool("get_user_competency_evaluations", {"user_id": 42})
     assert result, "Doit retourner au moins un element"
     data = json.loads(result[0].text)
+    
     assert isinstance(data, list)
     assert data[0]["competency_name"] == "Kubernetes"
     assert data[0]["ai_score"] == 3.5
@@ -143,6 +160,7 @@ async def test_mcp_tools_set_user_score(mock_httpx_mcp):
         "comment": "OK"
     })
     data = json.loads(result[0].text)
+    
     assert data["user_score"] == 4.0
     assert data["competency_name"] == "Kubernetes"
 
@@ -164,6 +182,7 @@ async def test_mcp_tools_set_user_score_without_comment(mock_httpx_mcp):
         # Pas de comment
     })
     data = json.loads(result[0].text)
+    
     assert data["user_score"] == 3.5
 
 
@@ -180,6 +199,7 @@ async def test_mcp_tools_trigger_ai_scoring(mock_httpx_mcp):
 
     result = await call_tool("trigger_ai_scoring", {"user_id": 42})
     data = json.loads(result[0].text)
+    
     assert data["user_id"] == 42
     assert data["triggered"] == 15
 

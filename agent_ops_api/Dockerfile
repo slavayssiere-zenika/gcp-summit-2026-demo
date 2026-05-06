@@ -1,5 +1,5 @@
 # ---- Build Stage ----
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY agent_commons/ /agent_commons/
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels /agent_commons/
 
 # ---- Runtime Stage ----
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

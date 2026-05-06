@@ -157,6 +157,17 @@ class A2AResponse(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ADK utilisée pour cette requête.")
     semantic_cache_hit: Optional[bool] = Field(None, description="True si la réponse a été servie depuis le cache sémantique.")
     degraded: Optional[bool] = Field(None, description="True si le sous-agent a répondu en mode dégradé (erreur réseau).")
+    confidence: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Niveau de confiance de la réponse (0.0 – 1.0). "
+            "1.0 = toutes les métriques issues d'appels d'outils FinOps réels, aucun guardrail déclenché. "
+            "< 0.8 = un guardrail a été déclenché (hallucination suspicion, TOOL_BUDGET, COM-006...). "
+            "None = information non disponible (mode dégradé ou erreur)."
+        ),
+    )
     display_type: Optional[str] = Field(
         None,
         description=(
@@ -177,6 +188,7 @@ class A2AResponse(BaseModel):
                 "thoughts": "",
                 "usage": {"total_input_tokens": 120, "total_output_tokens": 80, "estimated_cost_usd": 0.000033},
                 "source": "adk_agent",
+                "confidence": 1.0,
             }
         }
     }

@@ -120,7 +120,7 @@ resource "google_bigquery_table" "data_quality_history" {
   {"name":"competency_assignment_pct","type":"INTEGER","mode":"REQUIRED","description":"% consultants avec compétences assignées"},
   {"name":"ai_scoring_pct","type":"INTEGER","mode":"REQUIRED","description":"% consultants avec scoring IA suffisant"},
   {"name":"issues_count","type":"INTEGER","mode":"REQUIRED","description":"Nombre d'anomalies détectées"},
-  {"name":"trigger","type":"STRING","mode":"NULLABLE","description":"Source du déclenchement : scheduler | batch_completed | manual"}
+  {"name":"trigger","type":"STRING","mode":"REQUIRED","description":"scheduler | batch_completed | manual"}
 ]
 EOF
 }

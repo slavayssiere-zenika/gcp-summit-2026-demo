@@ -16,6 +16,10 @@ echo "✅ [DOCKER] Démon disponible — tests d'intégration activés."
 
 echo "# Test and Coverage Report" > test_report.txt
 
+# Installation de schemathesis
+echo "📦 Installation de schemathesis..."
+python3 -m pip install schemathesis > /dev/null 2>&1
+
 
 for service in "${SERVICES[@]}"; do
   if [ -d "$service" ]; then
@@ -30,6 +34,14 @@ for service in "${SERVICES[@]}"; do
       export PYTHONPATH=$PWD
       python3 -m pytest --cov=src --cov=./ --cov-report=term-missing 2>&1 | tee -a ../test_report.txt
       echo "Exit code: ${PIPESTATUS[0]}" >> ../test_report.txt
+      
+      # Contract Testing avec schemathesis
+      if [[ "$service" == "users_api" || "$service" == "items_api" || "$service" == "cv_api" || "$service" == "missions_api" || "$service" == "competencies_api" ]]; then
+        echo "🧪 Running Schemathesis for $service..." | tee -a ../test_report.txt
+        # Désactiver les checks stateful qui prennent trop de temps, focus sur la conformité OpenAPI
+        python3 -m schemathesis run --app main:app /openapi.json --checks all 2>&1 | tee -a ../test_report.txt
+        echo "Schemathesis exit code: ${PIPESTATUS[0]}" >> ../test_report.txt
+      fi
     else
       echo "No tests found." >> ../test_report.txt
     fi

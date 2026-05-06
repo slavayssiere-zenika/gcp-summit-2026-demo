@@ -15,6 +15,7 @@ Non-bloquant : les erreurs Pub/Sub sont loguées sans propager d'exception.
 import json
 import logging
 import os
+from datetime import datetime, timezone
 
 from google.cloud import pubsub_v1
 
@@ -65,8 +66,17 @@ async def publish_data_quality_snapshot(
         logger.error("[dq-publisher] Échec calcul data quality report: %s", exc)
         return {"success": False, "error": f"compute_data_quality_report failed: {exc}"}
 
+    # Conversion computed_at ISO8601 → microsecondes Unix (requis par Avro timestamp-micros).
+    # En encodage JSON Avro, logicalType timestamp-micros = integer (µs depuis epoch Unix).
+    computed_at_str = report["computed_at"]
+    try:
+        dt = datetime.fromisoformat(computed_at_str)
+    except ValueError:
+        dt = datetime.now(timezone.utc)
+    computed_at_micros = int(dt.timestamp() * 1_000_000)
+
     payload = {
-        "computed_at": report["computed_at"],
+        "computed_at": computed_at_micros,
         "total_cvs": report["total_cvs"],
         "users_with_cv": report["users_with_cv"],
         "score": report["score"],

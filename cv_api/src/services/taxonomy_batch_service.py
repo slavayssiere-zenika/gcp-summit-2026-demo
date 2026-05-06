@@ -13,6 +13,13 @@ from google.genai import types
 import src.services.config as _svc_config
 from src.cvs.routers._shared import BATCH_GCS_BUCKET
 from src.cvs.task_state import tree_task_manager
+from src.services.batch_parsers import (
+    check_missing_pillars,
+    get_all_used_names,
+    has_unsubstituted_placeholders,
+    parse_jsonl_map_result,
+    strip_json_fences,
+)
 from src.services.data_quality_publisher import publish_data_quality_snapshot
 from src.services.finops import log_finops
 from src.services.taxonomy_service import fetch_prompt as _fetch_prompt
@@ -351,64 +358,26 @@ class TaxonomyBatchService:
                     f"Aucun fichier .jsonl trouvé dans {dest_uri}")
             file_content = output_blob.download_as_text()
 
-            total_prompt_tokens = 0
-            total_candidates_tokens = 0
+            # ── Parsing unifié via batch_parsers ────────────────────────────────────────
+            map_result, usage = parse_jsonl_map_result(file_content)
+
+            # Reconstruit parsed_results pour les étapes reduce/sweep (textes bruts)
             parsed_results = []
-
             for line in file_content.splitlines():
-                resp = json.loads(line)
-                if "response" in resp and "usageMetadata" in resp["response"]:
-                    total_prompt_tokens += resp["response"]["usageMetadata"].get(
-                        "promptTokenCount", 0)
-                    total_candidates_tokens += resp["response"]["usageMetadata"].get(
-                        "candidatesTokenCount", 0)
-
-                if "response" in resp and "candidates" in resp["response"] and len(
-                        resp["response"]["candidates"]) > 0:
-                    parts = resp["response"]["candidates"][0].get(
-                        "content", {}).get("parts", [])
-                    if parts:
-                        parsed_results.append(parts[0].get("text", ""))
-
-            usage = {"prompt_token_count": total_prompt_tokens,
-                     "candidates_token_count": total_candidates_tokens}
+                if not line.strip():
+                    continue
+                try:
+                    resp = json.loads(line)
+                    candidates = resp.get("response", {}).get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            parsed_results.append(parts[0].get("text", ""))
+                except json.JSONDecodeError:
+                    pass
 
             if batch_step == "map":
                 await log_finops(user_caller, "recalculate_tree_batch_map", os.environ["GEMINI_MODEL"], usage, auth_token=auth_token)
-
-                map_result = {}
-                for i, text in enumerate(parsed_results):
-                    try:
-                        cleaned = text.strip()
-                        if cleaned.startswith("```json"):
-                            cleaned = cleaned[7:]
-                        if cleaned.startswith("```"):
-                            cleaned = cleaned[3:]
-                        if cleaned.endswith("```"):
-                            cleaned = cleaned[:-3]
-                        cleaned = cleaned.strip()
-
-                        raw_map, _ = json.JSONDecoder().raw_decode(cleaned)
-                        if isinstance(raw_map, dict) and "items" in raw_map:
-                            raw_map = raw_map["items"]
-                        parsed_chunk = {}
-                        if isinstance(raw_map, list):
-                            for item in raw_map:
-                                if isinstance(item, dict):
-                                    parsed_chunk.update(item)
-                        elif isinstance(raw_map, dict):
-                            parsed_chunk.update(raw_map)
-
-                        for pillar, skills in parsed_chunk.items():
-                            if not isinstance(skills, list):
-                                continue
-                            if pillar not in map_result:
-                                map_result[pillar] = []
-                            map_result[pillar].extend(skills)
-                    except Exception as e:
-                        logger.error(
-                            f"Erreur de parsing sur le chunk {i} du Map (ignoré): {e}")
-                        continue
 
                 if not map_result:
                     return {
@@ -552,25 +521,16 @@ class TaxonomyBatchService:
                 await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
 
                 res_tree = {}
+                import json_repair
+
                 for i, text in enumerate(parsed_results):
                     try:
-                        cleaned = text.strip()
-                        if cleaned.startswith("```json"):
-                            cleaned = cleaned[7:]
-                        if cleaned.startswith("```"):
-                            cleaned = cleaned[3:]
-                        if cleaned.endswith("```"):
-                            cleaned = cleaned[:-3]
-                        cleaned = cleaned.strip()
-
-                        import json_repair
-
+                        cleaned = strip_json_fences(text)
                         raw_res = json_repair.loads(cleaned)
                         if isinstance(raw_res, dict):
                             res_tree.update(raw_res)
                     except Exception as e:
-                        snippet = cleaned[-100:] if len(
-                            cleaned) > 100 else cleaned
+                        snippet = text[-100:] if len(text) > 100 else text
                         error_msg = f"Erreur JSON Reduce: {e}. Extrait: {snippet}"
                         logger.error(error_msg)
                         await tree_task_manager.update_progress(status="error", error=error_msg)
@@ -580,31 +540,20 @@ class TaxonomyBatchService:
                         "success": False, "error": "Aucun chunk JSONL du Reduce n'a pu être parsé."}
 
                 expected_pillars = latest_status.get("completed_pillars", [])
-                expected_names = {p.get("name")
-                                  for p in expected_pillars if p.get("name")}
                 actual_names = set(res_tree.keys())
+                missing_original = check_missing_pillars(expected_pillars, res_tree)
 
-                import re
-
-                def normalize(n): return re.sub(
-                    r'[^a-z0-9]', '', (n or '').lower().replace('&', 'et'))
-
-                expected_norm = {normalize(n): n for n in expected_names}
-                actual_norm = {normalize(n): n for n in actual_names}
-                missing_norm = set(expected_norm.keys()) - \
-                    set(actual_norm.keys())
-
-                if missing_norm:
-                    missing_original = [expected_norm[k] for k in missing_norm]
-                    error_msg = f"Reduce incomplet : les piliers suivants manquent dans la réponse Vertex AI: {
-                        ', '.join(missing_original)}. Trouvés : {
-                        ', '.join(actual_names)}"
+                if missing_original:
+                    error_msg = (
+                        f"Reduce incomplet : les piliers suivants manquent dans la réponse Vertex AI: "
+                        f"{', '.join(missing_original)}. Trouvés : {', '.join(actual_names)}"
+                    )
                     await tree_task_manager.update_progress(status="error", error=error_msg)
                     return {"success": False, "error": error_msg}
 
                 await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")
 
-                if "{{CURRENT_PILLAR}}" in res_tree or "{{PILLAR_NAME}}" in res_tree:
+                if has_unsubstituted_placeholders(res_tree):
                     error_msg = (
                         "res_tree corrompu : la clef '{{CURRENT_PILLAR}}' est présente, "
                         "le prompt Reduce n'a pas substitué le placeholder. "
@@ -621,29 +570,6 @@ class TaxonomyBatchService:
                 try:
                     instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", f"Bearer {sweep_service_token}")
                     existing_names = await _get_existing_competencies(f"Bearer {sweep_service_token}")
-
-                    def get_all_used_names(node, used=None):
-                        if used is None:
-                            used = set()
-                        if isinstance(node, dict):
-                            if "name" in node:
-                                used.add(node["name"])
-                            if "merge_from" in node and isinstance(
-                                    node["merge_from"], list):
-                                for m in node["merge_from"]:
-                                    used.add(m)
-                            for k, v in node.items():
-                                if isinstance(k, str) and k not in (
-                                        "sub", "sub_competencies", "description", "aliases", "name", "merge_from"):
-                                    used.add(k)
-                                if k not in ("description", "aliases"):
-                                    get_all_used_names(v, used)
-                        elif isinstance(node, list):
-                            for item in node:
-                                get_all_used_names(item, used)
-                        elif isinstance(node, str):
-                            used.add(node)
-                        return used
 
                     used_names = get_all_used_names(res_tree)
                     missing = list(set(existing_names) - used_names)
@@ -770,25 +696,17 @@ class TaxonomyBatchService:
                 await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
 
                 try:
+                    import json_repair
+
                     sweep_assignments = []
                     merges = []
                     for i, text in enumerate(parsed_results):
                         try:
-                            cleaned = text.strip()
-                            if cleaned.startswith("```json"):
-                                cleaned = cleaned[7:]
-                            if cleaned.startswith("```"):
-                                cleaned = cleaned[3:]
-                            if cleaned.endswith("```"):
-                                cleaned = cleaned[:-3]
-                            cleaned = cleaned.strip()
-
-                            import json_repair
+                            cleaned = strip_json_fences(text)
                             raw_res = json_repair.loads(cleaned)
                             if isinstance(raw_res, dict):
                                 if "assignments" in raw_res:
-                                    sweep_assignments.extend(
-                                        raw_res["assignments"])
+                                    sweep_assignments.extend(raw_res["assignments"])
                                 if "merges" in raw_res:
                                     merges.extend(raw_res["merges"])
                         except Exception as e:

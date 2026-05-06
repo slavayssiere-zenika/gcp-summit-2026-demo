@@ -216,7 +216,7 @@ for svc in services:
             
         # Replace occurrences in the file
         content = read_tf(fname)
-        content = re.sub(r'google_service_account\.cr_sa\["([^"]+)"\]', f'google_service_account.\g<1>_sa', content)
+        content = re.sub(r'google_service_account\.cr_sa\["([^"]+)"\]', rf'google_service_account.\g<1>_sa', content)
         # Handle time_sleep replacement
         content = re.sub(r'depends_on\s*=\s*\[\s*time_sleep\.wait_for_iam_propagation\s*,', 'depends_on = [', content)
         content = re.sub(r'time_sleep\.wait_for_iam_propagation\s*,?', '', content)

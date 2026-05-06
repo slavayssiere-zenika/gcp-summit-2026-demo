@@ -52,7 +52,7 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
         elif name == "delete_user":
             response = await client.delete(f"{API_BASE_URL}/{arguments['user_id']}")
             response.raise_for_status()
-            return [TextContent(type="text", text="User deleted successfully")]
+            return [TextContent(type="text", text=json.dumps({"message": "User deleted successfully"}))]
 
         elif name == "health_check":
             response = await client.get(f"{API_BASE_URL}/health")
@@ -184,11 +184,11 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
             return [TextContent(type="text", text=json.dumps(results))]
 
         else:
-            return [TextContent(type="text", text=f"Unknown tool: {name}")]
+            return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 409:
-            return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
-        return [TextContent(type="text", text=f"HTTP Error: {e.response.status_code} - {e.response.text}")]
+            return [TextContent(type="text", text=json.dumps({"success": False, "error": f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres."}))]
+        return [TextContent(type="text", text=json.dumps({"success": False, "error": f"HTTP Error: {e.response.status_code} - {e.response.text}"}))]
     except Exception as e:
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]

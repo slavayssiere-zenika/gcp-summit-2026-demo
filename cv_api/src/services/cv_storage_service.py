@@ -141,7 +141,13 @@ class CVStorageService:
 
             if not user_id and folder_first_name and folder_last_name:
                 folder_search_q = f"{folder_first_name} {folder_last_name}"
-                fn_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": folder_search_q, "limit": 10}, headers=headers)
+                # is_anonymous=false : on cherche uniquement les vrais consultants pour éviter
+                # qu'un homonyme anonyme soit retourné à la place du consultant réel.
+                fn_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/search",
+                    params={"query": folder_search_q, "limit": 10, "is_anonymous": "false"},
+                    headers=headers
+                )
                 if fn_res.status_code == 200:
                     try:
                         fn_data = UsersResponse.model_validate(fn_res.json())
@@ -157,7 +163,12 @@ class CVStorageService:
                                 break
 
             if not user_id and email:
-                search_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": email, "limit": 10}, headers=headers)
+                # is_anonymous=false : recherche par email uniquement parmi les consultants réels.
+                search_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/search",
+                    params={"query": email, "limit": 10, "is_anonymous": "false"},
+                    headers=headers
+                )
                 if search_res.status_code == 200:
                     try:
                         search_data = UsersResponse.model_validate(search_res.json())
@@ -177,7 +188,12 @@ class CVStorageService:
 
             if not user_id and first_name and last_name:
                 search_q = f"{first_name} {last_name}"
-                name_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": search_q, "limit": 10}, headers=headers)
+                # is_anonymous=false : recherche par nom uniquement parmi les consultants réels.
+                name_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/search",
+                    params={"query": search_q, "limit": 10, "is_anonymous": "false"},
+                    headers=headers
+                )
                 if name_res.status_code == 200:
                     try:
                         name_data = UsersResponse.model_validate(name_res.json())
@@ -209,7 +225,9 @@ class CVStorageService:
                                 break
 
             filename = os.path.basename(url).lower()
-            if not is_anonymous and any(x in filename for x in [
+            # N'anonymise par filename que si l'identité n'est pas déjà résolue via user_id.
+            # Un consultant déjà identifié ne doit pas être ré-anonymisé par son nom de fichier.
+            if not is_anonymous and not user_id and any(x in filename for x in [
                                         "annonym", "anon", "abc"]):
                 is_anonymous = True
                 if first_name != "Anon":
@@ -219,14 +237,26 @@ class CVStorageService:
                     email = f"anon.{trigram.lower()}@anonymous.zenika.com"
 
             if user_id and is_anonymous:
-                if folder_first_name and folder_last_name:
-                    is_anonymous = False
+                # Fix #1 — Logique corrigée : si un vrai consultant est trouvé (user_id résolu),
+                # on dés-anonymise le profil plutôt que d'annuler l'association.
+                # L'ancienne logique inversée (user_id = None) créait des doublons anonymes.
+                user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+                if user_info_res.status_code == 200:
+                    user_data = user_info_res.json()
+                    if not user_data.get("is_anonymous", False):
+                        # L'user existant est un vrai consultant — on corrige is_anonymous
+                        is_anonymous = False
+                        logger.info(
+                            "[cv_storage] Profil dés-anonymisé : user_id=%s résolu comme consultant réel.",
+                            user_id
+                        )
+                    # Sinon l'user est déjà anonyme en base → on conserve l'association telle quelle
                 else:
-                    user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
-                    if user_info_res.status_code == 200:
-                        user_data = user_info_res.json()
-                        if not user_data.get("is_anonymous", False):
-                            user_id = None
+                    # Impossible de vérifier — on conserve user_id sans modifier is_anonymous
+                    logger.warning(
+                        "[cv_storage] Impossible de vérifier le statut anonyme de user_id=%s (HTTP %s).",
+                        user_id, user_info_res.status_code
+                    )
 
             if not user_id:
                 safe_fn = first_name or "u"

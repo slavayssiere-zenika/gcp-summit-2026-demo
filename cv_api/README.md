@@ -34,13 +34,13 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 |---|---|---|
 | `main.py` | 223 | ✅ |
 | `mcp_server.py` | 591 | ⚠️ |
-| `conftest.py` | 49 | ✅ |
+| `conftest.py` | 89 | ✅ |
 | `metrics.py` | 4 | ✅ |
 | `src/cvs/router.py` | 43 | ✅ |
 | `src/cvs/routers/analytics_router.py` | 383 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 288 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 102 | ✅ |
-| `src/cvs/routers/profile_router.py` | 426 | ✅ |
+| `src/cvs/routers/profile_router.py` | 559 | ⚠️ |
 | `src/cvs/routers/search_router.py` | 486 | ✅ |
 
 ## Variables d'environnement
@@ -95,7 +95,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 - `GET /user/{user_id}/missions`
 - `GET /user/{user_id}/details`
 - `POST /internal/users/merge`
-- `GET /search`
+- `POST /internal/remediate-anonymous-profiles`
 
 ## Architecture Service Layer
 ```

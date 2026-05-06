@@ -77,6 +77,9 @@ async def test_publish_success_with_db():
     assert data_arg["trigger"] == "scheduler"
     assert data_arg["grade"] == "A"
     assert EXPECTED_PAYLOAD_KEYS == set(data_arg.keys())
+    # computed_at doit être un entier (microsecondes Unix) pour Avro timestamp-micros
+    assert isinstance(data_arg["computed_at"], int)
+    assert data_arg["computed_at"] > 1_700_000_000_000_000  # après 2023-11-14
 
 
 @pytest.mark.asyncio

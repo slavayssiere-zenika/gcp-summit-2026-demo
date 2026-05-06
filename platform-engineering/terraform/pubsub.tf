@@ -257,10 +257,50 @@ data "google_project" "project" {}
 # Data Quality Snapshots — Pub/Sub → BigQuery (native subscription)
 # Chaque snapshot est publié par cv_api (scheduler 4h + post-batch)
 # La BigQuery Subscription écrit directement sans consumer Python.
+#
+# Architecture :
+#   google_pubsub_schema (Avro) → topic → BigQuery Subscription
+#   use_topic_schema=true : Pub/Sub mappe les champs Avro → colonnes BQ
+#   use_avro_binary_encoding=false : encoding JSON (compatible publisher Python)
 # ==============================================================
+
+# Schéma Avro décrivant le payload JSON publié par data_quality_publisher.py.
+# Les types Avro (string, int) correspondent aux colonnes BQ (STRING, INTEGER).
+# computed_at est un string ISO8601 (pas un long timestamp-micros) car le
+# publisher Python utilise report["computed_at"] qui est une string ISO.
+resource "google_pubsub_schema" "data_quality_schema" {
+  name = "data-quality-schema-${terraform.workspace}"
+  type = "AVRO"
+  definition = jsonencode({
+    type = "record"
+    name = "DataQualitySnapshot"
+    fields = [
+      { name = "computed_at", type = { type = "long", logicalType = "timestamp-micros" } },
+      { name = "total_cvs", type = "int" },
+      { name = "users_with_cv", type = "int" },
+      { name = "score", type = "int" },
+      { name = "grade", type = "string" },
+      { name = "embedding_pct", type = "int" },
+      { name = "missions_pct", type = "int" },
+      { name = "competencies_pct", type = "int" },
+      { name = "summary_pct", type = "int" },
+      { name = "current_role_pct", type = "int" },
+      { name = "competency_assignment_pct", type = "int" },
+      { name = "ai_scoring_pct", type = "int" },
+      { name = "issues_count", type = "int" },
+      { name = "trigger", type = "string" }
+    ]
+  })
+}
 
 resource "google_pubsub_topic" "data_quality_events" {
   name = "zenika-data-quality-events-${terraform.workspace}"
+
+  # Schéma Avro attaché : valide les messages avant insertion BQ
+  schema_settings {
+    schema   = google_pubsub_schema.data_quality_schema.id
+    encoding = "JSON"
+  }
 
   # 1 jour : un snapshot toutes les 4h = max 6 messages/jour, très faible volume
   message_retention_duration = "86400s"
@@ -269,16 +309,19 @@ resource "google_pubsub_topic" "data_quality_events" {
     environment = terraform.workspace
     managed_by  = "terraform"
   }
+
+  depends_on = [google_pubsub_schema.data_quality_schema]
 }
 
-# BigQuery Subscription native : écrit directement les messages dans la table data_quality_history
+# BigQuery Subscription native : les champs Avro sont mappés directement aux colonnes BQ.
+# use_topic_schema=true + use_avro_binary_encoding=false → encoding JSON Avro.
 resource "google_pubsub_subscription" "data_quality_bq_sub" {
   name  = "data-quality-bq-sub-${terraform.workspace}"
   topic = google_pubsub_topic.data_quality_events.id
 
   bigquery_config {
     table               = "${var.project_id}:finops_${terraform.workspace}.data_quality_history"
-    use_topic_schema    = false
+    use_topic_schema    = true
     write_metadata      = false
     drop_unknown_fields = true
   }
