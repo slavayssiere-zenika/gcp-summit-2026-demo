@@ -13,6 +13,28 @@ Si un README est obsolète ou manquant pour un service modifié, le mettre à jo
 git diff --name-only HEAD 2>/dev/null | grep -E "^[a-z_]+_api/|^agent_[a-z_]+/|^[a-z_]+_mcp/" | cut -d/ -f1 | sort -u | while read svc; do echo "=== $svc ==="; [ -f "$svc/README.md" ] && head -10 "$svc/README.md" || echo "MANQUANT"; done
 ```
 
+### Étape 0b : Vérification syntaxique Python sur tout le repo (BLOQUANT)
+Détecte les `SyntaxError` et `IndentationError` sur **l'ensemble des fichiers Python** du repo — y compris les fichiers non modifiés dans ce commit. Contrairement à Flake8 (étape 1b), ce check s'applique à tout le repo car une SyntaxError dans un fichier non modifié peut bloquer le démarrage du service en production.
+> 🛑 Ce step est **BLOQUANT** : aucun commit ne doit partir avec une erreur de syntaxe Python.
+
+// turbo
+```bash
+echo "=== py_compile : vérification syntaxique de tous les fichiers Python ==="
+SYNTAX_ERRORS=$(find . -name "*.py" \
+  -not -path "*/__pycache__/*" \
+  -not -path "*/test_env/*" \
+  -not -path "*/.venv/*" \
+  -not -path "*/node_modules/*" \
+  | xargs python3 -m py_compile 2>&1)
+if [ -n "$SYNTAX_ERRORS" ]; then
+  echo "❌ BLOQUANT : Erreurs de syntaxe Python détectées :"
+  echo "$SYNTAX_ERRORS"
+  exit 1
+else
+  echo "✅ Aucune erreur de syntaxe — tous les fichiers Python sont valides."
+fi
+```
+
 1. **Relancer les tests unitaires via script parallèle**
    Exécute le script bash dédié pour effectuer la couverture en simultané sur chaque environnement. L'arrêt est requis si le script est en erreur.
    > ⚠️ **Note** : Ce script exécute uniquement les tests présents dans chaque répertoire de service.
@@ -21,6 +43,7 @@ git diff --name-only HEAD 2>/dev/null | grep -E "^[a-z_]+_api/|^agent_[a-z_]+/|^
 ```bash
 bash scripts/run_tests.sh
 ```
+
 
 1b. **Vérification PEP8 / Flake8 sur les fichiers Python modifiés (BLOQUANT)**
     Détecte les violations PEP8 sur **uniquement les fichiers modifiés depuis le dernier commit**. Si des erreurs sont trouvées, l'agent DOIT les corriger avant de continuer.

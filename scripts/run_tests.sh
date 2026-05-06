@@ -27,7 +27,28 @@ check_docker_available() {
 DOCKER_AVAILABLE=true
 check_docker_available || DOCKER_AVAILABLE=false
 
+# ─── Vérification syntaxique Python (py_compile) ────────────────────────────
+echo "=== py_compile : vérification syntaxique de tous les fichiers Python ==="
+SYNTAX_ERRORS=$(find . -name "*.py" \
+    -not -path "*/__pycache__/*" \
+    -not -path "*/test_env/*" \
+    -not -path "*/.venv/*" \
+    -not -path "*/node_modules/*" \
+    -not -path "*/.gcloud/*" \
+    -not -path "*/google-cloud-sdk/*" \
+    -not -path "*/platform-engineering/terraform/scratch*" \
+    | xargs python3 -m py_compile 2>&1 || true)
+if [ -n "$SYNTAX_ERRORS" ]; then
+    echo "❌ BLOQUANT : Erreurs de syntaxe Python détectées (SyntaxError / IndentationError) :"
+    echo "$SYNTAX_ERRORS"
+    echo ""
+    echo "   Corrigez les erreurs ci-dessus avant de continuer."
+    exit 1
+fi
+echo "✅ Syntaxe Python OK — aucune SyntaxError/IndentationError détectée."
+
 echo "Démarrage des tests en parallèle (Docker: $DOCKER_AVAILABLE)..."
+
 
 pids=()
 apis=()

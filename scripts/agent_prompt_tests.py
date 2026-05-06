@@ -631,8 +631,7 @@ TEST_CASES: list[TestCase] = [
         expected_agent="hr",
         min_tool_calls=1,
         # Zenika étant international, l'agent répond dans la langue de l'interlocuteur.
-        # On vérifie uniquement le routage correct (HR    data_quality_strict=True,
-    ) et la présence du terme métier,
+        # On vérifie uniquement le routage correct (HR) et la présence du terme métier,
         # quelle que soit la langue de la réponse (fr: "consultant", en: "consultant").
         must_contain=["consultant"],  # terme identique en français et en anglais
         data_schema_validator=validate_users_list_data,
@@ -649,8 +648,7 @@ TEST_CASES: list[TestCase] = [
     TestCase(
         id="ROUTE-006",
         category="routing",
-        description="Question missions → doit router vers l'agent Missions (PAS HR    data_quality_strict=True,
-    )",
+        description="Question missions → doit router vers l'agent Missions (PAS HR)",
         prompt="Montre-moi toutes les missions actuellement actives",
         expected_agent="missions",
         forbidden_tools=["list_users", "search_best_candidates"],  # Ne doit pas aller sur HR
@@ -682,8 +680,7 @@ TEST_CASES: list[TestCase] = [
         category="hr",
         description="Recherche d'utilisateur par nom exact",
         prompt="Quels sont les informations du consultant Alice Martin ?",
-        # L'agent utilise search_users (puis list_users en fallback    data_quality_strict=True,
-    ) — get_user n'est appelé que si l'ID est connu
+        # L'agent utilise search_users (puis list_users en fallback) — get_user n'est appelé que si l'ID est connu
         expected_tools=["search_users"],
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
@@ -695,8 +692,7 @@ TEST_CASES: list[TestCase] = [
         category="hr",
         description="Recherche de compétences — taxonomie",
         prompt="Quelles sont les compétences Cloud disponibles dans le référentiel Zenika ?",
-        # L'agent utilise search_competencies (plus efficace que list_competencies/get_competency_tree    data_quality_strict=True,
-    )
+        # L'agent utilise search_competencies (plus efficace que list_competencies/get_competency_tree)
         expected_tools=["search_competencies"],
         min_tool_calls=1,
         # Correction [HR-002] : 'DevOps' n'est pas dans la taxonomie Cloud mais dans une
@@ -709,8 +705,7 @@ TEST_CASES: list[TestCase] = [
         category="hr",
         description="Matching candidat/mission — profil Java senior",
         prompt="J'ai besoin d'un développeur Java senior pour une mission FinTech. Qui proposeriez-vous parmi nos consultants ?",
-        # Pipeline réel : search_best_candidates + get_candidate_rag_context (list_users n'est pas appelé    data_quality_strict=True,
-    )
+        # Pipeline réel : search_best_candidates + get_candidate_rag_context (list_users n'est pas appelé)
         expected_tools=["search_best_candidates"],
         min_tool_calls=1,
         expect_no_hallucination_warning=True,
