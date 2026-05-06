@@ -20,8 +20,30 @@ from typing import Any, List, Optional
 import httpx
 from opentelemetry.propagate import inject
 from prometheus_client import Counter
-from pydantic import ValidationError
-from shared.schemas.mcp import McpToolResult
+from pydantic import BaseModel, ValidationError
+
+
+# ---------------------------------------------------------------------------
+# MCP protocol DTOs — inlined here to keep agent_commons self-contained.
+# The Dockerfile for agents does NOT include the monorepo's shared/ package.
+# Keep in sync with shared/schemas/mcp.py (source of truth for data APIs).
+# ---------------------------------------------------------------------------
+class McpContent(BaseModel):
+    """Single content item in an MCP tool call result."""
+
+    type: str
+    text: Optional[str] = None
+
+
+class McpToolResult(BaseModel):
+    """Standard MCP tool call response envelope.
+
+    The 'result' key is the standard field returned by the MCP sidecar.
+    Using model_validate() will catch any protocol drift.
+    """
+
+    result: List[Any] = []
+
 
 # ---------------------------------------------------------------------------
 # Prometheus metric — defined here so it is imported from a single location

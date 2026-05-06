@@ -77,13 +77,15 @@ async def create_agent(session_id: str | None = None):
                 )
                 if res.status_code == 200:
                     from pydantic import BaseModel
-            class PromptResp(BaseModel):
-                value: str
-            try:
-                p_data = PromptResp.model_validate(res.json())
-                user_prompt = p_data.value
-            except Exception:
-                user_prompt = ""
+
+                    class PromptResp(BaseModel):
+                        value: str
+
+                    try:
+                        p_data = PromptResp.model_validate(res.json())
+                        user_prompt = p_data.value
+                    except Exception:
+                        user_prompt = ""
                     if user_prompt:
                         instruction_text += (
                             f"\n\n--- INSTRUCTIONS UTILISATEUR ({session_id}) ---\n"

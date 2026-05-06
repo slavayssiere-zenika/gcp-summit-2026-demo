@@ -103,13 +103,15 @@ async def health_agents():
                 ok = True
             if not isinstance(v_res, Exception) and v_res.status_code == 200:
                 from pydantic import BaseModel
-        class VersionResp(BaseModel):
-            version: str
-        try:
-            v_data = VersionResp.model_validate(v_res.json())
-            version = v_data.version
-        except Exception:
-            version = "unknown"
+
+                class VersionResp(BaseModel):
+                    version: str
+
+                try:
+                    v_data = VersionResp.model_validate(v_res.json())
+                    version = v_data.version
+                except Exception:
+                    version = "unknown"
         except Exception as e:
             _logger.warning("[health-probe] Agent '%s' health check failed: %s", agent_name, e)
             ok = False
