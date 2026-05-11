@@ -1,3 +1,58 @@
+## Mise à jour automatique - 2026-05-11 16:55:11
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1868  | 458  |  75% |
+| agent_hr_api     | 1614  | 216  |  87% |
+| agent_missions_api | 1375  | 252  |  82% |
+| agent_ops_api    | 1458  | 214  |  85% |
+| agent_router_api | 2609  | 447  |  83% |
+| analytics_mcp    | 1095  | 167  |  85% |
+| competencies_api | 4654  | 1090 |  77% |
+| cv_api           | 8399  | 1374 |  84% |
+| drive_api        | 3767  | 492  |  87% |
+| items_api        | 2313  | 238  |  90% |
+| missions_api     | 2279  | 319  |  86% |
+| monitoring_mcp   | 1371  | 169  |  88% |
+| platform-engineering | 1181  | 912  |  23% |
+| prompts_api      | 1352  | 338  |  75% |
+| scratch          | 58    | 20   |  66% |
+| shared           | 149   | 10   |  93% |
+| tests            | 78    | 3    |  96% |
+| users_api        | 2225  | 418  |  81% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/spec.md` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/tests/integration/conftest.py` (M)
+- `competencies_api/tests/integration/test_pg_integration.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/tests/integration/test_profile_router_extended.py` (M)
+- `drive_api/spec.md` (M)
+- `frontend/vitest.log` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/antigravity_sanity_error.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `prompts_api/spec.md` (M)
+- `cv_pytest_out.txt` (??)
+- `pytest_output_2.txt` (??)
+- `pytest_output_3.txt` (??)
+- `pytest_output_4.txt` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-11 16:33:20
 
 ### Couverture de Code

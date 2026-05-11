@@ -58,6 +58,15 @@ def integration_env(postgres_container, redis_container):
     _cache_module.reset_client()
 
 
+@pytest.fixture(autouse=True)
+def mock_gemini_aliases():
+    """Mock la génération d'alias Gemini pour tous les tests d'intégration."""
+    from unittest.mock import AsyncMock, patch
+    with patch("src.competencies.helpers._generate_aliases_for_competency", new_callable=AsyncMock) as mock:
+        mock.return_value = "mock_alias1, mock_alias2"
+        yield mock
+
+
 @pytest.fixture
 def wipe_competencies_db(postgres_container, integration_env):
     """Recrée le schéma avant chaque test."""

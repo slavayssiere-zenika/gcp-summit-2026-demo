@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-05-11 14:33 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-11 14:55 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 
@@ -149,7 +149,7 @@ deploy.sh [SERVICE] [BUMP_TYPE] [OPTIONS]
 
 ## ⚙️ Pipeline d'Infrastructure — `platform-engineering/manage_env.py`
 
-> Dernière modification : `2026-05-05`
+> Dernière modification : `2026-05-11`
 
 ### Description
 

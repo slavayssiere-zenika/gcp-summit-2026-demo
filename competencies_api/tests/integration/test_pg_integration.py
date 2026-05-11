@@ -127,11 +127,17 @@ def test_cleanup_orphans_real_postgres(client, postgres_container):
     engine = create_engine(sync_url)
     with engine.begin() as conn:
         conn.execute(
-            text("INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) VALUES (1, :cid, 1.0, 0.0)"),
+            text(
+                "INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) "
+                "VALUES (1, :cid, 1.0, 0.0)"
+            ),
             {"cid": valid_id}
         )
         conn.execute(
-            text("INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) VALUES (1, :cid, 0.0, 0.0)"),
+            text(
+                "INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) "
+                "VALUES (1, :cid, 0.0, 0.0)"
+            ),
             {"cid": zero_id}
         )
     engine.dispose()
@@ -139,7 +145,7 @@ def test_cleanup_orphans_real_postgres(client, postgres_container):
     # Exécuter le endpoint (doit retourner un 200 et non un 500)
     resp = client.post("/bulk/cleanup-orphans")
     assert resp.status_code == 200, f"Erreur nettoyage: {resp.json()}"
-    
+
     # Explication du count de 4:
     # - Orpheline_Zero : a un score 0, donc considérée orpheline -> supprimée
     # - Orpheline_Vraie : aucune liaison -> supprimée
@@ -174,28 +180,42 @@ def test_bulk_tree_drops_real_postgres(client, postgres_container):
     engine = create_engine(sync_url)
     with engine.begin() as conn:
         conn.execute(
-            text("INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) VALUES (1, :cid, 3.0, 0.0)"),
+            text(
+                "INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) "
+                "VALUES (1, :cid, 3.0, 0.0)"
+            ),
             {"cid": drop_id}
         )
     engine.dispose()
 
     # Exécuter le bulk_tree avec "drops"
     resp = client.post("/bulk_tree", json={
-        "tree": {"Tech": ["Enfant_A_Garder"]},
+        "tree": {"Tech": {"sub": {"Enfant_A_Garder": {}}}},
         "drops": ["A_Supprimer"]
     })
     assert resp.status_code == 200, f"Erreur bulk_tree: {resp.json()}"
-    
-    remaining = client.get("/").json()["items"]
-    names = [c["name"] for c in remaining]
-    
-    # "A_Supprimer" est physiquement supprimée car dans drops
-    assert "A_Supprimer" not in names
-    # "Enfant_A_Garder" est conservée dans Tech
-    assert "Enfant_A_Garder" in names
-    # "A_Archiver" est conservée et déplacée dans les Archives (parce que non listée dans tree ni dans drops)
-    assert "A_Archiver" in names
 
+    remaining = client.get("/").json()["items"]
+
+    # Trouver les piliers (racines)
+    tech_node = next((c for c in remaining if c["name"] == "Tech"), None)
+    archives_node = next((c for c in remaining if c["name"] == "Compétences Archives / Non classées"), None)
+
+    assert tech_node is not None, "Le pilier Tech devrait exister"
+    assert archives_node is not None, "Le pilier Archives devrait exister"
+
+    tech_subs = [c["name"] for c in tech_node.get("sub_competencies", [])]
+    archives_subs = [c["name"] for c in archives_node.get("sub_competencies", [])]
+
+    # "A_Supprimer" est physiquement supprimée car dans drops, donc n'est ni dans Tech ni dans Archives
+    assert "A_Supprimer" not in tech_subs
+    assert "A_Supprimer" not in archives_subs
+
+    # "Enfant_A_Garder" est conservée dans Tech
+    assert "Enfant_A_Garder" in tech_subs
+
+    # "A_Archiver" est conservée et déplacée dans les Archives
+    assert "A_Archiver" in archives_subs
 
 
 # ─────────────────────────────────────────────────────────────────────────────

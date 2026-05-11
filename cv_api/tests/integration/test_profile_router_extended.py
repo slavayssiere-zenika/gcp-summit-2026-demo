@@ -18,7 +18,7 @@ def test_get_all_user_tags(client, wipe_cv_db):
 
 @pytest.mark.asyncio
 async def test_get_users_by_tag(client, wipe_cv_db):
-    with patch("src.cvs.routers.profile_router.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.profile_service.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"id": 1, "is_anonymous": False}
@@ -30,7 +30,7 @@ async def test_get_users_by_tag(client, wipe_cv_db):
 
 @pytest.mark.asyncio
 async def test_get_user_cv(client, wipe_cv_db):
-    with patch("src.cvs.routers.profile_router.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.profile_service.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"id": 1, "is_anonymous": False}
@@ -41,7 +41,7 @@ async def test_get_user_cv(client, wipe_cv_db):
 
 @pytest.mark.asyncio
 async def test_get_user_cv_details(client, wipe_cv_db):
-    with patch("src.cvs.routers.profile_router.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.profile_service.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"id": 1, "is_anonymous": False}
@@ -61,7 +61,7 @@ def test_handle_user_pubsub_events(client, wipe_cv_db):
     assert resp.status_code == 200
 
 def test_remediate_anonymous_profiles_dry_run(client, wipe_cv_db):
-    with patch("src.cvs.routers.profile_router.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.profile_service.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"items": [{"id": 1, "email": "test@zenika.com", "is_anonymous": True}], "total": 1, "skip": 0, "limit": 100}

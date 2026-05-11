@@ -1273,30 +1273,39 @@ def deploy(env, base_domain, project_id, config, force=False):
                     req_mcp = urllib.request.Request(mcp_url, method="GET")
                     if access_token:
                         req_mcp.add_header("Authorization", f"Bearer {access_token}")
-                    try:
-                        resp_mcp = urllib.request.urlopen(req_mcp, timeout=15, context=ctx_to_use)
-                        if resp_mcp.status == 200:
-                            mcp_data = json.loads(resp_mcp.read().decode('utf-8'))
-                            if isinstance(mcp_data, list):
-                                tools_count = len(mcp_data)
+                    last_err_msg = ""
+                    for attempt in range(3):
+                        try:
+                            resp_mcp = urllib.request.urlopen(req_mcp, timeout=20, context=ctx_to_use)
+                            if resp_mcp.status == 200:
+                                mcp_data = json.loads(resp_mcp.read().decode('utf-8'))
+                                if isinstance(mcp_data, list):
+                                    tools_count = len(mcp_data)
+                                else:
+                                    tools_count = len(mcp_data.get("tools", []))
+                                logger.info(f"  [+] MCP {mcp_route} OK: Found {tools_count} tools.")
+                                last_err_msg = ""
+                                break
                             else:
-                                tools_count = len(mcp_data.get("tools", []))
-                            logger.info(f"  [+] MCP {mcp_route} OK: Found {tools_count} tools.")
-                        else:
-                            err_msg = f"HTTP {resp_mcp.status}"
-                            logger.error(f"  [-] MCP {mcp_route} FAIL: {err_msg}")
-                            generate_antigravity_error_report(
-                                "Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{resp_mcp.status}"])
-                    except urllib.error.HTTPError as e:
-                        err_msg = f"FAIL (HTTP {e.code}) on {mcp_route}"
-                        logger.error(f"  [-] {err_msg}")
+                                last_err_msg = f"MCP {mcp_route} FAIL: HTTP {resp_mcp.status}"
+                                if resp_mcp.status >= 500:
+                                    time.sleep(10)
+                                    continue
+                                break
+                        except urllib.error.HTTPError as e:
+                            last_err_msg = f"FAIL (HTTP {e.code}) on {mcp_route}"
+                            if e.code >= 500:
+                                time.sleep(10)
+                                continue
+                            break
+                        except Exception as e:
+                            last_err_msg = f"MCP {mcp_route} FAIL: {e}"
+                            time.sleep(10)
+                    
+                    if last_err_msg:
+                        logger.error(f"  [-] {last_err_msg} (après 3 tentatives)")
                         generate_antigravity_error_report(
-                            "Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", f"HTTP_{e.code}"])
-                    except Exception as e:
-                        err_msg = f"MCP {mcp_route} FAIL: {e}"
-                        logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report(
-                            "Sanity Check 8/8 : MCP Availability", err_msg, ["mcp", "sanity-check", "exception"])
+                            "Sanity Check 8/8 : MCP Availability", last_err_msg, ["mcp", "sanity-check", "exception"])
 
                 # --- CHECK 9/9: AIOPS METRICS ---
                 logger.info("\n[*] Check 9/9: Validating AIOps metrics endpoint...")
@@ -1304,25 +1313,34 @@ def deploy(env, base_domain, project_id, config, force=False):
                     aiops_url = f"https://{api_dns_name}/api/analytics/metrics/aiops?force=true"
                     req_aiops = urllib.request.Request(aiops_url, method="GET")
                     req_aiops.add_header("Authorization", f"Bearer {access_token}")
-                    try:
-                        resp_aiops = urllib.request.urlopen(req_aiops, timeout=30, context=ctx_to_use)
-                        if resp_aiops.status == 200:
-                            logger.info(f"  [+] AIOps Metrics OK: {aiops_url}")
-                        else:
-                            err_msg = f"HTTP {resp_aiops.status}"
-                            logger.error(f"  [-] AIOps Metrics FAIL: {err_msg}")
-                            generate_antigravity_error_report(
-                                "Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{resp_aiops.status}"])
-                    except urllib.error.HTTPError as e:
-                        err_msg = f"FAIL (HTTP {e.code}) on /api/analytics/metrics/aiops"
-                        logger.error(f"  [-] {err_msg}")
+                    last_err_msg = ""
+                    for attempt in range(3):
+                        try:
+                            resp_aiops = urllib.request.urlopen(req_aiops, timeout=30, context=ctx_to_use)
+                            if resp_aiops.status == 200:
+                                logger.info(f"  [+] AIOps Metrics OK: {aiops_url}")
+                                last_err_msg = ""
+                                break
+                            else:
+                                last_err_msg = f"AIOps Metrics FAIL: HTTP {resp_aiops.status}"
+                                if resp_aiops.status >= 500:
+                                    time.sleep(10)
+                                    continue
+                                break
+                        except urllib.error.HTTPError as e:
+                            last_err_msg = f"FAIL (HTTP {e.code}) on /api/analytics/metrics/aiops"
+                            if e.code >= 500:
+                                time.sleep(10)
+                                continue
+                            break
+                        except Exception as e:
+                            last_err_msg = f"AIOps Metrics FAIL: {e}"
+                            time.sleep(10)
+                    
+                    if last_err_msg:
+                        logger.error(f"  [-] {last_err_msg} (après 3 tentatives)")
                         generate_antigravity_error_report(
-                            "Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", f"HTTP_{e.code}"])
-                    except Exception as e:
-                        err_msg = f"AIOps Metrics FAIL: {e}"
-                        logger.error(f"  [-] {err_msg}")
-                        generate_antigravity_error_report(
-                            "Sanity Check 9/9 : AIOps Metrics", err_msg, ["analytics_mcp", "sanity-check", "exception"])
+                            "Sanity Check 9/9 : AIOps Metrics", last_err_msg, ["analytics_mcp", "sanity-check", "exception"])
                 else:
                     logger.warning("  [!] Skipping Check 9: No access_token available (Check 4 failed).")
 
