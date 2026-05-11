@@ -738,12 +738,21 @@ class TaxonomyBatchService:
                     cleaned = strip_json_fences(text)
                     raw_res = json_repair.loads(cleaned)
                     if isinstance(raw_res, dict):
-                        if "assignments" in raw_res:
-                            sweep_assignments.extend(raw_res["assignments"])
-                        if "merges" in raw_res:
-                            merges.extend(raw_res["merges"])
-                        if "drops" in raw_res:
-                            drops.extend(raw_res["drops"])
+                        if "assignments" in raw_res and isinstance(raw_res["assignments"], list):
+                            valid_assignments = [
+                                x for x in raw_res["assignments"]
+                                if isinstance(x, dict) and "competency" in x and "pillar" in x
+                            ]
+                            sweep_assignments.extend(valid_assignments)
+                        if "merges" in raw_res and isinstance(raw_res["merges"], list):
+                            valid_merges = [
+                                x for x in raw_res["merges"]
+                                if isinstance(x, dict) and "canonical" in x and "merge_from" in x and isinstance(x["merge_from"], list)
+                            ]
+                            merges.extend(valid_merges)
+                        if "drops" in raw_res and isinstance(raw_res["drops"], list):
+                            valid_drops = [x for x in raw_res["drops"] if isinstance(x, str)]
+                            drops.extend(valid_drops)
                 except Exception as e:
                     logger.error(
                         f"Erreur de parsing sur le chunk {i} du Sweep (ignoré): {e}")
@@ -755,9 +764,12 @@ class TaxonomyBatchService:
 
             await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges, {len(drops)} drops). Application en base de données...")
 
+            fresh = await TaxonomyBatchService.generate_autonomous_service_token()
+            sweep_token = fresh if fresh else persisted_svc_token
+
             competencies_api_url = os.getenv(
                 "COMPETENCIES_API_URL", "http://competencies_api:8000")
-            apply_headers = {"Authorization": f"Bearer {auth_token}"}
+            apply_headers = {"Authorization": f"Bearer {sweep_token}"}
             from opentelemetry.propagate import inject
             inject(apply_headers)
 
