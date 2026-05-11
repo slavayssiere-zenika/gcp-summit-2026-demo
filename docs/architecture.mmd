@@ -1,0 +1,120 @@
+flowchart TD
+    %% Styling
+    classDef frontend fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:white;
+    classDef agent fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:white;
+    classDef data_api fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:white;
+    classDef sidecar fill:#BBDEFB,stroke:#1976D2,stroke-width:1px,color:#0D47A1,stroke-dasharray: 5 5;
+    classDef mcp_native fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:white;
+    classDef storage fill:#607D8B,stroke:#455A64,stroke-width:2px,color:white;
+    classDef external fill:#E91E63,stroke:#C2185B,stroke-width:2px,color:white;
+
+    %% Client Layer
+    subgraph Client ["Client Layer"]
+        VueJS["Frontend (Vue.js)"]:::frontend
+        Nginx["Nginx Proxy (/api/)"]:::frontend
+        VueJS --> Nginx
+    end
+
+    %% Agent Layer (Consommateurs MCP)
+    subgraph Agents ["Agents IA (Google ADK + Gemini) 🟣"]
+        RouterAgent["agent_router_api\n(Routeur / Cache Sémantique)"]:::agent
+        HRAgent["agent_hr_api\n(RH: CVs, Compétences)"]:::agent
+        OpsAgent["agent_ops_api\n(Ops: Missions, Items)"]:::agent
+        MissionsAgent["agent_missions_api\n(Docs Missions)"]:::agent
+
+        RouterAgent -->|A2A HTTP| HRAgent
+        RouterAgent -->|A2A HTTP| OpsAgent
+        RouterAgent -->|A2A HTTP| MissionsAgent
+    end
+
+    Nginx -->|/api/query| RouterAgent
+
+    %% Data API Layer (Producteurs MCP)
+    subgraph DataAPIs ["APIs Data (Producteurs MCP) 🔵"]
+        UsersAPI["users_api\n(Auth, JWT)"]:::data_api
+        ItemsAPI["items_api\n(Items, Catégories)"]:::data_api
+        CompAPI["competencies_api\n(Arbre, Scoring)"]:::data_api
+        CVAPI["cv_api\n(Analyse multimodale)"]:::data_api
+        MissionsAPI["missions_api\n(Docs Missions)"]:::data_api
+        DriveAPI["drive_api\n(Sync GDrive)"]:::data_api
+        PromptsAPI["prompts_api\n(System Prompts)"]:::data_api
+
+        UsersMCP[("Sidecar MCP")]:::sidecar
+        ItemsMCP[("Sidecar MCP")]:::sidecar
+        CompMCP[("Sidecar MCP")]:::sidecar
+        CVMCP[("Sidecar MCP")]:::sidecar
+        MissionsMCP[("Sidecar MCP")]:::sidecar
+        DriveMCP[("Sidecar MCP")]:::sidecar
+        PromptsMCP[("Sidecar MCP")]:::sidecar
+
+        UsersAPI -.- UsersMCP
+        ItemsAPI -.- ItemsMCP
+        CompAPI -.- CompMCP
+        CVAPI -.- CVMCP
+        MissionsAPI -.- MissionsMCP
+        DriveAPI -.- DriveMCP
+        PromptsAPI -.- PromptsMCP
+    end
+
+    %% Connexions Agents -> MCP Data APIs
+    HRAgent -->|Consomme tools| UsersMCP
+    HRAgent -->|Consomme tools| CVMCP
+    HRAgent -->|Consomme tools| CompMCP
+
+    OpsAgent -->|Consomme tools| ItemsMCP
+    OpsAgent -->|Consomme tools| MissionsMCP
+
+    MissionsAgent -->|Consomme tools| MissionsMCP
+    MissionsAgent -->|Consomme tools| DriveMCP
+
+    RouterAgent -->|Consomme tools| PromptsMCP
+
+    %% MCP Natif Layer
+    subgraph MCPNatif ["MCP Natifs 🟤"]
+        AnalyticsMCP["analytics_mcp\n(FinOps, Marché)"]:::mcp_native
+        MonitoringMCP["monitoring_mcp\n(SRE, Obs)"]:::mcp_native
+    end
+
+    RouterAgent -.->|log_ai_consumption| AnalyticsMCP
+    HRAgent -.->|log_ai_consumption| AnalyticsMCP
+    OpsAgent -.->|log_ai_consumption| AnalyticsMCP
+    MissionsAgent -.->|log_ai_consumption| AnalyticsMCP
+
+    %% Storage Layer
+    subgraph Storage ["Data Layer & Services Externes"]
+        Postgres[("PostgreSQL\n(pgvector)")]:::storage
+        Redis[("Redis\n(DB isolées)")]:::storage
+        BigQuery[("BigQuery\n(ai_usage)")]:::storage
+        AlloyDB[("AlloyDB")]:::storage
+        Gemini["Vertex AI (Gemini)"]:::external
+        GDrive["Google Drive"]:::external
+    end
+
+    %% Storage connections
+    UsersAPI --> Postgres
+    ItemsAPI --> Postgres
+    CompAPI --> Postgres
+    CVAPI --> Postgres
+    MissionsAPI --> Postgres
+    DriveAPI --> Postgres
+    PromptsAPI --> Postgres
+
+    UsersAPI -.-> Redis
+    ItemsAPI -.-> Redis
+    CompAPI -.-> Redis
+    CVAPI -.-> Redis
+    MissionsAPI -.-> Redis
+    DriveAPI -.-> Redis
+    PromptsAPI -.-> Redis
+    RouterAgent -.->|Cache Sémantique| Redis
+
+    AnalyticsMCP --> BigQuery
+    MonitoringMCP --> AlloyDB
+
+    %% External connections
+    RouterAgent --> Gemini
+    HRAgent --> Gemini
+    OpsAgent --> Gemini
+    MissionsAgent --> Gemini
+
+    DriveAPI --> GDrive

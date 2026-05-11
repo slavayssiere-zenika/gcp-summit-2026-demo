@@ -30,6 +30,10 @@ class HealthCheckFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
+        if not msg:
+            req_line = getattr(record, "request_line", "")
+            if req_line:
+                msg = f'"{req_line}"'
         return not any(
             f'"GET {p} ' in msg or f'"POST {p} ' in msg or
             f'"HEAD {p} ' in msg or f'"OPTIONS {p} ' in msg

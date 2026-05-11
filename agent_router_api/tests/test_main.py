@@ -7,6 +7,8 @@ from main import app
 client = TestClient(app)
 
 # Helper for JWT payload Generation
+
+
 def get_auth_token(sub="user_1"):
     from jose import jwt
     from router import SECRET_KEY
@@ -15,15 +17,18 @@ def get_auth_token(sub="user_1"):
     payload = {"sub": sub, "role": "admin"}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
+
 def test_root():
     response = client.get("/")
     assert response.status_code == 200
     assert "Router Agent API" in response.json()["message"]
+
 
 def test_get_spec_success(mocker):
     mocker.patch("builtins.open", mocker.mock_open(read_data="# Spec doc"))
@@ -32,6 +37,7 @@ def test_get_spec_success(mocker):
     assert response.status_code == 200
     assert "# Spec doc" in response.text
 
+
 def test_get_spec_fail(mocker):
     mocker.patch("builtins.open", side_effect=Exception("Not found"))
     token = get_auth_token()
@@ -39,12 +45,14 @@ def test_get_spec_fail(mocker):
     assert response.status_code == 200
     assert "# Specification introuvable" in response.text
 
+
 @pytest.fixture
 def mock_httpx(mocker):
     mock = mocker.patch("main.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock.return_value.__aenter__.return_value = client_instance
     return client_instance
+
 
 def test_login_success(mock_httpx):
     mock_resp = MagicMock(status_code=200, cookies={"access_token": "abc"})
@@ -55,6 +63,7 @@ def test_login_success(mock_httpx):
     assert response.status_code == 200
     assert response.cookies.get("access_token") == "abc"
 
+
 def test_login_fail(mock_httpx):
     mock_resp = MagicMock(status_code=401)
     mock_resp.json.return_value = {"detail": "Invalid creds"}
@@ -64,27 +73,31 @@ def test_login_fail(mock_httpx):
     assert response.status_code == 401
     assert "Invalid creds" in response.json()["detail"]
 
+
 def test_logout():
     client.cookies.set("access_token", "abc")
     response = client.post("/logout")
     assert response.status_code == 200
     assert response.cookies.get("access_token") is None
 
+
 def test_get_me_success(mock_httpx):
     mock_resp = MagicMock(status_code=200)
     mock_resp.json.return_value = {"username": "bob"}
     mock_httpx.get.return_value = mock_resp
-    
+
     response = client.get("/me")
     assert response.status_code == 200
     assert response.json()["username"] == "bob"
 
+
 def test_get_me_fail(mock_httpx):
     mock_resp = MagicMock(status_code=401)
     mock_httpx.get.return_value = mock_resp
-    
+
     response = client.get("/me")
     assert response.status_code == 401
+
 
 def test_mcp_registry():
     token = get_auth_token()
@@ -94,34 +107,38 @@ def test_mcp_registry():
     assert "services" in payload
     assert len(payload["services"]) > 0
 
+
 @patch('router.run_agent_query')
 def test_query_success(mock_run_agent_query):
     mock_run_agent_query.return_value = {"response": "Answer", "source": "gemini"}
     token = get_auth_token()
-    
+
     response = client.post("/query", json={"query": "Hello"}, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["response"] == "Answer"
+
 
 @patch('router.run_agent_query')
 def test_query_error(mock_run_agent_query):
     mock_run_agent_query.side_effect = Exception("Agent fail")
     token = get_auth_token()
-    
+
     response = client.post("/query", json={"query": "Hello"}, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["source"] == "error"
     assert "Agent fail" in response.json()["response"]
 
+
 def test_query_no_auth():
     response = client.post("/query", json={"query": "Hello"})
     assert response.status_code == 401
+
 
 def test_get_history_success(mocker):
     # Mock get_session_service
     mock_svc = AsyncMock()
     mock_session = MagicMock()
-    
+
     mock_event_1 = MagicMock(author="user")
     mock_event_1.usage_metadata = None
     mock_event_1.response = None
@@ -129,7 +146,7 @@ def test_get_history_success(mocker):
     mock_event_1.get_function_responses.return_value = []
     mock_event_1.actions = []
     mock_event_1.content.parts = [MagicMock(text="User msg")]
-    
+
     mock_event_2 = MagicMock(author="assistant")
     mock_event_2.usage_metadata = None
     mock_event_2.response = None
@@ -137,12 +154,12 @@ def test_get_history_success(mocker):
     mock_event_2.get_function_responses.return_value = []
     mock_event_2.actions = []
     mock_event_2.content = "```json\n{\"reply\": \"Ans\", \"display_type\": \"text\"}\n```"
-    
+
     mock_session.events = [mock_event_1, mock_event_2]
     mock_svc.get_session.return_value = mock_session
-    
+
     mocker.patch("router.get_session_service", return_value=mock_svc)
-    
+
     token = get_auth_token("test_user_hi")
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
@@ -151,15 +168,17 @@ def test_get_history_success(mocker):
     assert history[0]["content"] == "User msg"
     assert "Ans" in history[1]["content"]
 
+
 def test_get_history_no_session(mocker):
     mock_svc = AsyncMock()
     mock_svc.get_session.return_value = None
     mocker.patch("router.get_session_service", return_value=mock_svc)
-    
+
     token = get_auth_token()
     response = client.get("/history", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["history"] == []
+
 
 def test_get_history_invalid_auth():
     response = client.get("/history", headers={"Authorization": "Bearer invalid"})
@@ -285,3 +304,43 @@ async def test_run_agent_query_normal_execution_unaffected(mocker):
     # Aucun warning de corruption
     corruption_warnings = [s for s in result["steps"] if "SESSION_CORRUPTION" in s.get("tool", "")]
     assert len(corruption_warnings) == 0
+
+
+@pytest.mark.asyncio
+async def test_run_agent_query_null_role_execution_unaffected(mocker):
+    """Vérifie que l'exécution ne crash pas (AttributeError) si ADK retourne un event.content.role à None."""
+    from agent import run_agent_query
+
+    mock_runner = MagicMock()
+    mock_event = MagicMock()
+    mock_event.content = MagicMock()
+    mock_event.content.role = None  # <-- Simulate the problem
+    mock_event.content.parts = [
+        MagicMock(
+            text="Réponse sans rôle explicite",
+            thought=None,
+            tool_call=None,
+            function_call=None,
+            function_response=None
+        )
+    ]
+    mock_event.response = None
+
+    async def none_role_run_async(*args, **kwargs):
+        yield mock_event
+
+    mock_runner.run_async = none_role_run_async
+    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
+
+    mock_session_svc = AsyncMock()
+    mock_session_svc.get_session.return_value = MagicMock()
+    mocker.patch("agent.get_session_service", return_value=mock_session_svc)
+
+    result = await run_agent_query("Test rôle null", session_id="normal-session")
+
+    assert "response" in result
+    # It might not append the text because the condition is `is_assistant = role_val in ["assistant", ...]`.
+    # But it must not crash!
+    assert "usage" in result
+    assert "steps" in result

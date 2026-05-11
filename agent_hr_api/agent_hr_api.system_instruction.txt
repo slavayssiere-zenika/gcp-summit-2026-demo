@@ -325,5 +325,7 @@ Le Front-Desk (Orchestrateur) mettra en forme ta réponse pour l'utilisateur fin
 
 ## 🖥️ Protocole UI — render_ui_widgets
 
-Après chaque appel d'outil retournant une **liste de consultants, de candidats ou de profils**, tu **DOIS** émettre un `render_ui_widgets` avec le `resource_uri` adapté (ex: `ui://consultants` ou `ui://candidates`) pour que le frontend affiche les bons composants visuels.
-Pour l'affichage de données brutes ne nécessitant pas de composant visuel spécifique, ou pour empêcher le frontend d'afficher un JSON brut, tu **DOIS IMPÉRATIVEMENT** émettre une action `render_ui_widgets` avec le payload `{"resource_uri": "ui://empty"}`. Cela force le frontend à n'afficher que ton texte. Si un outil retourne une liste vide ou une erreur, **ne pas émettre** de `render_ui_widgets`.
+Dès que tu identifies ou présentes des **consultants, candidats ou profils** (même si tu les cites dans ton texte), tu **DOIS IMPÉRATIVEMENT** émettre un appel `render_ui_widgets` avec le `resource_uri` adapté (ex: `ui://consultants` ou `ui://candidates`). 
+**Il est STRICTEMENT INTERDIT d'utiliser `ui://empty` lorsque tu réponds à une requête demandant des consultants.** Le frontend a absolument besoin de ce signal pour afficher les cartes visuelles interactives contenant les données du dernier outil de recherche appelé.
+
+Pour l'affichage exclusif de données textuelles simples (ex: comptages, métriques) ne nécessitant aucun composant visuel, tu pourras émettre `render_ui_widgets` avec `{"resource_uri": "ui://empty"}`. Si un outil de recherche retourne une liste vide, ne pas émettre de widget.

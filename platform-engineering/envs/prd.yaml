@@ -19,22 +19,22 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.51"
-agent_hr_api_version:       "v0.0.115"
-agent_ops_api_version:      "v0.0.84"
-agent_missions_api_version: "v0.1.56"
-users_api_version:          "v0.0.78"
-items_api_version:          "v0.0.63"
-competencies_api_version:   "v0.1.86"
-cv_api_version:             "v0.0.253"
-prompts_api_version:        "v0.0.69"
-drive_api_version:          "v0.0.123"
-analytics_mcp_version:      "v0.0.98"
-monitoring_mcp_version:     "v0.0.85"
-db_migrations_version:      "v0.0.35"
+agent_router_api_version:   "v0.1.54"
+agent_hr_api_version:       "v0.0.118"
+agent_ops_api_version:      "v0.0.87"
+agent_missions_api_version: "v0.1.60"
+users_api_version:          "v0.0.81"
+items_api_version:          "v0.0.65"
+competencies_api_version:   "v0.1.89"
+cv_api_version:             "v0.0.256"
+prompts_api_version:        "v0.0.71"
+drive_api_version:          "v0.0.125"
+analytics_mcp_version:      "v0.0.100"
+monitoring_mcp_version:     "v0.0.86"
+db_migrations_version:      "v0.0.37"
 db_init_version:            "v0.1.1"
-missions_api_version:       "v0.0.87"
-frontend_version:           "v0.0.227"
+missions_api_version:       "v0.0.89"
+frontend_version:           "v0.0.231"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 0

@@ -50,6 +50,11 @@ def test_create_and_analyze_mission(mocker, mock_httpx, mock_genai):
     mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
     mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
 
+    async def mock_get_db_generator():
+        yield mock_db
+
+    mocker.patch("src.missions.analysis_service.database.get_db", side_effect=mock_get_db_generator)
+
     # Mock GenAI Extraction
     mock_extract_res = MagicMock()
     mock_extract_res.text = '{"competencies": ["Java", "Spring"]}'
@@ -116,6 +121,11 @@ def test_candidate_enrichment_with_seniority_and_skills(mocker, mock_httpx, mock
     app.dependency_overrides[get_db] = lambda: mock_db
     mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
     mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
+
+    async def mock_get_db_generator():
+        yield mock_db
+
+    mocker.patch("src.missions.analysis_service.database.get_db", side_effect=mock_get_db_generator)
 
     mock_extract_res = MagicMock()
     mock_extract_res.text = '{"competencies": ["Java 21", "Spring Boot"]}'
@@ -227,6 +237,11 @@ def test_reanalyze_mission(mocker, mock_httpx, mock_genai):
     app.dependency_overrides[get_db] = lambda: mock_db
     mocker.patch("src.missions.analysis_router.task_manager", autospec=True)
     mocker.patch("src.missions.analysis_service.task_manager", autospec=True)
+
+    async def mock_get_db_generator():
+        yield mock_db
+
+    mocker.patch("src.missions.analysis_service.database.get_db", side_effect=mock_get_db_generator)
 
     # Simule une mission existante en base
     mock_mission = MagicMock(

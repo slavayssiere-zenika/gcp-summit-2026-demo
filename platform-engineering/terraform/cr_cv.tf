@@ -210,13 +210,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
         name  = "CV_SA_EMAIL"
         value = google_service_account.cv_sa.email
       }
-      env {
-        # Audience OIDC du scheduler data-quality-snapshot.
-        # Le scheduler appelle directement l'URL Cloud Run (pas via LB), donc l'audience
-        # doit correspondre à l'URI du service Cloud Run.
-        name  = "PUBSUB_DQ_SNAPSHOT_AUDIENCE"
-        value = google_cloud_run_v2_service.cv_api.uri
-      }
+
     }
 
     # Conteneur Sidecar (MCP)

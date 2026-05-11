@@ -204,7 +204,8 @@ async def run_agent_and_collect(
         # --------------------------------------------------------------------
         # 2. Text response aggregation (model role only, no thoughts/tool calls)
         # --------------------------------------------------------------------
-        role_val = getattr(event.content, "role", "").lower() if has_content else ""
+        role_raw = getattr(event.content, "role", "")
+        role_val = role_raw.lower() if role_raw is not None else ""
         is_assistant = role_val in ["assistant", "model", f"assistant_zenika_{agent_name}"]
 
         if has_content and is_assistant:

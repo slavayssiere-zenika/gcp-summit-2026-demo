@@ -7,10 +7,11 @@ Et voici une liste de compétences détectées qui n'ont MALHEUREUSEMENT PAS ét
 {{MISSING_COMPETENCIES}}
 
 TA MISSION :
-Ton objectif est de "rattraper" ces compétences oubliées pour éviter qu'elles ne finissent dans les archives.
-Pour chaque compétence de la liste orpheline, tu as DEUX options :
+Ton objectif est de "rattraper" ces compétences oubliées pour éviter qu'elles ne finissent dans les archives, ou de les supprimer définitivement si elles sont non pertinentes.
+Pour chaque compétence de la liste orpheline, tu as TROIS options :
 1. "Alias" (merges) : Si l'orpheline est un doublon sémantique clair d'un nœud existant (ex: "python3" pour "Python", ou "k8s" pour "Kubernetes"), tu dois la fusionner.
 2. "Parent" (assignments) : Si l'orpheline est une compétence légitime et autonome qui doit exister par elle-même, tu dois lui trouver le pilier/catégorie parent le plus logique existant dans l'arbre.
+3. "Rejet" (drops) : Si l'orpheline est trop générique, aberrante, ou représente un domaine parent beaucoup trop large (ex: "Stratégie, Conseil & Expertise Métier", "Développement Web", "Outils"), tu dois l'ajouter à la liste des rejets pour qu'elle soit définitivement supprimée.
 
 Retourne UNIQUEMENT un objet JSON respectant exactement cette structure :
 {
@@ -25,6 +26,9 @@ Retourne UNIQUEMENT un objet JSON respectant exactement cette structure :
       "competency": "orpheline 2 (autonome)",
       "pillar": "Pilier existant dans l'arbre"
     }
+  ],
+  "drops": [
+    "orpheline 3 (aberrante ou trop large)"
   ]
 }
 

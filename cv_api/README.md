@@ -40,7 +40,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `src/cvs/routers/analytics_router.py` | 423 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 288 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 102 | ✅ |
-| `src/cvs/routers/profile_router.py` | 571 | ⚠️ |
+| `src/cvs/routers/profile_router.py` | 287 | ✅ |
 | `src/cvs/routers/search_router.py` | 459 | ✅ |
 
 ## Variables d'environnement

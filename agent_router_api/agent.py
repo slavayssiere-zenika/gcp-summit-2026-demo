@@ -279,7 +279,8 @@ async def run_agent_query(
                             seen_steps.add(sig)
 
             # Text response aggregation (model role only)
-            role_val = getattr(event.content, "role", "").lower() if has_content else ""
+            role_raw = getattr(event.content, "role", "")
+            role_val = role_raw.lower() if role_raw is not None else ""
             is_assistant = role_val in ["assistant", "model", "assistant_zenika"]
 
             if has_content and is_assistant:

@@ -1180,19 +1180,26 @@ def deploy(env, base_domain, project_id, config, force=False):
                 def check_route(route):
                     api_url = f"https://{api_dns_name}{route}"
                     req_get = urllib.request.Request(api_url, method="GET")
-                    try:
-                        resp = urllib.request.urlopen(req_get, timeout=90, context=ctx_to_use)
-                        return f"  [+] {route:<15} -> OK (HTTP {resp.status})"
-                    except urllib.error.HTTPError as e:
-                        err_msg = f"FAIL (HTTP {e.code} Error) sur {route}"
-                        generate_antigravity_error_report(
-                            "Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
-                        return f"  [-] {route:<15} -> {err_msg}"
-                    except Exception as e:
-                        err_msg = f"FAIL ({type(e).__name__}: {e}) sur {route}"
-                        generate_antigravity_error_report(
-                            "Sanity Check 5/5 : API Microservices", err_msg, ["routing", "sanity-check", "exception"])
-                        return f"  [-] {route:<15} -> {err_msg}"
+                    last_err_msg = ""
+                    for attempt in range(3):
+                        try:
+                            resp = urllib.request.urlopen(req_get, timeout=30, context=ctx_to_use)
+                            return f"  [+] {route:<15} -> OK (HTTP {resp.status})"
+                        except urllib.error.HTTPError as e:
+                            last_err_msg = f"FAIL (HTTP {e.code} Error) sur {route}"
+                            if e.code >= 500:
+                                time.sleep(10)
+                                continue
+                            generate_antigravity_error_report(
+                                "Sanity Check 5/5 : API Microservices", last_err_msg, ["routing", "sanity-check", f"HTTP_{e.code}"])
+                            return f"  [-] {route:<15} -> {last_err_msg}"
+                        except Exception as e:
+                            last_err_msg = f"FAIL ({type(e).__name__}: {e}) sur {route}"
+                            time.sleep(10)
+
+                    generate_antigravity_error_report(
+                        "Sanity Check 5/5 : API Microservices", last_err_msg, ["routing", "sanity-check", "exception"])
+                    return f"  [-] {route:<15} -> {last_err_msg} (après 3 tentatives)"
 
                 with ThreadPoolExecutor(max_workers=5) as executor:
                     futures = {executor.submit(check_route, route): route for route in api_routes}

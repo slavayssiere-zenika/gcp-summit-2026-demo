@@ -108,7 +108,7 @@ async def list_competencies(
 
     roots.sort(key=lambda x: x["id"])
     result = PaginationResponse(
-        items=roots[skip : skip + limit], total=len(roots), skip=skip, limit=limit
+        items=roots[skip: skip + limit], total=len(roots), skip=skip, limit=limit
     )
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
@@ -648,6 +648,43 @@ async def bulk_import_tree(
                 sweep_log.append(f"'{comp_name}' → '{pillar.name}'")
             await db.flush()
 
+        if payload.drops:
+            for drop_name in payload.drops:
+                drop_name = drop_name.strip()
+                if not drop_name:
+                    continue
+                comp_to_drop = (
+                    (
+                        await db.execute(
+                            select(Competency).filter(Competency.name.ilike(drop_name))
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if not comp_to_drop:
+                    continue
+
+                await db.execute(
+                    user_competency.delete().where(
+                        user_competency.c.competency_id == comp_to_drop.id
+                    )
+                )
+                await db.execute(
+                    delete(CompetencyEvaluation).where(
+                        CompetencyEvaluation.competency_id == comp_to_drop.id
+                    )
+                )
+                await db.execute(
+                    update(Competency)
+                    .where(Competency.parent_id == comp_to_drop.id)
+                    .values(parent_id=None)
+                )
+                await db.delete(comp_to_drop)
+                touched_ids.discard(comp_to_drop.id)
+                sweep_log.append(f"'{drop_name}' supprimée (Drop)")
+            await db.flush()
+
         archive_name = "Compétences Archives / Non classées"
         archives = (
             (
@@ -737,6 +774,7 @@ async def cleanup_orphan_competencies(
             if not orphans:
                 break
 
+            await db.execute(delete(CompetencyEvaluation).where(CompetencyEvaluation.competency_id.in_(orphans)))
             await db.execute(delete(Competency).where(Competency.id.in_(orphans)))
             await db.commit()
             total_deleted += len(orphans)

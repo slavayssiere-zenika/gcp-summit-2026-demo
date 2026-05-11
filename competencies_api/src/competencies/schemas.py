@@ -93,6 +93,10 @@ class TreeImportRequest(BaseModel):
     Traitées AVANT la gestion des orphelins (Archives) pour minimiser les
     compétences non classées.
     """
+    drops: Optional[List[str]] = []
+    """Liste des compétences aberrantes ou trop larges identifiées par le Sweep
+    qui doivent être définitivement supprimées, incluant leurs évaluations.
+    """
 
 
 class StatsRequest(BaseModel):

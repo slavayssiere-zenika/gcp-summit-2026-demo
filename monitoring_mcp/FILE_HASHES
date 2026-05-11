@@ -23,9 +23,7 @@
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9ccc3a5b37f3ce29d491dcb8b27a0b65e8bf188b  ./monitoring_mcp/Dockerfile
 9e30a63009f998bb634daf292987b181a3017dab  ./monitoring_mcp/tests/test_data_tools.py
-b0b8c4d654a38e70640f1a66cd0415616735f49a  ./monitoring_mcp/spec.md
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
-b77ee0f4bb5eff0cfa282ecabd57a3ad49747883  ./monitoring_mcp/README.md
 b832c884b321642f92bb79a1340caaf49dd1a391  ./monitoring_mcp/tests/test_mcp_server.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca436fb62ad9c2e4c6a81185ffd75ae58d33a2bb  ./monitoring_mcp/tests/test_auth.py

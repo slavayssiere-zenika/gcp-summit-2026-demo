@@ -1,8 +1,6 @@
+07d068d9823b4ecaf3f6ceb45d32474188ea6b7b  ./analytics_mcp/tests/test_auth.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
-0cb0e6554979490bb0d685bf81cdaa69213668b0  ./analytics_mcp/tests/test_auth.py
 0db60a9e52fda881108f5814351a2b0f59b3b2dd  ./analytics_mcp/tests/test_finops_tools.py
-0f215ebf8544a3d5638074fe07123971ac7bcca1  ./analytics_mcp/README.md
-1238b448f762e068f6330821145dedffc8cac59f  ./analytics_mcp/spec.md
 13959eb9e8c40d269f1eed3807699a8562d3c069  ./analytics_mcp/logger.py
 14e777b50ad1b203eb5538a59eb4896e2b1ea8cb  ./analytics_mcp/tools/market_tools.py
 17ff854f53a2985b6b11caa96c2039237bf8b39c  ./analytics_mcp/tests/test_mcp_app.py

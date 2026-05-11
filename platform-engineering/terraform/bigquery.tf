@@ -112,13 +112,13 @@ resource "google_bigquery_table" "data_quality_history" {
   {"name":"users_with_cv","type":"INTEGER","mode":"REQUIRED","description":"Consultants avec CV"},
   {"name":"score","type":"INTEGER","mode":"REQUIRED","description":"Score global 0-100"},
   {"name":"grade","type":"STRING","mode":"REQUIRED","description":"Grade A/B/C/D"},
-  {"name":"embedding_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec embedding sémantique"},
-  {"name":"missions_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec missions"},
-  {"name":"competencies_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec compétences extraites"},
-  {"name":"summary_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec summary"},
-  {"name":"current_role_pct","type":"INTEGER","mode":"REQUIRED","description":"% CVs avec current_role"},
-  {"name":"competency_assignment_pct","type":"INTEGER","mode":"REQUIRED","description":"% consultants avec compétences assignées"},
-  {"name":"ai_scoring_pct","type":"INTEGER","mode":"REQUIRED","description":"% consultants avec scoring IA suffisant"},
+  {"name":"embedding_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion CVs avec embedding sémantique (0.0→1.0)"},
+  {"name":"missions_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion CVs avec missions (0.0→1.0)"},
+  {"name":"competencies_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion CVs avec compétences extraites (0.0→1.0)"},
+  {"name":"summary_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion CVs avec summary (0.0→1.0)"},
+  {"name":"current_role_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion CVs avec current_role (0.0→1.0)"},
+  {"name":"competency_assignment_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion consultants avec compétences assignées (0.0→1.0)"},
+  {"name":"ai_scoring_pct","type":"FLOAT","mode":"REQUIRED","description":"Proportion consultants avec scoring IA suffisant (0.0→1.0)"},
   {"name":"issues_count","type":"INTEGER","mode":"REQUIRED","description":"Nombre d'anomalies détectées"},
   {"name":"trigger","type":"STRING","mode":"REQUIRED","description":"scheduler | batch_completed | manual"}
 ]
@@ -153,4 +153,22 @@ resource "google_bigquery_table" "model_pricing" {
   }
 ]
 EOF
+}
+
+# Export des logs HTTP Cloud Run vers BigQuery pour Looker Studio
+resource "google_logging_project_sink" "http_requests_bq" {
+  name        = "http-requests-to-bq-${terraform.workspace}"
+  description = "Export Cloud Run HTTP requests to BigQuery dataset finops_${terraform.workspace}"
+  destination = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${google_bigquery_dataset.finops.dataset_id}"
+
+  # Filtrer uniquement les logs d'accès HTTP de Cloud Run
+  filter = "resource.type=\"cloud_run_revision\" AND httpRequest.requestMethod!=\"\" AND severity>=DEFAULT"
+
+  unique_writer_identity = true
+}
+
+resource "google_project_iam_member" "log_sink_bq_writer" {
+  project = var.project_id
+  role    = "roles/bigquery.dataEditor"
+  member  = google_logging_project_sink.http_requests_bq.writer_identity
 }

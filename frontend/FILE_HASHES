@@ -63,7 +63,6 @@
 57194a33a37db9585b368696294808a55aa50c4c  ./frontend/coverage/src/views/DataQuality.vue.html
 5ad26e9cc50a29dd96f8dfd7c3f1a50cce0b2539  ./frontend/coverage/favicon.png
 5bb152e98718becf674c1f6678f28b7e9e8b9fc9  ./frontend/src/App.vue
-5c15f4ed2d19497a81e4994c27668431a25693b8  ./frontend/src/views/Competencies.vue
 5e40d99d6a4a43abfae8350e7b5e06f6074eaa4d  ./frontend/src/views/PromptsAdmin.vue
 5ea74b8d982bfa2c077854728d1409db536b2c06  ./frontend/coverage/src/components/ui/index.html
 5f5e4e38c2ab569279c807c91991e50737ca8b10  ./frontend/src/views/Docs.vue
@@ -88,6 +87,7 @@
 74c6f4787bc8fd403ef558078b8a41802421e820  ./frontend/coverage/src/stores/index.html
 75a765483970c61ff35d9dafc195b26cd9dfab3a  ./frontend/src/views/Profile.vue
 75ff87d721e89ad55c543f80f7ccdef5d6fa721f  ./frontend/coverage/src/components/agent/DebugPromptCard.vue.html
+7880e4fec16e1b214c5b329cdcec5984d6d187d7  ./frontend/vitest.log
 7929669130975ec3d4495c21c86d1865db869c19  ./frontend/coverage/clover.xml
 79e2be8ce0e72a7d6d0ebdd962ce3771bb4084e7  ./frontend/coverage/src/stores/uxStore.ts.html
 7a7fa28325425774f8c6ecdfbea1d189f3ebeb68  ./frontend/coverage/src/components/CVReanalysisPanel.vue.html
@@ -98,7 +98,6 @@
 826b5611ba0cc7754f207a21f3b098a607be81a0  ./frontend/coverage/coverage-final.json
 84470b29579f3a859a511d161fd3c1d61b823713  ./frontend/coverage/src/stores/chatStore.ts.html
 8666fe21bbb1ad9c05e884485d1ddb11d24d34bd  ./frontend/coverage/src/views/Docs.vue.html
-8702a371f48a6df2e367cec217bb244624c2bcaf  ./frontend/README.md
 884b9218d2984dabee9b80ae611a628d456db80e  ./frontend/coverage/src/components/StarRating.vue.html
 8907cae430171ed070575a72bb61a0af7cdadf80  ./frontend/src/views/__tests__/Login.spec.ts
 89b936797db1af622d2a700191b3f081d9e6741f  ./frontend/src/components/ui/__tests__/ToastNotification.spec.ts
@@ -123,6 +122,8 @@ a0cf103abdaae0c87252b6ac1033530b05a80ed3  ./frontend/coverage/src/components/Dri
 a129203c910b6e1781fa93e8e23bc2964fbb6890  ./frontend/src/components/TaxonomySuggestions.vue
 a2a9df1e2c8347657b3ca5074649f58a11ece975  ./frontend/coverage/src/components/agent/EvaluationTable.vue.html
 a345a51e69c22119fff064c42c75d58ecea537b4  ./frontend/coverage/src/components/agent/ItemCard.vue.html
+a7bca08b4212b8a9b13285ccedbbf452a6c8b079  ./frontend/src/views/Competencies.vue
+a9f55bce18ee6bc559fed8373cdce23399fd44f8  ./frontend/src/views/__tests__/Competencies.spec.ts
 b0402ccbfd495601fdead0c79a27b5d9b361c794  ./frontend/src/types/index.ts
 b0a3b293e2aafe2cda33eba2e9759e4d38d82198  ./frontend/src/types/__tests__/index.spec.ts
 b1fa2fe2854f7c5a883a8ce0e903e19ca4724b24  ./frontend/src/utils/treeify.ts
@@ -163,7 +164,6 @@ d825eeb4d513d858c51e06de98899f1c4667cee9  ./frontend/coverage/src/data/index.htm
 d8e84dbbb5615de028626d522323930f0dcd187b  ./frontend/src/components/agent/AgentExpertTerminal.vue
 d95de151df4b294612ffac2f4a14bd29fda8d9dc  ./frontend/src/views/MissionDetail.vue
 d9a48401c21325b78b99e7afabee0f140d576604  ./frontend/src/components/agent/__tests__/ItemCard.spec.ts
-d9f3df93c17cde53c31c6dc46d50153032a68d19  ./frontend/vitest.log
 da5c0ef467a330913336cd9b0da5f3c900af6c3e  ./frontend/coverage/sort-arrow-sprite.png
 dc8e4d271329feadc712d7f69c562a41495a01b4  ./frontend/coverage/src/components/index.html
 dcbb45db432abba394eb3e23de25f7432a4fdc71  ./frontend/src/main.ts

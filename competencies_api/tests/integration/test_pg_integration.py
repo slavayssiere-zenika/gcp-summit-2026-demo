@@ -99,6 +99,105 @@ def test_isolation_between_tests_no_state_leak(client):
     assert data.total == 0, f"State-leak : {data.total} compétences persistent entre les tests"
 
 
+def test_cleanup_orphans_real_postgres(client, postgres_container):
+    """Valide que /bulk/cleanup-orphans supprime correctement les évaluations liées aux orphelins."""
+    # 1. Créer une compétence parente
+    resp = client.post("/", json={"name": "Parent", "category": "Tech"})
+    parent_id = resp.json()["id"]
+
+    # 2. Créer une compétence enfant (avec parent -> non orpheline)
+    resp = client.post("/", json={"name": "Enfant", "parent_id": parent_id})
+    resp.json()["id"]
+
+    # 3. Créer une compétence orpheline AVEC une évaluation score > 0 (doit être gardée)
+    resp = client.post("/", json={"name": "Orpheline_Valide"})
+    valid_id = resp.json()["id"]
+
+    # 4. Créer une compétence orpheline AVEC une évaluation score 0 (doit être supprimée en cascade)
+    resp = client.post("/", json={"name": "Orpheline_Zero"})
+    zero_id = resp.json()["id"]
+
+    # 5. Créer une orpheline vraie SANS aucune liaison (doit être supprimée)
+    resp = client.post("/", json={"name": "Orpheline_Vraie"})
+    resp.json()["id"]
+
+    # Insérer les évaluations manuellement (pour by-pass l'A2A)
+    from sqlalchemy import create_engine, text
+    sync_url = postgres_container.get_connection_url()
+    engine = create_engine(sync_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) VALUES (1, :cid, 1.0, 0.0)"),
+            {"cid": valid_id}
+        )
+        conn.execute(
+            text("INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) VALUES (1, :cid, 0.0, 0.0)"),
+            {"cid": zero_id}
+        )
+    engine.dispose()
+
+    # Exécuter le endpoint (doit retourner un 200 et non un 500)
+    resp = client.post("/bulk/cleanup-orphans")
+    assert resp.status_code == 200, f"Erreur nettoyage: {resp.json()}"
+    
+    # Explication du count de 4:
+    # - Orpheline_Zero : a un score 0, donc considérée orpheline -> supprimée
+    # - Orpheline_Vraie : aucune liaison -> supprimée
+    # - Enfant : aucune liaison, considérée orpheline (leaf) -> supprimée
+    # - Parent : perd son enfant, devient leaf, n'a aucune liaison -> supprimée en cascade
+    assert resp.json()["deleted_count"] == 4
+
+    # Vérifier que seule Orpheline_Valide (et les catégories par défaut) existent toujours
+    remaining = client.get("/").json()["items"]
+    names = [c["name"] for c in remaining]
+    assert "Orpheline_Valide" in names
+    assert "Parent" not in names
+    assert "Enfant" not in names
+    assert "Orpheline_Zero" not in names
+    assert "Orpheline_Vraie" not in names
+
+
+def test_bulk_tree_drops_real_postgres(client, postgres_container):
+    """Valide que /bulk_tree supprime proprement les compétences (drops) au lieu de les archiver."""
+    # 1. Créer une compétence qui sera droppée (avec une éval)
+    resp = client.post("/", json={"name": "A_Supprimer", "category": "Tech"})
+    drop_id = resp.json()["id"]
+
+    # 2. Créer une compétence qui sera omise de l'arbre mais PAS droppée (doit être archivée)
+    client.post("/", json={"name": "A_Archiver", "category": "Tech"})
+
+    # 3. Créer une compétence qui sera conservée dans l'arbre
+    resp = client.post("/", json={"name": "Enfant_A_Garder", "category": "Tech"})
+
+    from sqlalchemy import create_engine, text
+    sync_url = postgres_container.get_connection_url()
+    engine = create_engine(sync_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) VALUES (1, :cid, 3.0, 0.0)"),
+            {"cid": drop_id}
+        )
+    engine.dispose()
+
+    # Exécuter le bulk_tree avec "drops"
+    resp = client.post("/bulk_tree", json={
+        "tree": {"Tech": ["Enfant_A_Garder"]},
+        "drops": ["A_Supprimer"]
+    })
+    assert resp.status_code == 200, f"Erreur bulk_tree: {resp.json()}"
+    
+    remaining = client.get("/").json()["items"]
+    names = [c["name"] for c in remaining]
+    
+    # "A_Supprimer" est physiquement supprimée car dans drops
+    assert "A_Supprimer" not in names
+    # "Enfant_A_Garder" est conservée dans Tech
+    assert "Enfant_A_Garder" in names
+    # "A_Archiver" est conservée et déplacée dans les Archives (parce que non listée dans tree ni dans drops)
+    assert "A_Archiver" in names
+
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Redis réel
 # ─────────────────────────────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ async def test_list_missions_tool(mocker):
 
     result = await call_tool(name="list_missions", arguments={})
     data = json.loads(result[0].text)
-    
+
     assert data["missions"][0]["name"] == "Mission 1"
 
 
@@ -57,3 +57,64 @@ async def test_tool_errors(mocker):
     data = json.loads(result[0].text)
     assert data.get("success") is False
     assert "Unknown tool" in data.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_other_tools(mocker):
+    mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
+    client_instance = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = client_instance
+
+    mock_resp = MagicMock(status_code=200)
+    mock_resp.json.return_value = {"success": True}
+    client_instance.get.return_value = mock_resp
+    client_instance.post.return_value = mock_resp
+    client_instance.patch.return_value = mock_resp
+    client_instance.delete.return_value = mock_resp
+
+    mcp_auth_header_var.set("Bearer token")
+
+    tools = [
+        ("reanalyze_mission", {"mission_id": 1}),
+        ("get_mission", {"mission_id": 1}),
+        ("get_mission_candidates", {"mission_id": 1}),
+        ("update_mission_status", {"mission_id": 1, "status": "WON", "reason": "Test"}),
+        ("get_mission_status_history", {"mission_id": 1}),
+        ("get_user_active_missions", {"user_id": 1}),
+        ("get_mission_task_status", {"task_id": "123"}),
+        ("delete_all_missions", {})
+    ]
+
+    for name, args in tools:
+        result = await call_tool(name=name, arguments=args)
+        data = json.loads(result[0].text)
+        assert data.get("success") is True or "message" in data or "success" not in data
+
+
+@pytest.mark.asyncio
+async def test_tool_exceptions(mocker):
+    mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
+    client_instance = AsyncMock()
+    mock_httpx.return_value.__aenter__.return_value = client_instance
+
+    client_instance.get.side_effect = Exception("Network Error")
+    client_instance.post.side_effect = Exception("Network Error")
+    client_instance.patch.side_effect = Exception("Network Error")
+    client_instance.delete.side_effect = Exception("Network Error")
+
+    tools = [
+        ("reanalyze_mission", {"mission_id": 1}),
+        ("get_mission", {"mission_id": 1}),
+        ("get_mission_candidates", {"mission_id": 1}),
+        ("update_mission_status", {"mission_id": 1, "status": "WON", "reason": "Test"}),
+        ("get_mission_status_history", {"mission_id": 1}),
+        ("get_user_active_missions", {"user_id": 1}),
+        ("get_mission_task_status", {"task_id": "123"}),
+        ("delete_all_missions", {})
+    ]
+
+    for name, args in tools:
+        result = await call_tool(name=name, arguments=args)
+        data = json.loads(result[0].text)
+        assert data.get("success") is False
+        assert "error" in data

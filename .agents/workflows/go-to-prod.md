@@ -16,7 +16,7 @@ for d in *_api *_mcp agent_*; do [ -f "$d/README.md" ] && echo "=== $d ===" && h
 ### Étape 1 : Architecture Multi-Projets et Versions (`prd.yaml`)
 1. Lit le fichier `platform-engineering/envs/prd.yaml`.
 2. 🛑 **Check Multi-Projets** : Vérifie explicitement que `project_id` pointe bien vers le projet de production (ex: `prod-ia-staffing`), mais que `image_registry` pointe toujours vers le projet d'origine (Sandbox) pour réutiliser les artefacts validés en amont.
-3. 🛑 **Check IAM Cross-Project (BLOQUANT)** : Rappelle à l'utilisateur de s'assurer que l'Agent de Service Cloud Run de production (`@serverless-robot-prod.iam.gserviceaccount.com`) possède le rôle `roles/artifactregistry.reader` sur le registre d'artefacts du projet Sandbox, sans quoi le déploiement échouera.
+3. 🛑 **Check IAM Cross-Project (Alerte Cognitive)** : Rappelle à l'utilisateur que l'Agent de Service Cloud Run de production (`@serverless-robot-prod.iam.gserviceaccount.com`) doit posséder le rôle `roles/artifactregistry.reader` sur le registre d'artefacts du projet Sandbox. Ce point est vérifié **implicitement** à l'Étape 5 par le plan Terraform (qui crashera avec une erreur `Permission denied` si le droit d'accès à l'image manque), mais doit rester une préoccupation majeure de l'opérateur lors d'une MEP.
 4. Utilise `list_dir` et/ou `view_file` pour lire les fichiers `VERSION` locaux de tous les microservices détectés.
 5. Identifie les différences entre les versions locales et celles définies dans `prd.yaml`.
 6. **Action (OBLIGATOIRE)** : Mets à jour **automatiquement** le fichier `prd.yaml` avec les toutes dernières versions détectées en utilisant tes outils d'édition de fichier. (DÉROGATION EXPLICITE : l'agent a l'autorisation exceptionnelle de modifier le fichier `prd.yaml` lors de ce workflow, dérogeant à la règle §12). Tu dois ensuite générer et présenter une analyse détaillée de ces changements de version à l'utilisateur.
@@ -32,9 +32,9 @@ Pour chaque service dont la version a changé dans `prd.yaml` à l'étape 1 :
 3. Si le README est absent → le créer conformément au template §13 AGENTS.md (**BLOQUANT**).
 
 ### Étape 3 : Audit Zéro-Trust et Contrat Conteneur (BLOQUANT)
-1. **Zéro-Trust** : L'agent DOIT rechercher l'existence de fuites de dépendances FASTAPI. Demande à l'utilisateur de valider que la CI est verte, ou lance un audit rapide (par exemple `python3 scripts/run_tests.sh` via le tool de `run_command` s'il est compatible, ou une recherche statique de router sans `dependencies=[Depends(verify_jwt)]`).
+1. **Zéro-Trust (Recherche Automatisée)** : L'agent DOIT rechercher l'existence de fuites de dépendances FASTAPI. Au lieu de simplement demander à l'utilisateur, l'agent doit utiliser l'outil `grep_search` sur les fichiers `main.py` et `routers/*.py` des APIs ciblées pour s'assurer que `dependencies=[Depends(verify_jwt)]` (ou une sécurité équivalente) est bien injectée dans les APIRouters.
 2. **Container Contract** : Vérifie de manière aléatoire/statique sur les API ciblées par la MEP que leurs `Dockerfile` comportent la directive `USER` pour éviter le run root et que le point d'entrée est robuste (`CMD ["python3"...]`).
-> 🛑 Si cet audit montre une régression de sécurité flagrante, **interrompt l'assistance au déploiement et propose le correctif.**
+> 🛑 Si cet audit montre une régression de sécurité flagrante, **interromps l'assistance au déploiement et propose/applique le correctif.**
 
 ### Étape 4 : Validation des Migrations Liquibase (BLOQUANT)
 1. Liste le répertoire des migrations : `db_migrations/changelogs/`.
@@ -44,11 +44,11 @@ Pour chaque service dont la version a changé dans `prd.yaml` à l'étape 1 :
 ### Étape 5 : Exécution du Plan d'Impact Infra
 1. **Commande de Plan** : Tente d'exécuter l'analyse d'infrastructure dans le terminal de l'utilisateur avec `run_command` :
    `python3 platform-engineering/manage_env.py plan --env prd`
-   *(Note : Si une erreur de dépendances comme "yaml missing" survient, notifie l'utilisateur d'activer son environnement virtuel Python associé au projet en cours, ou utilise `.antigravity_env/bin/python` de manière proactive si disponible).*
+   *(Notes expertes : Le Terraform Plan valide implicitement les droits IAM Cross-Project en tentant de lire les images Docker. Si le plan échoue avec une erreur de permission sur l'Artifact Registry, notifie l'utilisateur. Si le plan échoue avec une erreur de syntaxe HCL comme "Self-referential block", tu as le devoir d'enquêter et de proposer/appliquer une correction immédiate sur le code `.tf` avant de relancer le plan).*
 2. **Analyse du résultat Terraform** : Ne copie pas les longs logs, fournis un tableau vulgarisé :
    - 🟢 Piliers Cloud créés.
-   - 🔵 Modifications légères (Ex: scale param, env vars modifiée).
-   - 🔴 Piliers Cloud détruits (WARNING !).
+   - 🔵 Modifications légères (Ex: update image Cloud Run, scale param, env vars).
+   - 🔴 Piliers Cloud détruits (WARNING ! Justifie toujours le contexte, ex: remplacement sûr d'un `null_resource`).
 
 ### Étape 6 : Finalisation - Smoke Tests
 Avant de donner la commande complète `deploy` pour la PROD, donne un résumé des *Smoke Tests* attendus post-MEP :

@@ -95,7 +95,7 @@ const onSelectLeaf = async (node: any) => {
     // 2. Détails utilisateurs (max 15)
     if (allUserIds.length > 0) {
       const topIds = allUserIds.slice(0, 15)
-      const usersRes = await axios.post(`/api/users/bulk`, topIds)
+      const usersRes = await axios.post(`/api/users/bulk`, { user_ids: topIds })
       associatedUsers.value = usersRes.data || []
     }
   } catch (err) {

@@ -1,0 +1,365 @@
+=== FLAKE8 & RADON AUDIT ===
+Service: agent_hr_api
+--- Large Files (>400 lines) ---
+    1388 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_missions_api
+--- Large Files (>400 lines) ---
+    1173 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_ops_api
+--- Large Files (>400 lines) ---
+    1351 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_router_api
+--- Large Files (>400 lines) ---
+     415 agent_router_api/agent.py
+     420 agent_router_api/a2a_tools.py
+    2446 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: competencies_api
+--- Large Files (>400 lines) ---
+     906 competencies_api/src/competencies/competencies_router.py
+     414 competencies_api/src/competencies/evaluations_router.py
+     445 competencies_api/src/competencies/analytics_router.py
+     437 competencies_api/src/competencies/scoring_pipeline.py
+    4652 total
+     654 competencies_api/mcp_server.py
+    1417 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+competencies_api/src/competencies/scoring_utils.py
+    F 271:0 _parse_scoring_results_gcs - B
+    F 127:0 _format_mission_v2 - B
+    F 168:0 _build_scoring_prompt - B
+    F 106:0 _estimate_duration_from_dates - B
+competencies_api/src/competencies/competencies_router.py
+    F 348:0 bulk_import_tree - D
+    F 757:0 create_competency - B
+    F 819:0 update_competency - B
+    F 229:0 review_competency_suggestion - B
+    F 78:0 list_competencies - B
+    F 694:0 cleanup_orphan_competencies - B
+competencies_api/src/competencies/ai_scoring.py
+    F 86:0 _compute_ai_score - C
+competencies_api/src/competencies/finops.py
+    F 11:0 log_finops - C
+competencies_api/src/competencies/evaluations_router.py
+    F 97:0 search_batch_users_evaluations - B
+    F 152:0 list_user_evaluations - B
+    F 50:0 search_batch_evaluations - B
+    F 332:0 trigger_ai_score_all - B
+competencies_api/src/competencies/assignments_router.py
+    F 255:0 handle_user_pubsub_events - B
+competencies_api/src/competencies/schemas.py
+    C 143:0 BatchEvaluationRequest - B
+    C 169:0 BatchUsersEvaluationRequest - B
+    M 154:4 BatchEvaluationRequest._normalize_fields - B
+    M 180:4 BatchUsersEvaluationRequest._normalize_fields - B
+competencies_api/src/competencies/analytics_router.py
+    F 102:0 get_agency_competency_coverage - D
+    F 344:0 get_taxonomy_quality - C
+    F 207:0 get_skill_gaps - B
+    F 271:0 get_similar_consultants - B
+competencies_api/src/competencies/scoring_router.py
+    F 231:0 _resume_apply_bg - C
+    F 321:0 resume_bulk_scoring - C
+    F 98:0 trigger_bulk_scoring_all - C
+competencies_api/src/competencies/bulk_task_state.py
+    M 47:4 BulkScoringTaskManager.update_progress - B
+    M 98:4 BulkScoringTaskManager.is_running - B
+competencies_api/src/competencies/helpers.py
+    F 81:0 _parse_duration_months - B
+competencies_api/src/competencies/scoring_pipeline.py
+    F 154:0 bg_bulk_scoring_vertex - D
+    F 38:0 _fetch_missions_for_user - B
+
+33 blocks (classes, functions, methods) analyzed.
+Average complexity: C (10.666666666666666)
+--- Flake8 Issues ---
+
+Service: cv_api
+--- Large Files (>400 lines) ---
+     571 cv_api/src/cvs/routers/profile_router.py
+     459 cv_api/src/cvs/routers/search_router.py
+     423 cv_api/src/cvs/routers/analytics_router.py
+     608 cv_api/src/services/bulk_service.py
+     490 cv_api/src/services/cv_storage_service.py
+     579 cv_api/src/services/taxonomy_service.py
+     445 cv_api/src/services/pubsub_service.py
+     784 cv_api/src/services/taxonomy_batch_service.py
+    8056 total
+     591 cv_api/mcp_server.py
+    1333 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+cv_api/src/auth.py
+    F 53:0 _decode_and_validate - B
+    F 22:0 verify_jwt - B
+cv_api/src/gemini_retry.py
+    F 20:0 _is_retryable - B
+cv_api/src/cvs/bulk_task_state.py
+    M 84:4 BulkReanalyseTaskManager._update_progress_locked - C
+    M 155:4 BulkReanalyseTaskManager.is_running - B
+cv_api/src/cvs/task_state.py
+    M 159:4 TreeTaskState.update_progress - D
+    M 37:4 ReanalysisTaskState.update_progress - B
+    C 127:0 TreeTaskState - B
+    M 95:4 ReanalysisTaskState.is_task_running - B
+cv_api/src/cvs/routers/profile_router.py
+    F 275:0 get_user_cv_details - C
+    F 436:0 remediate_anonymous_profiles - C
+    F 116:0 get_users_by_tag - C
+    F 187:0 get_user_cv - B
+    F 234:0 get_user_missions - B
+    F 396:0 handle_user_pubsub_events - B
+cv_api/src/cvs/routers/search_router.py
+    F 143:0 search_candidates_multi_criteria - C
+    F 256:0 get_rag_snippet - C
+    F 358:0 match_mission_to_candidates - C
+    F 73:0 find_similar_consultants - B
+cv_api/src/cvs/routers/bulk_router.py
+    F 109:0 get_bulk_reanalyse_status - C
+    F 152:0 cancel_bulk_reanalyse - B
+cv_api/src/cvs/routers/analytics_router.py
+    F 270:0 reanalyze_cvs - D
+    F 113:0 get_extraction_scores - B
+    F 37:0 get_consultants_experience_ranking - B
+cv_api/src/cvs/routers/taxonomy_quality.py
+    F 1:0 evaluate_taxonomy_quality - B
+cv_api/src/cvs/routers/data_quality_router.py
+    F 30:0 _validate_scheduler_oidc - B
+cv_api/src/cvs/routers/taxonomy_router.py
+    F 115:0 recalculate_tree_batch_list - D
+    F 202:0 recalculate_tree_batch_recover - B
+cv_api/src/services/data_quality_publisher.py
+    F 29:0 publish_data_quality_snapshot - B
+cv_api/src/services/bulk_service.py
+    F 119:0 bg_bulk_reanalyse - E
+    F 405:0 bg_retry_apply - C
+    F 58:0 _get_cv_extraction_prompt - B
+    F 88:0 _post_missions_bulk - B
+cv_api/src/services/finops.py
+    F 20:0 log_finops - B
+cv_api/src/services/cv_storage_service.py
+    M 54:4 CVStorageService.resolve_identity_and_user - F
+    M 295:4 CVStorageService.bg_process_competencies_and_missions - D
+    C 25:0 CVStorageService - C
+cv_api/src/services/taxonomy_service.py
+    F 147:0 run_taxonomy_step - F
+    F 64:0 get_existing_competencies - C
+cv_api/src/services/embedding_service.py
+    F 27:0 reindex_embeddings_bg - D
+cv_api/src/services/cv_import_service.py
+    F 19:0 process_cv_core - D
+cv_api/src/services/utils.py
+    F 47:0 _coerce_to_str - B
+    F 20:0 build_taxonomy_context - B
+    F 68:0 _build_distilled_content - B
+cv_api/src/services/search_service.py
+    F 41:0 execute_search - E
+cv_api/src/services/batch_parsers.py
+    F 111:0 parse_jsonl_map_result - C
+    F 63:0 get_all_used_names - C
+    F 193:0 check_missing_pillars - B
+cv_api/src/services/data_quality_service.py
+    F 66:0 compute_data_quality_report - E
+cv_api/src/services/pubsub_service.py
+    M 207:4 PubsubService.handle_pubsub_cv_import - D
+    C 28:0 PubsubService - C
+    M 30:4 PubsubService._run_cv_delete_bg - C
+    M 112:4 PubsubService._run_cv_pipeline_bg - B
+cv_api/src/services/taxonomy_batch_service.py
+    M 209:4 TaxonomyBatchService.check_batch - F
+    C 35:0 TaxonomyBatchService - E
+    M 87:4 TaxonomyBatchService.start_batch - C
+    M 37:4 TaxonomyBatchService.generate_autonomous_service_token - B
+cv_api/src/services/cv_extraction_service.py
+    M 22:4 CVExtractionService.fetch_cv_content - D
+    C 20:0 CVExtractionService - D
+    M 165:4 CVExtractionService.analyze_cv_with_llm - C
+
+60 blocks (classes, functions, methods) analyzed.
+Average complexity: C (17.45)
+--- Flake8 Issues ---
+
+Service: drive_api
+--- Large Files (>400 lines) ---
+     421 drive_api/src/routers/files_router.py
+    2718 total
+    1120 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+drive_api/src/auth.py
+    F 59:0 _decode_and_validate - B
+    F 24:0 verify_jwt - B
+drive_api/src/discovery_service.py
+    M 200:4 DiscoveryService._discover_delta_bottom_up - C
+    M 77:4 DiscoveryService._discover_full_top_down - C
+    M 37:4 DiscoveryService.discover_files - B
+    C 21:0 DiscoveryService - B
+drive_api/src/ingestion_service.py
+    M 43:4 IngestionService.ingest_batch - C
+    C 39:0 IngestionService - C
+drive_api/src/routers/dlq_router.py
+    F 154:0 delete_dlq_message - D
+    F 37:0 get_dlq_status - D
+    F 276:0 replay_dlq - C
+drive_api/src/routers/files_router.py
+    F 370:0 update_file - C
+drive_api/src/services/tree_resolution.py
+    M 89:4 TreeResolver.resolve_root_and_parent - D
+    C 17:0 TreeResolver - B
+    M 74:4 TreeResolver._check_excluded - B
+drive_api/src/services/ingestion_kpi_service.py
+    M 16:4 IngestionKpiService.get_ingestion_stats - E
+    M 149:4 IngestionKpiService.get_folder_kpis - D
+    C 12:0 IngestionKpiService - C
+    M 252:4 IngestionKpiService.quality_gate_batch - B
+drive_api/src/services/folder_service.py
+    M 19:4 FolderService.add_folder - B
+    M 61:4 FolderService.update_folder - B
+
+21 blocks (classes, functions, methods) analyzed.
+Average complexity: C (14.19047619047619)
+--- Flake8 Issues ---
+
+Service: items_api
+--- Large Files (>400 lines) ---
+     855 total
+     861 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+items_api/src/items/admin_router.py
+    F 51:0 handle_user_pubsub_events - B
+items_api/src/items/crud_router.py
+    F 191:0 create_items_bulk - D
+    F 301:0 update_item - C
+    F 131:0 create_item - B
+    F 66:0 list_items - B
+    F 103:0 get_item - B
+
+6 blocks (classes, functions, methods) analyzed.
+Average complexity: C (11.166666666666666)
+--- Flake8 Issues ---
+
+Service: missions_api
+--- Large Files (>400 lines) ---
+    1332 total
+     976 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+missions_api/src/gemini_retry.py
+    F 20:0 _is_retryable - B
+missions_api/src/missions/analysis_router.py
+    F 22:0 create_and_analyze_mission - C
+    F 126:0 reanalyze_mission - B
+missions_api/src/missions/document_extractor.py
+    F 15:0 extract_document_contents - C
+missions_api/src/missions/crud_router.py
+    F 16:0 list_missions - B
+    F 132:0 get_mission - B
+missions_api/src/missions/cache.py
+    F 13:0 get_cached_prompt - B
+missions_api/src/missions/user_router.py
+    F 12:0 get_active_missions_for_user - B
+missions_api/src/missions/helpers.py
+    F 1:0 extract_mid_parents - B
+missions_api/src/missions/analysis_service.py
+    F 35:0 process_mission_core - E
+
+10 blocks (classes, functions, methods) analyzed.
+Average complexity: C (12.8)
+--- Flake8 Issues ---
+
+Service: prompts_api
+--- Large Files (>400 lines) ---
+     635 total
+     921 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+prompts_api/src/gemini_retry.py
+    F 20:0 _is_retryable - B
+prompts_api/src/prompts/analyzer.py
+    F 115:0 improve_prompt_with_gemini - B
+prompts_api/src/prompts/router.py
+    F 51:0 get_my_prompt - B
+    F 285:0 read_compiled_prompt - B
+
+4 blocks (classes, functions, methods) analyzed.
+Average complexity: B (7.75)
+--- Flake8 Issues ---
+
+Service: users_api
+--- Large Files (>400 lines) ---
+    1470 total
+     912 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+users_api/src/auth.py
+    F 67:0 verify_jwt - C
+users_api/src/users/crud_router.py
+    F 184:0 create_user - C
+    F 252:0 update_user - C
+    F 26:0 map_user_to_response - B
+    F 52:0 list_users - B
+    F 143:0 get_me - B
+users_api/src/users/system_router.py
+    F 79:0 get_duplicates - B
+    F 54:0 map_user_to_response - B
+users_api/src/users/auth_router.py
+    F 151:0 google_callback - C
+    F 61:0 refresh_token_route - B
+    F 234:0 create_service_token - B
+    F 38:0 login - B
+users_api/src/mcp_tools/tools_handlers.py
+    F 12:0 handle_tool_call - E
+
+13 blocks (classes, functions, methods) analyzed.
+Average complexity: C (11.153846153846153)
+--- Flake8 Issues ---
+
+Service: analytics_mcp
+--- Large Files (>400 lines) ---
+    1023 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: monitoring_mcp
+--- Large Files (>400 lines) ---
+     700 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_commons
+--- Large Files (>400 lines) ---
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_hr_api
+--- Large Files (>400 lines) ---
+    1388 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_missions_api
+--- Large Files (>400 lines) ---
+    1173 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_ops_api
+--- Large Files (>400 lines) ---
+    1351 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+
+Service: agent_router_api
+--- Large Files (>400 lines) ---
+     415 agent_router_api/agent.py
+     420 agent_router_api/a2a_tools.py
+    2446 total
+--- Complex Functions (>50 lines or high cyclomatic) ---
+--- Flake8 Issues ---
+

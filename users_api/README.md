@@ -13,7 +13,7 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 | `mcp_server.py` | 94 | ✅ |
 | `conftest.py` | 72 | ✅ |
 | `metrics.py` | 4 | ✅ |
-| `src/users/auth_router.py` | 286 | ✅ |
+| `src/users/auth_router.py` | 293 | ✅ |
 | `src/users/crud_router.py` | 310 | ✅ |
 | `src/users/router.py` | 10 | ✅ |
 | `src/users/system_router.py` | 131 | ✅ |

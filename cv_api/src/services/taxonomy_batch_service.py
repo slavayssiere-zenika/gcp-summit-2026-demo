@@ -377,408 +377,425 @@ class TaxonomyBatchService:
                     pass
 
             if batch_step == "map":
-                await log_finops(user_caller, "recalculate_tree_batch_map", os.environ["GEMINI_MODEL"], usage, auth_token=auth_token)
-
-                if not map_result:
-                    return {
-                        "success": False, "error": "Aucun chunk JSONL n'a pu être parsé correctement."}
-
-                await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")
-
-                fresh = await TaxonomyBatchService.generate_autonomous_service_token()
-                dedup_service_token = fresh if fresh else persisted_svc_token
-                if fresh:
-                    await tree_task_manager.update_progress(service_token=fresh)
-
-                async def run_dedup(svc_token: str = dedup_service_token):
-                    _svc_auth_header = f"Bearer {svc_token}"
-                    try:
-                        instruction_dedup = await _fetch_prompt("cv_api.generate_taxonomy_tree_deduplicate", _svc_auth_header)
-                        map_json_str = json.dumps(
-                            map_result, ensure_ascii=False)
-                        dedup_instruction = instruction_dedup.replace(
-                            "{{MAP_RESULT}}", map_json_str)
-
-                        response_dedup = await generate_content_with_retry(
-                            _svc_config.client,
-                            model=os.environ["GEMINI_PRO_MODEL"],
-                            contents=[dedup_instruction],
-                            config=types.GenerateContentConfig(
-                                temperature=0.1,
-                                response_mime_type="application/json",
-                                max_output_tokens=65536,
-                            )
-                        )
-                        await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ["GEMINI_PRO_MODEL"], response_dedup.usage_metadata, auth_token=svc_token)
-
-                        finish_reason = None
-                        if response_dedup.candidates:
-                            finish_reason = str(
-                                getattr(
-                                    response_dedup.candidates[0],
-                                    "finish_reason",
-                                    "")).upper()
-                        if finish_reason and "MAX_TOKEN" in finish_reason:
-                            raise ValueError(
-                                f"La réponse Deduplicate a été tronquée par le LLM (finish_reason={finish_reason}). "
-                                "Augmentez max_output_tokens ou réduisez le prompt."
-                            )
-
-                        cleaned = response_dedup.text.strip()
-                        if cleaned.startswith("```json"):
-                            cleaned = cleaned[7:]
-                        if cleaned.startswith("```"):
-                            cleaned = cleaned[3:]
-                        if cleaned.endswith("```"):
-                            cleaned = cleaned[:-3]
-                        cleaned = cleaned.strip()
-                        try:
-                            raw_dedup, _ = json.JSONDecoder().raw_decode(cleaned)
-                        except json.JSONDecodeError as json_err:
-                            raise ValueError(
-                                f"Erreur Deduplicate: {json_err} — "
-                                f"Réponse LLM (premiers 500 chars): {cleaned[:500]!r}"
-                            )
-
-                        pillars_list = []
-                        if isinstance(raw_dedup, list):
-                            pillars_list = raw_dedup
-                        elif isinstance(raw_dedup, dict):
-                            if "pillars" in raw_dedup:
-                                pillars_list = raw_dedup["pillars"]
-                            else:
-                                pillars_list = list(raw_dedup.keys())
-
-                        completed_pillars = []
-                        for p in pillars_list:
-                            if isinstance(p, dict) and "name" in p:
-                                completed_pillars.append(p)
-                            elif isinstance(p, str):
-                                completed_pillars.append(
-                                    {"name": p, "description": ""})
-
-                        if not completed_pillars:
-                            raise ValueError(
-                                f"Le LLM a retourné un résultat vide ou non reconnu pour la déduplication : {
-                                    str(raw_dedup)[
-                                        :200]}")
-
-                        await tree_task_manager.update_progress(completed_pillars=completed_pillars, new_log="Deduplicate terminé. Lancement du Batch Reduce...")
-
-                        instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", _svc_auth_header)
-
-                        with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".jsonl") as f:
-                            for i, p in enumerate(completed_pillars):
-                                p_name = p.get("name", "")
-                                reduce_prompt = instruction_reduce.replace(
-                                    "{{CURRENT_PILLAR}}", p_name).replace(
-                                    "{{MAP_RESULT}}", map_json_str)
-                                req = {
-                                    "id": f"pillar-{i}",
-                                    "request": {
-                                        "contents": [{"role": "user", "parts": [{"text": reduce_prompt}]}],
-                                        "generationConfig": {
-                                            "temperature": 0.1,
-                                            "responseMimeType": "application/json",
-                                            "maxOutputTokens": 65536
-                                        }
-                                    }
-                                }
-                                f.write(json.dumps(req) + "\n")
-                            temp_path = f.name
-
-                        gcs_client_reduce = gcs_storage.Client()
-                        ts_reduce = int(datetime.now(timezone.utc).timestamp())
-                        blob_reduce_name = f"taxonomy/input/reduce-{ts_reduce}.jsonl"
-                        reduce_bucket = gcs_client_reduce.bucket(
-                            BATCH_GCS_BUCKET)
-                        blob_reduce = reduce_bucket.blob(blob_reduce_name)
-                        blob_reduce.upload_from_filename(
-                            temp_path, content_type="application/jsonl")
-                        src_reduce_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_reduce_name}"
-                        dest_reduce_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/reduce-{ts_reduce}/"
-
-                        reduce_batch_job = await asyncio.to_thread(
-                            _svc_config.vertex_batch_client.batches.create,
-                            model=os.environ["GEMINI_PRO_MODEL"],
-                            src=src_reduce_uri,
-                            config={
-                                "display_name": "taxonomy-reduce-batch",
-                                "dest": dest_reduce_uri}
-                        )
-                        await tree_task_manager.update_progress(batch_job_id=reduce_batch_job.name, batch_step="reduce", new_log=f"Job Batch Reduce créé (ID: {reduce_batch_job.name}). En attente Vertex AI...")
-                        os.unlink(temp_path)
-                    except Exception as e:
-                        logger.error(f"Erreur background dedup: {e}")
-                        await tree_task_manager.update_progress(status="error", error=f"Erreur Deduplicate: {str(e)}")
-
-                task = asyncio.create_task(run_dedup())
-                _background_tasks.add(task)
-                task.add_done_callback(_background_tasks.discard)
-                return {"success": True, "state": "PROCESSING_DEDUP"}
-
+                return await TaxonomyBatchService._handle_map_step(user_caller, auth_token, map_result, usage, persisted_svc_token)
             elif batch_step == "reduce":
-                await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
-
-                res_tree = {}
-                import json_repair
-
-                for i, text in enumerate(parsed_results):
-                    try:
-                        cleaned = strip_json_fences(text)
-                        raw_res = json_repair.loads(cleaned)
-                        if isinstance(raw_res, dict):
-                            res_tree.update(raw_res)
-                    except Exception as e:
-                        snippet = text[-100:] if len(text) > 100 else text
-                        error_msg = f"Erreur JSON Reduce: {e}. Extrait: {snippet}"
-                        logger.error(error_msg)
-                        await tree_task_manager.update_progress(status="error", error=error_msg)
-                        return {"success": False, "error": error_msg}
-                if not res_tree:
-                    return {
-                        "success": False, "error": "Aucun chunk JSONL du Reduce n'a pu être parsé."}
-
-                expected_pillars = latest_status.get("completed_pillars", [])
-                actual_names = set(res_tree.keys())
-                missing_original = check_missing_pillars(expected_pillars, res_tree)
-
-                if missing_original:
-                    error_msg = (
-                        f"Reduce incomplet : les piliers suivants manquent dans la réponse Vertex AI: "
-                        f"{', '.join(missing_original)}. Trouvés : {', '.join(actual_names)}"
-                    )
-                    await tree_task_manager.update_progress(status="error", error=error_msg)
-                    return {"success": False, "error": error_msg}
-
-                await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")
-
-                if has_unsubstituted_placeholders(res_tree):
-                    error_msg = (
-                        "res_tree corrompu : la clef '{{CURRENT_PILLAR}}' est présente, "
-                        "le prompt Reduce n'a pas substitué le placeholder. "
-                        "Relancez un nouveau batch depuis zéro (Recover ne suffit pas)."
-                    )
-                    await tree_task_manager.update_progress(status="error", error=error_msg)
-                    return {"success": False, "error": error_msg}
-
-                fresh = await TaxonomyBatchService.generate_autonomous_service_token()
-                sweep_service_token = fresh if fresh else persisted_svc_token
-                if fresh:
-                    await tree_task_manager.update_progress(service_token=fresh)
-
-                try:
-                    instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", f"Bearer {sweep_service_token}")
-                    existing_names = await _get_existing_competencies(f"Bearer {sweep_service_token}")
-
-                    used_names = get_all_used_names(res_tree)
-                    missing = list(set(existing_names) - used_names)
-
-                    if not missing:
-                        await tree_task_manager.update_progress(sweep_result=[], missing_competencies=[], new_log="Aucune compétence manquante détectée. Application de l'arbre en DB...")
-
-                        competencies_api_url = os.getenv(
-                            "COMPETENCIES_API_URL", "http://competencies_api:8000")
-                        apply_headers = {
-                            "Authorization": f"Bearer {sweep_service_token}"}
-                        from opentelemetry.propagate import inject
-                        inject(apply_headers)
-                        async with httpx.AsyncClient() as http_client:
-                            res = await http_client.post(
-                                f"{competencies_api_url}/bulk_tree",
-                                json={
-                                    "tree": res_tree,
-                                    "sweep_assignments": [],
-                                    "merges": []},
-                                headers=apply_headers,
-                                timeout=180.0
-                            )
-                            if res.status_code == 200:
-                                await tree_task_manager.update_progress(
-                                    status="completed",
-                                    new_log="Taxonomie appliqu\u00e9e avec succ\u00e8s !"
-                                )
-                                # Snapshot data quality post-batch (non-bloquant)
-                                _dq_bg = asyncio.create_task(
-                                    publish_data_quality_snapshot(
-                                        db=None,
-                                        auth_header=f"Bearer {sweep_service_token}",
-                                        trigger="batch_completed",
-                                    )
-                                )
-                                _background_tasks.add(_dq_bg)
-                                _dq_bg.add_done_callback(_background_tasks.discard)
-                                return {"success": True, "state": "COMPLETED"}
-                            else:
-                                await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
-                                return {
-                                    "success": False, "error": f"Erreur d'application: {res.text}"}
-                    else:
-                        with tempfile.NamedTemporaryFile("w", delete=False) as f:
-                            chunk_size = 150
-
-                            def minify_tree(node):
-                                if isinstance(node, dict):
-                                    keys_to_drop = ("description", "merge_from", "id", "created_at",
-                                                    "keywords", "examples")
-                                    return {k: minify_tree(v) for k, v in node.items() if k not in keys_to_drop}
-                                elif isinstance(node, list):
-                                    return [minify_tree(item) for item in node]
-                                return node
-
-                            minified_res_tree = minify_tree(res_tree)
-
-                            for i in range(0, len(missing), chunk_size):
-                                missing_chunk = missing[i:i + chunk_size]
-                                sweep_instruction = instruction_sweep.replace(
-                                    "{{MISSING_COMPETENCIES}}", ", ".join(missing_chunk)).replace(
-                                    "{{RES_TREE}}", json.dumps(
-                                        minified_res_tree, ensure_ascii=False))
-                                req = {
-                                    "request": {
-                                        "contents": [{"role": "user", "parts": [{"text": sweep_instruction}]}],
-                                        "generationConfig": {
-                                            "temperature": 0.1,
-                                            "responseMimeType": "application/json",
-                                            "maxOutputTokens": 8192,
-                                            "responseSchema": {
-                                                "type": "OBJECT",
-                                                "properties": {
-                                                    "merges": {
-                                                        "type": "ARRAY",
-                                                        "items": {
-                                                            "type": "OBJECT",
-                                                            "properties": {
-                                                                "canonical": {"type": "STRING"},
-                                                                "merge_from": {"type": "ARRAY", "items": {"type": "STRING"}}
-                                                            },
-                                                            "required": ["canonical", "merge_from"]
-                                                        }
-                                                    },
-                                                    "assignments": {
-                                                        "type": "ARRAY",
-                                                        "items": {
-                                                            "type": "OBJECT",
-                                                            "properties": {
-                                                                "competency": {"type": "STRING"},
-                                                                "pillar": {"type": "STRING"}
-                                                            },
-                                                            "required": ["competency", "pillar"]
-                                                        }
-                                                    }
-                                                },
-                                                "required": ["merges", "assignments"]
-                                            }
-                                        }
-                                    }
-                                }
-                                f.write(json.dumps(req) + "\n")
-                            temp_path = f.name
-
-                        gcs_client_sweep = gcs_storage.Client()
-                        ts_sweep = int(datetime.now(timezone.utc).timestamp())
-                        blob_sweep_name = f"taxonomy/input/sweep-{ts_sweep}.jsonl"
-                        sweep_bucket = gcs_client_sweep.bucket(
-                            BATCH_GCS_BUCKET)
-                        blob_sweep = sweep_bucket.blob(blob_sweep_name)
-                        blob_sweep.upload_from_filename(
-                            temp_path, content_type="application/jsonl")
-                        src_sweep_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_sweep_name}"
-                        dest_sweep_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/sweep-{ts_sweep}/"
-
-                        sweep_batch_job = await asyncio.to_thread(
-                            _svc_config.vertex_batch_client.batches.create,
-                            model=os.environ["GEMINI_PRO_MODEL"],
-                            src=src_sweep_uri,
-                            config={
-                                "display_name": "taxonomy-sweep-batch",
-                                "dest": dest_sweep_uri}
-                        )
-                        await tree_task_manager.update_progress(batch_job_id=sweep_batch_job.name, batch_step="sweep", missing_competencies=missing, new_log=f"Job Batch Sweep créé (ID: {sweep_batch_job.name}). En attente Vertex AI...")
-                        os.unlink(temp_path)
-
-                        return {"success": True, "state": "PROCESSING_SWEEP"}
-
-                except Exception as e:
-                    logger.error(f"Erreur de création Sweep Batch: {e}")
-                    await tree_task_manager.update_progress(status="error", error=f"Erreur Sweep: {str(e)}")
-                    return {"success": False, "error": str(e)}
-
+                return await TaxonomyBatchService._handle_reduce_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token)
             elif batch_step == "sweep":
-                await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
-
-                try:
-                    import json_repair
-
-                    sweep_assignments = []
-                    merges = []
-                    for i, text in enumerate(parsed_results):
-                        try:
-                            cleaned = strip_json_fences(text)
-                            raw_res = json_repair.loads(cleaned)
-                            if isinstance(raw_res, dict):
-                                if "assignments" in raw_res:
-                                    sweep_assignments.extend(raw_res["assignments"])
-                                if "merges" in raw_res:
-                                    merges.extend(raw_res["merges"])
-                        except Exception as e:
-                            logger.error(
-                                f"Erreur de parsing sur le chunk {i} du Sweep (ignoré): {e}")
-
-                    res_tree = latest_status.get("res_tree", {})
-                    if not res_tree:
-                        raise ValueError(
-                            "L'arbre (res_tree) est manquant dans l'état de la tâche. Impossible d'appliquer la taxonomie.")
-
-                    await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges). Application en base de données...")
-
-                    competencies_api_url = os.getenv(
-                        "COMPETENCIES_API_URL", "http://competencies_api:8000")
-                    apply_headers = {"Authorization": f"Bearer {auth_token}"}
-                    from opentelemetry.propagate import inject
-                    inject(apply_headers)
-
-                    async with httpx.AsyncClient() as http_client:
-                        res = await http_client.post(
-                            f"{competencies_api_url}/bulk_tree",
-                            json={
-                                "tree": res_tree,
-                                "sweep_assignments": sweep_assignments,
-                                "merges": merges},
-                            headers=apply_headers,
-                            timeout=180.0
-                        )
-                        if res.status_code == 200:
-                            await tree_task_manager.update_progress(
-                                status="completed",
-                                new_log="Taxonomie appliqu\u00e9e avec succ\u00e8s !"
-                            )
-                            # Snapshot data quality post-batch (non-bloquant)
-                            _dq_bg2 = asyncio.create_task(
-                                publish_data_quality_snapshot(
-                                    db=None,
-                                    auth_header=f"Bearer {auth_token}",
-                                    trigger="batch_completed",
-                                )
-                            )
-                            _background_tasks.add(_dq_bg2)
-                            _dq_bg2.add_done_callback(_background_tasks.discard)
-                            return {"success": True, "state": "COMPLETED"}
-                        else:
-                            error_msg = f"Erreur d'application en base: {
-                                res.text}"
-                            logger.error(error_msg)
-                            await tree_task_manager.update_progress(status="error", error=error_msg)
-                            return {"success": False, "error": error_msg}
-
-                except Exception as e:
-                    logger.error(f"Erreur d'application du Sweep: {e}")
-                    await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {str(e)}")
-                    return {"success": False, "error": str(e)}
-
+                return await TaxonomyBatchService._handle_sweep_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token)
         except Exception as e:
             logger.error(
                 f"Erreur inattendue dans le check batch: {e}",
                 exc_info=True)
             await tree_task_manager.update_progress(status="error", error=str(e))
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    async def _handle_map_step(user_caller, auth_token, map_result, usage, persisted_svc_token):
+        await log_finops(user_caller, "recalculate_tree_batch_map", os.environ["GEMINI_MODEL"], usage, auth_token=auth_token)
+
+        if not map_result:
+            return {
+                "success": False, "error": "Aucun chunk JSONL n'a pu être parsé correctement."}
+
+        await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")
+
+        fresh = await TaxonomyBatchService.generate_autonomous_service_token()
+        dedup_service_token = fresh if fresh else persisted_svc_token
+        if fresh:
+            await tree_task_manager.update_progress(service_token=fresh)
+
+        async def run_dedup(svc_token: str = dedup_service_token):
+            _svc_auth_header = f"Bearer {svc_token}"
+            try:
+                instruction_dedup = await _fetch_prompt("cv_api.generate_taxonomy_tree_deduplicate", _svc_auth_header)
+                map_json_str = json.dumps(
+                    map_result, ensure_ascii=False)
+                dedup_instruction = instruction_dedup.replace(
+                    "{{MAP_RESULT}}", map_json_str)
+
+                response_dedup = await generate_content_with_retry(
+                    _svc_config.client,
+                    model=os.environ["GEMINI_PRO_MODEL"],
+                    contents=[dedup_instruction],
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        response_mime_type="application/json",
+                        max_output_tokens=65536,
+                    )
+                )
+                await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ["GEMINI_PRO_MODEL"], response_dedup.usage_metadata, auth_token=svc_token)
+
+                finish_reason = None
+                if response_dedup.candidates:
+                    finish_reason = str(
+                        getattr(
+                            response_dedup.candidates[0],
+                            "finish_reason",
+                            "")).upper()
+                if finish_reason and "MAX_TOKEN" in finish_reason:
+                    raise ValueError(
+                        f"La réponse Deduplicate a été tronquée par le LLM (finish_reason={finish_reason}). "
+                        "Augmentez max_output_tokens ou réduisez le prompt."
+                    )
+
+                cleaned = response_dedup.text.strip()
+                if cleaned.startswith("```json"):
+                    cleaned = cleaned[7:]
+                if cleaned.startswith("```"):
+                    cleaned = cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+                try:
+                    raw_dedup, _ = json.JSONDecoder().raw_decode(cleaned)
+                except json.JSONDecodeError as json_err:
+                    raise ValueError(
+                        f"Erreur Deduplicate: {json_err} — "
+                        f"Réponse LLM (premiers 500 chars): {cleaned[:500]!r}"
+                    )
+
+                pillars_list = []
+                if isinstance(raw_dedup, list):
+                    pillars_list = raw_dedup
+                elif isinstance(raw_dedup, dict):
+                    if "pillars" in raw_dedup:
+                        pillars_list = raw_dedup["pillars"]
+                    else:
+                        pillars_list = list(raw_dedup.keys())
+
+                completed_pillars = []
+                for p in pillars_list:
+                    if isinstance(p, dict) and "name" in p:
+                        completed_pillars.append(p)
+                    elif isinstance(p, str):
+                        completed_pillars.append(
+                            {"name": p, "description": ""})
+
+                if not completed_pillars:
+                    raise ValueError(
+                        f"Le LLM a retourné un résultat vide ou non reconnu pour la déduplication : {
+                            str(raw_dedup)[
+                                :200]}")
+
+                await tree_task_manager.update_progress(completed_pillars=completed_pillars, new_log="Deduplicate terminé. Lancement du Batch Reduce...")
+
+                instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", _svc_auth_header)
+
+                with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".jsonl") as f:
+                    for i, p in enumerate(completed_pillars):
+                        p_name = p.get("name", "")
+                        reduce_prompt = instruction_reduce.replace(
+                            "{{CURRENT_PILLAR}}", p_name).replace(
+                            "{{MAP_RESULT}}", map_json_str)
+                        req = {
+                            "id": f"pillar-{i}",
+                            "request": {
+                                "contents": [{"role": "user", "parts": [{"text": reduce_prompt}]}],
+                                "generationConfig": {
+                                    "temperature": 0.1,
+                                    "responseMimeType": "application/json",
+                                    "maxOutputTokens": 65536
+                                }
+                            }
+                        }
+                        f.write(json.dumps(req) + "\n")
+                    temp_path = f.name
+
+                gcs_client_reduce = gcs_storage.Client()
+                ts_reduce = int(datetime.now(timezone.utc).timestamp())
+                blob_reduce_name = f"taxonomy/input/reduce-{ts_reduce}.jsonl"
+                reduce_bucket = gcs_client_reduce.bucket(
+                    BATCH_GCS_BUCKET)
+                blob_reduce = reduce_bucket.blob(blob_reduce_name)
+                blob_reduce.upload_from_filename(
+                    temp_path, content_type="application/jsonl")
+                src_reduce_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_reduce_name}"
+                dest_reduce_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/reduce-{ts_reduce}/"
+
+                reduce_batch_job = await asyncio.to_thread(
+                    _svc_config.vertex_batch_client.batches.create,
+                    model=os.environ["GEMINI_PRO_MODEL"],
+                    src=src_reduce_uri,
+                    config={
+                        "display_name": "taxonomy-reduce-batch",
+                        "dest": dest_reduce_uri}
+                )
+                await tree_task_manager.update_progress(batch_job_id=reduce_batch_job.name, batch_step="reduce", new_log=f"Job Batch Reduce créé (ID: {reduce_batch_job.name}). En attente Vertex AI...")
+                os.unlink(temp_path)
+            except Exception as e:
+                logger.error(f"Erreur background dedup: {e}")
+                await tree_task_manager.update_progress(status="error", error=f"Erreur Deduplicate: {str(e)}")
+
+        task = asyncio.create_task(run_dedup())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+        return {"success": True, "state": "PROCESSING_DEDUP"}
+
+    @staticmethod
+    async def _handle_reduce_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token):
+        await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
+
+        res_tree = {}
+        import json_repair
+
+        for i, text in enumerate(parsed_results):
+            try:
+                cleaned = strip_json_fences(text)
+                raw_res = json_repair.loads(cleaned)
+                if isinstance(raw_res, dict):
+                    res_tree.update(raw_res)
+            except Exception as e:
+                snippet = text[-100:] if len(text) > 100 else text
+                error_msg = f"Erreur JSON Reduce: {e}. Extrait: {snippet}"
+                logger.error(error_msg)
+                await tree_task_manager.update_progress(status="error", error=error_msg)
+                return {"success": False, "error": error_msg}
+        if not res_tree:
+            return {
+                "success": False, "error": "Aucun chunk JSONL du Reduce n'a pu être parsé."}
+
+        expected_pillars = latest_status.get("completed_pillars", [])
+        actual_names = set(res_tree.keys())
+        missing_original = check_missing_pillars(expected_pillars, res_tree)
+
+        if missing_original:
+            error_msg = (
+                f"Reduce incomplet : les piliers suivants manquent dans la réponse Vertex AI: "
+                f"{', '.join(missing_original)}. Trouvés : {', '.join(actual_names)}"
+            )
+            await tree_task_manager.update_progress(status="error", error=error_msg)
+            return {"success": False, "error": error_msg}
+
+        await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")
+
+        if has_unsubstituted_placeholders(res_tree):
+            error_msg = (
+                "res_tree corrompu : la clef '{{CURRENT_PILLAR}}' est présente, "
+                "le prompt Reduce n'a pas substitué le placeholder. "
+                "Relancez un nouveau batch depuis zéro (Recover ne suffit pas)."
+            )
+            await tree_task_manager.update_progress(status="error", error=error_msg)
+            return {"success": False, "error": error_msg}
+
+        fresh = await TaxonomyBatchService.generate_autonomous_service_token()
+        sweep_service_token = fresh if fresh else persisted_svc_token
+        if fresh:
+            await tree_task_manager.update_progress(service_token=fresh)
+
+        try:
+            instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", f"Bearer {sweep_service_token}")
+            existing_names = await _get_existing_competencies(f"Bearer {sweep_service_token}")
+
+            used_names = get_all_used_names(res_tree)
+            missing = list(set(existing_names) - used_names)
+
+            if not missing:
+                await tree_task_manager.update_progress(sweep_result=[], missing_competencies=[], new_log="Aucune compétence manquante détectée. Application de l'arbre en DB...")
+
+                competencies_api_url = os.getenv(
+                    "COMPETENCIES_API_URL", "http://competencies_api:8000")
+                apply_headers = {
+                    "Authorization": f"Bearer {sweep_service_token}"}
+                from opentelemetry.propagate import inject
+                inject(apply_headers)
+                async with httpx.AsyncClient() as http_client:
+                    res = await http_client.post(
+                        f"{competencies_api_url}/bulk_tree",
+                        json={
+                            "tree": res_tree,
+                            "sweep_assignments": [],
+                            "merges": []},
+                        headers=apply_headers,
+                        timeout=180.0
+                    )
+                    if res.status_code == 200:
+                        await tree_task_manager.update_progress(
+                            status="completed",
+                            new_log="Taxonomie appliqu\u00e9e avec succ\u00e8s !"
+                        )
+                        # Snapshot data quality post-batch (non-bloquant)
+                        _dq_bg = asyncio.create_task(
+                            publish_data_quality_snapshot(
+                                db=None,
+                                auth_header=f"Bearer {sweep_service_token}",
+                                trigger="batch_completed",
+                            )
+                        )
+                        _background_tasks.add(_dq_bg)
+                        _dq_bg.add_done_callback(_background_tasks.discard)
+                        return {"success": True, "state": "COMPLETED"}
+                    else:
+                        await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
+                        return {
+                            "success": False, "error": f"Erreur d'application: {res.text}"}
+            else:
+                with tempfile.NamedTemporaryFile("w", delete=False) as f:
+                    chunk_size = 150
+
+                    def minify_tree(node):
+                        if isinstance(node, dict):
+                            keys_to_drop = ("description", "merge_from", "id", "created_at",
+                                            "keywords", "examples")
+                            return {k: minify_tree(v) for k, v in node.items() if k not in keys_to_drop}
+                        elif isinstance(node, list):
+                            return [minify_tree(item) for item in node]
+                        return node
+
+                    minified_res_tree = minify_tree(res_tree)
+
+                    for i in range(0, len(missing), chunk_size):
+                        missing_chunk = missing[i:i + chunk_size]
+                        sweep_instruction = instruction_sweep.replace(
+                            "{{MISSING_COMPETENCIES}}", ", ".join(missing_chunk)).replace(
+                            "{{RES_TREE}}", json.dumps(
+                                minified_res_tree, ensure_ascii=False))
+                        req = {
+                            "request": {
+                                "contents": [{"role": "user", "parts": [{"text": sweep_instruction}]}],
+                                "generationConfig": {
+                                    "temperature": 0.1,
+                                    "responseMimeType": "application/json",
+                                    "maxOutputTokens": 8192,
+                                    "responseSchema": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "merges": {
+                                                "type": "ARRAY",
+                                                "items": {
+                                                    "type": "OBJECT",
+                                                    "properties": {
+                                                        "canonical": {"type": "STRING"},
+                                                        "merge_from": {"type": "ARRAY", "items": {"type": "STRING"}}
+                                                    },
+                                                    "required": ["canonical", "merge_from"]
+                                                }
+                                            },
+                                            "assignments": {
+                                                "type": "ARRAY",
+                                                "items": {
+                                                    "type": "OBJECT",
+                                                    "properties": {
+                                                        "competency": {"type": "STRING"},
+                                                        "pillar": {"type": "STRING"}
+                                                    },
+                                                    "required": ["competency", "pillar"]
+                                                }
+                                            },
+                                            "drops": {
+                                                "type": "ARRAY",
+                                                "items": {"type": "STRING"}
+                                            }
+                                        },
+                                        "required": ["merges", "assignments", "drops"]
+                                    }
+                                }
+                            }
+                        }
+                        f.write(json.dumps(req) + "\n")
+                    temp_path = f.name
+
+                gcs_client_sweep = gcs_storage.Client()
+                ts_sweep = int(datetime.now(timezone.utc).timestamp())
+                blob_sweep_name = f"taxonomy/input/sweep-{ts_sweep}.jsonl"
+                sweep_bucket = gcs_client_sweep.bucket(
+                    BATCH_GCS_BUCKET)
+                blob_sweep = sweep_bucket.blob(blob_sweep_name)
+                blob_sweep.upload_from_filename(
+                    temp_path, content_type="application/jsonl")
+                src_sweep_uri = f"gs://{BATCH_GCS_BUCKET}/{blob_sweep_name}"
+                dest_sweep_uri = f"gs://{BATCH_GCS_BUCKET}/taxonomy/output/sweep-{ts_sweep}/"
+
+                sweep_batch_job = await asyncio.to_thread(
+                    _svc_config.vertex_batch_client.batches.create,
+                    model=os.environ["GEMINI_PRO_MODEL"],
+                    src=src_sweep_uri,
+                    config={
+                        "display_name": "taxonomy-sweep-batch",
+                        "dest": dest_sweep_uri}
+                )
+                await tree_task_manager.update_progress(batch_job_id=sweep_batch_job.name, batch_step="sweep", missing_competencies=missing, new_log=f"Job Batch Sweep créé (ID: {sweep_batch_job.name}). En attente Vertex AI...")
+                os.unlink(temp_path)
+
+                return {"success": True, "state": "PROCESSING_SWEEP"}
+
+        except Exception as e:
+            logger.error(f"Erreur de création Sweep Batch: {e}")
+            await tree_task_manager.update_progress(status="error", error=f"Erreur Sweep: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    async def _handle_sweep_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token):
+        await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
+
+        try:
+            import json_repair
+
+            sweep_assignments = []
+            merges = []
+            drops = []
+            for i, text in enumerate(parsed_results):
+                try:
+                    cleaned = strip_json_fences(text)
+                    raw_res = json_repair.loads(cleaned)
+                    if isinstance(raw_res, dict):
+                        if "assignments" in raw_res:
+                            sweep_assignments.extend(raw_res["assignments"])
+                        if "merges" in raw_res:
+                            merges.extend(raw_res["merges"])
+                        if "drops" in raw_res:
+                            drops.extend(raw_res["drops"])
+                except Exception as e:
+                    logger.error(
+                        f"Erreur de parsing sur le chunk {i} du Sweep (ignoré): {e}")
+
+            res_tree = latest_status.get("res_tree", {})
+            if not res_tree:
+                raise ValueError(
+                    "L'arbre (res_tree) est manquant dans l'état de la tâche. Impossible d'appliquer la taxonomie.")
+
+            await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges, {len(drops)} drops). Application en base de données...")
+
+            competencies_api_url = os.getenv(
+                "COMPETENCIES_API_URL", "http://competencies_api:8000")
+            apply_headers = {"Authorization": f"Bearer {auth_token}"}
+            from opentelemetry.propagate import inject
+            inject(apply_headers)
+
+            async with httpx.AsyncClient() as http_client:
+                res = await http_client.post(
+                    f"{competencies_api_url}/bulk_tree",
+                    json={
+                        "tree": res_tree,
+                        "sweep_assignments": sweep_assignments,
+                        "merges": merges,
+                        "drops": drops},
+                    headers=apply_headers,
+                    timeout=180.0
+                )
+                if res.status_code == 200:
+                    await tree_task_manager.update_progress(
+                        status="completed",
+                        new_log="Taxonomie appliqu\u00e9e avec succ\u00e8s !"
+                    )
+                    # Snapshot data quality post-batch (non-bloquant)
+                    _dq_bg2 = asyncio.create_task(
+                        publish_data_quality_snapshot(
+                            db=None,
+                            auth_header=f"Bearer {auth_token}",
+                            trigger="batch_completed",
+                        )
+                    )
+                    _background_tasks.add(_dq_bg2)
+                    _dq_bg2.add_done_callback(_background_tasks.discard)
+                    return {"success": True, "state": "COMPLETED"}
+                else:
+                    error_msg = f"Erreur d'application en base: {
+                        res.text}"
+                    logger.error(error_msg)
+                    await tree_task_manager.update_progress(status="error", error=error_msg)
+                    return {"success": False, "error": error_msg}
+
+        except Exception as e:
+            logger.error(f"Erreur d'application du Sweep: {e}")
+            await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {str(e)}")
             return {"success": False, "error": str(e)}

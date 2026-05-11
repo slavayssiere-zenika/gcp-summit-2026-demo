@@ -366,3 +366,88 @@ def test_read_compiled_prompt_does_not_inject_error_correction():
     assert data["value"] == "Je suis un agent."
     assert "error_correction" not in data["value"]
     assert "NEVER DO X" not in data["value"]
+
+
+# ── DELETE endpoint ────────────────────────────────────────────────────────────
+
+def test_delete_prompt_success():
+    client.post("/", json={"key": "to_delete", "value": "val"})
+    resp = client.delete("/to_delete")
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    # Vérifier que c'est bien supprimé
+    resp_get = client.get("/to_delete")
+    assert resp_get.status_code == 404
+
+
+def test_delete_prompt_not_found():
+    resp = client.delete("/does_not_exist_ever")
+    assert resp.status_code == 404
+
+
+# ── Global Exception Handler ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_global_exception_handler_500():
+    """Vérifie que le global exception handler intercepte une exception inattendue et la logge."""
+    from main import global_exception_handler
+    mock_request = MagicMock()
+    mock_request.method = "GET"
+    mock_request.url.path = "/"
+    mock_request.headers = {}
+
+    exc = ValueError("Simulated violent crash")
+
+    with patch("main.report_exception_to_prompts_api", new_callable=AsyncMock) as mock_report, \
+         patch("main.get_service_token_fallback", new_callable=AsyncMock, return_value="fake"):
+        resp = await global_exception_handler(mock_request, exc)
+        assert resp.status_code == 500
+        import json
+        assert json.loads(resp.body)["detail"] == "Internal Server Error"
+        mock_report.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_global_exception_handler_422():
+    """Vérifie que la RequestValidationError ne déclenche pas le report d'erreur 500."""
+    from main import global_exception_handler
+    from fastapi.exceptions import RequestValidationError
+
+    mock_request = MagicMock()
+    exc = RequestValidationError(errors=[])
+
+    with patch("main.report_exception_to_prompts_api", new_callable=AsyncMock) as mock_report:
+        resp = await global_exception_handler(mock_request, exc)
+        assert resp.status_code == 422
+        mock_report.assert_not_called()
+
+# ── Main.py Endpoints ──────────────────────────────────────────────────────────
+
+
+def test_ready_endpoint():
+    resp = client.get("/ready")
+    assert resp.status_code == 200
+
+
+def test_spec_endpoint():
+    resp = client.get("/spec")
+    assert resp.status_code == 200
+
+
+@patch("main.httpx.AsyncClient.request")
+def test_mcp_proxy(mock_request):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b'{"success": true}'
+    mock_resp.headers = {"content-length": "15"}
+    mock_request.return_value = mock_resp
+
+    resp = client.get("/mcp/tools")
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+
+def test_version_endpoint():
+    resp = client.get("/version")
+    assert resp.status_code == 200

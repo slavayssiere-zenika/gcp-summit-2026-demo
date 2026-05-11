@@ -157,7 +157,9 @@ def test_get_active_missions_ignores_sentinel_user_id_zero(mocker):
         id=3,
         title="Mission sans profils",
         proposed_team=[
-            {"user_id": 0, "full_name": "Aucun profil disponible", "role": "Non staffé", "estimated_days": 0, "justification": "Aucun consultant qualifié"}
+            {"user_id": 0, "full_name": "Aucun profil disponible", "role": "Non staffé", "estimated_days": 0, "justification": "Aucun consultant qualifié"},
+            {"user_id": "invalid", "full_name": "Invalid", "role": "Test", "estimated_days": 0, "justification": "test"},
+            {"user_id": None, "full_name": "Invalid", "role": "Test", "estimated_days": 0, "justification": "test"}
         ]
     )
     mock_result = MagicMock()
@@ -312,5 +314,58 @@ def test_list_missions_includes_status(mocker):
     data = response.json()
     items = data["items"]
     assert len(items) > 0
-    assert "status" in items[0]
     assert items[0]["status"] == "STAFFED"
+
+
+def test_get_mission_status_history(mocker):
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    mock_mission = MagicMock(id=1)
+    mock_res_m = MagicMock()
+    mock_res_m.scalars.return_value.first.return_value = mock_mission
+
+    from datetime import datetime
+    mock_hist = MagicMock(id=1, mission_id=1, old_status="STAFFED", new_status="WON", reason="ok", changed_by="admin", changed_at=datetime.utcnow())
+    mock_res_h = MagicMock()
+    mock_res_h.scalars.return_value.all.return_value = [mock_hist]
+
+    mock_db.execute.side_effect = [mock_res_m, mock_res_h]
+
+    response = client.get("/missions/1/status/history", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+
+
+def test_get_mission(mocker):
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    mock_mission = MagicMock(id=1, title="M1", description="desc", status="WON", extracted_competencies=[], prefiltered_candidates=[], proposed_team=[])
+    mock_res_m = MagicMock()
+    mock_res_m.scalars.return_value.first.return_value = mock_mission
+    mock_db.execute.return_value = mock_res_m
+
+    response = client.get("/missions/1", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+    assert response.json()["title"] == "M1"
+
+
+def test_delete_all_missions(mocker):
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[verify_jwt] = lambda: {"role": "admin"}
+    response = client.delete("/missions", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+    app.dependency_overrides[verify_jwt] = override_verify_jwt
+
+
+def test_delete_mission(mocker):
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[verify_jwt] = lambda: {"role": "commercial"}
+    mock_mission = MagicMock(id=1)
+    mock_res_m = MagicMock()
+    mock_res_m.scalars.return_value.first.return_value = mock_mission
+    mock_db.execute.return_value = mock_res_m
+
+    response = client.delete("/missions/1", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200
+    app.dependency_overrides[verify_jwt] = override_verify_jwt

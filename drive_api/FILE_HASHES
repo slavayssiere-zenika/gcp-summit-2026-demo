@@ -8,12 +8,10 @@
 1110641b18468ac4cc15487956776616fb5e2bfb  ./drive_api/debug_test.patch
 11e6e081e814c2221448460d908075796c66501c  ./drive_api/tests/test_mcp_tools.py
 12bb238d8094250ae2da124d6bc1799fbbab3146  ./drive_api/src/models.py
+14d24e7b5dec5ec5b2fb860f2a5f8c9d53b705de  ./drive_api/tests/integration/test_pubsub_integration.py
 1684bc87ce78137d7e1056353633e8711cd7ecb9  ./drive_api/tests/test_folder_service.py
 20b4f11eea28ac9bd46157677343987d23186f9e  ./drive_api/tests/test_files_router.py
-20c410eec30c0b65a35e0b0379b7e7880081b8d7  ./drive_api/src/schemas.py
-276effc3bc59158d54f288ba57254c3d58d6ba09  ./drive_api/README.md
 29609d23e194a2e433c8c5d4fc7b91fdbb01c2f7  ./drive_api/tests/test_schemas.py
-2cecb44d5da7a9ec3f327fb85f54c0217c140b9e  ./drive_api/query_db.py
 2ddbeb6d87460a289c68ba39fe1a0839c0988eaa  ./drive_api/tests/test_drive_service_offboarding.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
 2f5f5de0be8056f813e5565faa2b8f3c794ea5ce  ./drive_api/src/discovery_service.py
@@ -24,7 +22,9 @@
 3a60b0902fd9d9cab56de896d145662a2c9c4b10  ./drive_api/conftest.py
 3e72a2f38dcf8e4cfe1f92bb2130cd303eff9247  ./drive_api/src/services/google_api_client.py
 46f52c4e85d8c8a5891fdae338ce17c9c02ed5a0  ./drive_api/src/drive_service.py
+4b76ca7ac977f14339ee51557e6dd8cecc1d16dc  ./drive_api/src/schemas.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
+56dcd7f1b6c438da874ad457d6f1c499a61b7f7d  ./drive_api/query_db.py
 601a21d6fa212abd4ee85cefc4a49a452560c48e  ./drive_api/tests/test_ingestion_router.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 6485e00779618ceb3d45db895c2381e9d89de90d  ./drive_api/src/auth.py
@@ -32,7 +32,6 @@
 6ec284e5bb71e84fe4a52bb646e0c8f7f120e0ed  ./drive_api/pytest_output.txt
 75af5ba166f79ff15a5319f1aee481579dc91fee  ./drive_api/tests/integration/conftest.py
 762edb947b946679d89fe9026eb4e95957d18aa0  ./drive_api/src/routers/dlq_router.py
-792fc71c6c6515071b8033f19bb4ba2bcfbd87ca  ./drive_api/spec.md
 81bb8775f3f6ccc8f6534480c508176d508a3b5d  ./drive_api/src/router.py
 82d9bbc249f47c06f47fae96ae48ad4cd7dba6c4  ./drive_api/tests/test_dlq_router.py
 8df0d1b70fad4f57f316126b44c90fec188f69fd  ./shared/tests/__init__.py
@@ -46,7 +45,6 @@ b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b64acf28f4e3c4536effe83256697dc3764a44c8  ./drive_api/requirements.txt
 bc22d9deb2b30591e868b42d4cd3c15ea66f43d0  ./drive_api/tests/test_tree_resolution.py
 bc68e0ba410db9b8987bf55e482c495edeada605  ./drive_api/tests/test_zero_trust.py
-c400ab1221047b512433482e5f830f1be9dbd5b6  ./drive_api/tests/integration/test_pubsub_integration.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 cbcd342d29e2bc3fab739fe01d37627fae03db39  ./drive_api/tests/test_google_api_client.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./drive_api/.dockerignore
@@ -57,10 +55,10 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./drive_api/src/routers/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./drive_api/src/services/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./drive_api/tests/integration/__init__.py
 de91bbe6e01b761bc17c6731ac8ff56ef5dac8a8  ./drive_api/tests/test_main.py
-dfa6ac1d87224753aece736d2f1f074b778dbf98  ./drive_api/src/ingestion_service.py
 e1175990711b70be7e0701f484ad16cea440f1a0  ./drive_api/database.py
 e26ca3f0b16238dcfe0cc8684923b77cc4c4be20  ./drive_api/main.py
 ea15926a1d26427be74f78139b69560568d41548  ./drive_api/src/routers/ingestion_router.py
+efdd9c08160a014c4e637851b6932dad1d7015fb  ./drive_api/src/ingestion_service.py
 f0316cf3be6343a3e8b90374d5189f40c552e35e  ./drive_api/tests/test_discovery_service.py.orig
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f2b6d86e94723d946bc7e67f9f5b95deebbccd55  ./drive_api/mcp_server.py

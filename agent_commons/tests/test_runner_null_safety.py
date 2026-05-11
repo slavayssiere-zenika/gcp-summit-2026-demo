@@ -64,6 +64,18 @@ def _make_text_event(text: str) -> MagicMock:
     return event
 
 
+def _make_none_role_event() -> MagicMock:
+    """Simule un event où le rôle est explicitement None."""
+    event = MagicMock()
+    event.content = MagicMock()
+    event.content.role = None
+    event.content.parts = []
+    event.actions = None
+    event.response = None
+    event.usage_metadata = None
+    return event
+
+
 def _make_async_runner(events: list) -> MagicMock:
     """Crée un mock de Runner ADK dont run_async() yielde une liste d'événements."""
     async def _gen(*args, **kwargs):
@@ -168,3 +180,19 @@ class TestNullSafetyParts:
         assert response_text == "Résultat final"
         assert steps == []
         assert thoughts == []
+
+    @pytest.mark.asyncio
+    async def test_none_role_does_not_raise(self):
+        """Un event avec role=None ne doit PAS lever AttributeError."""
+        events = [_make_none_role_event(), _make_text_event("Résultat avec rôle ok")]
+        mock_runner = _make_async_runner(events)
+
+        try:
+            result = await run_agent_and_collect(
+                mock_runner, "user1", "sess1", "query", "test_agent", "[TEST]"
+            )
+        except AttributeError as e:
+            pytest.fail(f"run_agent_and_collect a levé AttributeError sur role=None : {e}")
+
+        assert result is not None
+        assert result[0] == "Résultat avec rôle ok"

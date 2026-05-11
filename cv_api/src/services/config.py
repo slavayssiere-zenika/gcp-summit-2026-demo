@@ -30,9 +30,11 @@ ANALYTICS_MCP_URL = os.getenv("ANALYTICS_MCP_URL", "http://analytics_mcp:8008")
 # Ces variables permettent d'obtenir un service-token via /internal/service-token.
 ADMIN_SERVICE_USERNAME = os.getenv("ADMIN_SERVICE_USERNAME", "")
 ADMIN_SERVICE_PASSWORD = os.getenv("ADMIN_SERVICE_PASSWORD", "")
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 
 # ── GCP / Gemini ────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+os.environ.pop("GOOGLE_API_KEY", None)
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
 VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "europe-west1")
 BATCH_GCS_BUCKET = os.getenv("BATCH_GCS_BUCKET", "")

@@ -269,7 +269,7 @@ data "google_project" "project" {}
 # computed_at est un string ISO8601 (pas un long timestamp-micros) car le
 # publisher Python utilise report["computed_at"] qui est une string ISO.
 resource "google_pubsub_schema" "data_quality_schema" {
-  name = "data-quality-schema-${terraform.workspace}"
+  name = "data-quality-schema-v2-${terraform.workspace}"
   type = "AVRO"
   definition = jsonencode({
     type = "record"
@@ -280,13 +280,14 @@ resource "google_pubsub_schema" "data_quality_schema" {
       { name = "users_with_cv", type = "int" },
       { name = "score", type = "int" },
       { name = "grade", type = "string" },
-      { name = "embedding_pct", type = "int" },
-      { name = "missions_pct", type = "int" },
-      { name = "competencies_pct", type = "int" },
-      { name = "summary_pct", type = "int" },
-      { name = "current_role_pct", type = "int" },
-      { name = "competency_assignment_pct", type = "int" },
-      { name = "ai_scoring_pct", type = "int" },
+      # Proportions (0.0 → 1.0) — divisées par 100 par le publisher Python avant injection
+      { name = "embedding_pct", type = "float" },
+      { name = "missions_pct", type = "float" },
+      { name = "competencies_pct", type = "float" },
+      { name = "summary_pct", type = "float" },
+      { name = "current_role_pct", type = "float" },
+      { name = "competency_assignment_pct", type = "float" },
+      { name = "ai_scoring_pct", type = "float" },
       { name = "issues_count", type = "int" },
       { name = "trigger", type = "string" }
     ]

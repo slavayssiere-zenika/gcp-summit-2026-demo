@@ -4,10 +4,10 @@
 17ee75f1181b52f60018eb2e483d9b8809a5aa95  ./agent_commons/agent_commons/schemas.py
 1b53e4f5ce9930d7048c80fb175e2c7659657ed8  ./agent_missions_api/tests/test_jwt_propagation.py
 1d725d567d81190d35a2f6d81d0e954a435d2a7b  ./agent_commons/tests/test_guardrail_ops_metrics.py
-1e97aa9afcf41e2da79d8e9565bb8d16218e5c9f  ./agent_commons/README.md
 1fa5d028739a2a437b39a75b7a09dca43f24c5da  ./agent_commons/agent_commons/exception_handler.py
 2106034ed534aae6316071d3f2d239267d5207eb  ./agent_missions_api/tests/test_guardrail.py
 2465dd17f16de0856494d077efc9a2db788a3916  ./agent_commons/tests/test_mcp_proxy.py
+28c1977baf7889938533dc917f6da5abb2c43919  ./agent_missions_api/tests/test_agent_fallback.py
 2cf6c1ada7941df6612b49151a315ce9fe67b8de  ./agent_commons/agent_commons/metadata.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
@@ -20,12 +20,11 @@
 5fcc9a80da191dc87c6a6122dc22675faa6931b2  ./agent_missions_api/agent_missions_api.system_instruction.txt
 61cdc605fd87a731befda27f9c4d5b0ee3a9f724  ./agent_commons/agent_commons.egg-info/top_level.txt
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
+640597ccea9961b2ca828eaf5288a7386f8f4a37  ./agent_commons/tests/test_runner_null_safety.py
 6459c884b3e10d2a41d92639d70259c7de21d794  ./agent_missions_api/metrics.py
 6b852832c9ab6999c5bc703fd959fcc946611b5d  ./agent_missions_api/Dockerfile
 7176ac32dd66eb4b56c749735fe08339c74adaef  ./agent_missions_api/logger.py
-719dd556fb4e4070dd6c55cbdf17c4ad5d5e5ceb  ./agent_missions_api/spec.md
 76e6e325f5b813fd03bbd965e16ff3cf28ef3881  ./agent_commons/agent_commons.egg-info/SOURCES.txt
-779d69b54711bdceaa7c7a2a834bd19f440c451b  ./agent_missions_api/README.md
 7b25ef78b79ee7417cafc3996aabe7f791a39d1d  ./agent_commons/tests/test_mcp_client_propagation.py
 83eff2f28e5e28c0095435c920671841f6d9c3ee  ./agent_commons/tests/test_runner_display_type.py
 8d9bea4bb6b536285ca96aa438e32cec8814b60c  ./agent_missions_api/tests/test_session.py
@@ -53,9 +52,10 @@ cb18b3f18a06ed361898a1af3c512a1384b2e362  ./agent_commons/tests/test_finops.py
 cd15353bf9c0c1ab7dfc75af142988d57ef97559  ./agent_commons/agent_commons/mcp_client.py
 d07883cc5c2569b648abf5e77667a2e9317ca5d7  ./agent_missions_api/conftest.py
 d1250060cd910b1dc3f945e8b3770c7a074b2255  ./agent_commons/agent_commons/guardrails_grounding.py
-d7e69873954b40aaa4f3028cc2a7f6a27dd499ed  ./agent_commons/agent_commons/runner.py
 d878e2e00978775e2a37d0484f0dc9c71536951c  ./agent_missions_api/main.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./agent_missions_api/__init__.py
+ddf7886948b0d7931bf32be2e9f3d8d93f165f67  ./agent_commons/agent_commons/runner.py
+e4cf1ff15539f96a32a7e41c1cbaaad43c3283fd  ./agent_missions_api/tests/test_history.py
 e78e28340bf24308866859b88795ec17725e9c74  ./agent_missions_api/session.py
 e94ec766935137fa55bb6262412fde909427a061  ./agent_commons/tests/test_guardrails.py
 f07c219bfe776cf380c0401a19129c79ee251ad1  ./agent_commons/tests/__init__.py

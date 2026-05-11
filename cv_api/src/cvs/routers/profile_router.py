@@ -5,21 +5,17 @@ import json
 import logging
 from datetime import datetime, timezone
 
-import httpx
 # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 import src.services.config as _svc_config
 from database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      Request)
 from opentelemetry.propagate import inject
-from pydantic import ValidationError
-from sqlalchemy import func
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import verify_jwt
 from src.cvs.models import CVProfile
-from src.cvs.routers._shared import USERS_API_URL
 from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
                              CVProfileResponse, CVResponse, UserMergeRequest,
                              ExtractedMission)
@@ -28,7 +24,6 @@ from src.services.config import _CV_CACHE
 from src.services.cv_import_service import process_cv_core
 from src.services.taxonomy_service import (fetch_prompt,
                                            get_existing_competencies)
-from shared.schemas.users import UsersResponse, UserItem
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -115,67 +110,16 @@ async def get_all_user_tags(db: AsyncSession = Depends(get_db)):
             response_model=PaginationResponse[CVProfileResponse])
 async def get_users_by_tag(tag: str, skip: int = Query(
         0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db)):
-    """
-    Récupère les profils CV (et user_ids) associés à un tag spécifique (ex: localisation 'Niort').
-    Sans redondance par utilisateur (déduplication).
-    """
-    # On utilise DISTINCT ON pour récupérer uniquement le CV le plus récent
-    # par utilisateur
-    profiles = (await db.execute(
-        select(CVProfile)
-        .distinct(CVProfile.user_id)
-        .order_by(CVProfile.user_id, CVProfile.created_at.desc())
-    )).scalars().all()
+    from src.services.profile_service import ProfileService
 
-    seen_users = set()
-    unique_profiles = []
-
-    for p in profiles:
-        # On ne garde que les utilisateurs dont le CV le plus récent correspond
-        # au tag
-        if p.source_tag and tag.lower() in p.source_tag.lower():
-            if p.user_id not in seen_users:
-                seen_users.add(p.user_id)
-                unique_profiles.append(p)
-    # Group by user for bulk enrichment
-    user_ids = list(seen_users)
-    user_enrich_map = {}
     auth_header = request.headers.get("Authorization") if request else None
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
 
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
-        for u_id in user_ids:
-            try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers_downstream)
-                if u_res.status_code == 200:
-                    try:
-                        u_data = UserItem.model_validate(u_res.json())
-                        user_enrich_map[u_id] = u_data.model_dump()
-                    except ValidationError as ve:
-                        logger.error(f"Rupture de contrat API users pour {u_id}", extra={"error": str(ve)})
-            except Exception as e:
-                logger.warning(
-                    f"Failed to fetch user {u_id} for enrichment: {e}")
-
-    total = len(unique_profiles)
-    paginated_profiles = unique_profiles[skip:skip + limit]
+    total, responses = await ProfileService.get_users_by_tag(tag, skip, limit, headers_downstream, db)
 
     return {
-        "items": [
-            CVProfileResponse(
-                user_id=p.user_id,
-                source_url=p.source_url,
-                source_tag=p.source_tag,
-                imported_by_id=p.imported_by_id,
-                is_anonymous=user_enrich_map.get(
-                    p.user_id, {}).get(
-                    "is_anonymous", False),
-                full_name=user_enrich_map.get(p.user_id, {}).get("full_name"),
-                email=user_enrich_map.get(p.user_id, {}).get("email"),
-                username=user_enrich_map.get(p.user_id, {}).get("username")
-            ) for p in paginated_profiles
-        ],
+        "items": responses,
         "total": total,
         "skip": skip,
         "limit": limit
@@ -186,43 +130,18 @@ async def get_users_by_tag(tag: str, skip: int = Query(
             response_model=PaginationResponse[CVProfileResponse])
 async def get_user_cv(user_id: int, skip: int = Query(
         0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db)):
-    """
-    Récupére le ou les liens source (Google Doc) originaux des CVs associés au collaborateur.
-    """
-    total = (await db.execute(select(func.count(CVProfile.id)).filter(CVProfile.user_id == user_id))).scalar() or 0
-    profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()).offset(skip).limit(limit))).scalars().all()
-    if not profiles:
-        raise HTTPException(status_code=404,
-                            detail="Aucun CV trouvé pour cet utilisateur.")
+    from src.services.profile_service import ProfileService
 
-    # Fetch user details for anonymity status
-    is_anon = False
     auth_header = request.headers.get("Authorization") if request else None
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
-    async with httpx.AsyncClient(timeout=5.0) as http_client:
-        try:
-            u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
-            if u_res.status_code == 200:
-                try:
-                    u_data = UserItem.model_validate(u_res.json())
-                    is_anon = u_data.is_anonymous or False
-                except ValidationError as ve:
-                    logger.error(f"Rupture de contrat API users pour {user_id}", extra={"error": str(ve)})
-        except Exception as e:
-            logger.warning(
-                f"Failed to fetch user {user_id} for is_anonymous check: {e}")
+
+    total, responses = await ProfileService.get_user_cv(user_id, skip, limit, headers_downstream, db)
+    if total == 0:
+        raise HTTPException(status_code=404, detail="Aucun CV trouvé pour cet utilisateur.")
 
     return {
-        "items": [
-            CVProfileResponse(
-                user_id=p.user_id,
-                source_url=p.source_url,
-                source_tag=p.source_tag,
-                imported_by_id=p.imported_by_id,
-                is_anonymous=is_anon
-            ) for p in profiles
-        ],
+        "items": responses,
         "total": total,
         "skip": skip,
         "limit": limit
@@ -233,137 +152,33 @@ async def get_user_cv(user_id: int, skip: int = Query(
             response_model=PaginationResponse[ExtractedMission])
 async def get_user_missions(user_id: int, skip: int = Query(
         0, ge=0), limit: int = 50, db: AsyncSession = Depends(get_db)):
-    """
-    Récupère le détail des missions extraites du CV pour un utilisateur.
-    """
-    profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
-    if not profiles:
-        raise HTTPException(
-            status_code=404,
-            detail="Aucun profil CV trouvé pour cet utilisateur.")
+    from src.services.profile_service import ProfileService
 
-    merged_missions = []
-    seen_mission_keys = set()
+    total, items = await ProfileService.get_user_missions(user_id, skip, limit, db)
+    if total == 0 and not items:
+        profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
+        if not profiles:
+            raise HTTPException(status_code=404, detail="Aucun profil CV trouvé pour cet utilisateur.")
 
-    for profile in profiles:
-        if not profile.missions:
-            continue
-        for mission in profile.missions:
-            if not isinstance(mission, dict):
-                continue
-            title = (mission.get("title") or "").strip()
-            company_key = (mission.get("company") or "").strip().lower()
-
-            if not title:
-                continue
-
-            key = f"{title.lower()}|{company_key}"
-
-            if key not in seen_mission_keys:
-                seen_mission_keys.add(key)
-                # Assure que title n'est pas None pour la validation Pydantic
-                # (title: str)
-                mission["title"] = title
-                merged_missions.append(mission)
-
-    total = len(merged_missions)
-    paginated = merged_missions[skip:skip + limit]
-    return {"items": paginated, "total": total, "skip": skip, "limit": limit}
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
 
 
 @router.get("/user/{user_id}/details", response_model=CVFullProfileResponse)
 async def get_user_cv_details(
         user_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    Récupère le profil sémantique complet d'un utilisateur (RAG Context).
-    """
-    profiles = (await db.execute(
-        select(CVProfile)
-        .filter(CVProfile.user_id == user_id)
-        .order_by(CVProfile.created_at.desc())
-    )).scalars().all()
+    from src.services.profile_service import ProfileService
 
-    if not profiles:
-        raise HTTPException(
-            status_code=404,
-            detail="Profil sémantique introuvable pour cet utilisateur.")
-
-    base_profile = profiles[0]
-
-    # Fetch user details for anonymity status
-    is_anon = False
-
-    # Propagate Authorization and Tracing (Rule 3 & 4)
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
     inject(headers)
 
-    async with httpx.AsyncClient(timeout=5.0) as http_client:
-        try:
-            u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
-            if u_res.status_code == 200:
-                try:
-                    u_data = UserItem.model_validate(u_res.json())
-                    is_anon = u_data.is_anonymous or False
-                except ValidationError as ve:
-                    logger.error(f"Rupture de contrat API users pour {user_id}", extra={"error": str(ve)})
-        except Exception as e:
-            logger.warning(
-                f"Failed to fetch user anonymity status for {user_id}: {e}")
+    profile = await ProfileService.get_user_cv_details(user_id, headers, db)
+    if not profile:
+        raise HTTPException(
+            status_code=404,
+            detail="Profil sémantique introuvable pour cet utilisateur.")
 
-    # Inférer seniority depuis years_of_experience si non stocké directement
-    years = base_profile.years_of_experience or 0
-    if years >= 8:
-        inferred_seniority = "Senior"
-    elif years >= 3:
-        inferred_seniority = "Mid"
-    elif years > 0:
-        inferred_seniority = "Junior"
-    else:
-        inferred_seniority = None
-
-    merged_missions = []
-    seen_mission_keys = set()
-    merged_comp_keywords = set()
-
-    merged_educations = []
-    seen_edu_keys = set()
-
-    for p in profiles:
-        if p.competencies_keywords:
-            merged_comp_keywords.update(p.competencies_keywords)
-
-        if p.educations:
-            for edu in p.educations:
-                degree = edu.get("degree", "").strip().lower()
-                school = edu.get("school", "").strip().lower()
-                key = f"{degree}|{school}"
-                if key not in seen_edu_keys:
-                    seen_edu_keys.add(key)
-                    merged_educations.append(edu)
-
-        if not p.missions:
-            continue
-        for mission in p.missions:
-            title = mission.get("title", "").strip().lower()
-            company = mission.get("company", "").strip().lower()
-            key = f"{title}|{company}"
-
-            if key not in seen_mission_keys:
-                seen_mission_keys.add(key)
-                merged_missions.append(mission)
-
-    return CVFullProfileResponse(
-        user_id=base_profile.user_id,
-        summary=base_profile.summary,
-        current_role=base_profile.current_role,
-        seniority=inferred_seniority,
-        years_of_experience=base_profile.years_of_experience,
-        competencies_keywords=list(merged_comp_keywords),
-        missions=merged_missions,
-        educations=merged_educations,
-        is_anonymous=is_anon
-    )
+    return profile
 
 
 @router.post("/internal/users/merge")
@@ -440,14 +255,8 @@ async def remediate_anonymous_profiles(
     token_payload: dict = Depends(verify_jwt),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remédiation des profils incorrectement marqués comme anonymes.
+    from src.services.profile_service import ProfileService
 
-    Identifie les utilisateurs en base (via users_api) ayant is_anonymous=True
-    mais dont l'email n'est pas @anonymous.zenika.com (= vrais consultants mal flaggés).
-    En mode dry_run=False, envoie un PATCH pour corriger is_anonymous=False sur chaque profil.
-
-    Protégé admin uniquement. Exécuté en background pour les volumes importants.
-    """
     if token_payload.get("role") not in ("admin", "service_account"):
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
 
@@ -458,112 +267,19 @@ async def remediate_anonymous_profiles(
     headers_downstream = {"Authorization": auth_header}
     inject(headers_downstream)
 
-    async def _run_remediation(dry: bool, hdrs: dict) -> None:
-        skip, limit, total_fixed, total_scanned = 0, 100, 0, 0
-        logger.info("[remediate-anon] Démarrage remédiation (dry_run=%s).", dry)
-
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            while True:
-                # Récupère uniquement les users anonymes par page
-                res = await http_client.get(
-                    f"{USERS_API_URL.rstrip('/')}/",
-                    params={"skip": skip, "limit": limit, "is_anonymous": "true"},
-                    headers=hdrs,
-                )
-                if res.status_code != 200:
-                    logger.error("[remediate-anon] Erreur users_api /: HTTP %s", res.status_code)
-                    break
-
-                try:
-                    page = UsersResponse.model_validate(res.json())
-                except ValidationError as ve:
-                    logger.error("[remediate-anon] Rupture contrat UsersResponse: %s", ve)
-                    break
-
-                if not page.items:
-                    break
-
-                total_scanned += len(page.items)
-
-                for user in page.items:
-                    email = getattr(user, "email", "") or ""
-                    # Un vrai consultant a un email @zenika.com (pas @anonymous.zenika.com)
-                    if email and "@anonymous.zenika.com" not in email.lower():
-                        logger.info(
-                            "[remediate-anon] user_id=%s email=%s marqué anonyme à tort%s.",
-                            user.id, email, " → correction" if not dry else " (dry_run)"
-                        )
-                        if not dry:
-                            patch_res = await http_client.put(
-                                f"{USERS_API_URL.rstrip('/')}/{user.id}",
-                                json={"is_anonymous": False},
-                                headers=hdrs,
-                            )
-                            if patch_res.status_code == 200:
-                                total_fixed += 1
-                            else:
-                                logger.warning(
-                                    "[remediate-anon] Échec PATCH user_id=%s: HTTP %s — %s",
-                                    user.id, patch_res.status_code, patch_res.text
-                                )
-                        else:
-                            total_fixed += 1  # compte dans dry_run aussi
-
-                if len(page.items) < limit:
-                    break
-                skip += limit
-
-        logger.info(
-            "[remediate-anon] Terminé — scanned=%d, %s=%d.",
-            total_scanned,
-            "would_fix" if dry else "fixed",
-            total_fixed,
-        )
-
     if dry_run:
-        # En dry_run, on exécute directement pour retourner le résultat synchrone
-        # (volume attendu faible — pas besoin de background)
-        skip, limit, candidates = 0, 100, []
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            while True:
-                res = await http_client.get(
-                    f"{USERS_API_URL.rstrip('/')}/",
-                    params={"skip": skip, "limit": limit, "is_anonymous": "true"},
-                    headers=headers_downstream,
-                )
-                if res.status_code != 200:
-                    raise HTTPException(status_code=502, detail=f"users_api error: HTTP {res.status_code}")
+        try:
+            total, candidates = await ProfileService.remediate_anonymous_profiles_dry(headers_downstream)
+            return {
+                "dry_run": True,
+                "candidates_to_fix": total,
+                "profiles": candidates,
+                "message": f"{total} profil(s) incorrectement anonymes détectés. Relancez avec dry_run=false pour les corriger."
+            }
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=str(e))
 
-                try:
-                    page = UsersResponse.model_validate(res.json())
-                except ValidationError as ve:
-                    raise HTTPException(status_code=502, detail=f"Rupture contrat users_api: {ve}")
-
-                if not page.items:
-                    break
-
-                for user in page.items:
-                    email = getattr(user, "email", "") or ""
-                    if email and "@anonymous.zenika.com" not in email.lower():
-                        candidates.append({"id": user.id, "email": email,
-                                           "full_name": getattr(user, "full_name", None)})
-
-                if len(page.items) < limit:
-                    break
-                skip += limit
-
-        return {
-            "dry_run": True,
-            "candidates_to_fix": len(candidates),
-            "profiles": candidates[:50],  # cap à 50 pour la lisibilité
-            "message": (
-                f"{len(candidates)} profil(s) incorrectement anonymes détectés. "
-                "Relancez avec dry_run=false pour les corriger."
-            ),
-        }
-
-    # Mode effectif — traitement en background (volume potentiellement élevé)
-    background_tasks.add_task(_run_remediation, False, dict(headers_downstream))
+    background_tasks.add_task(ProfileService.run_remediation, dict(headers_downstream))
     return {
         "dry_run": False,
         "status": "accepted",

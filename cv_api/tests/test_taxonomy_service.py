@@ -38,6 +38,26 @@ async def test_get_existing_competencies_success():
 
 
 @pytest.mark.asyncio
+async def test_get_existing_competencies_fail_fast():
+    with patch("src.services.taxonomy_service.httpx.AsyncClient") as MockClient:
+        client_instance = AsyncMock()
+        MockClient.return_value.__aenter__.return_value = client_instance
+
+        mock_resp = MagicMock(status_code=200)
+        # Invalid payload (missing 'items' and 'total') to trigger ValidationError
+        mock_resp.json.return_value = {"bad_key": "data"}
+        client_instance.get.return_value = mock_resp
+
+        with patch("src.services.taxonomy_service.logger.error") as mock_logger, \
+             patch("src.services.taxonomy_service.database.get_db", return_value=AsyncMock()):
+            result = await get_existing_competencies("Bearer token")
+            # Result should be empty because of fail-fast on first page
+            assert result == []
+            mock_logger.assert_called_once()
+            assert "Rupture de contrat API competencies" in mock_logger.call_args[0][0]
+
+
+@pytest.mark.asyncio
 async def test_run_taxonomy_step_apply():
     mock_genai_client = MagicMock()
 

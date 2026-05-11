@@ -15,7 +15,7 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 | `src/items/admin_router.py` | 102 | ✅ |
 | `src/items/crud_router.py` | 365 | ✅ |
 | `src/items/router.py` | 26 | ✅ |
-| `src/items/routers/categories_router.py` | 102 | ✅ |
+| `src/items/routers/categories_router.py` | 61 | ✅ |
 | `src/items/routers/search_router.py` | 128 | ✅ |
 
 ## Variables d'environnement

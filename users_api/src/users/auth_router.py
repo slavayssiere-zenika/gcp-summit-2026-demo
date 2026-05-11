@@ -98,8 +98,15 @@ async def logout(response: Response):
 @auth_router.post("/service-account/login", response_model=TokenResponse)
 async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSession = Depends(get_db)):
     try:
+        from jose import jwt as jose_jwt
+        try:
+            unverified_claims = jose_jwt.get_unverified_claims(req.id_token)
+            aud = unverified_claims.get("aud")
+        except Exception:
+            aud = None
+
         request_obj = google_requests.Request()
-        id_info = id_token.verify_oauth2_token(req.id_token, request_obj)
+        id_info = id_token.verify_oauth2_token(req.id_token, request_obj, audience=aud)
 
         email = id_info.get("email")
         if not email:

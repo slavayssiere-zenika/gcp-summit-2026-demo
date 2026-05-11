@@ -338,7 +338,7 @@ compute_service_hash() {
   find "${DIRS_TO_CHECK[@]}" -type f \
     ! -name "VERSION" ! -name "HASH" ! -name "FILE_HASHES" \
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
-    ! -name "*.db" ! -name "*.pyc" \
+    ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
@@ -361,7 +361,7 @@ save_shared_hash() {
     find "./shared" -type f \
       ! -name "HASH" ! -name "FILE_HASHES" \
       ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
-      ! -name "*.db" ! -name "*.pyc" \
+      ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
       ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
       ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
       ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
@@ -382,7 +382,7 @@ check_shared_changed() {
   find "./shared" -type f \
     ! -name "HASH" ! -name "FILE_HASHES" \
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
-    ! -name "*.db" ! -name "*.pyc" \
+    ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \

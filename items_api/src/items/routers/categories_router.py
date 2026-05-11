@@ -1,60 +1,19 @@
 """categories_router.py — Items categories et statistiques."""
 import os
 
-import httpx
 from cache import get_cache, set_cache
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from opentelemetry.propagate import inject
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import verify_jwt
 from src.items.models import Category, Item
 from src.items.schemas import (CategoryCreate, CategoryResponse,
-                               ItemResponse, ItemStatsResponse, PaginationResponse,
-                               UserInfo)
+                               ItemStatsResponse, PaginationResponse)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
 
-
-def get_trace_context_headers() -> dict:
-    headers = {}
-    inject(headers)
-    return headers
-
-
-async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
-    headers = get_trace_context_headers()
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        headers["Authorization"] = auth_header
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(f"{USERS_API_URL.rstrip('/')}/users/{user_id}", headers=headers)
-            if response.status_code == 404:
-                raise HTTPException(status_code=400, detail=f"User with id {user_id} not found")
-            response.raise_for_status()
-            return UserInfo(**response.json())
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=503, detail=f"Unable to verify user: {e}")
-
-
-async def enrich_item(item: Item, request: Request) -> ItemResponse:
-    try:
-        user = await get_user_from_api(item.user_id, request)
-    except HTTPException:
-        user = None
-    return ItemResponse(
-        id=item.id,
-        name=item.name,
-        description=item.description,
-        metadata_json=item.metadata_json,
-        user_id=item.user_id,
-        created_at=item.created_at,
-        user=user,
-        categories=[CategoryResponse.model_validate(c) for c in item.categories]
-    )
 
 router = APIRouter(prefix="", tags=["items_categories"], dependencies=[Depends(verify_jwt)])
 
