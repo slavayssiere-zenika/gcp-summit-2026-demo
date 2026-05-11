@@ -64,7 +64,9 @@ def verify_jwt_bearer(
         HTTPException 401 si le token est invalide, expiré ou si `sub` est absent.
     """
     try:
-        payload = jose_jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jose_jwt.decode(
+            auth.credentials, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300}
+        )
         if not payload.get("sub"):
             raise HTTPException(
                 status_code=401, detail="Token invalide : claim 'sub' manquant"
@@ -95,8 +97,6 @@ async def verify_jwt_request(request: Request) -> dict:
     Raises:
         HTTPException 401 si le header est absent, malformé, ou le token invalide.
     """
-    import jwt as pyjwt  # PyJWT (agent_missions_api convention)
-
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(
@@ -105,7 +105,9 @@ async def verify_jwt_request(request: Request) -> dict:
         )
     token = auth_header.split(" ", 1)[1]
     try:
-        payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jose_jwt.decode(
+            token, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300}
+        )
         if not payload.get("sub"):
             raise HTTPException(
                 status_code=401, detail="Token invalide : claim 'sub' manquant"

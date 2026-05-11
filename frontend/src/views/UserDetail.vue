@@ -78,6 +78,15 @@ const getCategoryName = (id: number) => {
 
 
 const cvProfiles = ref<any[]>([])
+const avgExtractionScore = computed(() => {
+  if (!cvProfiles.value || cvProfiles.value.length === 0) return null
+  const scores = cvProfiles.value
+    .map(c => c.extraction_reliability_score)
+    .filter(s => s != null)
+  if (scores.length === 0) return null
+  const sum = scores.reduce((acc, val) => acc + val, 0)
+  return Math.round(sum / scores.length)
+})
 const importerUser = ref<User | null>(null)
 const missions = ref<any[]>([])
 const educations = ref<any[]>([])
@@ -203,6 +212,10 @@ watch(() => route.params.id, (newId, oldId) => {
             <ShieldCheck size="16" />
             {{ user?.is_active ? 'Compte Actif' : 'Compte Inactif' }}
           </div>
+          <div v-if="avgExtractionScore !== null" class="user-badge score-badge" :class="avgExtractionScore >= 75 ? 'active' : 'warning'">
+            <ShieldCheck size="16" />
+            Fiabilité d'extraction : {{ avgExtractionScore }}%
+          </div>
         </div>
       </header>
 
@@ -301,9 +314,13 @@ watch(() => route.params.id, (newId, oldId) => {
               <label><UserIcon size="14" /> Documents Associés (CVs)</label>
               <div class="value" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem">
                 <template v-for="(cv, index) in cvProfiles" :key="index">
-                  <a v-if="cv" :href="cv.source_url" target="_blank" class="importer-link" style="font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <a v-if="cv" :href="cv.source_url" target="_blank" class="importer-link" style="font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                     Lien Source vers le CV {{ index + 1 }}
                     <span v-if="cv.source_tag" style="background: rgba(227, 25, 55, 0.05); cursor: default; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; text-decoration: none !important;">{{ cv.source_tag }}</span>
+                    <span v-if="cv.extraction_reliability_score != null" style="background: rgba(16, 185, 129, 0.1); color: #10b981; cursor: default; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; text-decoration: none !important;" :title="'Score de fiabilité de l\'extraction par l\'IA'">
+                      <ShieldCheck :size="12" style="vertical-align: text-top; margin-right: 2px;" />
+                      Score: {{ cv.extraction_reliability_score }}%
+                    </span>
                   </a>
                 </template>
               </div>

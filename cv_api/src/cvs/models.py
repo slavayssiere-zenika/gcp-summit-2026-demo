@@ -28,6 +28,7 @@ class CVProfile(Base):
     raw_content = Column(Text, nullable=False)
     # Using 3072 dimensions to match gemini-embedding-001 output topology natively
     semantic_embedding = Column(Vector(3072), nullable=True)
+    extraction_reliability_score = Column(Integer, nullable=True)
     imported_by_id = Column(Integer, index=True, nullable=True)
     is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from fastapi import Request
 from opentelemetry import trace
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger import json
 from starlette.middleware.base import BaseHTTPMiddleware
 
 SILENT_PATHS: frozenset = frozenset({
@@ -27,7 +27,7 @@ class HealthCheckFilter(logging.Filter):
         )
 
 
-class OpenTelemetryJsonFormatter(jsonlogger.JsonFormatter):
+class OpenTelemetryJsonFormatter(json.JsonFormatter):
     """Injecte trace_id/span_id + champs de service dans chaque log JSON."""
 
     _service_name: str = os.getenv("SERVICE_NAME", "analytics-mcp")

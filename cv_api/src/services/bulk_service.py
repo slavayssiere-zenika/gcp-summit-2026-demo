@@ -10,7 +10,7 @@ import logging
 import os
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import database
 import httpx
@@ -56,15 +56,16 @@ async def _acquire_service_token(auth_header: str) -> str:
 
 
 async def _get_cv_extraction_prompt() -> str:
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     cached = _CV_CACHE.get("prompt", {})
-    if cached.get("value") and now < cached.get("expires", datetime.min):
+    if cached.get("value") and now < cached.get("expires", datetime.min.replace(tzinfo=timezone.utc)):
         return cached["value"]
     try:
         async with httpx.AsyncClient(timeout=10.0) as hc:
             res = await hc.get(f"{PROMPTS_API_URL.rstrip('/')}/prompts/cv_api.extract_cv_info")
             if res.status_code == 200:
                 from pydantic import BaseModel
+
                 class PromptResp(BaseModel):
                     value: str
                 data = PromptResp.model_validate(res.json())

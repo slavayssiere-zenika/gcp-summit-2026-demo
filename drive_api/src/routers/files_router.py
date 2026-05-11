@@ -210,10 +210,29 @@ async def _reset_errors_to_pending(db: AsyncSession, force: bool = False) -> dic
     zombie_threshold = datetime.now(timezone.utc) - timedelta(minutes=30)
 
     # Reset des ERROR
+    # Circuit breaker: on abandonne après 3 échecs (passage en IGNORED_NOT_CV)
+    stmt_failed = (
+        update(DriveSyncState)
+        .where(DriveSyncState.status == DriveSyncStatus.ERROR)
+        .where(DriveSyncState.retry_count >= 3)
+        .values(
+            status=DriveSyncStatus.IGNORED_NOT_CV,
+            error_message="Circuit breaker: Echec définitif après 3 tentatives d'import"
+        )
+    )
+    await db.execute(stmt_failed)
+
+    # Pour ceux qui n'ont pas encore atteint la limite, on incrémente le retry_count et on remet en PENDING
     stmt_errors = (
         update(DriveSyncState)
         .where(DriveSyncState.status == DriveSyncStatus.ERROR)
-        .values(status=DriveSyncStatus.PENDING, error_message=None, last_processed_at=datetime.now(timezone.utc))
+        .where(DriveSyncState.retry_count < 3)
+        .values(
+            status=DriveSyncStatus.PENDING,
+            error_message=None,
+            last_processed_at=datetime.now(timezone.utc),
+            retry_count=DriveSyncState.retry_count + 1
+        )
         .returning(DriveSyncState.google_file_id)
     )
     result_errors = await db.execute(stmt_errors)

@@ -5,7 +5,7 @@ from typing import List
 import httpx
 from cache import delete_cache_pattern, get_cache, set_cache
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path
 from opentelemetry.propagate import inject
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,18 +13,19 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from src.auth import verify_jwt
 from src.items.models import Category, Item
-from src.items.schemas import (BulkItemCreate, CategoryCreate,
-                               CategoryResponse, ItemCreate, ItemResponse,
-                               ItemStatsResponse, ItemUpdate,
+from src.items.schemas import (BulkItemCreate, CategoryResponse,
+                               ItemCreate, ItemResponse, ItemUpdate,
                                PaginationResponse, UserInfo)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
 
+
 def get_trace_context_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
+
 
 async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     headers = get_trace_context_headers()
@@ -40,6 +41,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
             return UserInfo(**response.json())
         except httpx.HTTPError as e:
             raise HTTPException(status_code=503, detail=f"Unable to verify user: {e}")
+
 
 async def enrich_item(item: Item, request: Request) -> ItemResponse:
     try:
@@ -59,10 +61,11 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
 
 router = APIRouter(prefix="", tags=["items_crud"], dependencies=[Depends(verify_jwt)])
 
+
 @router.get("/", response_model=PaginationResponse[ItemResponse])
 async def list_items(
     request: Request,
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    skip: int = Query(0, ge=0, le=2_147_483_647, description="Number of records to skip"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
     search: str = Query(None, description="Search term"),
     db: AsyncSession = Depends(get_db),
@@ -72,7 +75,7 @@ async def list_items(
     allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
     search_str = search or "none"
     cache_key = f"items:list:{skip}:{limit}:search_{search_str}:auth_{allowed_ids_str}"
-    
+
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
@@ -82,7 +85,7 @@ async def list_items(
 
     from sqlalchemy import func
     base_query = select(Item).options(selectinload(Item.categories)).join(Item.categories).filter(Category.id.in_(allowed_ids)).distinct()
-    
+
     total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar()
     items = (await db.execute(base_query.offset(skip).limit(limit))).scalars().all()
     enriched_items = [await enrich_item(item, request) for item in items]
@@ -95,11 +98,12 @@ async def list_items(
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
+
 @router.get("/{item_id}", response_model=ItemResponse)
 async def get_item(
-    item_id: int, 
     request: Request,
-    db: AsyncSession = Depends(get_db), 
+    item_id: int = Path(..., gt=0, le=2_147_483_647),
+    db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
     cache_key = f"items:{item_id}"
@@ -122,16 +126,17 @@ async def get_item(
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
+
 @router.post("/", response_model=ItemResponse, status_code=201)
 async def create_item(
     request: Request,
-    item: ItemCreate, 
-    db: AsyncSession = Depends(get_db), 
+    item: ItemCreate,
+    db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
     if not item.category_ids:
         raise HTTPException(status_code=400, detail="Item must have at least one category")
-    
+
     categories = (await db.execute(select(Category).filter(Category.id.in_(item.category_ids)))).scalars().all()
     if len(categories) != len(set(item.category_ids)):
         raise HTTPException(status_code=400, detail="One or more category IDs are invalid")
@@ -148,7 +153,7 @@ async def create_item(
         select(Item).options(_sil(Item.categories))
         .filter(Item.user_id == item.user_id, Item.name == item.name)
     )).scalars().first()
-    
+
     if existing:
         import logging as _log
         _log.getLogger(__name__).info(f"[create_item] Item '{item.name}' (user_id={item.user_id}) déjà existant — retour idempotent.")
@@ -177,9 +182,10 @@ async def create_item(
 
     delete_cache_pattern("items:list:*")
     delete_cache_pattern("items:search:*")
-    
+
     db_item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == db_item.id))).scalars().first()
     return await enrich_item(db_item, request)
+
 
 @router.post("/bulk", response_model=List[ItemResponse], status_code=201)
 async def create_items_bulk(
@@ -190,39 +196,39 @@ async def create_items_bulk(
 ):
     user_role = auth_payload.get("role", "")
     allowed_ids = auth_payload.get("allowed_category_ids", [])
-    
+
     all_category_ids = set()
     for item in payload.items:
         all_category_ids.update(item.category_ids)
-        
+
     if not all_category_ids:
         return []
-        
+
     categories = (await db.execute(select(Category).filter(Category.id.in_(all_category_ids)))).scalars().all()
     cat_map = {c.id: c for c in categories}
-    
+
     if len(categories) != len(all_category_ids):
         raise HTTPException(status_code=400, detail="One or more category IDs are invalid")
-        
+
     if user_role not in ("admin", "rh", "service_account"):
         forbidden_ids = [cid for cid in all_category_ids if cid not in allowed_ids]
         if forbidden_ids:
             raise HTTPException(status_code=403, detail=f"User does not have rights for categories: {forbidden_ids}")
-            
+
     from sqlalchemy.orm import selectinload as _sil
     user_ids = {item.user_id for item in payload.items}
     names = {item.name for item in payload.items}
-    
+
     existing_items = (await db.execute(
         select(Item).options(_sil(Item.categories))
         .filter(Item.user_id.in_(user_ids), Item.name.in_(names))
     )).scalars().all()
-    
+
     existing_map = {(i.user_id, i.name): i for i in existing_items}
-    
+
     new_items = []
     result_item_ids = []
-    
+
     for item in payload.items:
         key = (item.user_id, item.name)
         if key in existing_map:
@@ -237,27 +243,27 @@ async def create_items_bulk(
             )
             db.add(db_item)
             new_items.append(db_item)
-            
+
     if new_items:
         try:
             await db.commit()
             for db_item in new_items:
                 await db.refresh(db_item)
                 result_item_ids.append(db_item.id)
-            
+
             delete_cache_pattern("items:list:*")
             delete_cache_pattern("items:search:*")
         except IntegrityError as e:
             await db.rollback()
             import logging as _log
             _log.getLogger(__name__).warning(f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
-            
+
             result_item_ids = []
             for item in payload.items:
                 existing = (await db.execute(
                     select(Item).filter(Item.user_id == item.user_id, Item.name == item.name)
                 )).scalars().first()
-                
+
                 if existing:
                     result_item_ids.append(existing.id)
                 else:
@@ -280,7 +286,7 @@ async def create_items_bulk(
                         )).scalars().first()
                         if existing:
                             result_item_ids.append(existing.id)
-            
+
             delete_cache_pattern("items:list:*")
             delete_cache_pattern("items:search:*")
         except Exception:
@@ -290,11 +296,12 @@ async def create_items_bulk(
     final_items = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id.in_(result_item_ids)))).scalars().all()
     return [await enrich_item(db_item, request) for db_item in final_items]
 
+
 @router.put("/{item_id}", response_model=ItemResponse)
 async def update_item(
-    item_id: int,
     item_update: ItemUpdate,
     request: Request,
+    item_id: int = Path(..., gt=0, le=2_147_483_647),
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
@@ -327,13 +334,14 @@ async def update_item(
     delete_cache_pattern("items:list:*")
     delete_cache_pattern("items:search:*")
     delete_cache_pattern("items:user:*")
-    
+
     item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()
     return await enrich_item(item, request)
 
+
 @router.delete("/{item_id}", status_code=204)
 async def delete_item(
-    item_id: int,
+    item_id: int = Path(..., gt=0, le=2_147_483_647),
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):

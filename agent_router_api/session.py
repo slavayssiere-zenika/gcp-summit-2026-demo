@@ -7,6 +7,7 @@ from google.adk.runners import InMemorySessionService
 
 logger = logging.getLogger(__name__)
 
+
 class RedisSessionService(InMemorySessionService):
     def __init__(self):
         super().__init__()
@@ -52,15 +53,36 @@ class RedisSessionService(InMemorySessionService):
         session = super()._create_session_impl(**kwargs)
         self._save_all(session_id)
         return session
-        
+
     async def append_event(self, session, event):
         self._load_all(session.id)
         res = await super().append_event(session, event)
+
+        # Sliding Window / Truncation de l'historique
+        max_history = int(os.getenv("ADK_MAX_HISTORY_TURNS", "40"))
+        if hasattr(session, "history") and isinstance(session.history, list):
+            if len(session.history) > max_history:
+                logger.info(
+                    f"Truncating session {session.id} history from {len(session.history)} "
+                    f"to {max_history} messages"
+                )
+                session.history = session.history[-max_history:]
+
         self._save_all(session.id)
         return res
-        
+
     def _delete_session_impl(self, **kwargs):
         session_id = kwargs.get("session_id")
         self._load_all(session_id)
-        super()._delete_session_impl(**kwargs)
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+        try:
+            super()._delete_session_impl(**kwargs)
+        except Exception:
+            pass
         self._save_all(session_id)
+        if session_id:
+            try:
+                self.r.delete(f"adk:sessions:{session_id}")
+            except Exception as e:
+                logger.error(f"Redis memory delete fail: {e}")

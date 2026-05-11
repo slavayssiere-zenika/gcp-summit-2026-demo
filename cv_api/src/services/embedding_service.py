@@ -85,6 +85,25 @@ async def reindex_embeddings_bg(
                     )
                     profile.semantic_embedding = emb_res.embeddings[0].values
 
+                    # Extraction quality test during re-index
+                    import math
+                    raw_snippet = profile.raw_content[:20000] if profile.raw_content else ""
+                    if raw_snippet:
+                        raw_emb_res = await embed_content_with_retry(
+                            genai_client,
+                            model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+                            contents=raw_snippet
+                        )
+                        raw_vector = raw_emb_res.embeddings[0].values
+
+                        vector_data = profile.semantic_embedding
+                        dot_product = sum(a * b for a, b in zip(vector_data, raw_vector))
+                        norm_v1 = math.sqrt(sum(a * a for a in vector_data))
+                        norm_v2 = math.sqrt(sum(b * b for b in raw_vector))
+                        if norm_v1 > 0 and norm_v2 > 0:
+                            sim = dot_product / (norm_v1 * norm_v2)
+                            profile.extraction_reliability_score = min(100, max(0, int(sim * 100)))
+
                     # FinOps tracking
                     await log_finops(
                         "system-reindex",

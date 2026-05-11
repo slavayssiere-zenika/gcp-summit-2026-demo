@@ -19,14 +19,20 @@ import json
 import logging
 import os
 import time
+import contextvars
 
 import httpx
 from mcp_client import auth_header_var, user_id_var
 from metrics import (A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL,
                      A2A_CALL_RETRIES_TOTAL)
 from opentelemetry.propagate import inject
+from agent_commons.ui_tools import render_ui_widgets
 
 logger = logging.getLogger(__name__)
+
+# Side-channel to pass massive data (UI elements, traces, sub-steps) to the router
+# without injecting it into the LLM's context window (prevents 400 Context Overflow).
+a2a_metadata_var = contextvars.ContextVar("a2a_metadata", default=None)
 
 # ── Circuit-Breaker configuration ────────────────────────────────────────────
 # After CB_FAILURE_THRESHOLD consecutive failures on a given agent, the circuit
@@ -306,14 +312,20 @@ async def ask_hr_agent(query: str, user_id: str = "") -> dict:
     if data.get("degraded"):
         return {"result": json.dumps(data)}
 
+    metadata_list = a2a_metadata_var.get()
+    if metadata_list is not None:
+        metadata_list.append({
+            "agent": "hr_agent",
+            "data": data.get("data"),
+            "display_type": data.get("display_type"),
+            "steps": data.get("steps", []),
+            "usage": data.get("usage", {}),
+        })
+
     return {"result": json.dumps({
         "agent": "hr_agent",
         "response": data.get("response"),
-        "data": data.get("data"),
-        "display_type": data.get("display_type"),
-        "steps": data.get("steps", []),
         "thoughts": data.get("thoughts", ""),
-        "usage": data.get("usage", {}),
         "confidence": _compute_confidence(data.get("steps", [])),
     })}
 
@@ -341,14 +353,20 @@ async def ask_ops_agent(query: str, user_id: str = "") -> dict:
     if data.get("degraded"):
         return {"result": json.dumps(data)}
 
+    metadata_list = a2a_metadata_var.get()
+    if metadata_list is not None:
+        metadata_list.append({
+            "agent": "ops_agent",
+            "data": data.get("data"),
+            "display_type": data.get("display_type"),
+            "steps": data.get("steps", []),
+            "usage": data.get("usage", {}),
+        })
+
     return {"result": json.dumps({
         "agent": "ops_agent",
         "response": data.get("response"),
-        "data": data.get("data"),
-        "display_type": data.get("display_type"),
-        "steps": data.get("steps", []),
         "thoughts": data.get("thoughts", ""),
-        "usage": data.get("usage", {}),
         "confidence": _compute_confidence(data.get("steps", [])),
     })}
 
@@ -380,17 +398,23 @@ async def ask_missions_agent(query: str, user_id: str = "") -> dict:
     if data.get("degraded"):
         return {"result": json.dumps(data)}
 
+    metadata_list = a2a_metadata_var.get()
+    if metadata_list is not None:
+        metadata_list.append({
+            "agent": "missions_agent",
+            "data": data.get("data"),
+            "display_type": data.get("display_type"),
+            "steps": data.get("steps", []),
+            "usage": data.get("usage", {}),
+        })
+
     return {"result": json.dumps({
         "agent": "missions_agent",
         "response": data.get("response"),
-        "data": data.get("data"),
-        "display_type": data.get("display_type"),
-        "steps": data.get("steps", []),
         "thoughts": data.get("thoughts", ""),
-        "usage": data.get("usage", {}),
         "confidence": _compute_confidence(data.get("steps", [])),
     })}
 
 
 # Liste des outils exposés au Router LLM
-ROUTER_TOOLS = [ask_hr_agent, ask_ops_agent, ask_missions_agent]
+ROUTER_TOOLS = [ask_hr_agent, ask_ops_agent, ask_missions_agent, render_ui_widgets]

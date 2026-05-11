@@ -9,7 +9,7 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 212 | ✅ |
+| `main.py` | 231 | ✅ |
 | `mcp_server.py` | 328 | ✅ |
 | `conftest.py` | 39 | ✅ |
 | `metrics.py` | 3 | ✅ |

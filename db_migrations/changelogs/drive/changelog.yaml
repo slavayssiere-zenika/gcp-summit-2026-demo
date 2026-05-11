@@ -334,3 +334,22 @@ databaseChangeLog:
             tableName: "drive_sync_state"
             columnName: "imported_at"
             newDataType: "timestamp"
+
+  - changeSet:
+      id: "15"
+      author: "antigravity"
+      comment: "Ajout de la colonne retry_count pour le circuit breaker de l'ingestion"
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "retry_count"
+                  type: "integer"
+                  defaultValueNumeric: "0"
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "retry_count"

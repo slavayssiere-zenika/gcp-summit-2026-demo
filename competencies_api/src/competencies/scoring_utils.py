@@ -4,6 +4,7 @@ scoring_utils.py — Fonctions pures de calcul pour le scoring de compétences.
 Pas de dépendances réseau ni DB — testables unitairement.
 Exporté depuis scoring_service.py (re-export compat).
 """
+
 import json
 import logging
 import math
@@ -25,8 +26,7 @@ CV_API_URL: str = os.getenv("CV_API_URL", "http://cv_api:8000")
 # → Utiliser un ID stable via VERTEX_BATCH_MODEL.
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL")
 VERTEX_BATCH_MODEL: str = os.getenv(
-    "VERTEX_BATCH_MODEL",
-    os.getenv("GEMINI_MODEL_STABLE")
+    "VERTEX_BATCH_MODEL", os.getenv("GEMINI_MODEL_STABLE")
 )
 
 # Concurrence de préchargement des missions (1 appel HTTP par user)
@@ -37,8 +37,12 @@ SCORING_APPLY_SEMAPHORE: int = int(os.getenv("SCORING_APPLY_SEMAPHORE", "10"))
 # ── Paramètres de pondération scoring v2 (dupliqués depuis router.py) ─────────
 COMPETENCY_DECAY_LAMBDA: float = float(os.getenv("COMPETENCY_DECAY_LAMBDA", "0.1"))
 MISSION_TYPE_BONUS: dict = {
-    "audit": 0.5, "conseil": 0.5, "accompagnement": 0.3,
-    "formation": 0.4, "expertise": 0.3, "build": 0.0,
+    "audit": 0.5,
+    "conseil": 0.5,
+    "accompagnement": 0.3,
+    "formation": 0.4,
+    "expertise": 0.3,
+    "build": 0.0,
 }
 MISSION_TYPE_LABELS: dict = {
     "audit": "Audit / Diagnostic (valeur ajoutée élevée)",
@@ -51,6 +55,7 @@ MISSION_TYPE_LABELS: dict = {
 
 
 # ── Utilitaires de pondération (copiés depuis router.py pour autonomie) ───────
+
 
 def _compute_recency_weight(end_date_str: Optional[str]) -> float:
     """Decay exponentiel sur l'ancienneté de la mission."""
@@ -98,7 +103,9 @@ def _get_mission_bonus(mission_type: Optional[str]) -> tuple[str, float]:
     return label, bonus
 
 
-def _estimate_duration_from_dates(start: Optional[str], end: Optional[str]) -> Optional[str]:
+def _estimate_duration_from_dates(
+    start: Optional[str], end: Optional[str]
+) -> Optional[str]:
     if not start or not end:
         return None
     try:
@@ -106,6 +113,7 @@ def _estimate_duration_from_dates(start: Optional[str], end: Optional[str]) -> O
         sm = int(str(start)[5:7]) if len(str(start)) >= 7 else 1
         if str(end).lower() in ("present", "en cours", "current"):
             from datetime import date as _date
+
             ey, em = _date.today().year, _date.today().month
         else:
             ey = int(str(end)[:4])
@@ -164,14 +172,19 @@ def _build_scoring_prompt(competency_name: str, missions: list) -> str:
 
     comp_norm = competency_name.lower()
     relevant = [
-        m for m in missions
+        m
+        for m in missions
         if any(
             comp_norm in c.lower() or c.lower() in comp_norm
             for c in m.get("competencies", [])
         )
     ]
     context_missions = relevant if relevant else missions[:5]
-    context_label = "directement liées à cette compétence" if relevant else "générales du consultant"
+    context_label = (
+        "directement liées à cette compétence"
+        if relevant
+        else "générales du consultant"
+    )
     missions_text = "\n\n".join([_format_mission_v2(m) for m in context_missions])
 
     return (
@@ -206,6 +219,7 @@ def _build_scoring_prompt(competency_name: str, missions: list) -> str:
 
 # ── Phase 1 : Préchargement des missions ─────────────────────────────────────
 
+
 def _build_jsonl_lines(
     user_comp_list: list[tuple[int, int, str]],  # (user_id, comp_id, comp_name)
     missions_map: dict[int, list],
@@ -232,16 +246,20 @@ def _build_jsonl_lines(
             continue
 
         key = f"score-{user_id}-{comp_id}"
-        lines.append(json.dumps({
-            "id": key,
-            "request": {
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "responseMimeType": "application/json",
-                },
-            },
-        }))
+        lines.append(
+            json.dumps(
+                {
+                    "id": key,
+                    "request": {
+                        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": 0.1,
+                            "responseMimeType": "application/json",
+                        },
+                    },
+                }
+            )
+        )
         index[key] = (user_id, comp_id, comp_name)
 
     return lines, index, skipped_no_mission
@@ -249,13 +267,14 @@ def _build_jsonl_lines(
 
 # ── Phase 3 : Apply des résultats GCS → DB ───────────────────────────────────
 
+
 def _parse_scoring_results_gcs(
     blobs_jsonl: list[str],
     index: dict[str, tuple[int, int, str]],
 ) -> tuple[list[tuple[int, int, str, float, str]], dict[int, dict]]:
     """
     Parse les lignes JSONL de sortie Vertex AI Batch.
-    Retourne une liste de (user_id, comp_id, comp_name, score, justification) 
+    Retourne une liste de (user_id, comp_id, comp_name, score, justification)
     et un dict des usages tokens par user_id.
     """
     results: list[tuple[int, int, str, float, str]] = []
@@ -271,17 +290,26 @@ def _parse_scoring_results_gcs(
             user_id, comp_id, comp_name = index[key]
             candidates = record.get("response", {}).get("candidates", [])
             usage = record.get("response", {}).get("usageMetadata", {})
-            
+
             inp = usage.get("promptTokenCount", 0)
             out = usage.get("candidatesTokenCount", 0)
             if user_id not in user_usage:
-                user_usage[user_id] = {"prompt_token_count": 0, "candidates_token_count": 0}
+                user_usage[user_id] = {
+                    "prompt_token_count": 0,
+                    "candidates_token_count": 0,
+                }
             user_usage[user_id]["prompt_token_count"] += inp
             user_usage[user_id]["candidates_token_count"] += out
-            
+
             if not candidates:
                 continue
-            raw = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+            raw = (
+                candidates[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+                .strip()
+            )
             if not raw.startswith("{"):
                 m = re.search(r"\{.*\}", raw, re.DOTALL)
                 raw = m.group(0) if m else raw

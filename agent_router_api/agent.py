@@ -18,7 +18,7 @@ import os
 import httpx  # noqa: F401,F811 — re-exported so tests can patch "agent.httpx.AsyncClient"
 from a2a_tools import (  # noqa: F401 — backward-compat re-exports for test patching
     ROUTER_TOOLS, A2aRequestInterceptor, A2ASubAgentError, _call_sub_agent,
-    ask_hr_agent, ask_missions_agent, ask_ops_agent)
+    ask_hr_agent, ask_missions_agent, ask_ops_agent, a2a_metadata_var)
 from google.adk.agents import Agent
 from google.genai import types
 from mcp_client import auth_header_var, user_id_var
@@ -157,6 +157,8 @@ async def run_agent_query(
             app_name="zenika_assistant", user_id=user_id, session_id=session_id
         )
 
+    a2a_metadata_var.set([])
+
     response_parts: list[str] = []
     last_tool_data = None
     steps: list[dict] = []
@@ -176,7 +178,8 @@ async def run_agent_query(
             has_content = hasattr(event, "content") and event.content is not None
 
             if has_content:
-                for part in (list(event.content.parts) if hasattr(event.content, "parts") else []):
+                parts = getattr(event.content, "parts", None)
+                for part in (list(parts) if parts is not None else []):
                     # a) Thoughts (Gemini 2.0 Thinking support)
                     thought_val = getattr(part, "thought", None)
                     if thought_val:
@@ -218,45 +221,57 @@ async def run_agent_query(
                                 logger.warning(f"Erreur ignorée lors du parsing JSON: {e}")
 
                         # Aggregate sub-agent metadata if this is an A2A delegation
-                        if isinstance(res_data, dict) and "response" in res_data:
+                        is_a2a = isinstance(res_data, dict) and "response" in res_data
+                        if is_a2a:
                             sub_agent_name = res_data.get("agent", "sub_agent")
 
                             sub_thoughts = res_data.get("thoughts", "")
                             if sub_thoughts:
                                 thoughts.append(f"[{sub_agent_name}] {sub_thoughts}")
-
-                            sub_steps = res_data.get("steps", [])
-                            sub_tool_calls = [s for s in sub_steps if s.get("type") == "call"]
-
-                            if not sub_tool_calls and res_data.get("response"):
-                                logger.warning(
-                                    f"[Router] ⚠️ Sub-agent '{sub_agent_name}' responded with ZERO tool calls."
-                                )
-                                steps.append({
-                                    "type": "warning",
-                                    "tool": f"{sub_agent_name}:GUARDRAIL",
-                                    "args": {"message": f"[{sub_agent_name}] Aucun outil appelé. Réponse potentiellement hallucinée."},
-                                })
-
-                            for s in sub_steps:
-                                prefixed = dict(s)
-                                if "tool" in prefixed:
-                                    prefixed["tool"] = f"{sub_agent_name}:{prefixed['tool']}"
-                                prefixed["source"] = sub_agent_name
-                                sig_key = f"sub:{json.dumps(prefixed, sort_keys=True)}"
-                                if sig_key not in seen_steps:
-                                    steps.append(prefixed)
-                                    seen_steps.add(sig_key)
-
-                            sub_use = res_data.get("usage", {})
-                            total_input_tokens += sub_use.get("total_input_tokens", 0)
-                            total_output_tokens += sub_use.get("total_output_tokens", 0)
-                            last_tool_data = res_data.get("data")
-                            # Capture du hint UI propagé depuis render_ui_widgets du sous-agent
-                            if res_data.get("display_type") and not sub_agent_display_type:
-                                sub_agent_display_type = res_data["display_type"]
                         else:
                             last_tool_data = res_data
+
+                        # Process side-channeled metadata to avoid Context Window Overflow
+                        metadata_list = a2a_metadata_var.get()
+                        if metadata_list:
+                            for meta in metadata_list:
+                                meta_agent_name = meta.get("agent", "sub_agent")
+                                sub_steps = meta.get("steps", [])
+                                sub_tool_calls = [s for s in sub_steps if s.get("type") == "call"]
+
+                                if not sub_tool_calls and is_a2a and res_data.get("response"):
+                                    logger.warning(
+                                        f"[Router] ⚠️ Sub-agent '{meta_agent_name}' responded with ZERO tool calls."
+                                    )
+                                    steps.append({
+                                        "type": "warning",
+                                        "tool": f"{meta_agent_name}:GUARDRAIL",
+                                        "args": {
+                                            "message": f"[{meta_agent_name}] Aucun outil appelé. "
+                                                       "Réponse potentiellement hallucinée."
+                                        },
+                                    })
+
+                                for s in sub_steps:
+                                    prefixed = dict(s)
+                                    if "tool" in prefixed:
+                                        prefixed["tool"] = f"{meta_agent_name}:{prefixed['tool']}"
+                                    prefixed["source"] = meta_agent_name
+                                    sig_key = f"sub:{json.dumps(prefixed, sort_keys=True)}"
+                                    if sig_key not in seen_steps:
+                                        steps.append(prefixed)
+                                        seen_steps.add(sig_key)
+
+                                sub_use = meta.get("usage", {})
+                                total_input_tokens += sub_use.get("total_input_tokens", 0)
+                                total_output_tokens += sub_use.get("total_output_tokens", 0)
+
+                                if meta.get("data") is not None:
+                                    last_tool_data = meta.get("data")
+                                if meta.get("display_type") and not sub_agent_display_type:
+                                    sub_agent_display_type = meta.get("display_type")
+
+                            metadata_list.clear()
 
                         sig = f"result:{json.dumps(res_data, sort_keys=True)}"
                         if sig not in seen_steps:
@@ -270,7 +285,7 @@ async def run_agent_query(
             if has_content and is_assistant:
                 if isinstance(event.content, str):
                     response_parts.append(event.content)
-                elif hasattr(event.content, "parts"):
+                elif getattr(event.content, "parts", None) is not None:
                     for part in event.content.parts:
                         if (
                             getattr(part, "text", None)
@@ -286,8 +301,10 @@ async def run_agent_query(
                 else getattr(event, "usage_metadata", None)
             )
             if u:
-                it = getattr(u, "prompt_token_count", 0) or (u.get("prompt_token_count", 0) if isinstance(u, dict) else 0)
-                ot = getattr(u, "candidates_token_count", 0) or (u.get("candidates_token_count", 0) if isinstance(u, dict) else 0)
+                it = getattr(u, "prompt_token_count", 0) or (
+                    u.get("prompt_token_count", 0) if isinstance(u, dict) else 0)
+                ot = getattr(u, "candidates_token_count", 0) or (
+                    u.get("candidates_token_count", 0) if isinstance(u, dict) else 0)
                 router_input_tokens = max(router_input_tokens, it)
                 router_output_tokens = max(router_output_tokens, ot)
                 total_input_tokens = max(total_input_tokens, it)
@@ -321,7 +338,7 @@ async def run_agent_query(
     except Exception as gemini_err:
         # OPS-003 — Gemini context window overflow (400 INVALID_ARGUMENT)
         err_str = str(gemini_err)
-        if "input token count exceeds" in err_str or "INVALID_ARGUMENT" in err_str:
+        if "input token count exceeds" in err_str:
             logger.warning(
                 f"[OPS-003] Gemini context window overflow for session '{session_id}'. "
                 f"Auto-resetting session. Error: {err_str[:200]}"

@@ -2,7 +2,6 @@ google-api-python-client>=2.100.0
 google-auth>=2.20.0
 faker>=20.0.0
 google-genai>=0.1.0
-mutmut>=3.5.0
 # Requis par google-adk[a2a] pour AgentRegistry.get_mcp_toolset()
 a2a-sdk>=0.3.26
 google-cloud-iamconnectorcredentials>=0.1.0

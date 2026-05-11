@@ -12,7 +12,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 | `main.py` | 381 | ✅ |
 | `conftest.py` | 16 | ✅ |
 | `metrics.py` | 20 | ✅ |
-| `agent.py` | 237 | ✅ |
+| `agent.py` | 243 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

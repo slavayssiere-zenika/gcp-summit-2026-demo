@@ -27,10 +27,12 @@ _log = logging.getLogger(__name__)
 
 auth_router = APIRouter(prefix="", tags=["auth"])
 
+
 def _set_auth_cookies(request: Request, response: Response, access_token: str, refresh_token: str) -> None:
     is_https = request.headers.get("x-forwarded-proto", "http").lower() == "https"
     response.set_cookie(key="access_token", value=access_token, httponly=True, max_age=15 * 60, samesite="lax", secure=is_https)
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, max_age=3600 * 24 * 7, samesite="lax", secure=is_https)
+
 
 @auth_router.post("/login", response_model=TokenResponse)
 async def login(login_data: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
@@ -53,6 +55,7 @@ async def login(login_data: LoginRequest, request: Request, response: Response, 
     _set_auth_cookies(request, response, access_token, refresh_token)
 
     return TokenResponse(access_token=access_token, token_type="bearer", username=user.username, role=user.role)
+
 
 @auth_router.post("/refresh", response_model=TokenResponse)
 async def refresh_token_route(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
@@ -84,11 +87,13 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
 
     return TokenResponse(access_token=new_access, token_type="bearer", username=user.username, role=user.role)
 
+
 @auth_router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return {"message": "Déconnexion réussie"}
+
 
 @auth_router.post("/service-account/login", response_model=TokenResponse)
 async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSession = Depends(get_db)):
@@ -101,7 +106,7 @@ async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSessio
             raise HTTPException(status_code=403, detail="Un email est requis dans l'ID Token")
 
         if not email.endswith(".iam.gserviceaccount.com"):
-             raise HTTPException(status_code=403, detail="Ce token n'appartient pas à un Service Account autorisé")
+            raise HTTPException(status_code=403, detail="Ce token n'appartient pas à un Service Account autorisé")
 
         sa_token_ttl = int(os.getenv("SA_TOKEN_TTL_MINUTES", "120"))
         access_token = create_access_token(
@@ -116,11 +121,13 @@ async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSessio
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_SECRET_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_SECRET_KEY", "")
 
+
 @auth_router.get("/google/config")
 async def get_google_config():
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Google Client ID not configured")
     return {"client_id": GOOGLE_CLIENT_ID}
+
 
 @auth_router.get("/google/login")
 async def google_login(request: Request):
@@ -138,6 +145,7 @@ async def google_login(request: Request):
     }
     url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
     return RedirectResponse(url)
+
 
 @auth_router.get("/google/callback")
 async def google_callback(request: Request, code: str, response: Response, db: AsyncSession = Depends(get_db)):
@@ -160,23 +168,23 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         token_res = await client.post(token_url, data=token_data)
         if token_res.is_error:
             raise HTTPException(status_code=400, detail="Failed to get token from Google")
-        
+
         from shared.schemas.auth import TokenResponse
         data = TokenResponse.model_validate(token_res.json())
         access_token_google = data.access_token
-        
+
         userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
         userinfo_res = await client.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"})
         if userinfo_res.is_error:
             raise HTTPException(status_code=400, detail="Failed to get user info from Google")
-            
+
         user_info = userinfo_res.json()
     email = user_info.get("email")
     if not email or not email.endswith("@zenika.com"):
         raise HTTPException(status_code=403, detail="Uniquement les e-mails @zenika.com sont autorisés")
-        
+
     user = (await db.execute(select(User).filter(User.email == email))).scalars().first()
-    
+
     if not user:
         dummy_password = ''.join(pysecrets.choice(string.ascii_letters + string.digits) for _ in range(32))
         db_user = User(
@@ -200,7 +208,7 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         user.google_id = user_info.get("sub", user.google_id)
         await db.commit()
         await db.refresh(user)
-    
+
     USER_LOGINS_TOTAL.labels(status="success").inc()
 
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
@@ -210,15 +218,17 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         "role": user.role
     })
     refresh_token = create_refresh_token(data={"sub": user.username})
-    
+
     frontend_url = f"{scheme}://{host}/"
     redirect_response = RedirectResponse(frontend_url)
     _set_auth_cookies(request, redirect_response, access_token, refresh_token)
     return redirect_response
 
+
 @auth_router.get("/health")
 async def router_health():
     return {"status": "healthy"}
+
 
 @auth_router.post("/internal/service-token", response_model=TokenResponse)
 async def create_service_token(request: Request, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
@@ -231,7 +241,7 @@ async def create_service_token(request: Request, db: AsyncSession = Depends(get_
 
     allowed_ids = []
     role = token_payload.get("role")
-    
+
     if role != "service_account":
         user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
         if not user or not user.is_active:
@@ -245,6 +255,7 @@ async def create_service_token(request: Request, db: AsyncSession = Depends(get_
 
     _log.info(f"[service-token] Token de service généré pour '{username}' (TTL={ttl_minutes}min)")
     return TokenResponse(access_token=access_token, token_type="bearer", username=username, role=role)
+
 
 @auth_router.post("/suspend/{email}")
 async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
@@ -264,9 +275,9 @@ async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_pay
     db.add(audit_log)
     await db.commit()
 
-    from cache import client as redis_client
+    from cache import get_client
     BLACKLIST_KEY = f"jwt:blacklist:user:{user.username}"
-    redis_client.setex(BLACKLIST_KEY, 15 * 60, "suspended")
+    get_client().setex(BLACKLIST_KEY, 15 * 60, "suspended")
 
     delete_cache(f"users:{user.id}")
     delete_cache_pattern("users:me:*")

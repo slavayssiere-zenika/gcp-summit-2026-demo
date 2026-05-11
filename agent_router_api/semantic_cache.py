@@ -72,7 +72,7 @@ _INJECTION_PATTERNS = [
 ]
 
 _CACHE_KEY_PREFIX = "semcache:"
-_HNSW_INDEX_NAME = "idx:semcache"
+_HNSW_INDEX_NAME = "idx:semcache:v2"
 _EMBEDDING_DIM = 768  # gemini-embedding-001 dimension
 
 
@@ -149,9 +149,12 @@ class SemanticCache:
                 self._hnsw_ready = True
                 logger.info(f"[SemanticCache] Index HNSW '{_HNSW_INDEX_NAME}' créé (TAG — compatible Memorystore).")
             except Exception as e:
-                logger.error(f"[SemanticCache] Impossible de créer l'index HNSW: {e}")
-                # Fallback : on désactive le cache pour cette instance
-                self._hnsw_ready = False
+                if "already exists" in str(e).lower() or "Index already exists" in str(e):
+                    self._hnsw_ready = True
+                    logger.info(f"[SemanticCache] Index HNSW '{_HNSW_INDEX_NAME}' created by another instance.")
+                else:
+                    logger.error(f"[SemanticCache] Impossible de créer l'index HNSW: {e}")
+                    self._hnsw_ready = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -174,6 +177,9 @@ class SemanticCache:
         if not await self._ensure_connected():
             return None
 
+        if not self._hnsw_ready:
+            return None
+
         try:
             query_embedding = await self._compute_embedding_async(query)
             if query_embedding is None:
@@ -185,7 +191,7 @@ class SemanticCache:
 
             results = await self._redis.execute_command(
                 "FT.SEARCH", _HNSW_INDEX_NAME,
-                f"*=>[KNN 1 @embedding $vec AS score]",
+                "*=>[KNN 1 @embedding $vec AS score]",
                 "PARAMS", "2", "vec", embedding_bytes,
                 "RETURN", "3", "score", "response", "query_text",
                 "SORTBY", "score", "ASC",
@@ -271,6 +277,9 @@ class SemanticCache:
             return
 
         if not await self._ensure_connected():
+            return
+
+        if not self._hnsw_ready:
             return
 
         try:

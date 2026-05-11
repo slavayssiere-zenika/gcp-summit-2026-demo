@@ -31,6 +31,7 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
     && rm -rf /wheels
 
 # Copy service sources (context is repo root)
+COPY shared/ /app/shared/
 COPY agent_missions_api/ ./
 
 # ── Comportement applicatif (Level 1 — safe defaults) ─────────────────────────

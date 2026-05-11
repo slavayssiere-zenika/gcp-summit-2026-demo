@@ -132,6 +132,22 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         )
     ).scalar_one() or 0
 
+    res_extraction = await db.execute(
+        sa_text("""
+        SELECT
+            COUNT(extraction_reliability_score) as count_scored,
+            AVG(extraction_reliability_score) as mean_score,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY extraction_reliability_score) as median_score,
+            SUM(CASE WHEN extraction_reliability_score >= 75 THEN 1 ELSE 0 END) as ok_count
+        FROM cv_profiles
+        WHERE extraction_reliability_score IS NOT NULL
+        """)
+    )
+    row_ext = res_extraction.fetchone()
+    mean_score = round(row_ext[1] or 0, 1) if row_ext else 0.0
+    median_score = round(row_ext[2] or 0, 1) if row_ext else 0.0
+    extraction_ok_count = row_ext[3] if row_ext else 0
+
     # ── 2. Métriques externes (soft-dependencies) ─────────────────────────────
     competencies_api_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8000")
 
@@ -205,21 +221,28 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         "min_scored_count": MIN_SCORED_COUNT,
         "avg_scored_per_user": ai_scoring_avg,
     }
+    m_extraction_reliability = {
+        "ok": extraction_ok_count,
+        "total": total,
+        "pct": _pct(extraction_ok_count, total),
+        "mean": mean_score,
+        "median": median_score,
+    }
 
     all_metrics = [m_missions, m_embedding, m_competencies, m_summary,
-                   m_current_role, m_comp_assign, m_ai_scoring]
+                   m_current_role, m_comp_assign, m_ai_scoring, m_extraction_reliability]
     for m in all_metrics:
         m["status"] = _status(m["pct"])
 
     # ── 4. Score global (moyenne pondérée) ────────────────────────────────────
     score = round(
-        m_embedding["pct"]      * _WEIGHTS["embedding"]
+        m_embedding["pct"] * _WEIGHTS["embedding"]
         + m_competencies["pct"] * _WEIGHTS["competencies"]
-        + m_missions["pct"]     * _WEIGHTS["missions"]
-        + m_summary["pct"]      * _WEIGHTS["summary"]
+        + m_missions["pct"] * _WEIGHTS["missions"]
+        + m_summary["pct"] * _WEIGHTS["summary"]
         + m_current_role["pct"] * _WEIGHTS["current_role"]
-        + m_comp_assign["pct"]  * _WEIGHTS["competency_assignment"]
-        + m_ai_scoring["pct"]   * _WEIGHTS["ai_scoring"]
+        + m_comp_assign["pct"] * _WEIGHTS["competency_assignment"]
+        + m_ai_scoring["pct"] * _WEIGHTS["ai_scoring"]
     )
 
     if score >= 85:
@@ -264,6 +287,12 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             f"{users_with_cv - ai_scoring_ok} consultant(s) n'ont pas atteint "
             f"{MIN_SCORED_COUNT} compétences scorées."
         )
+    if m_extraction_reliability["status"] != "ok":
+        issues.append(
+            f"Fiabilité d'extraction IA insuffisante : "
+            f"{total - extraction_ok_count} CVs ont un score inférieur à 75%. "
+            "À vérifier dans l'interface de Qualité d'Extraction."
+        )
 
     recommendation = (
         "Tous les indicateurs sont dans les seuils nominaux. Pipeline en bonne santé."
@@ -285,6 +314,7 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             "current_role":          m_current_role,
             "competency_assignment": m_comp_assign,
             "ai_scoring":            m_ai_scoring,
+            "extraction_reliability": m_extraction_reliability,
         },
         "issues": issues,
         "recommendation": recommendation,

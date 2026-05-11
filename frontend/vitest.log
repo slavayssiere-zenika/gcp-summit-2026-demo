@@ -5,52 +5,52 @@
 
  RUN  v4.1.5 /Users/sebastien.lavayssiere/Code/test-open-code/frontend
 
-(node:38435) Warning: `--localstorage-file` was provided without a valid path
+(node:59239) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:38431) Warning: `--localstorage-file` was provided without a valid path
+(node:59233) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:38437) Warning: `--localstorage-file` was provided without a valid path
+(node:59232) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:38432) Warning: `--localstorage-file` was provided without a valid path
+(node:59235) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:38438) Warning: `--localstorage-file` was provided without a valid path
+(node:59234) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:38430) Warning: `--localstorage-file` was provided without a valid path
+ ✓ src/components/agent/__tests__/CompetencyList.spec.ts (5 tests) 80ms
+ ✓ src/components/agent/__tests__/EvaluationTable.spec.ts (7 tests) 95ms
+ ✓ src/components/agent/__tests__/EvaluationCard.spec.ts (10 tests) 203ms
+ ✓ src/components/agent/__tests__/ConsultantCard.spec.ts (9 tests) 145ms
+ ✓ src/components/__tests__/CVImportMonitor.spec.ts (1 test) 132ms
+ ✓ src/components/agent/__tests__/ConsultantAvailabilityCard.spec.ts (8 tests) 349ms
+ ✓ src/components/agent/__tests__/MissionCard.spec.ts (9 tests) 287ms
+ ✓ src/views/__tests__/Login.spec.ts (4 tests) 379ms
+ ✓ src/components/agent/__tests__/SystemHealthCard.spec.ts (11 tests) 368ms
+ ✓ src/components/__tests__/CompetencyNode.spec.ts (11 tests) 301ms
+ ✓ src/views/__tests__/MissionsList.spec.ts (8 tests) 406ms
+(node:59252) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
- ✓ src/components/agent/__tests__/EvaluationCard.spec.ts (10 tests) 111ms
- ✓ src/components/agent/__tests__/EvaluationTable.spec.ts (7 tests) 93ms
- ✓ src/components/__tests__/CompetencyNode.spec.ts (11 tests) 151ms
- ✓ src/components/agent/__tests__/ItemCard.spec.ts (9 tests) 219ms
- ✓ src/components/agent/__tests__/MissionCard.spec.ts (9 tests) 158ms
- ✓ src/components/agent/__tests__/SystemHealthCard.spec.ts (11 tests) 250ms
- ✓ src/views/__tests__/Login.spec.ts (4 tests) 218ms
- ✓ src/components/agent/__tests__/ConsultantCard.spec.ts (9 tests) 270ms
- ✓ src/components/agent/__tests__/ConsultantAvailabilityCard.spec.ts (8 tests) 183ms
- ✓ src/components/ui/__tests__/PageHeader.spec.ts (7 tests) 96ms
- ✓ src/views/__tests__/MissionsList.spec.ts (8 tests) 279ms
-(node:38444) Warning: `--localstorage-file` was provided without a valid path
+(node:59249) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:38458) Warning: `--localstorage-file` was provided without a valid path
+ ✓ src/services/__tests__/agentApi.spec.ts (4 tests) 9ms
+(node:59257) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
- ✓ src/components/agent/__tests__/CompetencyBadge.spec.ts (8 tests) 57ms
-(node:38457) Warning: `--localstorage-file` was provided without a valid path
+ ✓ src/utils/__tests__/apiContract.spec.ts (14 tests) 9ms
+ ✓ src/components/__tests__/StarRating.spec.ts (6 tests) 181ms
+ ✓ src/stores/__tests__/uxStore.spec.ts (7 tests) 34ms
+(node:59258) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)
- ✓ src/utils/__tests__/apiContract.spec.ts (14 tests) 22ms
- ✓ src/components/agent/__tests__/CompetencyList.spec.ts (5 tests) 60ms
- ✓ src/services/__tests__/auth.spec.ts (4 tests) 7ms
- ✓ src/stores/__tests__/uxStore.spec.ts (7 tests) 16ms
- ✓ src/components/ui/__tests__/ToastNotification.spec.ts (4 tests) 45ms
- ✓ src/components/__tests__/StarRating.spec.ts (6 tests) 43ms
- ✓ src/stores/__tests__/chatStore.spec.ts (9 tests) 12ms
- ✓ src/components/__tests__/CVImportMonitor.spec.ts (1 test) 103ms
- ✓ src/components/ui/__tests__/BaseButton.spec.ts (4 tests) 41ms
- ✓ src/components/agent/__tests__/FinopsBadge.spec.ts (6 tests) 38ms
- ✓ src/services/__tests__/agentApi.spec.ts (4 tests) 5ms
- ✓ src/types/__tests__/index.spec.ts (6 tests) 3ms
- ✓ src/utils/__tests__/treeify.spec.ts (2 tests) 3ms
+ ✓ src/components/agent/__tests__/ItemCard.spec.ts (9 tests) 182ms
+ ✓ src/components/ui/__tests__/BaseButton.spec.ts (4 tests) 96ms
+ ✓ src/components/agent/__tests__/CompetencyBadge.spec.ts (8 tests) 194ms
+ ✓ src/stores/__tests__/chatStore.spec.ts (9 tests) 33ms
+ ✓ src/components/ui/__tests__/ToastNotification.spec.ts (4 tests) 118ms
+ ✓ src/components/agent/__tests__/FinopsBadge.spec.ts (6 tests) 217ms
+ ✓ src/components/ui/__tests__/PageHeader.spec.ts (7 tests) 140ms
+ ✓ src/types/__tests__/index.spec.ts (6 tests) 20ms
+ ✓ src/utils/__tests__/treeify.spec.ts (2 tests) 17ms
+ ✓ src/services/__tests__/auth.spec.ts (4 tests) 41ms
 
  Test Files  25 passed (25)
       Tests  173 passed (173)
-   Start at  12:43:57
-   Duration  9.30s (transform 9.35s, setup 0ms, import 18.86s, tests 2.48s, environment 52.61s)
+   Start at  09:25:06
+   Duration  13.19s (transform 15.64s, setup 0ms, import 30.84s, tests 4.04s, environment 65.97s)
 

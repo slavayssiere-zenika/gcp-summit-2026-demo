@@ -88,6 +88,14 @@ def make_global_exception_handler(service_name: str):
     """
 
     async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        from fastapi.exceptions import RequestValidationError
+        from starlette.exceptions import HTTPException as StarletteHTTPException
+
+        if isinstance(exc, StarletteHTTPException):
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        if isinstance(exc, RequestValidationError):
+            return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
         error_msg = str(exc)
         trace_context = "".join(
             traceback.format_exception(type(exc), exc, exc.__traceback__)
@@ -113,7 +121,7 @@ def make_global_exception_handler(service_name: str):
 
         logger.error(
             f"[{service_name}] Unhandled exception on {request.method} {request.url.path}: "
-            f"{error_msg}",
+            f"{error_msg}\n{trace_context}",
             exc_info=True,
         )
         return JSONResponse(

@@ -11,12 +11,18 @@ sys.path.insert(0, os.path.abspath('src'))
 
 async def main():
     async for db in get_db():
-        # Get a few sync states
-        stmt = select(DriveSyncState).limit(10)
-        res = await db.execute(stmt)
-        states = res.scalars().all()
-        for s in states:
-            print(f"File: {s.file_name}, Parent: {s.parent_folder_name}, Status: {s.status}")
+        print("Sync States:")
+        skip = 0
+        limit = 100
+        while True:
+            stmt = select(DriveSyncState).offset(skip).limit(limit)
+            res = await db.execute(stmt)
+            states = res.scalars().all()
+            if not states:
+                break
+            for s in states:
+                print(f"File: {s.file_name}, Parent: {s.parent_folder_name}, Status: {s.status}")
+            skip += limit
             
         print("Folders:")
         stmt = select(DriveFolder)

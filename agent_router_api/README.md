@@ -9,10 +9,10 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 197 | ✅ |
-| `conftest.py` | 21 | ✅ |
+| `main.py` | 200 | ✅ |
+| `conftest.py` | 20 | ✅ |
 | `metrics.py` | 45 | ✅ |
-| `agent.py` | 397 | ✅ |
+| `agent.py` | 414 | ⚠️ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

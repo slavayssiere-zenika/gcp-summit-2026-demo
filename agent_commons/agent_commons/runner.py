@@ -96,7 +96,8 @@ async def run_agent_and_collect(
             # ----------------------------------------------------------------
             # 1. Exhaustive metadata extraction from parts
             # ----------------------------------------------------------------
-            for part in (list(event.content.parts) if hasattr(event.content, "parts") else []):
+            parts = getattr(event.content, "parts", None)
+            for part in (list(parts) if parts is not None else []):
                 # a) Thoughts (Gemini 2.0 Thinking support)
                 thought_val = getattr(part, "thought", None)
                 if thought_val:
@@ -209,7 +210,7 @@ async def run_agent_and_collect(
         if has_content and is_assistant:
             if isinstance(event.content, str):
                 response_parts.append(event.content)
-            elif hasattr(event.content, "parts"):
+            elif getattr(event.content, "parts", None) is not None:
                 for part in event.content.parts:
                     if (
                         getattr(part, "text", None)

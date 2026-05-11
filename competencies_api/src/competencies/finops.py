@@ -7,6 +7,7 @@ from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 
+
 async def log_finops(
     user_email: str,
     action: str,
@@ -24,12 +25,20 @@ async def log_finops(
         if hasattr(usage_metadata, "prompt_token_count"):
             input_tokens = getattr(usage_metadata, "prompt_token_count", 0)
         else:
-            input_tokens = usage_metadata.get("prompt_token_count", 0) if isinstance(usage_metadata, dict) else 0
+            input_tokens = (
+                usage_metadata.get("prompt_token_count", 0)
+                if isinstance(usage_metadata, dict)
+                else 0
+            )
 
         if hasattr(usage_metadata, "candidates_token_count"):
             output_tokens = getattr(usage_metadata, "candidates_token_count", 0)
         else:
-            output_tokens = usage_metadata.get("candidates_token_count", 0) if isinstance(usage_metadata, dict) else 0
+            output_tokens = (
+                usage_metadata.get("candidates_token_count", 0)
+                if isinstance(usage_metadata, dict)
+                else 0
+            )
 
         if input_tokens == 0 and output_tokens == 0:
             return

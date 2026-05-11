@@ -149,19 +149,43 @@ async def process_cv_core(
         CV_PROCESSING_TOTAL.labels(status="failure").inc()
         raise
 
-    # ── Étape 6 : Génération des embeddings vectoriels ────────────────────────
+    # ── Étape 6 : Génération des embeddings vectoriels et test de qualité ───────
     t0 = time.monotonic()
     distilled_content = _build_distilled_content(structured_cv)
     vector_data = None
+    extraction_reliability_score = None
     try:
+        # Distilled content embedding
         emb_res = await embed_content_with_retry(
             genai_client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL"),
             contents=distilled_content
         )
         vector_data = emb_res.embeddings[0].values
+        # Raw content embedding for quality check (limit to 20k chars)
+        import math
+        raw_snippet = raw_text[:20000]
+        raw_emb_res = await embed_content_with_retry(
+            genai_client,
+            model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+            contents=raw_snippet
+        )
+        raw_vector = raw_emb_res.embeddings[0].values
+
+        # Calculate Cosine Similarity
+        dot_product = sum(a * b for a, b in zip(vector_data, raw_vector))
+        norm_v1 = math.sqrt(sum(a * a for a in vector_data))
+        norm_v2 = math.sqrt(sum(b * b for b in raw_vector))
+        if norm_v1 > 0 and norm_v2 > 0:
+            sim = dot_product / (norm_v1 * norm_v2)
+            # Map [-1, 1] to [0, 100] approximately or just take max(0, sim)*100
+            extraction_reliability_score = min(100, max(0, int(sim * 100)))
+
         dur = int((time.monotonic() - t0) * 1000)
-        _step_ok("embedding", "Génération des embeddings vectoriels", dur, f"{len(vector_data)} dimensions")
+        _step_ok(
+            "embedding", "Génération des embeddings vectoriels", dur,
+            f"{len(vector_data)} dimensions, Score Fiabilité: {extraction_reliability_score}%"
+        )
     except Exception as e:
         dur = int((time.monotonic() - t0) * 1000)
         _step_warn("embedding", "Génération des embeddings vectoriels", dur, f"Embedding échoué : {e}")
@@ -171,7 +195,8 @@ async def process_cv_core(
     t0 = time.monotonic()
     try:
         await CVStorageService.upsert_cv_profile(
-            db, user_id, url, source_tag, structured_cv, raw_text, vector_data, importer_id
+            db, user_id, url, source_tag, structured_cv, raw_text, vector_data,
+            importer_id, extraction_reliability_score
         )
         dur = int((time.monotonic() - t0) * 1000)
         _step_ok("db_save", "Sauvegarde en base de données", dur, f"CV ID utilisateur {user_id}")

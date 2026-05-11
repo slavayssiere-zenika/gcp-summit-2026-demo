@@ -19,7 +19,7 @@ for d in *_api *_mcp agent_*; do [ -f "$d/README.md" ] && echo "=== $d ===" && h
 3. 🛑 **Check IAM Cross-Project (BLOQUANT)** : Rappelle à l'utilisateur de s'assurer que l'Agent de Service Cloud Run de production (`@serverless-robot-prod.iam.gserviceaccount.com`) possède le rôle `roles/artifactregistry.reader` sur le registre d'artefacts du projet Sandbox, sans quoi le déploiement échouera.
 4. Utilise `list_dir` et/ou `view_file` pour lire les fichiers `VERSION` locaux de tous les microservices détectés.
 5. Identifie les différences entre les versions locales et celles définies dans `prd.yaml`.
-6. **Action (OBLIGATOIRE)** : Mets à jour **automatiquement** le fichier `prd.yaml` avec les toutes dernières versions détectées en utilisant tes outils d'édition de fichier. Tu dois ensuite générer et présenter une analyse détaillée de ces changements de version à l'utilisateur.
+6. **Action (OBLIGATOIRE)** : Mets à jour **automatiquement** le fichier `prd.yaml` avec les toutes dernières versions détectées en utilisant tes outils d'édition de fichier. (DÉROGATION EXPLICITE : l'agent a l'autorisation exceptionnelle de modifier le fichier `prd.yaml` lors de ce workflow, dérogeant à la règle §12). Tu dois ensuite générer et présenter une analyse détaillée de ces changements de version à l'utilisateur.
 
 ### Étape 2 : Bilan Fonctionnel (`changelog.md`)
 1. Scanne avec `view_file` les entrées les plus récentes du fichier `changelog.md` ou utilise `git status` / `git log`.

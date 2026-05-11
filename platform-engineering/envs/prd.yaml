@@ -19,22 +19,22 @@ image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-s
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
-agent_router_api_version:   "v0.1.44"
-agent_hr_api_version:       "v0.0.107"
-agent_ops_api_version:      "v0.0.73"
-agent_missions_api_version: "v0.1.49"
-users_api_version:          "v0.0.71"
-items_api_version:          "v0.0.56"
-competencies_api_version:   "v0.1.79"
-cv_api_version:             "v0.0.243"
-prompts_api_version:        "v0.0.63"
-drive_api_version:          "v0.0.117"
-analytics_mcp_version:      "v0.0.92"
-monitoring_mcp_version:     "v0.0.81"
-db_migrations_version:      "v0.0.33"
+agent_router_api_version:   "v0.1.51"
+agent_hr_api_version:       "v0.0.115"
+agent_ops_api_version:      "v0.0.84"
+agent_missions_api_version: "v0.1.56"
+users_api_version:          "v0.0.78"
+items_api_version:          "v0.0.63"
+competencies_api_version:   "v0.1.86"
+cv_api_version:             "v0.0.253"
+prompts_api_version:        "v0.0.69"
+drive_api_version:          "v0.0.123"
+analytics_mcp_version:      "v0.0.98"
+monitoring_mcp_version:     "v0.0.85"
+db_migrations_version:      "v0.0.35"
 db_init_version:            "v0.1.1"
-missions_api_version:       "v0.0.81"
-frontend_version:           "v0.0.222"
+missions_api_version:       "v0.0.87"
+frontend_version:           "v0.0.227"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 0
@@ -58,7 +58,7 @@ competencies_scheduler_audience: ""
 
 # ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
 # Chaque agent dispose de son propre modèle pour optimiser coût/qualité.
-gemini_router_model:       "gemini-3.1-pro-preview"         # Orchestrateur : raisonnement complexe
+gemini_router_model:       "gemini-3.1-flash-lite-preview"    # Orchestrateur : compromis coût/performance testé et validé
 gemini_hr_model:           "gemini-3.1-flash-lite-preview"  # RH : RAG + MCP
 gemini_ops_model:          "gemini-3.1-flash-lite-preview"  # Ops : SQL + logs
 gemini_missions_model:     "gemini-3.1-flash-lite-preview"  # Missions : matching staffing

@@ -164,6 +164,9 @@ onUnmounted(() => {
               <RouterLink to="/import-cv" class="nav-pill" active-class="dropdown-active" aria-label="Import manuel d'un CV depuis le poste">
                 <BookOpen size="14" /> Import CV Manuel
               </RouterLink>
+              <RouterLink to="/admin/extraction-quality" class="nav-pill" active-class="dropdown-active" aria-label="Qualité de l'extraction des CVs">
+                <ShieldCheck size="14" /> Qualité d'Extraction
+              </RouterLink>
               <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" aria-label="Restructuration de la taxonomie par l'IA">
                 <Network size="14" /> Taxonomie & Structure IA
               </RouterLink>

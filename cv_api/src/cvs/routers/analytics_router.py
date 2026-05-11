@@ -1,64 +1,28 @@
 """analytics_router.py — Ranking, embeddings, reanalyze, skills coverage."""
 import asyncio
 import logging
-import os
 import re
 from typing import List, Optional
 
 import httpx
-import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
+import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access  # noqa: F401, E501
 from database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
-                     Request, Response)
-from fastapi.security import HTTPAuthorizationCredentials
-from google import genai
-from google.cloud import run_v2 as cloudrun_v2
-from google.cloud import storage as gcs_storage
-from metrics import CV_MISSING_EMBEDDINGS, CV_PROCESSING_TOTAL
+                     Request)
 from opentelemetry.propagate import inject
-from pydantic import BaseModel
-from sqlalchemy import delete as sa_delete
-from sqlalchemy import func
 from sqlalchemy import text as sa_text
-from sqlalchemy import update as sa_update
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import SECRET_KEY as _AUTH_SECRET_KEY
-from src.auth import security, verify_jwt
-from src.cvs.bulk_task_state import bulk_reanalyse_manager
+from src.auth import verify_jwt
 from src.cvs.models import CVProfile
-from src.cvs.routers._shared import (ADMIN_SERVICE_PASSWORD,
-                                     ADMIN_SERVICE_USERNAME, ANALYTICS_MCP_URL,
-                                     BATCH_GCS_BUCKET, BULK_APPLY_SEMAPHORE,
-                                     BULK_EMBED_SEMAPHORE,
-                                     BULK_SCALE_MIN_INSTANCES,
-                                     BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
-                                     COMPETENCIES_API_URL)
-from src.cvs.routers._shared import CV_RESPONSE_SCHEMA as _CV_RESPONSE_SCHEMA
-from src.cvs.routers._shared import (DRIVE_API_URL, GCP_PROJECT_ID,
-                                     ITEMS_API_URL, MISSIONS_API_URL,
-                                     PROMPTS_API_URL, USERS_API_URL,
-                                     VERTEX_LOCATION,
-                                     MultiCriteriaSearchRequest,
-                                     RecalculateStepRequest)
-from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
-                             CVImportStep, CVProfileResponse, CVResponse,
-                             RankedExperienceResponse, SearchCandidateRequest,
-                             SearchCandidateResponse, UserMergeRequest)
-from src.cvs.task_state import task_state_manager, tree_task_manager
-from src.gemini_retry import (embed_content_with_retry,
-                              generate_content_with_retry)
-from src.services.bulk_service import (_acquire_service_token,
-                                       bg_bulk_reanalyse, bg_retry_apply)
-from src.services.cv_import_service import process_cv_core
+from src.cvs.routers._shared import COMPETENCIES_API_URL
+from src.cvs.routers._shared import (DRIVE_API_URL, USERS_API_URL)
+from src.cvs.schemas import RankedExperienceResponse
+from src.services.bulk_service import bg_retry_apply
 from src.services.embedding_service import reindex_embeddings_bg
-from src.services.finops import log_finops
-from src.services.search_service import execute_search, scale_bulk_dependencies
 from src.services.taxonomy_service import (fetch_prompt,
-                                           get_existing_competencies,
-                                           run_taxonomy_step)
-from src.services.utils import (_build_distilled_content, _chunk_text,
-                                _clean_llm_json)
+                                           get_existing_competencies)
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -68,8 +32,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["CV Analytics"], dependencies=[Depends(verify_jwt)])
 
+
 @router.get("/ranking/experience", response_model=List[RankedExperienceResponse])
-async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[str] = None, request: Request = None, db: AsyncSession = Depends(get_db)):
+async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[str] = None, request: Request = None, db: AsyncSession = Depends(get_db)):  # noqa: E501
     """
     Retourne la liste des consultants les plus expérimentés basés sur les années d'expérience extraites des CVs.
     """
@@ -78,19 +43,19 @@ async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[st
         select(CVProfile)
         .filter(CVProfile.years_of_experience.is_not(None))
     )
-    
+
     if agency:
         stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
-        
+
     stmt = stmt.order_by(CVProfile.years_of_experience.desc()).limit(limit)
-    
+
     profiles = (await db.execute(stmt)).scalars().all()
-    
+
     # 2. Enrich with User details
     auth_header = request.headers.get("Authorization") if request else None
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
-    
+
     results = []
     seen_users = set()
     for p in profiles:
@@ -102,11 +67,11 @@ async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[st
             "years_of_experience": p.years_of_experience,
             "agency": p.source_tag
         })
-        
+
     async with httpx.AsyncClient(timeout=10.0) as http_client:
         async def fetch_user(res):
             try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)  # noqa: E501
                 if u_res.status_code == 200:
                     u_data = u_res.json()
                     res["full_name"] = u_data.get("full_name")
@@ -118,10 +83,6 @@ async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[st
         await asyncio.gather(*(fetch_user(res) for res in results))
 
     return results
-
-class RecalculateStepRequest(BaseModel):
-    step: str
-    target_pillar: Optional[str] = None
 
 
 @router.post("/reindex-embeddings")
@@ -146,7 +107,94 @@ async def reindex_embeddings(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Sprint A1 — Consultants similaires (0 LLM, SQL pur pgvector)
+
+
+@router.get("/extraction-scores")
+async def get_extraction_scores(
+    limit: int = 50,
+    skip: int = 0,
+    sort_desc: bool = True,
+    search: Optional[str] = None,
+    status: Optional[str] = "calculated",
+    request: Request = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retourne la liste paginée des scores de fiabilité d'extraction par CV.
+    status peut valoir "calculated" (par défaut) ou "uncalculated"
+    """
+    if status == "uncalculated":
+        stmt = select(CVProfile).where(CVProfile.extraction_reliability_score.is_(None))
+    else:
+        stmt = select(CVProfile).where(CVProfile.extraction_reliability_score.isnot(None))
+
+    if search:
+        # Search tag, summary or current_role? Or user_id if digit.
+        if search.isdigit():
+            stmt = stmt.where(CVProfile.user_id == int(search))
+        else:
+            stmt = stmt.where(
+                CVProfile.source_tag.ilike(f"%{search}%") |
+                CVProfile.current_role.ilike(f"%{search}%")
+            )
+
+    # Calculate total
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
+
+    if sort_desc:
+        stmt = stmt.order_by(CVProfile.extraction_reliability_score.desc())
+    else:
+        stmt = stmt.order_by(CVProfile.extraction_reliability_score.asc())
+
+    stmt = stmt.offset(skip).limit(limit)
+    profiles = (await db.execute(stmt)).scalars().all()
+
+    auth_header = request.headers.get("Authorization") if request else None
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+
+    results = [
+        {
+            "id": p.id,
+            "user_id": p.user_id,
+            "source_tag": p.source_tag,
+            "current_role": p.current_role,
+            "extraction_reliability_score": p.extraction_reliability_score
+        }
+        for p in profiles
+    ]
+
+    async def fetch_user(res):
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as http_client:
+                r = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/{res['user_id']}",
+                    headers=headers_downstream
+                )
+                if r.status_code == 200:
+                    u_data = r.json()
+                    res["full_name"] = u_data.get("full_name")
+                    res["email"] = u_data.get("email")
+                    res["is_anonymous"] = u_data.get("is_anonymous", False)
+                else:
+                    res["full_name"] = "Inconnu"
+                    res["email"] = "Inconnu"
+                    res["is_anonymous"] = False
+        except Exception as e:
+            logger.warning(f"Failed to fetch user details for {res['user_id']}: {e}")
+            res["full_name"] = "Erreur"
+            res["email"] = "Erreur"
+            res["is_anonymous"] = False
+
+    await asyncio.gather(*(fetch_user(res) for res in results))
+
+    return {
+        "items": results,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -177,9 +225,6 @@ async def get_reanalyze_status(
 # ─────────────────────────────────────────────────────────────────────────────
 # Sprint B2 — Matching inversé Mission → CVs
 # ─────────────────────────────────────────────────────────────────────────────
-
-MISSIONS_API_URL = os.getenv("MISSIONS_API_URL", "http://missions_api:8000")
-
 
 
 @router.get("/analytics/skills-coverage")
@@ -219,7 +264,6 @@ async def get_skills_coverage(
         for row in rows
         if row.skill
     ]
-
 
 
 @router.post("/reanalyze")
@@ -271,7 +315,7 @@ async def reanalyze_cvs(
 
     if not cvs:
         return {
-            "message": "Aucun CV trouvé en base locale. Une re-découverte Drive a été ordonnée — les nouveaux CVs seront ingérés lors du prochain /sync.",
+            "message": "Aucun CV trouvé en base locale. Une re-découverte Drive a été ordonnée — les nouveaux CVs seront ingérés lors du prochain /sync.",  # noqa: E501
             "count": 0,
             "pending_reset": 0,
             "skipped_manual": 0
@@ -377,7 +421,3 @@ async def reanalyze_cvs(
         "sync_triggered": sync_triggered,
         "clear_errors": clear_errors if clear_errors else None
     }
-
-
-
-

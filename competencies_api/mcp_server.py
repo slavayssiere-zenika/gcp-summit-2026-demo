@@ -569,7 +569,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             headers["Authorization"] = auth_header
         inject(headers)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(headers=headers) as client:
             try:
                 if name == "set_user_competency_score":
                     return await handle_set_user_competency_score(client, arguments, headers, API_BASE_URL)

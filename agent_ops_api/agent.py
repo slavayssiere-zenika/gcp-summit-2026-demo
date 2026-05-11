@@ -36,6 +36,7 @@ from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.runner import run_agent_and_collect
 from agent_commons.session import RedisSessionService
+from agent_commons.ui_tools import render_ui_widgets
 
 app_logger = logging.getLogger(__name__)
 
@@ -143,9 +144,10 @@ async def create_agent(session_id: str | None = None) -> Agent:
         except Exception as e:
             app_logger.warning("[Ops] ⚠️ Cloud Trace MCP toolset non disponible : %s", e)
 
-    OPS_TOOLS = tools_loaded
+    tools_loaded = await get_cached_tools(_OPS_CLIENTS_MAP, "[OPS]", ttl=300, _cache=_OPS_TOOLS_CACHE)
+    OPS_TOOLS = tools_loaded + [render_ui_widgets]
     if cloudtrace_toolset is not None:
-        OPS_TOOLS = tools_loaded + [cloudtrace_toolset]
+        OPS_TOOLS.append(cloudtrace_toolset)
 
     app_logger.info("[Ops] Creating Agent with %d tools...", len(OPS_TOOLS))
     agent = Agent(
@@ -193,8 +195,13 @@ def check_ops_hallucination_guardrail(query: str, response_text: str, steps: lis
 async def run_agent_query(
     query: str,
     session_id: str | None = None,
+    auth_token: str | None = None,
     user_id: str = "user_1",
 ) -> dict:
+    # Fix JWT propagation [STAFF-007] — re-setter auth_header_var dans CE contexte asyncio
+    if auth_token:
+        auth_header_var.set(auth_token)
+
     ephemeral_session_id = str(uuid.uuid4())
     session_service = get_session_service()
 

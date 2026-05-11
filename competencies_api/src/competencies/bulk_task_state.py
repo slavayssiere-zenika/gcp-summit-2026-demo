@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import redis.asyncio as redis
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/3")  # Note: using the competencies_api redis db
+REDIS_URL = os.getenv(
+    "REDIS_URL", "redis://redis:6379/3"
+)  # Note: using the competencies_api redis db
 
 BULK_REDIS_TTL_SECONDS = 8 * 3600
 BULK_STALE_TIMEOUT_MINUTES = 180
@@ -12,6 +14,7 @@ BULK_STALE_TIMEOUT_MINUTES = 180
 
 class BulkScoringTaskManager:
     """State machine Redis pour le pipeline de bulk scoring des compétences."""
+
     KEY = "competencies:bulk_scoring:status"
 
     def __init__(self, redis_url: str = REDIS_URL):
@@ -24,7 +27,9 @@ class BulkScoringTaskManager:
             "processed": 0,
             "success": 0,
             "error_count": 0,
-            "logs": [f"[{datetime.now(timezone.utc).isoformat()}] Démarrage — {total_users} users à scorer."],
+            "logs": [
+                f"[{datetime.now(timezone.utc).isoformat()}] Démarrage — {total_users} users à scorer."
+            ],
             "errors": [],
             "start_time": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -34,7 +39,9 @@ class BulkScoringTaskManager:
             "dest_uri": None,
             "mode": "vertex_batch",
         }
-        await self._redis.set(self.KEY, json.dumps(task_data), ex=BULK_REDIS_TTL_SECONDS)
+        await self._redis.set(
+            self.KEY, json.dumps(task_data), ex=BULK_REDIS_TTL_SECONDS
+        )
         return task_data
 
     async def update_progress(
@@ -93,7 +100,12 @@ class BulkScoringTaskManager:
         if not status:
             return False
 
-        if status.get("status") not in ("running", "uploading", "batch_running", "applying"):
+        if status.get("status") not in (
+            "running",
+            "uploading",
+            "batch_running",
+            "applying",
+        ):
             return False
 
         # Watchdog

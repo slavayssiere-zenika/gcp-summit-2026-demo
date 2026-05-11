@@ -103,6 +103,12 @@ const router = createRouter({
       meta: { adminOnly: true, rhAllowed: true }
     },
     {
+      path: '/admin/extraction-quality',
+      name: 'admin-extraction-quality',
+      component: () => import('../views/ExtractionQualityList.vue'),
+      meta: { adminOnly: true, rhAllowed: true }
+    },
+    {
       path: '/admin/finops',
       name: 'admin-finops',
       component: () => import('../views/FinopsAdmin.vue'),

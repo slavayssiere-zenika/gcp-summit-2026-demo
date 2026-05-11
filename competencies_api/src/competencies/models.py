@@ -1,8 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import Base
-from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
-                        Table, Text)
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
 
 # Association table for Many-to-Many relationship between User and Competency
@@ -12,7 +11,7 @@ user_competency = Table(
     Base.metadata,
     Column("user_id", Integer, primary_key=True, index=True),
     Column("competency_id", Integer, ForeignKey("competencies.id"), primary_key=True),
-    Column("created_at", DateTime, default=datetime.utcnow)
+    Column("created_at", DateTime, default=datetime.utcnow),
 )
 
 
@@ -24,17 +23,25 @@ class Competency(Base):
     description = Column(String, nullable=True)
     aliases = Column(String, nullable=True)
     parent_id = Column(Integer, ForeignKey("competencies.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
 
     # Hierarchical tree representation
-    parent = relationship("Competency", remote_side=[id], back_populates="sub_competencies")
+    parent = relationship(
+        "Competency", remote_side=[id], back_populates="sub_competencies"
+    )
     sub_competencies = relationship(
         "Competency",
         back_populates="parent",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="selectin",
     )
-    evaluations = relationship("CompetencyEvaluation", back_populates="competency", cascade="all, delete-orphan")
+    evaluations = relationship(
+        "CompetencyEvaluation",
+        back_populates="competency",
+        cascade="all, delete-orphan",
+    )
 
     # Note: We can't have a direct SQLAlchemy relationship to User
     # because it's in a different service/Base.
@@ -52,11 +59,14 @@ class CompetencyEvaluation(Base):
     - scoring_version : 'v1' (LLM pur) ou 'v2' (pondéré récence+durée+type)
     - weighted_context : JSON des méta-données de pondération (audit trail)
     """
+
     __tablename__ = "competency_evaluations"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
-    competency_id = Column(Integer, ForeignKey("competencies.id"), nullable=False, index=True)
+    competency_id = Column(
+        Integer, ForeignKey("competencies.id"), nullable=False, index=True
+    )
 
     # Scoring IA (calcule par Gemini depuis les missions)
     ai_score = Column(Float, nullable=True)
@@ -65,15 +75,23 @@ class CompetencyEvaluation(Base):
 
     # Scoring v2 — traçabilité de l'algorithme
     scoring_version = Column(String(10), nullable=True, default="v1")
-    weighted_context = Column(Text, nullable=True)  # JSON des méta-données de pondération
+    weighted_context = Column(
+        Text, nullable=True
+    )  # JSON des méta-données de pondération
 
     # Auto-evaluation utilisateur
     user_score = Column(Float, nullable=True)
     user_comment = Column(String(500), nullable=True)
     user_scored_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
 
     competency = relationship("Competency", back_populates="evaluations")
 
@@ -85,13 +103,24 @@ class CompetencySuggestion(Base):
     compétence absente de la taxonomie officielle. Un admin peut les valider
     (status='ACCEPTED' → crée la compétence) ou rejeter (status='REJECTED').
     """
+
     __tablename__ = "competency_suggestions"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     source = Column(String(50), nullable=False)  # 'mission' | 'cv'
-    context = Column(Text, nullable=True)  # contexte d'extraction LLM (mission ou CV) — TEXT illimité
+    context = Column(
+        Text, nullable=True
+    )  # contexte d'extraction LLM (mission ou CV) — TEXT illimité
     status = Column(String(20), nullable=False, default="PENDING_REVIEW", index=True)
-    occurrence_count = Column(Integer, nullable=False, default=1)  # fréquence = signal marché
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    occurrence_count = Column(
+        Integer, nullable=False, default=1
+    )  # fréquence = signal marché
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )

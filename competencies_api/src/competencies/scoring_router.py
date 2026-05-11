@@ -8,6 +8,7 @@ Routes :
   POST   /bulk-scoring-all/resume        ← Cloud Scheduler keepalive (OIDC)
   POST   /bulk-scoring-all/resume/manual ← Résumption manuelle admin
 """
+
 import asyncio
 import logging
 import os
@@ -16,8 +17,15 @@ import google.auth.transport.requests
 import google.oauth2.id_token
 import httpx
 from database import get_db
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
-                     Request, status)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -27,10 +35,13 @@ from src.competencies.ai_scoring import _bulk_scoring_all_bg
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.models import CompetencyEvaluation, user_competency
 from src.competencies.scheduler_control import set_scoring_scheduler_enabled
-from src.competencies.scoring_service import (BATCH_GCS_BUCKET, GCP_PROJECT_ID,
-                                              VERTEX_LOCATION,
-                                              _apply_scoring_results,
-                                              bg_bulk_scoring_vertex)
+from src.competencies.scoring_service import (
+    BATCH_GCS_BUCKET,
+    GCP_PROJECT_ID,
+    VERTEX_LOCATION,
+    _apply_scoring_results,
+    bg_bulk_scoring_vertex,
+)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
@@ -53,13 +64,12 @@ async def verify_scheduler_oidc(request: Request) -> None:
     if not SCHEDULER_AUDIENCE:
         raise HTTPException(
             status_code=500,
-            detail="[scheduler] SCHEDULER_AUDIENCE non configuré — appel refusé par sécurité."
+            detail="[scheduler] SCHEDULER_AUDIENCE non configuré — appel refusé par sécurité.",
         )
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(
-            status_code=401,
-            detail="[scheduler] Token OIDC Bearer requis."
+            status_code=401, detail="[scheduler] Token OIDC Bearer requis."
         )
     token = auth_header[7:]
     try:
@@ -71,8 +81,7 @@ async def verify_scheduler_oidc(request: Request) -> None:
     except Exception as exc:
         logger.warning("[scheduler] Échec validation OIDC: %s", exc)
         raise HTTPException(
-            status_code=401,
-            detail=f"[scheduler] Token OIDC invalide ou expiré: {exc}"
+            status_code=401, detail=f"[scheduler] Token OIDC invalide ou expiré: {exc}"
         )
 
 
@@ -83,11 +92,16 @@ class BulkScoringStatus(BaseModel):
     message: str
 
 
-@router.post("/evaluations/bulk-scoring-all", response_model=BulkScoringStatus, status_code=202)
+@router.post(
+    "/evaluations/bulk-scoring-all", response_model=BulkScoringStatus, status_code=202
+)
 async def trigger_bulk_scoring_all(
     request: Request,
     background_tasks: BackgroundTasks,
-    force: bool = Query(False, description="Si True, re-score TOUS les consultants avec compétences assignées"),
+    force: bool = Query(
+        False,
+        description="Si True, re-score TOUS les consultants avec compétences assignées",
+    ),
     semaphore_limit: int = Query(2, ge=1, le=5),
     min_scored_threshold: int = Query(10, ge=1),
     db: AsyncSession = Depends(get_db),
@@ -102,15 +116,21 @@ async def trigger_bulk_scoring_all(
     bg_auth_header = auth_header
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            svc_res = await client.post(f"{USERS_API_URL.rstrip('/')}/internal/service-token", headers={"Authorization": auth_header})
+            svc_res = await client.post(
+                f"{USERS_API_URL.rstrip('/')}/internal/service-token",
+                headers={"Authorization": auth_header},
+            )
             if svc_res.status_code == 200:
                 from shared.schemas.auth import TokenResponse
+
                 data = TokenResponse.model_validate(svc_res.json())
                 svc_token = data.access_token
                 if svc_token:
                     bg_auth_header = f"Bearer {svc_token}"
     except Exception as e:
-        logger.warning(f"[bulk-scoring-all] Impossible d'obtenir service token: {e} — fallback JWT")
+        logger.warning(
+            f"[bulk-scoring-all] Impossible d'obtenir service token: {e} — fallback JWT"
+        )
 
     headers = {"Authorization": bg_auth_header}
     inject(headers)
@@ -119,26 +139,42 @@ async def trigger_bulk_scoring_all(
         stmt = select(user_competency.c.user_id).distinct()
     else:
         scored_count_sub = (
-            select(CompetencyEvaluation.user_id, func.count(CompetencyEvaluation.id).label("scored_count"))
+            select(
+                CompetencyEvaluation.user_id,
+                func.count(CompetencyEvaluation.id).label("scored_count"),
+            )
             .where(CompetencyEvaluation.ai_score.isnot(None))
             .group_by(CompetencyEvaluation.user_id)
             .subquery()
         )
         stmt = (
-            select(user_competency.c.user_id).distinct()
-            .outerjoin(scored_count_sub, user_competency.c.user_id == scored_count_sub.c.user_id)
-            .where(func.coalesce(scored_count_sub.c.scored_count, 0) < min_scored_threshold)
+            select(user_competency.c.user_id)
+            .distinct()
+            .outerjoin(
+                scored_count_sub,
+                user_competency.c.user_id == scored_count_sub.c.user_id,
+            )
+            .where(
+                func.coalesce(scored_count_sub.c.scored_count, 0) < min_scored_threshold
+            )
         )
 
     user_ids_to_score = (await db.execute(stmt)).scalars().all()
     total = len(user_ids_to_score)
 
     if not user_ids_to_score:
-        return BulkScoringStatus(triggered=0, skipped=0, total_users=0,
-                                 message=f"Aucun consultant à scorer — tous ont déjà ≥{min_scored_threshold} compétences scorées.")
+        return BulkScoringStatus(
+            triggered=0,
+            skipped=0,
+            total_users=0,
+            message=f"Aucun consultant à scorer — tous ont déjà ≥{min_scored_threshold} compétences scorées.",
+        )
 
     if await bulk_scoring_manager.is_running():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Un bulk scoring est déjà en cours.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un bulk scoring est déjà en cours.",
+        )
 
     await bulk_scoring_manager.initialize(total_users=total)
 
@@ -146,8 +182,12 @@ async def trigger_bulk_scoring_all(
     gcp_project = os.getenv("GCP_PROJECT_ID", "")
     gcs_bucket = os.getenv("BATCH_GCS_BUCKET", "")
     if gcp_project and gcs_bucket:
-        logger.info(f"[bulk-scoring-all] → Pipeline Vertex AI Batch (project={gcp_project}, bucket={gcs_bucket})")
-        background_tasks.add_task(bg_bulk_scoring_vertex, list(user_ids_to_score), dict(headers))
+        logger.info(
+            f"[bulk-scoring-all] → Pipeline Vertex AI Batch (project={gcp_project}, bucket={gcs_bucket})"
+        )
+        background_tasks.add_task(
+            bg_bulk_scoring_vertex, list(user_ids_to_score), dict(headers)
+        )
         # Active le Cloud Scheduler keepalive dès le déclenchement Vertex
         background_tasks.add_task(set_scoring_scheduler_enabled, True)
     else:
@@ -155,10 +195,19 @@ async def trigger_bulk_scoring_all(
             "[bulk-scoring-all] GCP_PROJECT_ID ou BATCH_GCS_BUCKET absent — fallback pipeline séquentiel "
             f"(semaphore={semaphore_limit}). Configurez ces variables pour activer Vertex AI Batch."
         )
-        background_tasks.add_task(_bulk_scoring_all_bg, list(user_ids_to_score), dict(headers), semaphore_limit)
+        background_tasks.add_task(
+            _bulk_scoring_all_bg,
+            list(user_ids_to_score),
+            dict(headers),
+            semaphore_limit,
+        )
 
-    return BulkScoringStatus(triggered=total, skipped=0, total_users=total,
-                             message=f"Scoring IA lancé pour {total} consultant(s) via {'Vertex AI Batch' if gcp_project and gcs_bucket else 'pipeline séquentiel'}.")
+    return BulkScoringStatus(
+        triggered=total,
+        skipped=0,
+        total_users=total,
+        message=f"Scoring IA lancé pour {total} consultant(s) via {'Vertex AI Batch' if gcp_project and gcs_bucket else 'pipeline séquentiel'}.",  # noqa: E501
+    )
 
 
 @router.get("/bulk-scoring-all/status")
@@ -173,7 +222,10 @@ async def cancel_bulk_scoring(_: dict = Depends(verify_jwt)):
     """Annule et réinitialise l'état Redis du scoring (ne kill pas le BG task en cours)."""
     await bulk_scoring_manager.reset()
     await set_scoring_scheduler_enabled(False)
-    return {"success": True, "message": "Statut de scoring réinitialisé et scheduler mis en pause."}
+    return {
+        "success": True,
+        "message": "Statut de scoring réinitialisé et scheduler mis en pause.",
+    }
 
 
 async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
@@ -185,21 +237,25 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
 
     await bulk_scoring_manager.update_progress(
         status="applying",
-        new_log=f"[resume] Reprise post-scale-to-zero — lecture GCS ({dest_uri})..."
+        new_log=f"[resume] Reprise post-scale-to-zero — lecture GCS ({dest_uri})...",
     )
     blob_output_prefix = dest_uri.replace(f"gs://{BATCH_GCS_BUCKET}/", "")
     raw_lines: list[str] = []
     try:
         gcs_client = gcs_storage.Client()
         bucket = gcs_client.bucket(BATCH_GCS_BUCKET)
-        blobs = await asyncio.to_thread(list, bucket.list_blobs(prefix=blob_output_prefix))
+        blobs = await asyncio.to_thread(
+            list, bucket.list_blobs(prefix=blob_output_prefix)
+        )
         for out_blob in blobs:
             if not out_blob.name.endswith(".jsonl"):
                 continue
             content = await asyncio.to_thread(out_blob.download_as_text)
             raw_lines.extend(content.splitlines())
     except Exception as e:
-        await bulk_scoring_manager.update_progress(status="error", error=f"[resume] GCS read: {e}")
+        await bulk_scoring_manager.update_progress(
+            status="error", error=f"[resume] GCS read: {e}"
+        )
         return
 
     # Reconstruit un index minimal depuis les lignes GCS (pas de scoring_index disponible)
@@ -207,6 +263,7 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
     results = []
     import json
     import re
+
     for line in raw_lines:
         if not line.strip():
             continue
@@ -220,7 +277,13 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
             candidates = record.get("response", {}).get("candidates", [])
             if not candidates:
                 continue
-            raw = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+            raw = (
+                candidates[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+                .strip()
+            )
             if not raw.startswith("{"):
                 raw_m = re.search(r"\{.*\}", raw, re.DOTALL)
                 raw = raw_m.group(0) if raw_m else raw
@@ -246,7 +309,7 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
         status=final_status,
         success_inc=nb_success,
         error_count_inc=nb_errors,
-        new_log=log_msg
+        new_log=log_msg,
     )
     logger.info(f"[resume] Apply terminé — {nb_success} scores, {nb_errors} erreurs.")
     # Pipeline terminé — pause le Cloud Scheduler keepalive
@@ -275,8 +338,16 @@ async def resume_bulk_scoring(
     - Si status=applying → ne fait rien (apply déjà en cours via BG ou résumé)
     """
     st = await bulk_scoring_manager.get_status()
-    if not st or st.get("status") not in ("batch_running", "running", "error", "completed"):
-        return {"action": "noop", "reason": f"status={st.get('status') if st else 'idle'}"}
+    if not st or st.get("status") not in (
+        "batch_running",
+        "running",
+        "error",
+        "completed",
+    ):
+        return {
+            "action": "noop",
+            "reason": f"status={st.get('status') if st else 'idle'}",
+        }
 
     batch_job_id = st.get("batch_job_id")
     dest_uri = st.get("dest_uri")
@@ -289,7 +360,10 @@ async def resume_bulk_scoring(
     # Poll Vertex AI
     try:
         from google import genai
-        vertex_client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION)
+
+        vertex_client = genai.Client(
+            vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION
+        )
         job = await asyncio.to_thread(vertex_client.batches.get, name=batch_job_id)
         state_name = job.state.name if hasattr(job.state, "name") else str(job.state)
     except Exception as e:

@@ -104,11 +104,11 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
       }
       env {
         name  = "SEMANTIC_CACHE_THRESHOLD"
-        value = "0.95"
+        value = "0.90"
       }
       env {
         name  = "SEMANTIC_CACHE_TTL"
-        value = "900"
+        value = "86400"
       }
       env {
         name  = "GEMINI_EMBEDDING_MODEL"

@@ -84,6 +84,11 @@ class IngestionService:
                 continue
 
             ft = state.file_type or "google_doc"
+
+            # Fix: If the database has "google_doc" but the filename clearly indicates a DOCX, override it.
+            if state.file_name and state.file_name.lower().endswith(".docx"):
+                ft = "docx"
+
             if ft == "docx":
                 doc_url = f"https://drive.google.com/file/d/{state.google_file_id}"
             else:

@@ -67,7 +67,9 @@ app.dependency_overrides[verify_jwt] = override_verify_jwt
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
-    _fake_redis_client.flushall()  # Isole chaque test — fakeredis in-memory
+    import cache as _cache_module
+    if _cache_module._client:
+        _cache_module._client.flushall()
     yield
 
 
@@ -75,4 +77,3 @@ def wipe_db():
 def client():
     with TestClient(app) as c:
         yield c
-

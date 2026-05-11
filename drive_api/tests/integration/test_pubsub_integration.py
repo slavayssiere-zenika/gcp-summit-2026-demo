@@ -12,7 +12,7 @@ Bugs détectés que les mocks actuels ne voient pas :
 import json
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -60,8 +60,8 @@ def _seed_drive_state(postgres_container_drive, google_file_id: str, status: str
         ), {"fid": "folder-001", "tag": "zenika-paris", "name": "Test Consultant"})
         conn.execute(text(
             "INSERT INTO drive_sync_state "
-            "(google_file_id, folder_id, file_name, status, modified_time) "
-            "VALUES (:gfid, 1, :fname, :status, NOW())"
+            "(google_file_id, folder_id, file_name, status, modified_time, retry_count) "
+            "VALUES (:gfid, 1, :fname, :status, NOW(), 0)"
         ), {"gfid": google_file_id, "fname": "cv_test.pdf", "status": status})
         conn.commit()
     engine.dispose()
@@ -96,7 +96,6 @@ async def test_ingestion_publishes_to_pubsub_emulator(
     Ce test était impossible avec mock PublisherClient — on ne pouvait pas
     vérifier que le payload était correctement sérialisé en bytes JSON.
     """
-    from google.cloud import pubsub_v1
     from src.ingestion_service import IngestionService
 
     topic_path, sub_path = pubsub_topic_and_sub
@@ -110,10 +109,9 @@ async def test_ingestion_publishes_to_pubsub_emulator(
     assert published >= 0  # 0 si fallback (OIDC token absent en test), >= 1 si publié
 
     # Vérification de l'état en base après ingest
-    from src.models import DriveSyncState, DriveSyncStatus
     sync_url = postgres_container_drive.get_connection_url()
     engine = create_engine(sync_url)
-    from sqlalchemy import select as sa_select, text
+    from sqlalchemy import text
     with engine.connect() as conn:
         result = conn.execute(
             text("SELECT status FROM drive_sync_state WHERE google_file_id = :gfid"),

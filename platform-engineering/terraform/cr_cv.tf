@@ -202,6 +202,21 @@ resource "google_cloud_run_v2_service" "cv_api" {
         name  = "DATA_QUALITY_PUBSUB_TOPIC"
         value = google_pubsub_topic.data_quality_events.id
       }
+      env {
+        # Email du SA cv_sa — utilisé par data_quality_router.py pour valider le token OIDC
+        # émis par Cloud Scheduler (scheduler.tf utilise cv_sa comme OIDC sender).
+        # Sans cette variable, le fallback dans _validate_scheduler_oidc() retombe sur
+        # PUBSUB_INVOKER_SA_EMAIL (mauvais SA), causant un 401 systématique et une table BQ vide.
+        name  = "CV_SA_EMAIL"
+        value = google_service_account.cv_sa.email
+      }
+      env {
+        # Audience OIDC du scheduler data-quality-snapshot.
+        # Le scheduler appelle directement l'URL Cloud Run (pas via LB), donc l'audience
+        # doit correspondre à l'URI du service Cloud Run.
+        name  = "PUBSUB_DQ_SNAPSHOT_AUDIENCE"
+        value = google_cloud_run_v2_service.cv_api.uri
+      }
     }
 
     # Conteneur Sidecar (MCP)

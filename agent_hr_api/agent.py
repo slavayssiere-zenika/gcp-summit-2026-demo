@@ -28,6 +28,7 @@ from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.runner import run_agent_and_collect
 from agent_commons.session import (RedisSessionService, get_hr_candidates_pool,
                                    store_hr_candidates_pool)
+from agent_commons.ui_tools import render_ui_widgets
 
 app_logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_HR_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
     tools_loaded = await get_cached_tools(_HR_CLIENTS_MAP, "[HR]", ttl=300, _cache=_HR_TOOLS_CACHE)
-    HR_TOOLS = tools_loaded
+    HR_TOOLS = tools_loaded + [render_ui_widgets]
 
     if not HR_TOOLS:
         app_logger.error(
@@ -153,8 +154,13 @@ async def create_agent(session_id: str | None = None) -> Agent:
 async def run_agent_query(
     query: str,
     session_id: str | None = None,
+    auth_token: str | None = None,
     user_id: str = "user_1",
 ) -> dict:
+    # Fix JWT propagation [STAFF-007] — re-setter auth_header_var dans CE contexte asyncio
+    if auth_token:
+        auth_header_var.set(auth_token)
+
     # Session éphémère par requête — évite la contamination de contexte.
     # La persistance conversationnelle est gérée par Redis côté agent_router_api.
     ephemeral_session_id = str(uuid.uuid4())

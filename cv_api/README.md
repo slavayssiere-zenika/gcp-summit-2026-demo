@@ -32,16 +32,16 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 223 | ✅ |
+| `main.py` | 240 | ✅ |
 | `mcp_server.py` | 591 | ⚠️ |
 | `conftest.py` | 89 | ✅ |
 | `metrics.py` | 4 | ✅ |
 | `src/cvs/router.py` | 43 | ✅ |
-| `src/cvs/routers/analytics_router.py` | 383 | ✅ |
+| `src/cvs/routers/analytics_router.py` | 423 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 288 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 102 | ✅ |
-| `src/cvs/routers/profile_router.py` | 559 | ⚠️ |
-| `src/cvs/routers/search_router.py` | 486 | ✅ |
+| `src/cvs/routers/profile_router.py` | 571 | ⚠️ |
+| `src/cvs/routers/search_router.py` | 459 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -78,6 +78,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Endpoints clés
 - `GET /ranking/experience`
 - `POST /reindex-embeddings`
+- `GET /extraction-scores`
 - `GET /reanalyze/status`
 - `GET /analytics/skills-coverage`
 - `POST /reanalyze`
@@ -95,7 +96,6 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 - `GET /user/{user_id}/missions`
 - `GET /user/{user_id}/details`
 - `POST /internal/users/merge`
-- `POST /internal/remediate-anonymous-profiles`
 
 ## Architecture Service Layer
 ```

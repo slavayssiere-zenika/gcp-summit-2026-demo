@@ -1,11 +1,10 @@
 
 from cache import delete_cache_pattern
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, Path
+from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from src.auth import verify_jwt
 from src.items.models import Item
 
@@ -15,7 +14,7 @@ public_router = APIRouter(prefix="", tags=["items_public"])
 
 @router.delete("/user/{user_id}/items", status_code=204)
 async def delete_user_items(
-    user_id: int,
+    user_id: int = Path(..., gt=0, le=2_147_483_647),
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt),
 ):
@@ -39,9 +38,14 @@ async def delete_user_items(
     delete_cache_pattern("items:search:*")
     return None
 
+# Borne maximale pour les colonnes INT4
+_INT4_MAX = 2_147_483_647
+
+
 class UserMergeRequest(BaseModel):
-    source_id: int
-    target_id: int
+    source_id: int = Field(gt=0, le=_INT4_MAX, description="ID source (INT4)")
+    target_id: int = Field(gt=0, le=_INT4_MAX, description="ID cible (INT4)")
+
 
 @public_router.post("/pubsub/user-events")
 async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends(get_db)):
@@ -50,7 +54,13 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
     """
     import base64
     import json
-    payload = await request.json()
+    try:
+        body = await request.body()
+        if not body:
+            return {"status": "ignored"}
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
     message = payload.get("message")
     if not message or "data" not in message:
         return {"status": "ignored"}
@@ -60,7 +70,7 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
         event_data = json.loads(data_str)
         event_type = event_data.get("event")
         data = event_data.get("data", {})
-        
+
         if event_type == "user.merged":
             source_id = data.get("source_id")
             target_id = data.get("target_id")
@@ -72,10 +82,11 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
                 # Invalidate cache
                 delete_cache_pattern(f"items:user:{source_id}:*")
                 delete_cache_pattern(f"items:user:{target_id}:*")
-        
+
         return {"status": "processed"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+
 
 @router.post("/internal/users/merge")
 async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession = Depends(get_db)):

@@ -76,7 +76,11 @@ async def get_my_prompt(db: AsyncSession = Depends(get_db), payload: dict = Depe
 
 
 @router.put("/user/me", response_model=schemas.Prompt)
-async def update_my_prompt(payload: schemas.PromptUpdate, db: AsyncSession = Depends(get_db), jwt_payload: dict = Depends(verify_jwt)):
+async def update_my_prompt(
+    payload: schemas.PromptUpdate,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt)
+):
     username = jwt_payload.get("sub")
     if not username:
         raise HTTPException(status_code=401, detail="Token invalide")
@@ -137,7 +141,12 @@ async def read_prompt(key: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{key}", response_model=schemas.Prompt)
-async def update_prompt(key: str, payload: schemas.PromptUpdate, db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
+async def update_prompt(
+    key: str,
+    payload: schemas.PromptUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(verify_admin)
+):
     prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
     if not prompt:
         # Create if not exist (upsert semantics)
@@ -156,7 +165,11 @@ async def update_prompt(key: str, payload: schemas.PromptUpdate, db: AsyncSessio
 
 
 @router.post("/", response_model=schemas.Prompt)
-async def create_prompt(payload: schemas.PromptCreate, db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
+async def create_prompt(
+    payload: schemas.PromptCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(verify_admin)
+):
     prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == payload.key))).scalars().first()
     if prompt:
         prompt.value = payload.value
@@ -211,9 +224,14 @@ async def report_error_for_prompt(
         result = await db.execute(stmt)
         prompt_record = result.scalar_one_or_none()
 
-        fallback_prompt = """You are an Expert Prompt Engineer. Your task is to analyze a runtime error caught in one of our microservices, and generate a concise, defensive, and strict System Prompt rule to prevent agents from triggering this error again.
-The rule must be actionable and clear. Do NOT output a full system prompt, just the focused directive/rule (e.g., "NEVER do X. If you need Y, ALWAYS use Z.").
-Output ONLY the raw prompt text. No markdown formatting, no generic introduction."""
+        fallback_prompt = (
+            "You are an Expert Prompt Engineer. Your task is to analyze a runtime error caught in one "
+            "of our microservices, and generate a concise, defensive, and strict System Prompt rule to "
+            "prevent agents from triggering this error again.\n"
+            "The rule must be actionable and clear. Do NOT output a full system prompt, just the focused "
+            "directive/rule (e.g., \"NEVER do X. If you need Y, ALWAYS use Z.\").\n"
+            "Output ONLY the raw prompt text. No markdown formatting, no generic introduction."
+        )
 
         system_instruction = prompt_record.value if prompt_record else fallback_prompt
 
@@ -285,37 +303,14 @@ async def read_compiled_prompt(key: str, db: AsyncSession = Depends(get_db)):
                        "updated_at": db_prompt.updated_at.isoformat() if db_prompt.updated_at else None}
         await set_cache(f"prompts:{key}", json.dumps(prompt_dict))
 
-    # 2. get the active errors
-    stmt = select(models.Prompt).where(models.Prompt.key.like("error_correction:%"))
-    errors = (await db.execute(stmt)).scalars().all()
-
-    if not errors:
-        return prompt
-
-    compiled_value = prompt.value + "\n\n=== EXIGENCES DE CORRECTION D'ERREURS RÉCENTES ===\n"
-    for err in errors:
-        try:
-            data = json.loads(err.value)
-            # Extrait le nom du service depuis la clé (ex: error_correction:users_api:1234)
-            parts = err.key.split(':')
-            service_name = parts[1] if len(parts) > 1 else "Système"
-            rule_text = data.get('rule', '')
-            # Échapper les accolades pour le moteur de template de l'ADK
-            safe_rule_text = rule_text.replace("{", "{{").replace("}", "}}")
-            compiled_value += f"- [{service_name}] {safe_rule_text}\n"
-        except Exception:
-            # Rétrocompatibilité si d'anciens enregistrements en texte brut existent
-            safe_val = err.value.replace("{", "{{").replace("}", "}}")
-            compiled_value += f"- {safe_val}\n"
-
-    compiled_prompt = schemas.Prompt(key=prompt.key, value=compiled_value)
-    return compiled_prompt
+    return prompt
 
 
 @router.delete("/{key}", summary="Supprime un prompt existant")
 async def delete_prompt(key: str, db: AsyncSession = Depends(get_db), admin: dict = Depends(verify_admin)):
     """
-    Supprime un prompt de la base de données. Réservé aux admins. Utilisé principalement pour le nettoyage des error_correction.
+    Supprime un prompt de la base de données. Réservé aux admins.
+    Utilisé principalement pour le nettoyage des error_correction.
     """
     db_prompt = (await db.execute(select(models.Prompt).filter(models.Prompt.key == key))).scalars().first()
     if not db_prompt:

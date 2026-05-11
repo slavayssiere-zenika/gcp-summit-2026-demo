@@ -107,6 +107,24 @@ Pour chaque service détecté, vérifie rigoureusement les points de la checklis
   grep -n 'McpToolResult\|model_validate\|\.get("result"' agent_commons/agent_commons/mcp_client.py
   ```
 
-### Étape 4 : Génération du Rapport
-Une fois l'audit terminé, génère un artefact détaillé (ex: `rapport_audit_apis.md`). 
-Le rapport doit catégoriser les services (APIs Data, Agents) et contenir une matrice d'audit (avec emojis ✅ ❌) montrant précisément quels points de la **CHECKLIST DE CONFORMITÉ** de `AGENTS.md` sont respectés ou violés, ainsi que le plan d'action recommandé pour corriger les non-conformités.
+### Étape 4 : Exécution des Tests et Analyse de Mutation (mutmut)
+Pour chaque service détecté, exécute la suite de tests et une analyse de mutation pour vérifier la robustesse du code :
+
+// turbo
+```bash
+for d in *_api *_mcp agent_*; do
+  if [ -d "$d" ] && [ -d "$d/tests" ]; then
+    echo "=== Tests & Mutmut : $d ==="
+    cd "$d"
+    echo "Exécution de pytest..."
+    python3 -m pytest tests/ || echo "Erreur pytest dans $d"
+    echo "Exécution de mutmut..."
+    python3 -m mutmut run || echo "Erreur ou mutants survivants dans $d"
+    cd ..
+  fi
+done
+```
+
+### Étape 5 : Génération du Rapport
+Une fois l'audit, les tests et l'analyse de mutation terminés, génère un artefact détaillé (ex: `rapport_audit_apis.md`). 
+Le rapport doit catégoriser les services (APIs Data, Agents) et contenir une matrice d'audit (avec emojis ✅ ❌) montrant précisément quels points de la **CHECKLIST DE CONFORMITÉ** de `AGENTS.md` sont respectés ou violés, un résumé de l'état des tests, ainsi que les métriques de mutation (mutmut), accompagnés du plan d'action recommandé pour corriger les non-conformités.

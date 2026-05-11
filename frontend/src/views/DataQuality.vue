@@ -120,6 +120,7 @@ const metricLabels: Record<string, string> = {
   current_role: 'Poste actuel',
   competency_assignment: 'Compétences assignées',
   ai_scoring: 'Scoring IA (≥10)',
+  extraction_reliability: 'Fiabilité Extraction (≥75%)',
 }
 
 const driveMetricIcons: Record<string, any> = {
@@ -138,6 +139,7 @@ const metricIcons: Record<string, any> = {
   current_role: Database,
   competency_assignment: Users,
   ai_scoring: Zap,
+  extraction_reliability: ShieldCheck,
 }
 
 // ── Issue CTA mapping ─────────────────────────────────────────────────────────
@@ -153,6 +155,9 @@ const issueAction = (issue: string): IssueAction | null => {
   }
   if (lc.includes('embedding')) {
     return { label: 'Voir Admin', to: '/admin/bulk-import' }
+  }
+  if (lc.includes('fiabilité d\'extraction') || lc.includes('qualité d\'extraction')) {
+    return { label: 'Ouvrir Dashboard', to: '/admin/extraction-quality' }
   }
   return null
 }
@@ -392,6 +397,9 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <div class="metric-count">
             <template v-if="key === 'ai_scoring' && (metric as any).avg_scored_per_user != null">
               moy. {{ (metric as any).avg_scored_per_user }}/consultant
+            </template>
+            <template v-else-if="key === 'extraction_reliability' && (metric as any).mean != null">
+              moy. {{ (metric as any).mean }} / med. {{ (metric as any).median }}
             </template>
             <template v-else>{{ fmt(metric.ok) }}/{{ fmt(metric.total) }}</template>
           </div>

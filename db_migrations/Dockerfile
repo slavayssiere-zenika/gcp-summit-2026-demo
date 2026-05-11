@@ -9,8 +9,9 @@ COPY db_migrations/docker-entrypoint.sh /liquibase/docker-entrypoint.sh
 COPY db_migrations/changelogs/ /liquibase/changelogs/
 
 # Rendre le script exécutable et corriger les droits pour l'utilisateur non-root
-RUN chmod +x /liquibase/docker-entrypoint.sh \
-    && chown -R liquibase:liquibase /liquibase/changelogs /liquibase/docker-entrypoint.sh
+RUN wget -qO /liquibase/lib/postgresql.jar "https://jdbc.postgresql.org/download/postgresql-42.7.3.jar" \
+    && chmod +x /liquibase/docker-entrypoint.sh \
+    && chown -R liquibase:liquibase /liquibase/changelogs /liquibase/docker-entrypoint.sh /liquibase/lib/postgresql.jar
 
 # Revenir à l'utilisateur non-root (conforme aux golden rules)
 USER liquibase

@@ -11,6 +11,7 @@ class FolderCreate(BaseModel):
     folder_name: Optional[str] = None  # Peut être fourni manuellement, sinon récupéré via Drive API
     excluded_folders: Optional[List[str]] = []
 
+
 class FolderUpdate(BaseModel):
     tag: Optional[str] = None
     excluded_folders: Optional[List[str]] = None
@@ -61,9 +62,9 @@ class FileStateResponse(BaseModel):
     user_id: Optional[int]
     processing_duration_ms: Optional[int]
     file_type: Optional[str] = "google_doc"
+    retry_count: int = 0
 
     model_config = {"from_attributes": True}
-
 
 
 class PaginatedFilesResponse(BaseModel):
@@ -72,11 +73,13 @@ class PaginatedFilesResponse(BaseModel):
     skip: int
     limit: int
 
+
 class PaginatedFoldersResponse(BaseModel):
     items: List[FolderResponse]
     total: int
     skip: int
     limit: int
+
 
 class FileUpdate(BaseModel):
     user_id: Optional[int] = None

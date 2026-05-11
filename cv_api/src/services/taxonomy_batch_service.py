@@ -616,12 +616,24 @@ class TaxonomyBatchService:
                     else:
                         with tempfile.NamedTemporaryFile("w", delete=False) as f:
                             chunk_size = 150
+
+                            def minify_tree(node):
+                                if isinstance(node, dict):
+                                    keys_to_drop = ("description", "merge_from", "id", "created_at",
+                                                    "keywords", "examples")
+                                    return {k: minify_tree(v) for k, v in node.items() if k not in keys_to_drop}
+                                elif isinstance(node, list):
+                                    return [minify_tree(item) for item in node]
+                                return node
+
+                            minified_res_tree = minify_tree(res_tree)
+
                             for i in range(0, len(missing), chunk_size):
                                 missing_chunk = missing[i:i + chunk_size]
                                 sweep_instruction = instruction_sweep.replace(
                                     "{{MISSING_COMPETENCIES}}", ", ".join(missing_chunk)).replace(
                                     "{{RES_TREE}}", json.dumps(
-                                        res_tree, ensure_ascii=False))
+                                        minified_res_tree, ensure_ascii=False))
                                 req = {
                                     "request": {
                                         "contents": [{"role": "user", "parts": [{"text": sweep_instruction}]}],

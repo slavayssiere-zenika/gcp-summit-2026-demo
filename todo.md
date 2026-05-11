@@ -14,8 +14,6 @@
 
 - [ ] **[Platform Engineering] Automatisation du cycle éphémère Matin/Soir** : Créer un Cloud Run Job (`manage-env-job`) + Cloud Scheduler Jobs (`07:00 deploy`, `19:00 destroy`).
 - [ ] **Sécurité IAM / Accès Zero-Trust (IDE vers GCP)** : Créer un CLI proxy MCP (`mcp_gcp_proxy.py`).
-- [ ] **Infrastructure Cloud Run** : Restreindre serveurs MCP Cloud Run à "Cloud Run Invoker".
-- [ ] **Observabilité & Debugging GCP** : Tool MCP `search_cloud_logs_by_trace` et `get_recent_500_errors`.
 - [ ] **Infrastructure & Ops GCP** : Tool MCP `inspect_pubsub_dlq` et `get_redis_invalidation_state`.
 - [ ] **Base de Données & Auth GCP** : Tool MCP `execute_read_only_query` et `generate_dev_jwt`.
 - [ ] **Dashboard de performance des outils MCP** : (latency vs success rate).

@@ -71,7 +71,7 @@ def test_query_propagates_user_id_from_jwt(client, mock_agent_result):
 
     captured = {}
 
-    async def capture_user_id(query, session_id, user_id):
+    async def capture_user_id(query, session_id, user_id, auth_token=None, **kwargs):
         captured["user_id"] = user_id
         return mock_agent_result
 
@@ -107,7 +107,7 @@ def test_query_different_users_get_different_user_ids(client, mock_agent_result)
 
     captured_ids = []
 
-    async def capture_call(query, session_id, user_id):
+    async def capture_call(query, session_id, user_id, auth_token=None, **kwargs):
         captured_ids.append(user_id)
         return mock_agent_result
 
@@ -145,7 +145,7 @@ def test_session_isolation_different_users(client, mock_agent_result):
 
     captured_sessions = []
 
-    async def capture_session(query, session_id, user_id):
+    async def capture_session(query, session_id, user_id, auth_token=None, **kwargs):
         captured_sessions.append({"user_id": user_id, "session_id": session_id})
         return mock_agent_result
 
@@ -177,7 +177,7 @@ def test_same_user_explicit_session_id_is_propagated(client, mock_agent_result):
     """
     captured = {}
 
-    async def capture_call(query, session_id, user_id):
+    async def capture_call(query, session_id, user_id, auth_token=None, **kwargs):
         captured["session_id"] = session_id
         return mock_agent_result
 
@@ -326,7 +326,7 @@ def test_query_response_structure(client, mock_agent_result):
 
 def test_query_error_returns_500(client):
     """Une exception dans run_agent_query doit retourner 500."""
-    async def raise_error(query, session_id, user_id):
+    async def raise_error(query, session_id, user_id, auth_token=None, **kwargs):
         raise RuntimeError("MCP timeout")
 
     with patch("main.run_agent_query", new=raise_error):

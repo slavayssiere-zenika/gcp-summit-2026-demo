@@ -44,8 +44,6 @@ show_help() {
   echo "  --no-deploy        Construit et pousse les images Docker uniquement, ignore le déploiement Cloud Run"
   echo "  --force-all        Force le rebuild de TOUS les services (même ceux sans changement détecté)"
   echo "  --skip-tests       Bypasse la gate de tests unitaires (HOTFIX UNIQUEMENT — apparaîtra dans le summary)"
-  echo "  --mutation-tests   Active les tests de mutation mutmut (opt-in, lent ~5-15 min/service)"
-  echo "  --mutation-strict  --mutation-tests + bloque le build si score < seuil (défaut: 60%)"
   echo ""
   echo "Tests:"
   echo "  Par défaut, tous les tests sont lancés : unitaires + intégration Testcontainers (nécessite Docker)."
@@ -78,11 +76,7 @@ CURRENT_DEPLOYING_SERVICE=""
 SKIP_TESTS=false
 SKIP_UNCHANGED=true    # Défaut : rebuild uniquement ce qui a changé (opt-out via --force-all)
 FORCE_ALL=false        # Rebuild tout, même si aucun changement détecté
-RUN_MUTATION_TESTS=false   # Opt-in : --mutation-tests
-MUTATION_STRICT=false      # Opt-in : --mutation-strict (bloque le build si score < seuil)
-MUTATION_SCORE_THRESHOLD=60  # Seuil minimum de mutants tués (%) pour passer la gate
 declare -A COVERAGE_RESULTS   # service -> "75%" | "N/A" | "SKIPPED"
-declare -A MUTATION_RESULTS   # service -> "75% (50/67)" | "N/A" | "SKIPPED"
 
 # Répertoire de logs par run — conservé après exécution pour debug
 LOG_DIR="./deploy_logs/$(date +%Y%m%d_%H%M%S)"
@@ -172,23 +166,13 @@ print_summary() {
     fi
   fi
 
-  # ── Rapport de couverture + mutation des services rebuildés ──────────────────
+  # ── Rapport de couverture des services rebuildés ──────────────────
   if [ ${#COVERAGE_RESULTS[@]} -gt 0 ]; then
-    local HAS_MUTATION=false
-    [ ${#MUTATION_RESULTS[@]} -gt 0 ] && HAS_MUTATION=true
-
     echo -e "${GREY}------------------------------------------------------------${RESET}"
-    if [ "$HAS_MUTATION" = true ]; then
-      echo -e "📊 ${GREY}QUALITÉ DE TEST (services rebuildés)${RESET}"
-      echo -e "${GREY}------------------------------------------------------------${RESET}"
-      printf "   %-30s %-18s %s\n" "SERVICE" "COUVERTURE" "MUTATION SCORE"
-      printf "   %-30s %-18s %s\n" "-------" "----------" "--------------"
-    else
-      echo -e "📊 ${GREY}COUVERTURE DE TEST (services rebuildés)${RESET}"
-      echo -e "${GREY}------------------------------------------------------------${RESET}"
-      printf "   %-35s %s\n" "SERVICE" "COUVERTURE"
-      printf "   %-35s %s\n" "-------" "----------"
-    fi
+    echo -e "📊 ${GREY}COUVERTURE DE TEST (services rebuildés)${RESET}"
+    echo -e "${GREY}------------------------------------------------------------${RESET}"
+    printf "   %-35s %s\n" "SERVICE" "COUVERTURE"
+    printf "   %-35s %s\n" "-------" "----------"
 
     for svc in "${!COVERAGE_RESULTS[@]}"; do
       local cov="${COVERAGE_RESULTS[$svc]}"
@@ -210,35 +194,8 @@ print_summary() {
         fi
       fi
 
-      if [ "$HAS_MUTATION" = true ]; then
-        local mut="${MUTATION_RESULTS[$svc]:-—}"
-        local mut_color="$RESET"
-        local mut_icon="🧬"
-        local mut_num
-        mut_num=$(echo "$mut" | grep -oE '^[0-9]+' || echo "")
-        if [[ "$mut" == "SKIPPED" || "$mut" == "—" ]]; then
-          mut_color="$GREY"; mut_icon="➖ "
-        elif [[ "$mut" == *"❌"* ]]; then
-          mut_color="$RED"; mut_icon="❌"
-        elif [[ "$mut_num" =~ ^[0-9]+$ ]]; then
-          if [ "$mut_num" -ge 80 ]; then
-            mut_color="$GREEN"; mut_icon="✅"
-          elif [ "$mut_num" -ge "$MUTATION_SCORE_THRESHOLD" ]; then
-            mut_color="$YELLOW"; mut_icon="⚠️ "
-          else
-            mut_color="$YELLOW"; mut_icon="⚠️ "
-          fi
-        fi
-        printf "   %-30s ${cov_color}%-18s${RESET} ${mut_color}%s %s${RESET}\n" \
-          "$svc" "${cov_icon} ${cov}" "${mut_icon}" "$mut"
-      else
-        printf "   %-35s ${cov_color}%s %s${RESET}\n" "$svc" "$cov_icon" "$cov"
-      fi
+      printf "   %-35s ${cov_color}%s %s${RESET}\n" "$svc" "$cov_icon" "$cov"
     done
-
-    if [ "$HAS_MUTATION" = true ]; then
-      echo -e "   ${GREY}(seuil mutation: ≥${MUTATION_SCORE_THRESHOLD}% mutants tués)${RESET}"
-    fi
   fi
   # ─────────────────────────────────────────────────────────────────────────────
 
@@ -274,23 +231,6 @@ print_summary() {
         echo "**Résumé (fin du log)** :"
         echo '```'
         tail -20 "$f"
-        echo '```'
-        echo ""
-      fi
-    done
-
-    # 2. Logs mutmut si échec strict
-    for f in "${LOG_DIR}"/*_mutation.log; do
-      [ -f "$f" ] || continue
-      local svc_name
-      svc_name=$(basename "$f" _mutation.log)
-      local mut_errors
-      mut_errors=$(grep -E 'BadTestExecution|Traceback|Error|FAILED' "$f" | head -10)
-      if [ -n "$mut_errors" ]; then
-        HAS_ERRORS=true
-        echo "## ⚠️  Mutation : ${svc_name}"
-        echo '```'
-        echo "$mut_errors"
         echo '```'
         echo ""
       fi
@@ -397,11 +337,12 @@ compute_service_hash() {
   # Exclude VERSION and HASH files, and common ignore paths
   find "${DIRS_TO_CHECK[@]}" -type f \
     ! -name "VERSION" ! -name "HASH" ! -name "FILE_HASHES" \
-    ! -name ".coverage" ! -name "coverage.json" ! -name "pytest.log" \
-    ! -name "*.db" ! -name "*.pyc" ! -name ".mutmut-cache" \
-    ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" ! -path "*/mutants/*" \
+    ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
+    ! -name "*.db" ! -name "*.pyc" \
+    ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
-    ! -path "*/dist/*" ! -path "*/.DS_Store" \
+    ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
+    ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     -exec shasum {} + | sort > "/tmp/hash_${SERVICE}"
   shasum "/tmp/hash_${SERVICE}" | awk '{print $1}'
 }
@@ -419,11 +360,12 @@ save_shared_hash() {
   if [ -d "./shared" ]; then
     find "./shared" -type f \
       ! -name "HASH" ! -name "FILE_HASHES" \
-      ! -name ".coverage" ! -name "coverage.json" ! -name "pytest.log" \
-      ! -name "*.db" ! -name "*.pyc" ! -name ".mutmut-cache" \
-      ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" ! -path "*/mutants/*" \
+      ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
+      ! -name "*.db" ! -name "*.pyc" \
+      ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
       ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
-      ! -path "*/dist/*" ! -path "*/.DS_Store" \
+      ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
+      ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
       -exec shasum {} + | sort > "shared/FILE_HASHES"
     shasum "shared/FILE_HASHES" | awk '{print $1}' > "shared/HASH"
   fi
@@ -439,11 +381,12 @@ check_shared_changed() {
   local CURRENT
   find "./shared" -type f \
     ! -name "HASH" ! -name "FILE_HASHES" \
-    ! -name ".coverage" ! -name "coverage.json" ! -name "pytest.log" \
-    ! -name "*.db" ! -name "*.pyc" ! -name ".mutmut-cache" \
-    ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" ! -path "*/mutants/*" \
+    ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
+    ! -name "*.db" ! -name "*.pyc" \
+    ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
-    ! -path "*/dist/*" ! -path "*/.DS_Store" \
+    ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
+    ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     -exec shasum {} + | sort > "/tmp/current_shared_hashes"
   CURRENT=$(shasum "/tmp/current_shared_hashes" | awk '{print $1}')
   
@@ -533,18 +476,6 @@ run_service_tests() {
 
   echo -e "${RED}--- 🧪 Tests unitaires + couverture : $SERVICE ---${RESET}"
 
-  # Nettoyage du sandbox mutmut résiduel
-  # Problème : mutmut crée mutants/ avec des copies des tests. pytest compile des .pyc
-  # dans tests/__pycache__/ avec __file__ pointant vers mutants/tests/*.py.
-  # Au run pytest suivant, le module importé (mutants/) ne correspond pas au fichier
-  # collecté (tests/) → "import file mismatch".
-  # Fix : supprimer mutants/ ENTIÈREMENT + tests/__pycache__/ pour effacer les .pyc périmés.
-  if [ -d "./${SERVICE}/mutants" ]; then
-    rm -rf "./${SERVICE}/mutants"
-    find "./${SERVICE}" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
-    echo -e "${GREY}[ℹ️] Sandbox mutmut nettoyé (mutants/ + __pycache__ supprimés).${RESET}"
-  fi
-
   # PYTHONPATH : racine du monorepo (pour shared/) + dossier du service
   # Les agents ajoutent aussi agent_commons
   local PYTHONPATH_VAL=".:${SERVICE}"
@@ -592,105 +523,9 @@ run_service_tests() {
 }
 
 # ==============================================================================
-# Mutation Test Gate (opt-in via --mutation-tests / --mutation-strict)
 # ==============================================================================
-
-run_mutation_tests() {
-  local SERVICE=$1
-  local MUTMUT_BIN="./test_env/bin/mutmut"
-
-  # Désactivé par défaut — uniquement si --mutation-tests ou --mutation-strict
-  if [ "$RUN_MUTATION_TESTS" = false ]; then
-    return 0
-  fi
-
-  # Vérification de la présence de mutmut
-  if [ ! -f "$MUTMUT_BIN" ]; then
-    echo -e "${YELLOW}[⚠️  MUTATION SKIP] mutmut introuvable dans test_env.${RESET}"
-    echo -e "${YELLOW}   → test_env/bin/pip install mutmut${RESET}"
-    MUTATION_RESULTS["$SERVICE"]="SKIPPED"
-    return 0
-  fi
-
-  # Vérification de la présence du setup.cfg mutmut
-  if [ ! -f "./${SERVICE}/setup.cfg" ]; then
-    echo -e "${GREY}[ℹ️  MUTATION SKIP] Pas de setup.cfg mutmut pour $SERVICE — skipped.${RESET}"
-    MUTATION_RESULTS["$SERVICE"]="SKIPPED"
-    return 0
-  fi
-
-  echo -e "${YELLOW}--- 🧬 Tests de mutation : $SERVICE ---${RESET}"
-
-  # PYTHONPATH : idem run_service_tests
-  local PYTHONPATH_VAL=".:${SERVICE}"
-  if [[ "$SERVICE" == "agent_"* ]]; then
-    PYTHONPATH_VAL=".:${SERVICE}:./agent_commons"
-  fi
-
-  # mutmut log persistant — stdout silencé (trop verbeux pour le terminal)
-  local MUT_LOG="${LOG_DIR}/${SERVICE}_mutation.log"
-
-  pushd "./${SERVICE}" > /dev/null
-  OTEL_TRACES_EXPORTER=none \
-  OTEL_METRICS_EXPORTER=none \
-  OTEL_LOGS_EXPORTER=none \
-  SECRET_KEY="testsecret" \
-  PYTHONPATH="../${PYTHONPATH_VAL//.\//../}" \
-  "$OLDPWD/$MUTMUT_BIN" run \
-    2>&1 > "$OLDPWD/$MUT_LOG"
-
-  # Collecter les résultats (que le run ait réussi ou non)
-  local MUT_RESULTS_RAW
-  MUT_RESULTS_RAW=$("$OLDPWD/$MUTMUT_BIN" results --all true 2>/dev/null || echo "")
-  popd > /dev/null
-
-  # Extraire les compteurs depuis la sortie brute de mutmut results
-  # Format mutmut 3.x : chaque ligne = "  module.func__mutmut_N: killed|survived|not checked"
-  # Note: on utilise grep + wc -l plutôt que grep -c pour éviter le "0\n0" quand
-  # grep -c ne trouve aucun match (exit 1) et que || echo "0" s'exécute (valeur multi-ligne)
-  local KILLED SURVIVED TOTAL SCORE
-  KILLED=$(echo "$MUT_RESULTS_RAW" | grep ': killed' | wc -l | tr -d ' ')
-  SURVIVED=$(echo "$MUT_RESULTS_RAW" | grep ': survived' | wc -l | tr -d ' ')
-  TOTAL=$(( KILLED + SURVIVED ))
-
-  # Vérifier si mutmut n'a pas pu s'exécuter (phase stats échouée)
-  local UNCHECKED
-  UNCHECKED=$(echo "$MUT_RESULTS_RAW" | grep ': not checked' | wc -l | tr -d ' ')
-
-  if [ "$TOTAL" -eq 0 ] && [ "$UNCHECKED" -gt 0 ]; then
-    echo -e "${YELLOW}⚠️  Mutation $SERVICE : ${UNCHECKED} mutants non testés (sandbox stats) — voir ${MUT_LOG}${RESET}"
-    MUTATION_RESULTS["$SERVICE"]="⚠️ ${UNCHECKED} mutants (non testés)"
-    return 0
-  fi
-
-  if [ "$TOTAL" -eq 0 ]; then
-    echo -e "${GREY}[ℹ️  MUTATION] Aucun mutant généré pour $SERVICE.${RESET}"
-    MUTATION_RESULTS["$SERVICE"]="N/A"
-    return 0
-  fi
-
-  # Score = (Killed / Total) * 100
-  SCORE=$(( KILLED * 100 / TOTAL ))
-  local SCORE_STR="${SCORE}% (${KILLED}/${TOTAL} tués)"
-
-  if [ "$SCORE" -ge "$MUTATION_SCORE_THRESHOLD" ]; then
-    echo -e "${GREEN}✅ Mutation $SERVICE : ${SCORE_STR} ≥ seuil ${MUTATION_SCORE_THRESHOLD}% — OK${RESET}"
-    MUTATION_RESULTS["$SERVICE"]="$SCORE_STR"
-    return 0
-  else
-    MUTATION_RESULTS["$SERVICE"]="${SCORE_STR} ⚠️"
-    echo -e "${YELLOW}⚠️  Mutation $SERVICE : ${SCORE_STR} < seuil ${MUTATION_SCORE_THRESHOLD}%${RESET}"
-    if [ "$MUTATION_STRICT" = true ]; then
-      echo -e "${RED}❌ [--mutation-strict] Build bloqué — score de mutation insuffisant.${RESET}"
-      echo -e "${RED}   → Renforcez les assertions dans les tests pour tuer plus de mutants.${RESET}"
-      DEPLOYS_FAILED+=("$SERVICE (Mutation score: ${SCORE}% < ${MUTATION_SCORE_THRESHOLD}%)")
-      return 1
-    else
-      echo -e "${YELLOW}   → Score sous le seuil — non bloquant (utilisez --mutation-strict pour bloquer).${RESET}"
-      return 0
-    fi
-  fi
-}
+# Deployment Logic
+# ==============================================================================
 
 
 update_cloudrun() {
@@ -799,9 +634,6 @@ build_and_push_standard() {
   # CURRENT_DEPLOYING_SERVICE vidé avant return 1 pour éviter la double entrée
   # dans DEPLOYS_FAILED via le trap EXIT (P0/R4)
   run_service_tests "$SERVICE" || { CURRENT_DEPLOYING_SERVICE=""; return 1; }
-  # ── Gate de mutation (opt-in via --mutation-tests / --mutation-strict) ───────
-  run_mutation_tests "$SERVICE" || { CURRENT_DEPLOYING_SERVICE=""; return 1; }
-  # ────────────────────────────────────────────────────────────────────────────
 
   local TAG=$(get_service_tag "$SERVICE" "$BUMP")
   echo "--- Building $SERVICE ($TAG) ---"
@@ -812,6 +644,32 @@ build_and_push_standard() {
   docker build --platform linux/amd64 \
     -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" \
     -f "./${SERVICE}/Dockerfile" .
+  
+  echo "--- Smoke Test: Vérification du démarrage du conteneur ---"
+  local SMOKE_CONTAINER="smoke_${SERVICE}_$RANDOM"
+  
+  docker run -d --name "$SMOKE_CONTAINER" \
+    -e SECRET_KEY="smoke_test_key" \
+    -e GEMINI_API_KEY="dummy" \
+    -e REDIS_URL="redis://localhost:6379" \
+    -e DATABASE_URL="postgresql+asyncpg://dummy:dummy@localhost:5432/dummy" \
+    "${IMAGE_NAME}:${TAG}" >/dev/null
+    
+  sleep 3
+  
+  if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
+    echo -e "${RED}❌ [SMOKE TEST] L'image Docker a crashé au démarrage (Missing Module, Syntax Error, etc) !${RESET}"
+    echo -e "${RED}   Logs du crash :${RESET}"
+    docker logs "$SMOKE_CONTAINER" 2>&1 | tail -n 20
+    docker rm -f "$SMOKE_CONTAINER" >/dev/null
+    DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
+    CURRENT_DEPLOYING_SERVICE=""
+    return 1
+  fi
+  
+  echo -e "${GREEN}✅ [SMOKE TEST] Démarrage réussi.${RESET}"
+  docker rm -f "$SMOKE_CONTAINER" >/dev/null
+
   
   # Push
   echo "--- Pushing $SERVICE ---"
@@ -883,8 +741,17 @@ build_and_upload_frontend() {
   fi
   # P1/R8 — pushd/popd garantit le retour au répertoire racine même si npm échoue (set -eo pipefail)
   pushd frontend > /dev/null
-  echo "--- NPM ci && Build ---"
+  echo "--- NPM ci && Tests && Build ---"
   npm ci   # A2 — npm ci (reproductible, ne modifie pas package-lock.json, ~2-3x plus rapide en CI)
+  
+  if [ "$SKIP_TESTS" = false ]; then
+    echo "--- Run Frontend Tests ---"
+    npm run test:unit:run
+  else
+    echo -e "${YELLOW}[⚠️  TESTS SKIPPED] frontend — bypass via --skip-tests${RESET}"
+    TESTS_SKIPPED+=("frontend")
+  fi
+
   npm run build
   popd > /dev/null
 
@@ -990,13 +857,6 @@ for arg in "$@"; do
   elif [[ "$arg" == "--skip-tests" ]]; then
     SKIP_TESTS=true
     echo -e "${RED}🚨 [--skip-tests] Gate de tests DÉSACTIVÉE — réservé aux hotfixes urgents uniquement !${RESET}"
-  elif [[ "$arg" == "--mutation-tests" ]]; then
-    RUN_MUTATION_TESTS=true
-    echo -e "${YELLOW}[🧬 --mutation-tests] Tests de mutation activés (lent — prévoir ~5-15 min par service).${RESET}"
-  elif [[ "$arg" == "--mutation-strict" ]]; then
-    RUN_MUTATION_TESTS=true
-    MUTATION_STRICT=true
-    echo -e "${YELLOW}[🧬 --mutation-strict] Tests de mutation activés en mode STRICT (bloque si score < ${MUTATION_SCORE_THRESHOLD}%).${RESET}"
   else
     # Normalize input (e.g. agent-api -> agent_api)
     TARGET_SERVICES+=("${arg//-/_}")

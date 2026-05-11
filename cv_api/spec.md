@@ -75,6 +75,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/search/mission-match` : Match Mission To Candidates
 - **GET** `/ranking/experience` : Get Consultants Experience Ranking
 - **POST** `/reindex-embeddings` : Reindex Embeddings
+- **GET** `/extraction-scores` : Get Extraction Scores
 - **GET** `/reanalyze/status` : Get Reanalyze Status
 - **GET** `/analytics/skills-coverage` : Get Skills Coverage
 - **POST** `/reanalyze` : Reanalyze Cvs
@@ -95,7 +96,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/bulk-reanalyse/reset` : Reset Bulk Reanalyse
 - **GET** `/bulk-reanalyse/data-quality` : Get Data Quality Report
 - **POST** `/bulk-reanalyse/retry-apply` : Retry Bulk Apply
-- **GET** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **POST** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp

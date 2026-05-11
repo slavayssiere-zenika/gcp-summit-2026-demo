@@ -23,18 +23,22 @@ from google.genai import types
 from pydantic import ValidationError
 from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
-from src.competencies.helpers import (_compute_recency_weight,
-                                      _duration_multiplier, _get_mission_bonus,
-                                      _parse_duration_months)
-from src.competencies.models import (Competency, CompetencyEvaluation,
-                                     user_competency)
+from src.competencies.helpers import (
+    _compute_recency_weight,
+    _duration_multiplier,
+    _get_mission_bonus,
+    _parse_duration_months,
+)
+from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from shared.schemas.missions import MissionsResponse
 
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 if not GEMINI_MODEL:
-    logger.warning("GEMINI_MODEL n'est pas définie dans l'environnement. Le scoring IA va échouer.")
+    logger.warning(
+        "GEMINI_MODEL n'est pas définie dans l'environnement. Le scoring IA va échouer."
+    )
 CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
@@ -67,7 +71,7 @@ def _serialize_evaluation(ev: CompetencyEvaluation, competency_name: str = "") -
         "id": ev.id,
         "user_id": ev.user_id,
         "competency_id": ev.competency_id,
-        "name": competency_name,          # alias — attendu par les réponses paginées et le frontend
+        "name": competency_name,  # alias — attendu par les réponses paginées et le frontend
         "competency_name": competency_name,  # conservé pour rétrocompat BatchEvaluationResponse
         "ai_score": ev.ai_score,
         "ai_justification": ev.ai_justification,
@@ -95,7 +99,9 @@ async def _compute_ai_score(
         )
         return None, "GOOGLE_API_KEY non configurée — scoring IA désactivé."
 
-    logger.info(f"[_compute_ai_score] Starting evaluation for user_id={user_id}, competency='{competency_name}'")
+    logger.info(
+        f"[_compute_ai_score] Starting evaluation for user_id={user_id}, competency='{competency_name}'"
+    )
 
     # 1. Récupération des missions depuis cv_api
     missions = []
@@ -126,26 +132,35 @@ async def _compute_ai_score(
                     skip += limit
                 else:
                     logger.error(
-                        f"[_compute_ai_score] Error fetching missions for user {user_id}: HTTP {res.status_code}")
+                        f"[_compute_ai_score] Error fetching missions for user {user_id}: HTTP {res.status_code}"
+                    )
                     break
     except Exception as e:
         logger.warning(f"[AI Score] Failed to fetch missions for user {user_id}: {e}")
         return None, "Missions non disponibles (erreur réseau)."
 
     if not missions:
-        logger.warning(f"[_compute_ai_score] No missions found for user_id={user_id}. Assigning minimal score 1.0")
+        logger.warning(
+            f"[_compute_ai_score] No missions found for user_id={user_id}. Assigning minimal score 1.0"
+        )
         return 1.0, "Aucune mission trouvée dans le CV — score minimal attribué."
 
     # 2. Filtrage des missions pertinentes
     comp_norm = competency_name.lower()
     relevant_missions = [
-        m for m in missions
-        if any(comp_norm in c.lower() or c.lower() in comp_norm for c in m.get("competencies", []))
+        m
+        for m in missions
+        if any(
+            comp_norm in c.lower() or c.lower() in comp_norm
+            for c in m.get("competencies", [])
+        )
     ]
     context_missions = relevant_missions if relevant_missions else missions[:5]
 
     # 3. Construction du contexte enrichi v2
-    def _estimate_duration_from_dates(start: Optional[str], end: Optional[str]) -> Optional[str]:
+    def _estimate_duration_from_dates(
+        start: Optional[str], end: Optional[str]
+    ) -> Optional[str]:
         if not start or not end:
             return None
         try:
@@ -153,6 +168,7 @@ async def _compute_ai_score(
             sm = int(str(start)[5:7]) if len(str(start)) >= 7 else 1
             if str(end).lower() in ("present", "en cours", "current"):
                 from datetime import date as _date
+
                 ey, em = _date.today().year, _date.today().month
             else:
                 ey = int(str(end)[:4])
@@ -174,7 +190,9 @@ async def _compute_ai_score(
         else:
             recency_label = f"ancienne, valeur diminuée (poids={recency_weight})"
 
-        raw_duration = m.get("duration") or _estimate_duration_from_dates(m.get("start_date"), m.get("end_date"))
+        raw_duration = m.get("duration") or _estimate_duration_from_dates(
+            m.get("start_date"), m.get("end_date")
+        )
         duration_months = _parse_duration_months(raw_duration)
         dur_mult = _duration_multiplier(duration_months)
         dur_label = (
@@ -199,7 +217,11 @@ async def _compute_ai_score(
         return "\n".join(parts)
 
     missions_text = "\n\n".join([_format_mission_v2(m) for m in context_missions])
-    context_label = "directement liées à cette compétence" if relevant_missions else "générales du consultant"
+    context_label = (
+        "directement liées à cette compétence"
+        if relevant_missions
+        else "générales du consultant"
+    )
 
     # 4. Prompt v2
     prompt = (
@@ -220,7 +242,7 @@ async def _compute_ai_score(
         f"Réponds UNIQUEMENT en JSON valide avec exactement deux champs :\n"
         f"- score : float 0.0-5.0, arrondi au pas de 0.5\n"
         f"- justification : string 50-250 caractères en français\n\n"
-        f'Exemple : {{"score": 3.5, "justification": "2 missions récentes (poids>0.9) dont 1 audit chez Airbus (bonus +0.5)."}}'
+        f'Exemple : {{"score": 3.5, "justification": "2 missions récentes (poids>0.9) dont 1 audit chez Airbus (bonus +0.5)."}}'  # noqa: E501
     )
 
     # 5. Appel Gemini avec JSON forcé
@@ -229,14 +251,18 @@ async def _compute_ai_score(
         response = await client.aio.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.1),
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json", temperature=0.1
+            ),
         )
         raw = response.text.strip()
         if not raw.startswith("{"):
             json_match = re.search(r"\{.*\}", raw, re.DOTALL)
             raw = json_match.group(0) if json_match else raw
         data = json.loads(raw)
-        score = round(round(max(0.0, min(5.0, float(data.get("score", 0.0)))) * 2) / 2, 1)
+        score = round(
+            round(max(0.0, min(5.0, float(data.get("score", 0.0)))) * 2) / 2, 1
+        )
         justification = str(data.get("justification", ""))[:500]
         logger.info(f"[AI Score] user={user_id} comp='{competency_name}' score={score}")
         return score, justification
@@ -248,13 +274,17 @@ async def _compute_ai_score(
     return None, "Calcul IA échoué."
 
 
-async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], headers: dict):
+async def _score_all_bg(
+    user_id: int, comp_tuples: list[tuple[int, str]], headers: dict
+):
     """BackgroundTask : score toutes les competences feuilles d'un utilisateur.
 
     Recoit des tuples (competency_id, competency_name) pour eviter toute
     contamination cross-session SQLAlchemy.
     """
-    logger.info(f"[AI Score BG] Background task started for user={user_id} - {len(comp_tuples)} competencies")
+    logger.info(
+        f"[AI Score BG] Background task started for user={user_id} - {len(comp_tuples)} competencies"
+    )
     for comp_id, comp_name in comp_tuples:
         try:
             # 1. Calcul IA (long) SANS maintenir de connexion DB
@@ -265,24 +295,34 @@ async def _score_all_bg(user_id: int, comp_tuples: list[tuple[int, str]], header
                 ev = await _get_or_create_evaluation(db, user_id, comp_id)
                 ev.ai_score = score
                 ev.ai_justification = justification
-                ev.ai_scored_at = datetime.now(timezone.utc)
+                ev.ai_scored_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 ev.scoring_version = "v2"
-                ev.updated_at = datetime.now(timezone.utc)
+                ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await db.commit()
 
             if score is not None:
-                logger.info(f"[AI Score BG] user={user_id} competency='{comp_name}' score={score}")
+                logger.info(
+                    f"[AI Score BG] user={user_id} competency='{comp_name}' score={score}"
+                )
             else:
-                logger.warning(f"[AI Score BG] score=None user={user_id} competency='{comp_name}' — {justification}")
+                logger.warning(
+                    f"[AI Score BG] score=None user={user_id} competency='{comp_name}' — {justification}"
+                )
             await asyncio.sleep(0.3)
         except Exception as e:
-            logger.error(f"[AI Score BG] Failed for user={user_id} comp='{comp_name}': {e}")
+            logger.error(
+                f"[AI Score BG] Failed for user={user_id} comp='{comp_name}': {e}"
+            )
 
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
-    logger.info(f"[AI Score BG] Scoring terminé pour user={user_id} — {len(comp_tuples)} compétences traitées.")
+    logger.info(
+        f"[AI Score BG] Scoring terminé pour user={user_id} — {len(comp_tuples)} compétences traitées."
+    )
 
 
-async def _bulk_scoring_all_bg(user_ids: list[int], headers: dict, semaphore_limit: int = 2):
+async def _bulk_scoring_all_bg(
+    user_ids: list[int], headers: dict, semaphore_limit: int = 2
+):
     """BackgroundTask : déclenche ai-score-all pour chaque user, avec Semaphore.
 
     Orchestre N users avec contrôle du débit quota Gemini.
@@ -308,7 +348,9 @@ async def _bulk_scoring_all_bg(user_ids: list[int], headers: dict, semaphore_lim
                         .where(user_competency.c.user_id == uid)
                         .where(
                             ~select(Competency.id)
-                            .where(Competency.parent_id == user_competency.c.competency_id)
+                            .where(
+                                Competency.parent_id == user_competency.c.competency_id
+                            )
                             .where(Competency.id.in_(user_comp_subq))
                             .correlate(user_competency)
                             .exists()
@@ -317,16 +359,25 @@ async def _bulk_scoring_all_bg(user_ids: list[int], headers: dict, semaphore_lim
                     leaf_ids = (await db.execute(leaf_ids_stmt)).scalars().all()
                     if not leaf_ids:
                         skipped += 1
-                        await bulk_scoring_manager.update_progress(processed_inc=1, new_log=f"User {uid} ignoré (0 compétence feuille)")
+                        await bulk_scoring_manager.update_progress(
+                            processed_inc=1,
+                            new_log=f"User {uid} ignoré (0 compétence feuille)",
+                        )
                         return
-                    comps_raw = (await db.execute(
-                        select(Competency.id, Competency.name).where(Competency.id.in_(leaf_ids))
-                    )).all()
+                    comps_raw = (
+                        await db.execute(
+                            select(Competency.id, Competency.name).where(
+                                Competency.id.in_(leaf_ids)
+                            )
+                        )
+                    ).all()
                     comp_tuples = [(row[0], row[1]) for row in comps_raw]
 
                 await _score_all_bg(uid, comp_tuples, headers)
                 success += 1
-                await bulk_scoring_manager.update_progress(processed_inc=1, success_inc=1)
+                await bulk_scoring_manager.update_progress(
+                    processed_inc=1, success_inc=1
+                )
                 await asyncio.sleep(0.5)
             except Exception as e:
                 errors += 1
@@ -335,9 +386,13 @@ async def _bulk_scoring_all_bg(user_ids: list[int], headers: dict, semaphore_lim
                     processed_inc=1, error_count_inc=1, error=f"User {uid} erreur: {e}"
                 )
 
-    await asyncio.gather(*[_trigger_one(uid) for uid in user_ids], return_exceptions=True)
+    await asyncio.gather(
+        *[_trigger_one(uid) for uid in user_ids], return_exceptions=True
+    )
     await bulk_scoring_manager.update_progress(
         status="completed",
         new_log=f"Terminé — {success} succès, {errors} erreurs, {skipped} ignorés.",
     )
-    logger.info(f"[bulk-scoring-all BG] Terminé — {success} succès, {errors} erreurs sur {len(user_ids)} users.")
+    logger.info(
+        f"[bulk-scoring-all BG] Terminé — {success} succès, {errors} erreurs sur {len(user_ids)} users."
+    )

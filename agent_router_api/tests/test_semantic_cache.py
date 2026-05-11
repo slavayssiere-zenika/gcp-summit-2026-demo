@@ -6,13 +6,14 @@ log BigQuery, désactivation via env var, et dégradation gracieuse.
 
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def fake_embedding():
@@ -69,7 +70,7 @@ def make_cache(env_overrides=None):
         from semantic_cache import SemanticCache
         cache = SemanticCache()
         # Remplace le redis réel par un mock
-        cache._redis = MagicMock()
+        cache._redis = AsyncMock()
         return cache
 
 
@@ -87,6 +88,7 @@ async def test_cache_miss_returns_none(fake_embedding, dissimilar_embedding):
         result = await cache.get("Quelles sont les missions disponibles ?")
 
     assert result is None
+
 
 @pytest.mark.asyncio
 async def test_cache_hit_bypasses_llm(fake_embedding, similar_embedding, sample_response):
@@ -109,6 +111,7 @@ async def test_cache_hit_bypasses_llm(fake_embedding, similar_embedding, sample_
     assert result["steps"][0]["tool"] == "semantic_cache:HIT"
     assert "similarity_score" in result["steps"][0]["args"]
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("realtime_query", [
     "Ahmed est disponible aujourd'hui ?",
@@ -124,6 +127,7 @@ async def test_realtime_query_bypasses_cache(realtime_query):
     assert result is None
     mock_compute.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_cache_disabled_via_env_var():
     cache = make_cache(env_overrides={"SEMANTIC_CACHE_ENABLED": "false"})
@@ -135,6 +139,7 @@ async def test_cache_disabled_via_env_var():
     assert result is None
     mock_compute.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_embedding_failure_falls_through():
     cache = make_cache()
@@ -143,6 +148,7 @@ async def test_embedding_failure_falls_through():
         result = await cache.get("Y a-t-il des missions ?")
 
     assert result is None
+
 
 @pytest.mark.asyncio
 async def test_set_stores_in_redis(fake_embedding, sample_response):
@@ -161,6 +167,7 @@ async def test_set_stores_in_redis(fake_embedding, sample_response):
 
     cache._redis.expire.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_set_skips_realtime_queries(sample_response):
     cache = make_cache()
@@ -171,6 +178,7 @@ async def test_set_skips_realtime_queries(sample_response):
 
     mock_compute.assert_not_called()
     cache._redis.hset.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_cache_hit_response_contains_cache_step(fake_embedding, similar_embedding, sample_response):

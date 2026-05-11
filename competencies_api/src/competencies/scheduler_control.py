@@ -37,7 +37,9 @@ async def set_scoring_scheduler_enabled(enabled: bool) -> bool:
         True si l'opération a réussi, False sinon (erreur loggée, non levée).
     """
     if not GCP_PROJECT_ID:
-        logger.warning("[scheduler_control] GCP_PROJECT_ID absent — skip pause/resume scheduler.")
+        logger.warning(
+            "[scheduler_control] GCP_PROJECT_ID absent — skip pause/resume scheduler."
+        )
         return False
 
     action = "resume" if enabled else "pause"
@@ -52,7 +54,9 @@ async def set_scoring_scheduler_enabled(enabled: bool) -> bool:
                 client.pause_job(name=SCHEDULER_JOB_NAME)
 
         await asyncio.to_thread(_call)
-        logger.info(f"[scheduler_control] Cloud Scheduler job {action}d : {SCHEDULER_JOB_NAME}")
+        logger.info(
+            f"[scheduler_control] Cloud Scheduler job {action}d : {SCHEDULER_JOB_NAME}"
+        )
         return True
 
     except Exception as e:

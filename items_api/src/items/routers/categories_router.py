@@ -1,30 +1,28 @@
 """categories_router.py — Items categories et statistiques."""
 import os
-from typing import List
 
 import httpx
-from cache import delete_cache_pattern, get_cache, set_cache
+from cache import get_cache, set_cache
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from opentelemetry.propagate import inject
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
 from src.auth import verify_jwt
 from src.items.models import Category, Item
-from src.items.schemas import (BulkItemCreate, CategoryCreate,
-                               CategoryResponse, ItemCreate, ItemResponse,
-                               ItemStatsResponse, ItemUpdate,
-                               PaginationResponse, UserInfo)
+from src.items.schemas import (CategoryCreate, CategoryResponse,
+                               ItemResponse, ItemStatsResponse, PaginationResponse,
+                               UserInfo)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
+
 
 def get_trace_context_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
+
 
 async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     headers = get_trace_context_headers()
@@ -40,6 +38,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
             return UserInfo(**response.json())
         except httpx.HTTPError as e:
             raise HTTPException(status_code=503, detail=f"Unable to verify user: {e}")
+
 
 async def enrich_item(item: Item, request: Request) -> ItemResponse:
     try:
@@ -59,16 +58,18 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
 
 router = APIRouter(prefix="", tags=["items_categories"], dependencies=[Depends(verify_jwt)])
 
+
 @router.get("/categories", response_model=PaginationResponse[CategoryResponse])
 async def list_categories(
     db: AsyncSession = Depends(get_db),
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=2_147_483_647),
     limit: int = Query(50, ge=1, le=500),
 ):
     from sqlalchemy import func
     total = (await db.execute(select(func.count()).select_from(Category))).scalar()
     categories = (await db.execute(select(Category).offset(skip).limit(limit))).scalars().all()
     return {"items": categories, "total": total, "skip": skip, "limit": limit}
+
 
 @router.post("/categories", response_model=CategoryResponse, status_code=201)
 async def create_category(category: CategoryCreate, db: AsyncSession = Depends(get_db)):
@@ -82,6 +83,7 @@ async def create_category(category: CategoryCreate, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail="Category name already exists")
     return db_category
 
+
 @router.get("/stats", response_model=ItemStatsResponse)
 async def get_item_stats(db: AsyncSession = Depends(get_db)):
     cache_key = "items:stats"
@@ -91,7 +93,7 @@ async def get_item_stats(db: AsyncSession = Depends(get_db)):
 
     from sqlalchemy import func
     total = (await db.execute(select(func.count()).select_from(Item))).scalar()
-    
+
     by_user_raw = (await db.execute(select(Item.user_id, func.count(Item.id)).group_by(Item.user_id))).all()
     by_user = {user_id: count for user_id, count in by_user_raw}
 

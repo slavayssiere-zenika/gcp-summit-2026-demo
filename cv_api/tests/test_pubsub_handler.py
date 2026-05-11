@@ -15,6 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from src.cvs.models import CVProfile
+from src.services.pubsub_service import PubsubService
 
 # SECRET_KEY doit être cohérente avec celle chargée par src.auth au démarrage.
 # test_main.py charge le module en premier (ordre alphabétique) avec 'testsecret',
@@ -252,7 +254,7 @@ async def test_pubsub_handler_delete_action_archives_and_deactivates():
     """
     from main import app
 
-    mock_cv = MagicMock()
+    mock_cv = MagicMock(spec=CVProfile)
     mock_cv.user_id = 42
     mock_cv.is_archived = False
 
@@ -325,3 +327,59 @@ async def test_pubsub_handler_delete_action_archives_and_deactivates():
         # Assert Drive API was notified (PROCESSING then DELETED_OK)
         assert mock_http_instance.patch.call_count == 2
         assert mock_http_instance.patch.call_args_list[1][1]["json"]["status"] == "DELETED_OK"
+
+
+@pytest.mark.asyncio
+async def test_run_cv_delete_bg_no_cv():
+    mock_db = AsyncMock()
+    mock_db.execute.return_value.scalars.return_value.all.return_value = []
+
+    with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
+        await PubsubService._run_cv_delete_bg("http://url", "123", "jwt", "http://drive", {})
+
+
+@pytest.mark.asyncio
+async def test_run_cv_delete_bg_admin_user():
+    mock_cv = MagicMock()
+    mock_cv.user_id = 1
+    mock_db = AsyncMock()
+    mock_db.execute.return_value.scalars.return_value.all.return_value = [mock_cv]
+
+    mock_http_instance = AsyncMock()
+    mock_http_instance.get.return_value = MagicMock(status_code=200, json=lambda: {"role": "admin"})
+    mock_http_instance.patch.return_value = MagicMock(is_error=True, status_code=500)
+
+    with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
+        with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
+            await PubsubService._run_cv_delete_bg("http://url", "123", "jwt", "http://drive", {})
+
+
+@pytest.mark.asyncio
+async def test_run_cv_delete_bg_deactivation_failure():
+    mock_cv = MagicMock()
+    mock_cv.user_id = 1
+    mock_db = AsyncMock()
+    mock_db.execute.return_value.scalars.return_value.all.return_value = [mock_cv]
+
+    mock_http_instance = AsyncMock()
+    mock_http_instance.get.return_value = MagicMock(status_code=200, json=lambda: {"role": "user"})
+    mock_http_instance.put.return_value = MagicMock(is_success=False, text="Error")
+    mock_http_instance.patch.side_effect = Exception("Patch error")
+
+    with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
+        with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
+            await PubsubService._run_cv_delete_bg("http://url", "123", "jwt", "http://drive", {})
+
+
+@pytest.mark.asyncio
+async def test_run_cv_pipeline_bg_imported_cv_patch_error():
+    mock_result = MagicMock()
+    mock_result.user_id = 1
+
+    mock_http_instance = AsyncMock()
+    mock_http_instance.patch.side_effect = Exception("Patch error")
+
+    with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock())):
+        with patch("src.services.pubsub_service.process_cv_core", return_value=mock_result):
+            with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
+                await PubsubService._run_cv_pipeline_bg("123", "http", None, None, None, {}, "jwt", {}, "http")

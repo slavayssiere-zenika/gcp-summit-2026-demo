@@ -16,6 +16,7 @@ from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import inject
 from prometheus_fastapi_instrumentator import Instrumentator
+from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from src.prompts import router
 from src.prompts.router import verify_jwt
 
@@ -60,6 +61,7 @@ HTTPXClientInstrumentor().instrument()
 
 # 5. Prometheus Instrumentator
 Instrumentator().instrument(app).expose(app)
+app.add_middleware(ContentLengthSanitizerASGIMiddleware)
 
 # 6. Include Router
 
@@ -144,7 +146,8 @@ async def get_service_token_fallback() -> str:
         users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
         async with httpx.AsyncClient() as client:
             res_meta = await client.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=users_api",
+                "http://metadata.google.internal/computeMetadata/v1/instance/"
+                "service-accounts/default/identity?audience=users_api",
                 headers={"Metadata-Flavor": "Google"},
                 timeout=2.0
             )
@@ -187,6 +190,14 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
@@ -202,4 +213,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
     except Exception as fallback_e:
         logging.error(f"Failed to process exception reporting: {fallback_e}")
+
+    logging.error(
+        f"[prompts_api] Unhandled exception on {request.method} {request.url.path}: {error_msg}\n{trace_context}")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})

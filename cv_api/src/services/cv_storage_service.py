@@ -47,7 +47,7 @@ class CVStorageService:
 
     @staticmethod
     def is_valid_email(e: Optional[str]) -> bool:
-        EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$'
+        EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
         return bool(e and re.match(EMAIL_REGEX, e))
 
     @staticmethod
@@ -461,7 +461,8 @@ class CVStorageService:
     @staticmethod
     async def upsert_cv_profile(
         db, user_id: int, url: str, source_tag: Optional[str],
-        structured_cv: dict, raw_text: str, vector_data: Optional[list], importer_id: Optional[int]
+        structured_cv: dict, raw_text: str, vector_data: Optional[list], importer_id: Optional[int],
+        extraction_reliability_score: Optional[int] = None
     ):
         await db.execute(sa_delete(CVProfile).where(CVProfile.source_url == url))
         comp_keywords = [
@@ -482,6 +483,7 @@ class CVStorageService:
             educations=structured_cv.get("educations", []),
             raw_content=raw_text,
             semantic_embedding=vector_data,
+            extraction_reliability_score=extraction_reliability_score,
             imported_by_id=importer_id
         )
         db.add(cv_record)

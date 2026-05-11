@@ -12,7 +12,6 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./cv_test.db")
 os.environ.setdefault("SECRET_KEY", "testsecret")
@@ -81,7 +80,7 @@ class TestStatus:
 def _make_mock_db(total_cvs=10, missions_ok=8, embedding_ok=9,
                   competencies_ok=7, summary_ok=10, current_role_ok=10):
     """Construit un AsyncSession mock avec les résultats scalaires attendus.
-    
+
     data_quality_service appelle `result.scalar_one()` (synchrone sur l'objet résultat SQLAlchemy).
     On mocke donc execute() pour retourner un objet dont scalar_one() retourne la valeur.
     """
@@ -92,9 +91,9 @@ def _make_mock_db(total_cvs=10, missions_ok=8, embedding_ok=9,
         total_cvs,       # SELECT COUNT(*) CVProfile
         missions_ok,     # missions_ok
         embedding_ok,    # embedding_ok
-        competencies_ok, # competencies_ok
+        competencies_ok,  # competencies_ok
         summary_ok,      # summary_ok
-        current_role_ok, # current_role_ok
+        current_role_ok,  # current_role_ok
     ]
     call_count = [0]
 
@@ -106,6 +105,9 @@ def _make_mock_db(total_cvs=10, missions_ok=8, embedding_ok=9,
         result = MagicMock()
         result.scalar_one.return_value = val
         result.scalar_one_or_none.return_value = val
+        # Pour les statistiques d'extraction
+        total_param = scalar_calls[0]
+        result.fetchone.return_value = (total_param, 100.0, 100.0, total_param) if total_param > 0 else (0, 0.0, 0.0, 0)
         return result
 
     db.execute = fake_execute

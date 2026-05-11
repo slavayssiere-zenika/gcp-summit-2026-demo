@@ -4,7 +4,7 @@ import axios from 'axios'
 import {
   BrainCircuit, Search, Wand2, Save, RefreshCw, ChevronRight,
   Clock, Hash, AlertTriangle, CheckCircle2, Loader2, X,
-  ArrowLeftRight, FileText, BarChart3, Circle
+  ArrowLeftRight, FileText, BarChart3, Circle, Trash2
 } from 'lucide-vue-next'
 import { useUxStore } from '@/stores/uxStore'
 import PageHeader from '../components/ui/PageHeader.vue'
@@ -25,6 +25,7 @@ const originalPrompts = ref<Record<string, string>>({})
 const loading = ref(true)
 const savingKey = ref<string | null>(null)
 const analyzingKey = ref<string | null>(null)
+const deletingKey = ref<string | null>(null)
 const selectedKey = ref<string | null>(null)
 const searchQuery = ref('')
 const uiTab = ref<'system' | 'errors'>('system')
@@ -130,6 +131,24 @@ const fetchPrompts = async () => {
 
 const selectPrompt = (key: string) => {
   selectedKey.value = key
+}
+
+const deletePrompt = async (prompt: Prompt) => {
+  if (!confirm('Voulez-vous vraiment supprimer ce correctif ?')) return
+  try {
+    deletingKey.value = prompt.key
+    await axios.delete(`/api/prompts/${prompt.key}`)
+    prompts.value = prompts.value.filter(p => p.key !== prompt.key)
+    delete originalPrompts.value[prompt.key]
+    if (selectedKey.value === prompt.key) {
+      selectedKey.value = filteredPrompts.value.length > 0 ? filteredPrompts.value[0].key : null
+    }
+    uxStore.showToast(`✅ "${prompt.key}" supprimé avec succès`, 'success')
+  } catch (e: any) {
+    uxStore.showToast('Erreur lors de la suppression : ' + (e.response?.data?.detail || e.message), 'error')
+  } finally {
+    deletingKey.value = null
+  }
 }
 
 const updatePrompt = async (prompt: Prompt) => {
@@ -360,6 +379,18 @@ onBeforeUnmount(() => {
 
         <!-- Actions -->
         <div class="pa-actions">
+          <button
+            v-if="isErrorPrompt"
+            class="pa-btn-delete"
+            @click="deletePrompt(selectedPrompt)"
+            :disabled="!!deletingKey"
+            aria-label="Supprimer le correctif"
+          >
+            <Loader2 v-if="deletingKey === selectedPrompt.key" size="16" class="spin" />
+            <Trash2 v-else size="16" />
+            {{ deletingKey === selectedPrompt.key ? 'Suppression…' : 'Supprimer' }}
+          </button>
+
           <button
             class="pa-btn-analyze"
             @click="analyzePrompt(selectedPrompt)"
@@ -956,7 +987,8 @@ onBeforeUnmount(() => {
 }
 .pa-btn-analyze,
 .pa-btn-save,
-.pa-btn-ghost {
+.pa-btn-ghost,
+.pa-btn-delete {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -980,6 +1012,18 @@ onBeforeUnmount(() => {
   background: rgba(227, 25, 55, 0.04);
 }
 .pa-btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pa-btn-delete {
+  background: white;
+  color: var(--color-text-primary);
+  border: var(--border-subtle);
+}
+.pa-btn-delete:hover:not(:disabled) {
+  border-color: var(--zenika-red);
+  color: var(--zenika-red);
+  background: rgba(227, 25, 55, 0.04);
+}
+.pa-btn-delete:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .pa-btn-save {
   background: var(--zenika-red);

@@ -23,9 +23,10 @@ from agent_commons.mcp_client import MCPHttpClient, auth_header_var
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.runner import run_agent_and_collect
-from agent_commons.session import (RedisSessionService, clear_missions_context,
+from agent_commons.session import (RedisSessionService,
                                    get_missions_context,
                                    store_missions_context)
+from agent_commons.ui_tools import render_ui_widgets
 
 app_logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_MISSIONS_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
     tools_loaded = await get_cached_tools(_MISSIONS_CLIENTS_MAP, "[MISSIONS]", ttl=300, _cache=_MISSIONS_TOOLS_CACHE)
-    MISSIONS_TOOLS = tools_loaded
+    MISSIONS_TOOLS = tools_loaded + [render_ui_widgets]
 
     if not MISSIONS_TOOLS:
         app_logger.error(
@@ -141,8 +142,13 @@ async def create_agent(session_id: str | None = None) -> Agent:
 async def run_agent_query(
     query: str,
     session_id: str | None = None,
+    auth_token: str | None = None,
     user_id: str = "user_1",
 ) -> dict:
+    # Fix JWT propagation [STAFF-007] — re-setter auth_header_var dans CE contexte asyncio
+    if auth_token:
+        auth_header_var.set(auth_token)
+
     # Session éphémère par requête.
     ephemeral_session_id = str(uuid.uuid4())
     session_service = get_session_service()

@@ -74,7 +74,7 @@ for dir in *_api *_mcp; do
         echo "Proxy MCP (/mcp/{path}): $(check_grep "/mcp/{path" "$FILE_TO_CHECK")"
     fi
     
-    echo "Golden Pattern Erreur (report to prompts_api): $(grep -rE "report_exception_to_prompts_api|app.exception_handler" "$dir" 2>/dev/null | wc -l | awk '{if($1>0) print "✅"; else print "❌"}')"
+    echo "Golden Pattern Erreur (report to prompts_api): $(grep -rE "report_exception_to_prompts_api|app\.exception_handler|app\.add_exception_handler" "$dir" 2>/dev/null | wc -l | awk '{if($1>0) print "✅"; else print "❌"}')"
 
     # Readiness
     if [ -f "$dir/database.py" ] || [ -f "$dir/src/database.py" ]; then

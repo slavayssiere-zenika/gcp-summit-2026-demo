@@ -3,7 +3,7 @@ from src.cvs.schemas import PaginationResponse
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 # _svc_config.client/_svc_config.vertex_batch_client via attribute access
@@ -28,7 +28,7 @@ from src.services.config import _CV_CACHE
 from src.services.cv_import_service import process_cv_core
 from src.services.taxonomy_service import (fetch_prompt,
                                            get_existing_competencies)
-from shared.schemas.users import UsersResponse
+from shared.schemas.users import UsersResponse, UserItem
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -47,8 +47,8 @@ public_router = APIRouter(prefix="", tags=["CV_Public"])
 @router.post("/cache/invalidate-taxonomy")
 async def force_invalidate_taxonomy_cache(_: dict = Depends(verify_jwt)):
     """Invalide spécifiquement le contexte sémantique de l'arbre des compétences (Taxonomy Event)."""
-    _CV_CACHE["tree_context"] = {"value": None, "expires": datetime.min}
-    _CV_CACHE["tree_items"] = {"value": None, "expires": datetime.min}
+    _CV_CACHE["tree_context"] = {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)}
+    _CV_CACHE["tree_items"] = {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)}
     logger.info("Cache de taxonomie purgé avec succès (Event-driven).")
     return {"message": "Cache de taxonomie invalidé"}
 
@@ -149,7 +149,11 @@ async def get_users_by_tag(tag: str, skip: int = Query(
             try:
                 u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers_downstream)
                 if u_res.status_code == 200:
-                    user_enrich_map[u_id] = u_res.json()
+                    try:
+                        u_data = UserItem.model_validate(u_res.json())
+                        user_enrich_map[u_id] = u_data.model_dump()
+                    except ValidationError as ve:
+                        logger.error(f"Rupture de contrat API users pour {u_id}", extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(
                     f"Failed to fetch user {u_id} for enrichment: {e}")
@@ -200,7 +204,11 @@ async def get_user_cv(user_id: int, skip: int = Query(
         try:
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
             if u_res.status_code == 200:
-                is_anon = u_res.json().get("is_anonymous", False)
+                try:
+                    u_data = UserItem.model_validate(u_res.json())
+                    is_anon = u_data.is_anonymous or False
+                except ValidationError as ve:
+                    logger.error(f"Rupture de contrat API users pour {user_id}", extra={"error": str(ve)})
         except Exception as e:
             logger.warning(
                 f"Failed to fetch user {user_id} for is_anonymous check: {e}")
@@ -294,7 +302,11 @@ async def get_user_cv_details(
         try:
             u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
             if u_res.status_code == 200:
-                is_anon = u_res.json().get("is_anonymous", False)
+                try:
+                    u_data = UserItem.model_validate(u_res.json())
+                    is_anon = u_data.is_anonymous or False
+                except ValidationError as ve:
+                    logger.error(f"Rupture de contrat API users pour {user_id}", extra={"error": str(ve)})
         except Exception as e:
             logger.warning(
                 f"Failed to fetch user anonymity status for {user_id}: {e}")

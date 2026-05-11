@@ -99,3 +99,5 @@ talk/credentials.json
 # deploy.sh — logs de run (générés automatiquement)
 deploy_logs/
 talk/token.json
+coverage_output.txt
+coverage.xml

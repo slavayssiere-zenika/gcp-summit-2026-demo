@@ -68,7 +68,9 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
     # 1. Try token from Authorization header if present
     if credentials:
         try:
-            payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = jwt.decode(
+                credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300}
+            )
             if payload.get("type") == "refresh":
                 raise JWTError("Refresh token cannot be used as access token")
             # Vérification blacklist Redis (compte suspendu)
@@ -101,7 +103,9 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
         )
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300}
+        )
         if payload.get("type") == "refresh":
             raise JWTError("Refresh token cannot be used as access token")
         # Vérification blacklist Redis (compte suspendu)

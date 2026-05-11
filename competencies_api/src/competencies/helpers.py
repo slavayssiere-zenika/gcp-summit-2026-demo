@@ -63,7 +63,12 @@ def _compute_recency_weight(end_date_str: Optional[str]) -> float:
     - end_date_str 'YYYY' ou 'YYYY-MM' → poids selon l'ancienneté
     - Date non parseable → poids neutre 0.7
     """
-    if not end_date_str or str(end_date_str).lower() in ("present", "aujourd'hui", "current", "en cours"):
+    if not end_date_str or str(end_date_str).lower() in (
+        "present",
+        "aujourd'hui",
+        "current",
+        "en cours",
+    ):
         return 1.0
     try:
         end_year = int(str(end_date_str).strip()[:4])
@@ -83,9 +88,9 @@ def _parse_duration_months(duration_str: Optional[str]) -> Optional[int]:
         return None
     s = str(duration_str).lower()
     total_months = 0
-    years_match = re.search(r'(\d+)\s*(?:an|year|yr)', s)
-    months_match = re.search(r'(\d+)\s*(?:mois|month|mo)', s)
-    weeks_match = re.search(r'(\d+)\s*(?:semaine|week)', s)
+    years_match = re.search(r"(\d+)\s*(?:an|year|yr)", s)
+    months_match = re.search(r"(\d+)\s*(?:mois|month|mo)", s)
+    weeks_match = re.search(r"(\d+)\s*(?:semaine|week)", s)
     if years_match:
         total_months += int(years_match.group(1)) * 12
     if months_match:
@@ -124,7 +129,9 @@ async def _generate_aliases_for_competency(name: str) -> str | None:
             f"Exemple pour 'Kubernetes' : 'K8s, kube, k8s, Kube, kubernetes'.\n"
             f"Retourne UNIQUEMENT une liste séparée par des virgules, sans aucun texte additionnel."
         )
-        res = await client.aio.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        res = await client.aio.models.generate_content(
+            model=GEMINI_MODEL, contents=prompt
+        )
         if res.text:
             aliases = res.text.strip().strip("'").strip('"')
             logger.info(f"Alias générés pour '{name}' : {aliases}")
@@ -156,9 +163,12 @@ def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks, request_or_he
                     headers=headers,
                     timeout=3.0,
                 )
-                logger.info("[Cache Sync] Ordre d'invalidation de la taxonomie envoyé à cv_api.")
+                logger.info(
+                    "[Cache Sync] Ordre d'invalidation de la taxonomie envoyé à cv_api."
+                )
         except Exception as e:
             logger.warning(f"[Cache Sync] Échec d'invalidation de cv_api: {e}")
+
     bg_tasks.add_task(invalidate)
 
 
@@ -210,10 +220,14 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     inject(headers)
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+            response = await client.get(
+                f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers
+            )
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail=f"User {user_id} not found")
             response.raise_for_status()
             return UserInfo(**response.json())
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=503, detail=f"Users API unavailable: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Users API unavailable: {str(e)}"
+            )

@@ -43,6 +43,7 @@ class DriveSyncState(Base):
     # Nom du dossier parent direct du fichier (nomenclature Zenika "Prénom Nom")
     parent_folder_name = Column(String, nullable=True)
     error_message = Column(String, nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
     # Colonnes de timing pour les KPIs data quality — renseignées au fil des transitions d'état
     queued_at = Column(DateTime(timezone=True), nullable=True)      # Horodatage du passage en QUEUED (publication Pub/Sub)
     imported_at = Column(DateTime(timezone=True), nullable=True)    # Horodatage du passage en IMPORTED_CV (cv_api callback)

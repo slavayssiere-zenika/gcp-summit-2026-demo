@@ -81,7 +81,7 @@ def test_query_propagates_user_id(client, mock_agent_result):
     """Le user_id JWT sub est propagé à run_agent_query."""
     captured = {}
 
-    async def fake_run(query, session_id, user_id):
+    async def fake_run(query, session_id, user_id, auth_token=None, **kwargs):
         captured["user_id"] = user_id
         return mock_agent_result
 
@@ -122,7 +122,7 @@ def test_mcp_registry_success(client):
 
 
 def test_query_agent_error_returns_500(client):
-    async def raise_error(query, session_id, user_id):
+    async def raise_error(query, session_id, user_id, auth_token=None, **kwargs):
         raise RuntimeError("MCP timeout")
 
     with patch("main.run_agent_query", new=raise_error):

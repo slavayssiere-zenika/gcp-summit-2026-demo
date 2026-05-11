@@ -20,6 +20,8 @@ from typing import Any, Optional
 import database
 import httpx
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
+from shared.schemas.pagination import PaginationResponse
 from src.cvs.models import CVProfile
 from src.cvs.task_state import tree_task_manager
 from src.gemini_retry import generate_content_with_retry
@@ -89,14 +91,21 @@ async def get_existing_competencies(auth_header: str) -> list[str]:
                     timeout=10.0,
                 )
                 comp_res.raise_for_status()
-                comp_data = comp_res.json()
+                
+                try:
+                    comp_data = PaginationResponse[dict].model_validate(comp_res.json())
+                except ValidationError as ve:
+                    logger.error(
+                        "[taxonomy_service] Rupture de contrat API competencies",
+                        extra={"error": str(ve), "raw_keys": list(comp_res.json().keys())},
+                    )
+                    break
 
-                items = comp_data.get("items", []) if isinstance(comp_data, dict) else comp_data
+                items = comp_data.items
                 all_comps.extend(items)
 
-                if isinstance(comp_data, dict) and "total" in comp_data:
-                    if len(all_comps) >= comp_data["total"]:
-                        break
+                if len(all_comps) >= comp_data.total:
+                    break
                 elif len(items) < limit:
                     break
                 skip += limit

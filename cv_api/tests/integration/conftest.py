@@ -137,3 +137,16 @@ def client(pgvector_container, integration_env_cv):
         app.dependency_overrides[verify_jwt] = _prev_verify_jwt
     else:
         app.dependency_overrides.pop(verify_jwt, None)
+
+
+@pytest.fixture
+async def db_session(pgvector_container, integration_env_cv):
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker
+    pg_async_url = pgvector_container.get_connection_url().replace(
+        "postgresql+psycopg2", "postgresql+asyncpg"
+    )
+    engine = create_async_engine(pg_async_url)
+    AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with AsyncSessionLocal() as session:
+        yield session

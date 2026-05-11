@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-05-06 10:50 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-11 07:36 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 
@@ -47,7 +47,7 @@
 
 | Paramètre | **DEV** | **PRD** | **UAT** |
 | --- | --- | --- | --- | --- |
-| `gemini_router_model` | `gemini-3.1-pro-preview"` | `gemini-3.1-pro-preview"` | `gemini-3.1-pro-preview"` |
+| `gemini_router_model` | `gemini-3.1-pro-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-pro-preview"` |
 | `gemini_hr_model` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` |
 | `gemini_ops_model` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` |
 | `gemini_missions_model` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` | `gemini-3.1-flash-lite-preview"` |

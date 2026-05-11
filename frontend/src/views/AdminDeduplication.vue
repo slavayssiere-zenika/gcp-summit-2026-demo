@@ -124,6 +124,82 @@ const runApply = async () => {
   }
 }
 
+const isApplyingSingle = ref<number | null>(null)
+
+const remediateSingle = async (userId: number) => {
+  if (!confirm(`Désanonymiser ce profil (ID: ${userId}) ?`)) return
+  isApplyingSingle.value = userId
+  error.value = ''
+  successResponse.value = ''
+  try {
+    const res = await axios.put(
+      `/api/users/${userId}`,
+      { is_anonymous: false },
+      { headers: { Authorization: `Bearer ${authService.state.token}` } }
+    )
+    successResponse.value = `Le profil (ID: ${userId}) a été désanonymisé avec succès.`
+    // Remove it from the list
+    remediationCandidates.value = remediationCandidates.value.filter(c => c.id !== userId)
+    if (remediationCount.value !== null) remediationCount.value--
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || `Erreur lors de la correction du profil ${userId}`
+  } finally {
+    isApplyingSingle.value = null
+  }
+}
+
+const selectedRemediationForMerge = ref<number | null>(null)
+const remediationMergeSearchQuery = ref('')
+const remediationMergeSearchResults = ref<any[]>([])
+const isSearchingRemediationMerge = ref(false)
+const selectedRemediationMergeTarget = ref<number | null>(null)
+
+const searchRemediationMergeUsers = async () => {
+  if (remediationMergeSearchQuery.value.length < 2) return
+  isSearchingRemediationMerge.value = true
+  try {
+    const res = await axios.get('/api/users/search', {
+      params: { query: remediationMergeSearchQuery.value, limit: 5 },
+      headers: { Authorization: `Bearer ${authService.state.token}` }
+    })
+    remediationMergeSearchResults.value = (res.data.items || []).filter((u: any) => !u.is_anonymous)
+  } catch (err) {
+    console.error('Search failed:', err)
+  } finally {
+    isSearchingRemediationMerge.value = false
+  }
+}
+
+const performRemediationMerge = async (sourceId: number) => {
+  if (!selectedRemediationMergeTarget.value) return
+  
+  isLoading.value = true
+  error.value = ''
+  successResponse.value = ''
+  try {
+    await axios.post('/api/users/merge', {
+      source_id: sourceId,
+      target_id: selectedRemediationMergeTarget.value
+    }, {
+      headers: { Authorization: `Bearer ${authService.state.token}` }
+    })
+    successResponse.value = `Fusion réussie (ID: ${sourceId} -> ID: ${selectedRemediationMergeTarget.value})`
+    
+    selectedRemediationForMerge.value = null
+    selectedRemediationMergeTarget.value = null
+    remediationMergeSearchQuery.value = ''
+    remediationMergeSearchResults.value = []
+    
+    // Remove it from the list
+    remediationCandidates.value = remediationCandidates.value.filter(c => c.id !== sourceId)
+    if (remediationCount.value !== null) remediationCount.value--
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || "Erreur lors de la fusion."
+  } finally {
+    isLoading.value = false
+  }
+}
+
 const fetchAnonymousUsers = async () => {
   isLoadingAnon.value = true
   error.value = ''
@@ -450,19 +526,66 @@ onMounted(() => {
                   <th>ID</th>
                   <th>Email</th>
                   <th>Nom complet</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="c in remediationCandidates" :key="c.id">
-                  <td class="id-cell">
-                    <RouterLink :to="'/user/' + c.id" class="text-link">{{ c.id }}</RouterLink>
-                  </td>
-                  <td>{{ c.email }}</td>
-                  <td>{{ c.full_name || '—' }}</td>
-                </tr>
+                <template v-for="c in remediationCandidates" :key="c.id">
+                  <tr>
+                    <td class="id-cell">
+                      <RouterLink :to="'/user/' + c.id" class="text-link">{{ c.id }}</RouterLink>
+                    </td>
+                    <td>{{ c.email }}</td>
+                    <td>{{ c.full_name || '—' }}</td>
+                    <td>
+                      <div style="display: flex; gap: 8px;">
+                        <button class="action-btn-secondary" @click="remediateSingle(c.id)" :disabled="isApplyingSingle === c.id">
+                          <RotateCw v-if="isApplyingSingle === c.id" class="spin" size="14" />
+                          Désanonymiser
+                        </button>
+                        <button class="action-btn-secondary" style="border-color: var(--zenika-red); color: var(--zenika-red);" 
+                                @click="selectedRemediationForMerge = selectedRemediationForMerge === c.id ? null : c.id">
+                          {{ selectedRemediationForMerge === c.id ? 'Annuler' : 'Fusionner' }}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <!-- Search block for merge -->
+                  <tr v-if="selectedRemediationForMerge === c.id">
+                    <td colspan="4" style="padding: 1rem; background: #fff5f5;">
+                      <div class="merge-controls" style="flex-direction: column; align-items: stretch; background: transparent; border: none; padding: 0;">
+                        <div style="display: flex; gap: 1.5rem; align-items: flex-end;">
+                            <div class="control-group" style="flex: 2;">
+                               <label>1. Chercher un profil maître (Cible) :</label>
+                               <div style="display: flex; gap: 10px;">
+                                 <input type="text" v-model="remediationMergeSearchQuery" placeholder="Nom, email..." class="form-select" @keyup.enter="searchRemediationMergeUsers" style="flex:1;">
+                                 <button @click="searchRemediationMergeUsers" class="action-btn-secondary" :disabled="isSearchingRemediationMerge">
+                                   <Search size="16" />
+                                 </button>
+                               </div>
+                            </div>
+                            <div class="control-group" v-if="remediationMergeSearchResults.length > 0" style="flex: 2;">
+                               <label>2. Sélectionner le profil maître :</label>
+                               <select v-model="selectedRemediationMergeTarget" class="form-select">
+                                 <option :value="null">-- Choisir --</option>
+                                 <option v-for="res in remediationMergeSearchResults" :key="res.id" :value="res.id">
+                                    {{ res.full_name }} ({{ res.email }})
+                                 </option>
+                               </select>
+                            </div>
+                            <button @click="performRemediationMerge(c.id)" class="action-btn validate-btn" 
+                                    :disabled="!selectedRemediationMergeTarget || isLoading"
+                                    v-if="remediationMergeSearchResults.length > 0" style="align-self: flex-end;">
+                               Fusionner
+                            </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
-            <div v-if="remediationCount > remediationCandidates.length" class="table-truncated">
+            <div v-if="remediationCount !== null && remediationCount > remediationCandidates.length" class="table-truncated">
               … et {{ remediationCount - remediationCandidates.length }} autre(s) non affichés (voir logs)
             </div>
           </div>

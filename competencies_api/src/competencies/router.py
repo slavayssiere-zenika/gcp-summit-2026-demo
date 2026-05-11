@@ -26,8 +26,9 @@ from src.competencies.assignments_router import router as assignments_router
 from src.competencies.competencies_router import router as competencies_router
 from src.competencies.evaluations_router import router as evaluations_router
 from src.competencies.scoring_router import router as scoring_router
-from src.competencies.scoring_router import \
-    scheduler_router as analytics_scheduler_router
+from src.competencies.scoring_router import (
+    scheduler_router as analytics_scheduler_router,
+)
 
 # Agrégateur principal (protégé JWT — chaque sous-router porte ses propres Depends)
 router = APIRouter(prefix="", tags=["competencies"])

@@ -1,0 +1,11 @@
+0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
+2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
+3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
+35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
+4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
+61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
+8df0d1b70fad4f57f316126b44c90fec188f69fd  ./shared/tests/__init__.py
+95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
+b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
+ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
+f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py

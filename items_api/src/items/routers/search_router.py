@@ -2,28 +2,27 @@
 import os
 
 import httpx
-from cache import delete_cache_pattern, get_cache, set_cache
+from cache import get_cache, set_cache
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path
 from opentelemetry.propagate import inject
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from src.auth import verify_jwt
 from src.items.models import Category, Item
-from src.items.schemas import (BulkItemCreate, CategoryCreate,
-                               CategoryResponse, ItemCreate, ItemResponse,
-                               ItemStatsResponse, ItemUpdate,
+from src.items.schemas import (CategoryResponse, ItemResponse,
                                PaginationResponse, UserInfo)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
 
+
 def get_trace_context_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
+
 
 async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     headers = get_trace_context_headers()
@@ -39,6 +38,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
             return UserInfo(**response.json())
         except httpx.HTTPError as e:
             raise HTTPException(status_code=503, detail=f"Unable to verify user: {e}")
+
 
 async def enrich_item(item: Item, request: Request) -> ItemResponse:
     try:
@@ -58,6 +58,7 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
 
 router = APIRouter(prefix="", tags=["items_search"], dependencies=[Depends(verify_jwt)])
 
+
 @router.get("/search/query", response_model=PaginationResponse[ItemResponse])
 async def search_items(
     request: Request,
@@ -69,7 +70,7 @@ async def search_items(
     allowed_ids = auth_payload.get("allowed_category_ids", [])
     allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
     cache_key = f"items:search:{query}:{limit}:auth_{allowed_ids_str}"
-    
+
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
@@ -82,20 +83,21 @@ async def search_items(
         Category.id.in_(allowed_ids),
         or_(Item.name.ilike(f"%{query}%"), Item.description.ilike(f"%{query}%"))
     ).distinct()
-    
+
     total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar()
     items = (await db.execute(base_query.limit(limit))).scalars().all()
     enriched_items = [await enrich_item(item, request) for item in items]
-    
+
     result = PaginationResponse(items=[i.model_dump() for i in enriched_items], total=total, skip=0, limit=limit)
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
+
 @router.get("/user/{user_id}", response_model=PaginationResponse[ItemResponse])
 async def list_user_items(
-    user_id: int,
     request: Request,
-    skip: int = Query(0, ge=0),
+    user_id: int = Path(..., gt=0, le=2_147_483_647),
+    skip: int = Query(0, ge=0, le=2_147_483_647),
     limit: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
@@ -103,7 +105,7 @@ async def list_user_items(
     allowed_ids = auth_payload.get("allowed_category_ids", [])
     allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
     cache_key = f"items:user:{user_id}:{skip}:{limit}:auth_{allowed_ids_str}"
-    
+
     cached = get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)

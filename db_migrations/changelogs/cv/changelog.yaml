@@ -223,3 +223,20 @@ databaseChangeLog:
         - dropColumn:
             tableName: "cv_profiles"
             columnName: "is_archived"
+
+  - changeSet:
+      id: "11"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "extraction_reliability_score"
+                  type: "integer"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "cv_profiles"
+            columnName: "extraction_reliability_score"

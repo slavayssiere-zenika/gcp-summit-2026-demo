@@ -50,7 +50,7 @@ def _validate_scheduler_oidc(request: Request) -> None:
     try:
         audience = os.getenv(
             "PUBSUB_DQ_SNAPSHOT_AUDIENCE",
-            f"https://{request.headers.get('host', '')}{request.url.path}",
+            f"https://{request.headers.get('host', '')}",
         )
         decoded = google_id_token.verify_oauth2_token(
             oidc_token,
@@ -94,7 +94,7 @@ async def trigger_data_quality_snapshot(
 
     background_tasks.add_task(
         publish_data_quality_snapshot,
-        db,
+        None,
         auth_header,
         "scheduler",
     )

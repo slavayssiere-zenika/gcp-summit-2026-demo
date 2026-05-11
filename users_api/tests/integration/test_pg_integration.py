@@ -56,13 +56,13 @@ def test_upsert_behavior_on_duplicate_email_postgres(client):
     Ce test valide que ce comportement fonctionne sur un vrai PostgreSQL
     (la contrainte UNIQUE doit exister en base pour déclencher l'IntegrityError).
     """
-    payload = {"username": "bob", "email": "bob@zenika.com", "password": "pass123"}
+    payload = {"username": "bob", "email": "bob@zenika.com", "password": "password123"}
     r1 = client.post("/", json=payload)
     assert r1.status_code in (200, 201)
     original_id = r1.json()["id"]
 
     # Second POST avec le même email → upsert (doit retourner le même user)
-    r2 = client.post("/", json={"username": "bob-updated", "email": "bob@zenika.com", "password": "newpass"})
+    r2 = client.post("/", json={"username": "bob-updated", "email": "bob@zenika.com", "password": "newpass123"})
     assert r2.status_code in (200, 201), (
         f"L'upsert doit réussir (200/201), obtenu {r2.status_code} : {r2.json()}"
     )
@@ -77,8 +77,8 @@ def test_list_users_real_postgres(client):
     from pydantic import ValidationError
     from shared.schemas.users import UsersResponse
 
-    client.post("/", json={"username": "u1", "email": "u1@zenika.com", "password": "pwd"})
-    client.post("/", json={"username": "u2", "email": "u2@zenika.com", "password": "pwd"})
+    client.post("/", json={"username": "u1", "email": "u1@zenika.com", "password": "password"})
+    client.post("/", json={"username": "u2", "email": "u2@zenika.com", "password": "password"})
 
     resp = client.get("/")
     assert resp.status_code == 200

@@ -19,6 +19,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
+from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from src.auth import verify_jwt
 from src.missions.router import public_router, router
 
@@ -38,14 +39,14 @@ provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "missions-api",
         ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
+        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
 setup_logging()
@@ -61,6 +62,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, title="Missions API", root_path=os.getenv("ROOT_PATH", ""))
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
+app.add_middleware(ContentLengthSanitizerASGIMiddleware)
 
 
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
@@ -68,10 +70,10 @@ RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
 
-
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
 
 @app.get("/ready")
 async def ready(response: Response):
@@ -79,6 +81,7 @@ async def ready(response: Response):
         return {"status": "healthy"}
     response.status_code = 503
     return {"status": "unhealthy"}
+
 
 @app.get("/version")
 async def get_version():
@@ -88,6 +91,7 @@ async def get_version():
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage (anti prompt-injection)
 
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
 
 @app.get("/spec")
 async def get_spec():
@@ -100,6 +104,7 @@ async def get_spec():
 app.include_router(public_router)
 app.include_router(router)
 
+
 @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 @app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
@@ -108,13 +113,13 @@ async def proxy_mcp(path: str, request: Request):
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
         url += f"?{request.url.query}"
-    
+
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
-    
+
     body = await request.body()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             res = await client.request(
@@ -134,8 +139,6 @@ async def proxy_mcp(path: str, request: Request):
 app.include_router(protected_router)
 
 
-
-
 async def get_service_token_fallback() -> str:
     import logging
     import os
@@ -145,12 +148,13 @@ async def get_service_token_fallback() -> str:
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token
-        
+
     try:
         users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
         async with httpx.AsyncClient() as client:
             res_meta = await client.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=users_api",
+                "http://metadata.google.internal/computeMetadata/v1/instance/"
+                "service-accounts/default/identity?audience=users_api",
                 headers={"Metadata-Flavor": "Google"},
                 timeout=2.0
             )
@@ -161,8 +165,10 @@ async def get_service_token_fallback() -> str:
                     from shared.schemas.auth import TokenResponse
                     data = TokenResponse.model_validate(res.json())
                     return data.access_token
-    except Exception: raise
+    except Exception:
+        raise
     return ""
+
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
@@ -170,7 +176,8 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     try:
         from opentelemetry.propagate import inject
         inject(headers)
-    except Exception: raise
+    except Exception:
+        raise
 
     async with httpx.AsyncClient() as client:
         try:
@@ -187,23 +194,35 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             logging.error(f"Failed to report error to prompts_api: {e}")
             raise e
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    
+
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    
+
     try:
         if not token:
             token = await get_service_token_fallback()
-    
+
         if token:
             await report_exception_to_prompts_api("missions_api", error_msg, trace_context, token)
-    
+
     except Exception as fallback_e:
         logging.error(f"Failed to process exception reporting: {fallback_e}")
+
+    logging.error(
+        f"[missions_api] Unhandled exception on {request.method} {request.url.path}: {error_msg}\n{trace_context}")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 

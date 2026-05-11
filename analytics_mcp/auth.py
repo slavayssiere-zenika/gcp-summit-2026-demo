@@ -4,6 +4,9 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from google.auth import jwt as google_jwt
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from jose import JWTError, jwt
 
 # --- Configuration JWT ---
@@ -59,6 +62,33 @@ def verify_jwt(
         )
 
     try:
+        unverified_header = jwt.get_unverified_header(token)
+        if unverified_header.get("alg") == "RS256":
+            try:
+                unverified_claims = google_jwt.decode(token, verify=False)
+                token_aud = unverified_claims.get("aud")
+
+                payload = id_token.verify_oauth2_token(
+                    token, google_requests.Request(), audience=token_aud
+                )
+
+                if payload.get("email") and "sa-agent-router" in payload.get("email"):
+                    payload["role"] = "admin"
+                    payload["sub"] = payload.get("email")
+                    return payload
+                else:
+                    logger.warning("Tentative d'accès OIDC non autorisé: %s", payload.get("email"))
+                    raise HTTPException(status_code=403, detail="Service Account non autorisé")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.debug("Échec validation OIDC: %s", e)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token OIDC invalide",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
         payload = jwt.decode(token, _SECRET_KEY, algorithms=[ALGORITHM])
         if not payload.get("sub"):
             raise HTTPException(

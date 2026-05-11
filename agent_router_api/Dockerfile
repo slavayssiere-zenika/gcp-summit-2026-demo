@@ -33,6 +33,7 @@ COPY agent_router_api/requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt agent_commons \
     && rm -rf /wheels
 
+COPY shared/ /app/shared/
 COPY agent_router_api/ ./
 
 ENV PYTHONPATH=/app

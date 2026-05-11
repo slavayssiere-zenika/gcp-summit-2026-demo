@@ -60,3 +60,8 @@ Pour chaque consultant proposé :
 - **Justification** : [compétences matchées, expérience pertinente]
 
 Conclure avec : estimation en jours/homme et disponibilité si connue.
+
+## 🖥️ Protocole UI — render_ui_widgets
+
+Après chaque appel d'outil retournant une **liste de missions, de candidats ou d'évaluations**, tu **DOIS** émettre un `render_ui_widgets` avec le `resource_uri` adapté (ex: `ui://missions` ou `ui://candidates`) pour que le frontend affiche les bons composants visuels.
+Pour l'affichage de données brutes ne nécessitant pas de composant visuel spécifique, ou pour empêcher le frontend d'afficher un JSON brut (par exemple, si tu retournes de la donnée analytique ou du suivi global), tu **DOIS IMPÉRATIVEMENT** émettre une action `render_ui_widgets` avec le payload `{"resource_uri": "ui://empty"}`. Cela force le frontend à n'afficher que ton texte. Si un outil retourne une liste vide ou une erreur, **ne pas émettre** de `render_ui_widgets`.

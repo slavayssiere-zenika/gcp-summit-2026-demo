@@ -4,6 +4,7 @@ scoring_pipeline.py — Fonctions async réseau/DB et orchestrateur Vertex AI Ba
 Contient : _fetch_missions_for_user, _prefetch_all_missions,
            _apply_scoring_results, bg_bulk_scoring_vertex.
 """
+
 import asyncio
 import logging
 import time
@@ -16,16 +17,19 @@ from pydantic import ValidationError
 from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.finops import log_finops
-from src.competencies.models import (Competency, CompetencyEvaluation,
-                                     user_competency)
+from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from src.competencies.scheduler_control import set_scoring_scheduler_enabled
-from src.competencies.scoring_utils import (BATCH_GCS_BUCKET, CV_API_URL,
-                                            GCP_PROJECT_ID, MISSIONS_FETCH_SEMAPHORE,
-                                            SCORING_APPLY_SEMAPHORE,
-                                            VERTEX_BATCH_MODEL,
-                                            VERTEX_LOCATION,
-                                            _build_jsonl_lines,
-                                            _parse_scoring_results_gcs)
+from src.competencies.scoring_utils import (
+    BATCH_GCS_BUCKET,
+    CV_API_URL,
+    GCP_PROJECT_ID,
+    MISSIONS_FETCH_SEMAPHORE,
+    SCORING_APPLY_SEMAPHORE,
+    VERTEX_BATCH_MODEL,
+    VERTEX_LOCATION,
+    _build_jsonl_lines,
+    _parse_scoring_results_gcs,
+)
 from shared.schemas.missions import MissionsResponse
 
 logger = logging.getLogger(__name__)
@@ -63,16 +67,16 @@ async def _fetch_missions_for_user(
                             break
                         skip += limit
                     else:
-                        logger.warning(f"[scoring_service] missions user={user_id} HTTP {res.status_code}")
+                        logger.warning(
+                            f"[scoring_service] missions user={user_id} HTTP {res.status_code}"
+                        )
                         break
         except Exception as e:
             logger.warning(f"[scoring_service] missions user={user_id} erreur: {e}")
     return user_id, missions
 
 
-async def _prefetch_all_missions(
-    user_ids: list[int], headers: dict
-) -> dict[int, list]:
+async def _prefetch_all_missions(user_ids: list[int], headers: dict) -> dict[int, list]:
     """Précharge toutes les missions en parallèle — 1 appel HTTP par user."""
     sem = asyncio.Semaphore(MISSIONS_FETCH_SEMAPHORE)
     tasks = [_fetch_missions_for_user(uid, headers, sem) for uid in user_ids]
@@ -88,6 +92,7 @@ async def _prefetch_all_missions(
 
 
 # ── Phase 2 : Construction du JSONL ──────────────────────────────────────────
+
 
 async def _apply_scoring_results(
     results: list[tuple[int, int, str, float, str]],
@@ -113,23 +118,27 @@ async def _apply_scoring_results(
                     )
                     ev = (await db.execute(stmt)).scalars().first()
                     if not ev:
-                        ev = CompetencyEvaluation(user_id=user_id, competency_id=comp_id)
+                        ev = CompetencyEvaluation(
+                            user_id=user_id, competency_id=comp_id
+                        )
                         db.add(ev)
                     ev.ai_score = score
                     ev.ai_justification = justification
-                    ev.ai_scored_at = datetime.now(timezone.utc)
+                    ev.ai_scored_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     ev.scoring_version = "v3-batch"
-                    ev.updated_at = datetime.now(timezone.utc)
+                    ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     await db.commit()
                     success += 1
                 except Exception as item_e:
                     await db.rollback()
                     if not sample_error:
                         sample_error = str(item_e)
-                    logger.error(f"[scoring_service] upsert user={user_id} comp={comp_id}: {item_e}")
+                    logger.error(
+                        f"[scoring_service] upsert user={user_id} comp={comp_id}: {item_e}"
+                    )
                     errors += 1
 
-    chunks = [results[i:i + chunk_size] for i in range(0, len(results), chunk_size)]
+    chunks = [results[i : i + chunk_size] for i in range(0, len(results), chunk_size)]
     sem = asyncio.Semaphore(SCORING_APPLY_SEMAPHORE)
 
     async def _sem_worker(chunk: list):
@@ -160,7 +169,9 @@ async def bg_bulk_scoring_vertex(
         return
 
     try:
-        vertex_client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION)
+        vertex_client = genai.Client(
+            vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION
+        )
     except Exception as e:
         await bulk_scoring_manager.update_progress(
             status="error", error=f"Init vertex_client: {e}"
@@ -194,9 +205,13 @@ async def bg_bulk_scoring_vertex(
                 leaf_ids = (await db.execute(leaf_stmt)).scalars().all()
                 if not leaf_ids:
                     continue
-                comps = (await db.execute(
-                    select(Competency.id, Competency.name).where(Competency.id.in_(leaf_ids))
-                )).all()
+                comps = (
+                    await db.execute(
+                        select(Competency.id, Competency.name).where(
+                            Competency.id.in_(leaf_ids)
+                        )
+                    )
+                ).all()
 
                 for comp_id, comp_name in comps:
                     user_comp_list.append((uid, comp_id, comp_name))
@@ -222,7 +237,9 @@ async def bg_bulk_scoring_vertex(
         )
 
         # ── Étape 3 : Construire le JSONL ─────────────────────────────────────────
-        jsonl_lines, scoring_index, skipped_no_mission = _build_jsonl_lines(user_comp_list, missions_map)
+        jsonl_lines, scoring_index, skipped_no_mission = _build_jsonl_lines(
+            user_comp_list, missions_map
+        )
         await bulk_scoring_manager.update_progress(
             new_log=f"JSONL : {len(jsonl_lines)} requêtes, {skipped_no_mission} ignorés (pas de missions)."
         )
@@ -233,7 +250,9 @@ async def bg_bulk_scoring_vertex(
             return
 
         # ── Étape 4 : Upload GCS ──────────────────────────────────────────────────
-        await bulk_scoring_manager.update_progress(status="uploading", new_log="Upload JSONL vers GCS...")
+        await bulk_scoring_manager.update_progress(
+            status="uploading", new_log="Upload JSONL vers GCS..."
+        )
         ts = int(time.time())
         blob_input = f"bulk-scoring/input/{ts}.jsonl"
         blob_output_prefix = f"bulk-scoring/output/{ts}/"
@@ -244,12 +263,16 @@ async def bg_bulk_scoring_vertex(
             gcs_client = gcs_storage.Client()
             bucket = gcs_client.bucket(BATCH_GCS_BUCKET)
             blob = bucket.blob(blob_input)
-            blob.upload_from_string("\n".join(jsonl_lines), content_type="application/jsonlines")
+            blob.upload_from_string(
+                "\n".join(jsonl_lines), content_type="application/jsonlines"
+            )
             await bulk_scoring_manager.update_progress(
                 new_log=f"Upload OK : {input_uri} ({len(jsonl_lines)} lignes)"
             )
         except Exception as e:
-            await bulk_scoring_manager.update_progress(status="error", error=f"GCS upload: {e}")
+            await bulk_scoring_manager.update_progress(
+                status="error", error=f"GCS upload: {e}"
+            )
             return
 
         # ── Étape 5 : Soumettre le job Vertex AI Batch ───────────────────────────
@@ -258,7 +281,10 @@ async def bg_bulk_scoring_vertex(
                 vertex_client.batches.create,
                 model=VERTEX_BATCH_MODEL,
                 src=input_uri,
-                config={"display_name": f"competencies-bulk-scoring-{ts}", "dest": dest_uri},
+                config={
+                    "display_name": f"competencies-bulk-scoring-{ts}",
+                    "dest": dest_uri,
+                },
             )
             await bulk_scoring_manager.update_progress(
                 status="batch_running",
@@ -266,10 +292,14 @@ async def bg_bulk_scoring_vertex(
                 dest_uri=dest_uri,
                 new_log=f"Job Vertex AI soumis : {job.name} (model={VERTEX_BATCH_MODEL})",
             )
-            logger.info(f"[scoring_service] Vertex batch job créé : {job.name} (model={VERTEX_BATCH_MODEL})")
+            logger.info(
+                f"[scoring_service] Vertex batch job créé : {job.name} (model={VERTEX_BATCH_MODEL})"
+            )
 
         except Exception as e:
-            await bulk_scoring_manager.update_progress(status="error", error=f"Vertex create: {e}")
+            await bulk_scoring_manager.update_progress(
+                status="error", error=f"Vertex create: {e}"
+            )
             return
 
         # ── Étape 6 : Poll jusqu'à la fin du job ─────────────────────────────────
@@ -294,14 +324,20 @@ async def bg_bulk_scoring_vertex(
                 )
                 continue
 
-            state_name = job.state.name if hasattr(job.state, "name") else str(job.state)
+            state_name = (
+                job.state.name if hasattr(job.state, "name") else str(job.state)
+            )
             label = state_labels.get(state_name, state_name)
-            logger.info(f"[scoring_service] job state={state_name} (poll #{poll_count})")
+            logger.info(
+                f"[scoring_service] job state={state_name} (poll #{poll_count})"
+            )
             await bulk_scoring_manager.update_progress(
                 new_log=f"[Poll #{poll_count}] {label} (état Vertex : {state_name})"
             )
             if state_name == "JOB_STATE_SUCCEEDED":
-                await bulk_scoring_manager.update_progress(new_log="Vertex Batch terminé avec succès.")
+                await bulk_scoring_manager.update_progress(
+                    new_log="Vertex Batch terminé avec succès."
+                )
                 break
 
             if state_name in ("JOB_STATE_FAILED", "JOB_STATE_CANCELLED"):
@@ -318,14 +354,18 @@ async def bg_bulk_scoring_vertex(
         try:
             gcs_client2 = gcs_storage.Client()
             bucket2 = gcs_client2.bucket(BATCH_GCS_BUCKET)
-            blobs = await asyncio.to_thread(list, bucket2.list_blobs(prefix=blob_output_prefix))
+            blobs = await asyncio.to_thread(
+                list, bucket2.list_blobs(prefix=blob_output_prefix)
+            )
             for out_blob in blobs:
                 if not out_blob.name.endswith(".jsonl"):
                     continue
                 content = await asyncio.to_thread(out_blob.download_as_text)
                 raw_lines.extend(content.splitlines())
         except Exception as e:
-            await bulk_scoring_manager.update_progress(status="error", error=f"GCS read: {e}")
+            await bulk_scoring_manager.update_progress(
+                status="error", error=f"GCS read: {e}"
+            )
             return
 
         results, user_usage = _parse_scoring_results_gcs(raw_lines, scoring_index)
@@ -335,7 +375,9 @@ async def bg_bulk_scoring_vertex(
 
         # ── Étape 7.5 : Log FinOps ────────────────────────────────────────────────
         auth_header = headers.get("Authorization", "")
-        service_token = auth_header.removeprefix("Bearer ").strip() if auth_header else ""
+        service_token = (
+            auth_header.removeprefix("Bearer ").strip() if auth_header else ""
+        )
         for uid, usage in user_usage.items():
             asyncio.create_task(
                 log_finops(
@@ -343,7 +385,10 @@ async def bg_bulk_scoring_vertex(
                     action="bulk_scoring_vertex",
                     model=VERTEX_BATCH_MODEL,
                     usage_metadata=usage,
-                    metadata={"user_id": uid, "scores_count": sum(1 for r in results if r[0] == uid)},
+                    metadata={
+                        "user_id": uid,
+                        "scores_count": sum(1 for r in results if r[0] == uid),
+                    },
                     auth_token=service_token,
                     is_batch=True,
                 )
@@ -358,7 +403,7 @@ async def bg_bulk_scoring_vertex(
         # Scores minimaux (1.0) pour les users sans mission
         if skipped_no_mission > 0:
             await bulk_scoring_manager.update_progress(
-                new_log=f"{skipped_no_mission} paires ignorées (aucune mission dans CV) — score minimal 1.0 non appliqué automatiquement (relancer avec missions disponibles)."
+                new_log=f"{skipped_no_mission} paires ignorées (aucune mission dans CV) — score minimal 1.0 non appliqué automatiquement (relancer avec missions disponibles)."  # noqa: E501
             )
 
         final_status = "error" if nb_errors > 0 else "completed"
@@ -387,8 +432,6 @@ async def bg_bulk_scoring_vertex(
 
     except Exception as e:
         logger.error(f"[scoring_service] Erreur fatale: {e}", exc_info=True)
-        await bulk_scoring_manager.update_progress(
-            status="error", error=f"Fatal: {e}"
-        )
+        await bulk_scoring_manager.update_progress(status="error", error=f"Fatal: {e}")
         # Pipeline en erreur — pause le Cloud Scheduler keepalive
         await set_scoring_scheduler_enabled(False)

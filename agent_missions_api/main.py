@@ -3,38 +3,33 @@ import logging
 import os
 import re
 import time
-import warnings
 from contextlib import asynccontextmanager
 
-import httpx
+import httpx  # noqa: F401
 import uvicorn
 from agent import MISSIONS_TOOLS, run_agent_query
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response  # noqa: F401
 from logger import LoggingMiddleware, setup_logging
 from metrics import QUERY_COUNT, QUERY_LATENCY
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.propagate import extract, inject
+from opentelemetry.propagate import extract, inject  # noqa: F401
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
 from prometheus_fastapi_instrumentator import Instrumentator
-from pydantic import BaseModel
+from shared.middlewares import ContentLengthSanitizerASGIMiddleware
+from pydantic import BaseModel  # noqa: F401
 
 from agent_commons.exception_handler import make_global_exception_handler
-from agent_commons.jwt_middleware import ALGORITHM
+from agent_commons.jwt_middleware import ALGORITHM  # noqa: F401
 from agent_commons.jwt_middleware import verify_jwt_request as verify_jwt
-from agent_commons.mcp_client import auth_header_var
+from agent_commons.mcp_client import auth_header_var  # noqa: F401
 from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
-                                   get_tool_metadata)
-
-warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
-
-
+from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest)  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +43,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("[MISSIONS] FATAL: SECRET_KEY env var is not set. Service cannot start.")
 os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
+
 
 # ── OTel Tracing — 3 modes : http (Tempo), gcp (Cloud Trace), none ────────────
 def setup_tracing(app: FastAPI) -> TracerProvider:
@@ -136,6 +132,7 @@ _tracer = trace.get_tracer("agent_missions_api")
 
 # Prometheus (Golden Rules §5 — obligatoire)
 Instrumentator().instrument(app).expose(app)
+app.add_middleware(ContentLengthSanitizerASGIMiddleware)
 
 # ── Pydantic models — QueryRequest migré dans agent_commons.schemas ──────────
 
@@ -155,10 +152,11 @@ async def version():
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 
-async def _execute_query(request: QueryRequest, payload: dict) -> A2AResponse:
+async def _execute_query(request: QueryRequest, http_request: Request, payload: dict) -> A2AResponse:
     """Logique partagée entre /query et /a2a/query."""
     start_time = time.time()
     user_id = request.user_id or payload.get("sub") or "unknown@zenika.com"
+    auth_header = http_request.headers.get("Authorization")
 
     QUERY_COUNT.labels(agent="missions", status="started").inc()
     logger.info("[MISSIONS] Query received user_id=%s session=%s", user_id, request.session_id)
@@ -167,6 +165,7 @@ async def _execute_query(request: QueryRequest, payload: dict) -> A2AResponse:
         result = await run_agent_query(
             query=request.query,
             session_id=request.session_id,
+            auth_token=auth_header,
             user_id=user_id,
         )
         QUERY_COUNT.labels(agent="missions", status="success").inc()
@@ -191,12 +190,12 @@ async def _execute_query(request: QueryRequest, payload: dict) -> A2AResponse:
 
 
 @protected_router.post("/query", response_model=A2AResponse)
-async def query_agent(request: A2ARequest, payload: dict = Depends(verify_jwt)):
+async def query_agent(request: A2ARequest, http_request: Request, payload: dict = Depends(verify_jwt)):
     """
     Point d'entrée direct — utilisé par le frontend ou pour les tests directs.
     Exécute le pipeline de staffing et retourne le résultat structuré.
     """
-    return await _execute_query(request, payload)
+    return await _execute_query(request, http_request, payload)
 
 
 @protected_router.post("/a2a/query", response_model=A2AResponse)
@@ -215,7 +214,7 @@ async def a2a_query_agent(
         span.set_attribute("query.text", request.query[:100])
         user_id = request.user_id or payload.get("sub", "unknown")
         span.set_attribute("user.id", user_id)
-        return await _execute_query(request, payload)
+        return await _execute_query(request, http_request, payload)
 
 
 @protected_router.get("/history")
@@ -314,7 +313,8 @@ async def get_history(payload: dict = Depends(verify_jwt)):
     for msg in history:
         if isinstance(msg, dict):
             msg.pop("_full_text_progress", None)
-            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and not msg.get("data"):
+            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and \
+               not msg.get("data"):
                 continue
             final_history.append(msg)
 

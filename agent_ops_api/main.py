@@ -27,6 +27,7 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.trace import SpanKind
 from prometheus_fastapi_instrumentator import Instrumentator
+from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 
 from agent_commons.exception_handler import make_global_exception_handler
 from agent_commons.jwt_middleware import ALGORITHM
@@ -38,7 +39,6 @@ from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 
 
-
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
         OTLPSpanExporter
@@ -47,7 +47,6 @@ elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
 else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
         OTLPSpanExporter
-
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -86,11 +85,10 @@ app = FastAPI(
 )
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
+app.add_middleware(ContentLengthSanitizerASGIMiddleware)
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
-
-
 
 
 @app.get("/")
@@ -107,6 +105,7 @@ os.environ.pop("SECRET_KEY", None)
 
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
+
 @app.get("/spec")
 async def get_spec():
     try:
@@ -116,11 +115,12 @@ async def get_spec():
         app_logger.debug("[spec] spec.md not found or unreadable: %s: %s", type(e).__name__, e)
         return Response(content="# Specification introuvable", media_type="text/markdown")
 
+
 @protected_router.post("/query")
 async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
-    
+
     try:
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         computed_session_id = payload.get("sub")
@@ -128,23 +128,23 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             raise HTTPException(status_code=401, detail="Token invalide")
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
-        
+
     ctx = extract(http_request.headers)
-    
+
     with tracer.start_as_current_span("query.process", context=ctx, kind=SpanKind.SERVER) as span:
         trace_id = format(span.get_span_context().trace_id, '032x')
         span.set_attribute("trace.id", trace_id)
         span.set_attribute("query.text", request.query)
         span.set_attribute("session.id", computed_session_id)
-        
+
         try:
             AGENT_QUERIES_TOTAL.inc()
             # Propager le sub JWT comme user_id pour le tracking FinOps
             jwt_user_id = payload.get("sub") or "unknown@zenika.com"
-            result = await run_agent_query(request.query, computed_session_id, user_id=jwt_user_id)
+            result = await run_agent_query(request.query, computed_session_id, auth_token=auth_header, user_id=jwt_user_id)
             span.set_attribute("agent.source", result.get("source", "unknown"))
             return result
-            
+
         except Exception as e:
             app_logger.error(
                 "CRITICAL: Exception in /query (Ops) — %s: %s",
@@ -154,6 +154,7 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             )
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
+
 @protected_router.post("/a2a/query", response_model=A2AResponse)
 async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     """Point d'entrée A2A — appelé exclusivement par agent_router_api.
@@ -162,20 +163,20 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
     # Standard A2A Entrypoint
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
-    
+
     try:
         payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         computed_session_id = payload.get("sub")
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalide")
-    
+
     # Prb 7: Use the user_id propagated from Router if available, else fall back to JWT sub
     effective_user_id = request.user_id or computed_session_id or "user_1"
-        
+
     ctx = extract(http_request.headers)
     with tracer.start_as_current_span("a2a.query", context=ctx, kind=SpanKind.SERVER) as span:
         try:
-            result = await run_agent_query(request.query, computed_session_id, user_id=effective_user_id)
+            result = await run_agent_query(request.query, computed_session_id, auth_token=auth_header, user_id=effective_user_id)
             return A2AResponse(
                 response=result.get("response", ""),
                 data=result.get("data"),
@@ -196,12 +197,11 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
             raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
-
 app.include_router(_history_router)
 
 
-
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+
 
 @app.post("/login")
 async def login(request: Request, response: Response):
@@ -212,6 +212,7 @@ async def login(request: Request, response: Response):
         res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
         if res.status_code != 200:
             from pydantic import BaseModel
+
             class ErrorDetail(BaseModel):
                 detail: str
             try:
@@ -220,12 +221,13 @@ async def login(request: Request, response: Response):
             except Exception:
                 detail_msg = "Erreur de connexion"
             raise HTTPException(status_code=res.status_code, detail=detail_msg)
-        
+
         # Forward the cookie from users_api to the client
         for name, value in res.cookies.items():
             response.set_cookie(key=name, value=value, httponly=True, samesite="lax")
-        
+
         return res.json()
+
 
 @app.post("/logout")
 async def logout(response: Response):
@@ -233,6 +235,7 @@ async def logout(response: Response):
         # res = await client.post(f"{USERS_API_URL}/logout")
         response.delete_cookie("access_token")
         return {"message": "Déconnecté"}
+
 
 @app.get("/me")
 async def get_me(request: Request):
@@ -264,6 +267,7 @@ async def mcp_registry():
 async def health():
     return {"status": "healthy"}
 
+
 @app.get("/version")
 async def get_version():
     return {"version": os.getenv("APP_VERSION", "unknown")}
@@ -274,24 +278,24 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
     # Synchronisation avec les noms Terraform (market -> ANALYTICS_MCP_URL, drive -> DRIVE_MCP_URL, etc.)
     target_url_env = f"{server_name.upper()}_URL"
     base_url = os.getenv(target_url_env)
-    
+
     if not base_url:
         target_url_env_mcp = f"{server_name.upper()}_MCP_URL"
         base_url = os.getenv(target_url_env_mcp)
-        
+
     if not base_url:
         raise HTTPException(status_code=404, detail=f"MCP Server {server_name} introuvable (Tried {target_url_env} and {target_url_env_mcp if 'target_url_env_mcp' in locals() else 'N/A'})")
-        
+
     auth_header = f"{auth.scheme} {auth.credentials}"
     headers = {"Authorization": auth_header}
     inject(headers)
-    
+
     body = await request.body()
     target_path = f"{base_url.rstrip('/')}/{path}"
     query_params = request.url.query
     if query_params:
         target_path += "?" + query_params
-        
+
     async with httpx.AsyncClient() as client:
         try:
             res = await client.request(
@@ -304,7 +308,6 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
             return Response(content=res.content, status_code=res.status_code, media_type=res.headers.get("content-type"))
         except httpx.RequestError as exc:
             raise HTTPException(status_code=502, detail=f"Erreur de communication avec {server_name}: {str(exc)}")
-
 
 
 app.include_router(protected_router)

@@ -8,57 +8,28 @@ from typing import List, Optional
 import httpx
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 from database import get_db
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
-                     Request, Response)
+from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
+                     Response)
 from fastapi.security import HTTPAuthorizationCredentials
-from google import genai
-from google.cloud import run_v2 as cloudrun_v2
-from google.cloud import storage as gcs_storage
-from metrics import CV_MISSING_EMBEDDINGS, CV_PROCESSING_TOTAL
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
-from sqlalchemy import delete as sa_delete
-from sqlalchemy import func
-from sqlalchemy import text as sa_text
-from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import SECRET_KEY as _AUTH_SECRET_KEY
 from src.auth import security, verify_jwt
-from src.cvs.bulk_task_state import bulk_reanalyse_manager
 from src.cvs.models import CVProfile
-from src.cvs.routers._shared import (ADMIN_SERVICE_PASSWORD,
-                                     ADMIN_SERVICE_USERNAME, ANALYTICS_MCP_URL,
-                                     BATCH_GCS_BUCKET, BULK_APPLY_SEMAPHORE,
-                                     BULK_EMBED_SEMAPHORE,
-                                     BULK_SCALE_MIN_INSTANCES,
-                                     BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
-                                     COMPETENCIES_API_URL)
-from src.cvs.routers._shared import CV_RESPONSE_SCHEMA as _CV_RESPONSE_SCHEMA
-from src.cvs.routers._shared import (DRIVE_API_URL, GCP_PROJECT_ID,
-                                     ITEMS_API_URL, MISSIONS_API_URL,
-                                     PROMPTS_API_URL, USERS_API_URL,
-                                     VERTEX_LOCATION,
-                                     MultiCriteriaSearchRequest,
-                                     RecalculateStepRequest)
-from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
-                             CVImportStep, CVProfileResponse, CVResponse,
-                             RankedExperienceResponse, SearchCandidateRequest,
-                             SearchCandidateResponse, UserMergeRequest)
-from src.cvs.task_state import task_state_manager, tree_task_manager
-from src.gemini_retry import (embed_content_with_retry,
-                              generate_content_with_retry)
-from src.services.bulk_service import (_acquire_service_token,
-                                       bg_bulk_reanalyse, bg_retry_apply)
-from src.services.cv_import_service import process_cv_core
-from src.services.embedding_service import reindex_embeddings_bg
+from src.cvs.routers._shared import (MISSIONS_API_URL, USERS_API_URL,
+                                     MultiCriteriaSearchRequest)
+from src.cvs.schemas import (PaginationResponse, SearchCandidateRequest,
+                             SearchCandidateResponse)
+from src.gemini_retry import embed_content_with_retry
+from src.services.bulk_service import bg_retry_apply
 from src.services.finops import log_finops
-from src.services.search_service import execute_search, scale_bulk_dependencies
+from src.services.search_service import execute_search
 from src.services.taxonomy_service import (fetch_prompt,
-                                           get_existing_competencies,
-                                           run_taxonomy_step)
-from src.services.utils import (_build_distilled_content, _chunk_text,
-                                _clean_llm_json)
+                                           get_existing_competencies)
+from shared.schemas.users import UserItem
+from pydantic import ValidationError
+from src.services.utils import _build_distilled_content, _chunk_text
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -68,15 +39,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["CV Search"], dependencies=[Depends(verify_jwt)])
 
-from src.cvs.schemas import PaginationResponse
 
 @router.get("/search", response_model=PaginationResponse[SearchCandidateResponse])
 async def search_candidates(
     request: Request,
     response: Response,
-    query: str, 
+    query: str,
     skip: int = Query(0, ge=0),
-    limit: int = 5, 
+    limit: int = 5,
     skills: List[str] = Query(default=None),
     agency: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
@@ -150,9 +120,13 @@ async def find_similar_consultants(
                     f"{USERS_API_URL.rstrip('/')}/{profile.user_id}", headers=headers_downstream
                 )
                 if u_res.status_code == 200:
-                    u_data = u_res.json()
-                    entry["full_name"] = u_data.get("full_name")
-                    entry["email"] = u_data.get("email")
+                    try:
+                        u_data = UserItem.model_validate(u_res.json())
+                        entry["full_name"] = u_data.full_name
+                        entry["email"] = u_data.email
+                    except ValidationError as ve:
+                        logger.error(f"[SIMILAR] Contrat API users brisé pour {profile.user_id}",
+                                     extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(f"[SIMILAR] Enrichissement user {profile.user_id} échoué: {e}")
             results.append(entry)
@@ -163,13 +137,6 @@ async def find_similar_consultants(
 # ─────────────────────────────────────────────────────────────────────────────
 # Sprint A2 — Recherche multi-critères (N vecteurs pondérés, 1 requête SQL)
 # ─────────────────────────────────────────────────────────────────────────────
-
-class MultiCriteriaSearchRequest(BaseModel):
-    queries: List[str]
-    weights: Optional[List[float]] = None
-    limit: int = 10
-    agency: Optional[str] = None
-
 
 
 @router.post("/search/multi-criteria")
@@ -262,9 +229,13 @@ async def search_candidates_multi_criteria(
                     f"{USERS_API_URL.rstrip('/')}/{profile.user_id}", headers=headers_downstream
                 )
                 if u_res.status_code == 200:
-                    u_data = u_res.json()
-                    entry["full_name"] = u_data.get("full_name")
-                    entry["email"] = u_data.get("email")
+                    try:
+                        u_data = UserItem.model_validate(u_res.json())
+                        entry["full_name"] = u_data.full_name
+                        entry["email"] = u_data.email
+                    except ValidationError as ve:
+                        logger.error(f"[MULTI-SEARCH] Contrat API users brisé pour {profile.user_id}",
+                                     extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(f"[MULTI-SEARCH] Enrichissement user {profile.user_id} échoué: {e}")
             results.append(entry)
@@ -383,7 +354,6 @@ async def get_rag_snippet(
     }
 
 
-
 @router.post("/search/mission-match")
 async def match_mission_to_candidates(
     request: Request,
@@ -427,7 +397,7 @@ async def match_mission_to_candidates(
 
     mission_embedding = None
     if emb_res.status_code == 200:
-        from pydantic import BaseModel
+
         class EmbResp(BaseModel):
             embedding: list[float] | None = None
         try:
@@ -468,9 +438,13 @@ async def match_mission_to_candidates(
                     f"{USERS_API_URL.rstrip('/')}/{profile.user_id}", headers=headers_downstream
                 )
                 if u_res.status_code == 200:
-                    u_data = u_res.json()
-                    entry["full_name"] = u_data.get("full_name")
-                    entry["email"] = u_data.get("email")
+                    try:
+                        u_data = UserItem.model_validate(u_res.json())
+                        entry["full_name"] = u_data.full_name
+                        entry["email"] = u_data.email
+                    except ValidationError as ve:
+                        logger.error(f"[MISSION-MATCH] Contrat API users brisé pour {profile.user_id}",
+                                     extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(f"[MISSION-MATCH] Enrichissement user {profile.user_id} échoué: {e}")
             results.append(entry)
@@ -483,4 +457,3 @@ async def match_mission_to_candidates(
 # ─────────────────────────────────────────────────────────────────────────────
 # Sprint C1 — Analytics : couverture des compétences corpus
 # ─────────────────────────────────────────────────────────────────────────────
-

@@ -322,3 +322,8 @@ Si l'utilisateur utilise la **première personne** ("mon profil", "ma disponibil
 
 Fournis une réponse structurée et factuelle, **dans la même langue que la requête reçue**.
 Le Front-Desk (Orchestrateur) mettra en forme ta réponse pour l'utilisateur final.
+
+## 🖥️ Protocole UI — render_ui_widgets
+
+Après chaque appel d'outil retournant une **liste de consultants, de candidats ou de profils**, tu **DOIS** émettre un `render_ui_widgets` avec le `resource_uri` adapté (ex: `ui://consultants` ou `ui://candidates`) pour que le frontend affiche les bons composants visuels.
+Pour l'affichage de données brutes ne nécessitant pas de composant visuel spécifique, ou pour empêcher le frontend d'afficher un JSON brut, tu **DOIS IMPÉRATIVEMENT** émettre une action `render_ui_widgets` avec le payload `{"resource_uri": "ui://empty"}`. Cela force le frontend à n'afficher que ton texte. Si un outil retourne une liste vide ou une erreur, **ne pas émettre** de `render_ui_widgets`.

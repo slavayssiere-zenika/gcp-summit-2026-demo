@@ -13,6 +13,7 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
 from prometheus_fastapi_instrumentator import Instrumentator
+from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from router import router as api_router
 from telemetry import setup_telemetry
 from tools_registry import router as mcp_router
@@ -43,6 +44,7 @@ app = FastAPI(
 
 app.add_middleware(LoggingMiddleware)
 Instrumentator().instrument(app).expose(app)
+app.add_middleware(ContentLengthSanitizerASGIMiddleware)
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,health/agents,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
@@ -156,6 +158,7 @@ async def login(request: Request, response: Response):
         res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
         if res.status_code != 200:
             from pydantic import BaseModel
+
             class ErrorDetail(BaseModel):
                 detail: str
             try:

@@ -25,7 +25,7 @@ class CompetencyUpdate(BaseModel):
 class CompetencyResponse(CompetencyBase):
     id: int
     created_at: datetime
-    sub_competencies: List['CompetencyResponse'] = []
+    sub_competencies: List["CompetencyResponse"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,8 +64,9 @@ class MergeInstruction(BaseModel):
     Générée par Gemini Pro lors du recalcul de l'arbre de compétences.
     Le `canonical` doit exister dans la taxonomie après l'upsert du bulk_tree.
     """
-    canonical: str          # Nom canonique (ex: "Python")
-    merge_from: List[str]   # Noms des doublons à absorber (ex: ["python", "Python3"])
+
+    canonical: str  # Nom canonique (ex: "Python")
+    merge_from: List[str]  # Noms des doublons à absorber (ex: ["python", "Python3"])
 
 
 class SweepAssignment(BaseModel):
@@ -75,8 +76,9 @@ class SweepAssignment(BaseModel):
     Permet de reclassifier les compétences absentes du Reduce dans un pilier existant
     plutôt que de les laisser tomber dans les 'Archives / Non classées'.
     """
+
     competency: str  # Nom de la compétence orpheline
-    pillar: str      # Nom du pilier cible (doit exister dans le tree)
+    pillar: str  # Nom du pilier cible (doit exister dans le tree)
 
 
 class TreeImportRequest(BaseModel):
@@ -111,8 +113,10 @@ class CompetencyStatsResponse(BaseModel):
 
 # ── Evaluation Schemas ────────────────────────────────────────────────────────
 
+
 class CompetencyEvaluationResponse(BaseModel):
     """Réponse complète d'une évaluation : note IA + note utilisateur."""
+
     id: int
     user_id: int
     competency_id: int
@@ -129,7 +133,10 @@ class CompetencyEvaluationResponse(BaseModel):
 
 class UserScoreRequest(BaseModel):
     """Saisie manuelle de la note auto-évaluée par le consultant."""
-    score: float = Field(..., ge=0.0, le=5.0, description="Note de 0 à 5 (multiples de 0.5 recommandés)")
+
+    score: float = Field(
+        ..., ge=0.0, le=5.0, description="Note de 0 à 5 (multiples de 0.5 recommandés)"
+    )
     comment: Optional[str] = Field(None, max_length=500)
 
 
@@ -138,6 +145,7 @@ class BatchEvaluationRequest(BaseModel):
     Accepte 'user_id' (int) ou 'user_ids' (list → premier élément utilisé).
     Accepte 'competency_ids' (list).
     """
+
     user_id: int
     competency_ids: List[int]
 
@@ -163,6 +171,7 @@ class BatchUsersEvaluationRequest(BaseModel):
     Accepte 'competency_id' (int) ou 'competency_ids' (list → premier élément utilisé).
     Accepte 'user_ids' (list).
     """
+
     competency_id: int
     user_ids: List[int]
 
@@ -181,6 +190,7 @@ class BatchUsersEvaluationRequest(BaseModel):
 
 class AiScoreAllResponse(BaseModel):
     """Résultat du déclenchement du scoring IA batch."""
+
     user_id: int
     triggered: int
     message: str
@@ -188,8 +198,10 @@ class AiScoreAllResponse(BaseModel):
 
 # ── Analytics Schemas ─────────────────────────────────────────────────────────
 
+
 class AgencyCompetencyItem(BaseModel):
     """Un (agence, compétence, count) dans la heatmap."""
+
     agency: str
     competency: str
     count: int
@@ -198,6 +210,7 @@ class AgencyCompetencyItem(BaseModel):
 
 class AgencyCompetencyCoverage(BaseModel):
     """Réponse de /analytics/agency-coverage."""
+
     items: List[AgencyCompetencyItem]
     total_consultants: int
     total_agencies: int
@@ -205,6 +218,7 @@ class AgencyCompetencyCoverage(BaseModel):
 
 class SkillGapItem(BaseModel):
     """Une compétence manquante dans le pool ciblé."""
+
     competency_id: int
     competency_name: str
     consultants_with_skill: int
@@ -214,12 +228,14 @@ class SkillGapItem(BaseModel):
 
 class SkillGapResult(BaseModel):
     """Réponse de /analytics/skill-gaps."""
+
     gaps: List[SkillGapItem]
     pool_size: int
 
 
 class SimilarConsultant(BaseModel):
     """Un consultant similaire avec son score de similarité Jaccard."""
+
     user_id: int
     common_competencies: int
     jaccard_score: float
@@ -228,6 +244,7 @@ class SimilarConsultant(BaseModel):
 
 class SimilarConsultantsResult(BaseModel):
     """Réponse de /analytics/similar-consultants/{user_id}."""
+
     reference_user_id: int
     reference_competency_count: int
     similar_consultants: List[SimilarConsultant]
@@ -235,8 +252,10 @@ class SimilarConsultantsResult(BaseModel):
 
 # ── Competency Suggestions Schemas (Axe 4) ───────────────────────────────
 
+
 class CompetencySuggestionCreate(BaseModel):
     """Payload pour soumettre une nouvelle suggestion de compétence."""
+
     name: str
     source: str = "mission"  # 'mission' | 'cv'
     context: Optional[str] = None  # titre mission ou identifiant CV
@@ -244,6 +263,7 @@ class CompetencySuggestionCreate(BaseModel):
 
 class CompetencySuggestionResponse(BaseModel):
     """Réponse d'une suggestion de compétence."""
+
     id: int
     name: str
     source: str
@@ -257,6 +277,7 @@ class CompetencySuggestionResponse(BaseModel):
 
 class SuggestionReviewRequest(BaseModel):
     """Payload pour la validation ou le rejet d'une suggestion."""
+
     action: str  # 'ACCEPT' | 'REJECT'
     parent_id: Optional[int] = None  # si ACCEPT : parent dans la taxonomie
     description: Optional[str] = None  # si ACCEPT : description de la compétence
