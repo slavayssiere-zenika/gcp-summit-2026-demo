@@ -167,7 +167,7 @@
     },
     {
       "id": "SENIOR_JAVA_001",
-      "query": "Développeur Java senior Spring Boot microservices 10 ans d'expérience",
+      "query": "Développeur Java Spring Boot microservices backend expérimenté",
       "expected_user_ids": [
         754
       ],
@@ -177,7 +177,7 @@
         "spring",
         "backend"
       ],
-      "notes": "Profil backend Java historiquement fort chez Zenika"
+      "notes": "Query reformulée : 'Java senior 10 ans' ne correspond pas au vocabulaire des CVs Zenika. Les consultants décrivent leurs missions avec Spring Boot/microservices sans mention explicite du niveau. À recalibrer via manage_env rag-calibrate."
     }
   ]
 }
