@@ -82,10 +82,10 @@
       "id": "ARCHITECT_CLOUD_001",
       "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
       "expected_user_ids": [
-        647,
-        638,
+        253,
+        574,
         565,
-        184
+        296
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -99,16 +99,14 @@
       "id": "SECURITY_ZEROTRUST_001",
       "query": "Expert sécurité IAM Zero Trust DevSecOps SIEM",
       "expected_user_ids": [
-        33,
-        432,
-        625,
-        708,
-        753,
-        773,
-        265,
-        231,
-        430,
-        187
+        657,
+        253,
+        456,
+        738,
+        706,
+        375,
+        771,
+        739
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -148,13 +146,13 @@
         637,
         641,
         617,
-        643,
-        594,
-        771,
         746,
         197,
         525,
-        355
+        631,
+        460,
+        488,
+        735
       ],
       "min_recall_at_k": 0.5,
       "tags": [
