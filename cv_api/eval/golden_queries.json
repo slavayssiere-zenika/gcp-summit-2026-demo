@@ -1,0 +1,191 @@
+{
+  "_comment": "Golden dataset pour l'évaluation de la qualité RAG (R3).",
+  "_usage": "Ajouter des cas réels après chaque session de staffing réussie.",
+  "_schema": {
+    "query": "Requête naturelle envoyée à /search",
+    "expected_user_ids": "Liste ordonnée des user_ids attendus dans le top-K résultats",
+    "min_recall_at_k": "Recall@K minimum acceptable (0.0-1.0). Défaut 0.5",
+    "tags": "Labels pour filtrer les cas (ex: 'cloud', 'data', 'frontend')",
+    "notes": "Contexte sur pourquoi ces profils sont attendus"
+  },
+  "cases": [
+    {
+      "id": "GCP_DEVOPS_001",
+      "query": "Expert DevOps GCP avec expérience Kubernetes et Terraform",
+      "expected_user_ids": [
+        710,
+        478,
+        525,
+        692,
+        641,
+        657,
+        835,
+        738,
+        662,
+        541
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "cloud",
+        "devops",
+        "kubernetes"
+      ],
+      "notes": "Cas de base — à alimenter avec des user_ids réels après la première évaluation manuelle"
+    },
+    {
+      "id": "DATA_ENGINEER_001",
+      "query": "Data Engineer BigQuery Spark Python expérience pipeline de données",
+      "expected_user_ids": [
+        115,
+        351,
+        118,
+        212,
+        99,
+        197,
+        565,
+        240,
+        594,
+        959
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "data",
+        "bigquery",
+        "python"
+      ],
+      "notes": "Compétences data engineering classiques Zenika"
+    },
+    {
+      "id": "FULLSTACK_REACT_001",
+      "query": "Développeur fullstack React TypeScript Node.js microservices",
+      "expected_user_ids": [
+        820,
+        751,
+        986,
+        268,
+        547,
+        576,
+        492,
+        579,
+        457,
+        596
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "frontend",
+        "react",
+        "typescript"
+      ],
+      "notes": "Profil fullstack JS/TS fréquent chez Zenika"
+    },
+    {
+      "id": "ARCHITECT_CLOUD_001",
+      "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
+      "expected_user_ids": [
+        647,
+        638,
+        565,
+        184
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "cloud",
+        "architecture",
+        "migration"
+      ],
+      "notes": "Missions de transformation cloud typiques"
+    },
+    {
+      "id": "SECURITY_ZEROTRUST_001",
+      "query": "Expert sécurité IAM Zero Trust DevSecOps SIEM",
+      "expected_user_ids": [
+        33,
+        432,
+        625,
+        708,
+        753,
+        773,
+        265,
+        231,
+        430,
+        187
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "security",
+        "iam",
+        "devsecops"
+      ],
+      "notes": "Compétences sécurité avancées"
+    },
+    {
+      "id": "AGILE_COACH_001",
+      "query": "Coach Agile Scrum Master transformation organisationnelle SAFe",
+      "expected_user_ids": [
+        20,
+        431,
+        444,
+        711,
+        361,
+        483,
+        447,
+        745,
+        531,
+        736
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "agile",
+        "coaching",
+        "transformation"
+      ],
+      "notes": "Profils non-tech mais présents dans les CVs Zenika"
+    },
+    {
+      "id": "MLOPS_001",
+      "query": "MLOps ingénieur Machine Learning Vertex AI déploiement de modèles",
+      "expected_user_ids": [
+        637,
+        641,
+        617,
+        643,
+        594,
+        771,
+        746,
+        197,
+        525,
+        355
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "ml",
+        "mlops",
+        "vertexai"
+      ],
+      "notes": "Compétences IA/ML montantes chez Zenika"
+    },
+    {
+      "id": "SENIOR_JAVA_001",
+      "query": "Développeur Java senior Spring Boot microservices 10 ans d'expérience",
+      "expected_user_ids": [
+        290,
+        825,
+        850,
+        622,
+        917,
+        375,
+        717,
+        438,
+        968,
+        202
+      ],
+      "min_recall_at_k": 0.5,
+      "tags": [
+        "java",
+        "spring",
+        "backend"
+      ],
+      "notes": "Profil backend Java historiquement fort chez Zenika"
+    }
+  ]
+}
