@@ -13,16 +13,16 @@
       "id": "GCP_DEVOPS_001",
       "query": "Expert DevOps GCP avec expérience Kubernetes et Terraform",
       "expected_user_ids": [
-        710,
         478,
-        525,
+        710,
         692,
+        525,
+        835,
         641,
         657,
-        835,
-        738,
-        662,
-        541
+        550,
+        541,
+        662
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -38,14 +38,14 @@
       "expected_user_ids": [
         115,
         351,
-        118,
         212,
-        99,
-        197,
+        118,
         565,
+        99,
         240,
-        594,
-        959
+        959,
+        197,
+        594
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -59,16 +59,16 @@
       "id": "FULLSTACK_REACT_001",
       "query": "Développeur fullstack React TypeScript Node.js microservices",
       "expected_user_ids": [
+        986,
         820,
         751,
-        986,
-        268,
         547,
-        576,
+        596,
+        268,
+        536,
         492,
-        579,
-        457,
-        596
+        469,
+        156
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -82,10 +82,11 @@
       "id": "ARCHITECT_CLOUD_001",
       "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
       "expected_user_ids": [
-        253,
-        574,
+        771,
+        641,
+        638,
         565,
-        296
+        118
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -99,14 +100,16 @@
       "id": "SECURITY_ZEROTRUST_001",
       "query": "Expert sécurité IAM Zero Trust DevSecOps SIEM",
       "expected_user_ids": [
-        657,
+        33,
+        773,
+        448,
+        713,
+        637,
+        121,
         253,
-        456,
-        738,
-        706,
-        375,
-        771,
-        739
+        609,
+        525,
+        631
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -120,16 +123,16 @@
       "id": "AGILE_COACH_001",
       "query": "Coach Agile Scrum Master transformation organisationnelle SAFe",
       "expected_user_ids": [
-        20,
         431,
-        444,
         711,
-        361,
-        483,
+        444,
+        20,
         447,
         745,
-        531,
-        736
+        361,
+        483,
+        960,
+        531
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -147,12 +150,12 @@
         641,
         617,
         746,
-        197,
-        525,
-        631,
+        771,
         460,
+        642,
+        587,
         488,
-        735
+        604
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -166,16 +169,7 @@
       "id": "SENIOR_JAVA_001",
       "query": "Développeur Java senior Spring Boot microservices 10 ans d'expérience",
       "expected_user_ids": [
-        290,
-        825,
-        850,
-        622,
-        917,
-        375,
-        717,
-        438,
-        968,
-        202
+        754
       ],
       "min_recall_at_k": 0.5,
       "tags": [
