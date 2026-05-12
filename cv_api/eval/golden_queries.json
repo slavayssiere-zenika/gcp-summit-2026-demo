@@ -166,18 +166,27 @@
       "notes": "Compétences IA/ML montantes chez Zenika"
     },
     {
-      "id": "SENIOR_JAVA_001",
-      "query": "Développeur Java Spring Boot microservices backend expérimenté",
+      "id": "NODE_BACKEND_001",
+      "query": "Node.js API REST backend microservices TypeScript",
       "expected_user_ids": [
-        754
+        469,
+        495,
+        322,
+        296,
+        904,
+        986,
+        505,
+        536,
+        820,
+        821
       ],
       "min_recall_at_k": 0.5,
       "tags": [
-        "java",
-        "spring",
-        "backend"
+        "nodejs",
+        "backend",
+        "typescript"
       ],
-      "notes": "Query reformulée : 'Java senior 10 ans' ne correspond pas au vocabulaire des CVs Zenika. Les consultants décrivent leurs missions avec Spring Boot/microservices sans mention explicite du niveau. À recalibrer via manage_env rag-calibrate."
+      "notes": "Remplace SENIOR_JAVA_001 (corpus prd a peu de CVs Java purs — les consultants Java décrivent leurs missions avec les frameworks). Node.js backend bien représenté (229 résultats). Calibré sur prd 2026-05-12."
     }
   ]
 }
