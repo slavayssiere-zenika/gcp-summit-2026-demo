@@ -13,16 +13,16 @@
       "id": "GCP_DEVOPS_001",
       "query": "Expert DevOps GCP avec expérience Kubernetes et Terraform",
       "expected_user_ids": [
-        478,
-        710,
-        692,
-        525,
-        835,
         641,
+        835,
+        631,
+        738,
         657,
-        550,
-        541,
-        662
+        598,
+        662,
+        525,
+        659,
+        541
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -37,15 +37,15 @@
       "query": "Data Engineer BigQuery Spark Python expérience pipeline de données",
       "expected_user_ids": [
         115,
-        351,
-        212,
-        118,
-        565,
-        99,
         240,
-        959,
-        197,
-        594
+        319,
+        212,
+        226,
+        81,
+        281,
+        110,
+        118,
+        351
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -59,16 +59,16 @@
       "id": "FULLSTACK_REACT_001",
       "query": "Développeur fullstack React TypeScript Node.js microservices",
       "expected_user_ids": [
+        22,
         986,
+        24,
         820,
-        751,
-        547,
-        596,
+        195,
         268,
-        536,
-        492,
-        469,
-        156
+        925,
+        52,
+        242,
+        63
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -82,11 +82,16 @@
       "id": "ARCHITECT_CLOUD_001",
       "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
       "expected_user_ids": [
-        771,
-        641,
-        638,
-        565,
-        118
+        178,
+        285,
+        964,
+        657,
+        938,
+        61,
+        738,
+        127,
+        228,
+        541
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -100,16 +105,16 @@
       "id": "SECURITY_ZEROTRUST_001",
       "query": "Expert sécurité IAM Zero Trust DevSecOps SIEM",
       "expected_user_ids": [
+        449,
+        432,
+        1024,
         33,
-        773,
-        448,
-        713,
-        637,
-        121,
-        253,
-        609,
-        525,
-        631
+        625,
+        708,
+        473,
+        817,
+        44,
+        76
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -124,15 +129,15 @@
       "query": "Coach Agile Scrum Master transformation organisationnelle SAFe",
       "expected_user_ids": [
         431,
+        572,
         711,
         444,
+        453,
         20,
-        447,
-        745,
-        361,
         483,
-        960,
-        531
+        332,
+        534,
+        361
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -146,16 +151,16 @@
       "id": "MLOPS_001",
       "query": "MLOps ingénieur Machine Learning Vertex AI déploiement de modèles",
       "expected_user_ids": [
+        908,
+        52,
+        629,
         637,
+        223,
+        212,
         641,
-        617,
-        746,
-        771,
-        460,
-        642,
-        587,
-        488,
-        604
+        240,
+        541,
+        930
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -169,16 +174,16 @@
       "id": "NODE_BACKEND_001",
       "query": "Node.js API REST backend microservices TypeScript",
       "expected_user_ids": [
-        469,
         495,
+        274,
+        469,
+        148,
         322,
-        296,
         904,
-        986,
-        505,
-        536,
-        820,
-        821
+        217,
+        296,
+        459,
+        22
       ],
       "min_recall_at_k": 0.5,
       "tags": [
