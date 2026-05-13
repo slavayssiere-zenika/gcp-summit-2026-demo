@@ -10,7 +10,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
 
     scaling {
       min_instance_count = var.cloudrun_min_instances
-      max_instance_count = var.cloudrun_max_instances
+      max_instance_count = var.cv_api_max_instances
     }
 
     vpc_access {
@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
       }
       resources {
         limits = {
-          memory = "1024Mi"
+          memory = "2048Mi"
         }
       }
 
@@ -129,6 +129,10 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = var.gemini_pro_model
       }
       env {
+        name  = "GEMINI_BATCH_MODEL"
+        value = var.gemini_batch_model
+      }
+      env {
         name  = "PROMPTS_API_URL"
         value = "http://api.internal.zenika/api/prompts/"
       }
@@ -197,6 +201,17 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = var.bulk_scale_min_instances
       }
       env {
+        # Throttling pool SQL : limiter les connexions AlloyDB par instance cv_api.
+        # Règle : cv_api_max_instances × DB_POOL_SIZE ≤ alloydb_max_connections (~400 avec 2vCPU).
+        # Avec max_instances=10 et pool_size=20 → max 200 connexions (marge 50%).
+        name  = "DB_POOL_SIZE"
+        value = "20"
+      }
+      env {
+        name  = "DB_MAX_OVERFLOW"
+        value = "10"
+      }
+      env {
         # Topic Pub/Sub pour les snapshots de data quality (→ BigQuery via BigQuery Subscription).
         # Format : projects/{project_id}/topics/zenika-data-quality-events-{workspace}
         name  = "DATA_QUALITY_PUBSUB_TOPIC"
@@ -209,6 +224,30 @@ resource "google_cloud_run_v2_service" "cv_api" {
         # PUBSUB_INVOKER_SA_EMAIL (mauvais SA), causant un 401 systématique et une table BQ vide.
         name  = "CV_SA_EMAIL"
         value = google_service_account.cv_sa.email
+      }
+      env {
+        # Pool maximum de candidats explorés par la recherche vectorielle pgvector.
+        # ⚠️  CRITIQUE QUALITÉ RAG : doit toujours être >= nombre total de CVs indexés.
+        # Corpus prd actuel : ~1461 CVs. Valeur 2000 = marge 37% pour croissance.
+        # Ajuster si le corpus dépasse 2000 CVs (→ 3000, 5000...).
+        # Configurable sans redéploiement via Cloud Run env override.
+        name  = "MAX_VECTOR_CANDIDATES"
+        value = "2000"
+      }
+      env {
+        # Seuil de distance cosine pour le filtre R2.
+        # 0.55 = distance cosine ≈ 0.45 de similarité (valeur par défaut du code).
+        # Réduire pour plus de précision, augmenter pour plus de rappel.
+        name  = "VECTOR_DISTANCE_THRESHOLD"
+        value = "0.55"
+      }
+
+      env {
+        # R7 — Toggle RAG multi-vecteur (chunking par mission).
+        # Passer à "true" après que POST /bulk-reanalyse/reindex-mission-chunks
+        # ait complètement peuplé la table cv_mission_embeddings.
+        name  = "RAG_CHUNKED_SEARCH"
+        value = "true"
       }
 
     }
@@ -247,7 +286,7 @@ resource "google_cloud_run_v2_service" "cv_api" {
       }
       resources {
         limits = {
-          memory = "512Mi"
+          memory = "1024Mi"
         }
       }
 

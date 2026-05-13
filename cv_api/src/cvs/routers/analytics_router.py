@@ -1,6 +1,7 @@
 """analytics_router.py — Ranking, embeddings, reanalyze, skills coverage."""
 import asyncio
 import logging
+import os
 import re
 from typing import List, Optional
 
@@ -102,7 +103,7 @@ async def reindex_embeddings(
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
     auth_token = request.headers.get("Authorization")
     inject({"Authorization": auth_token} if auth_token else {})
-    background_tasks.add_task(reindex_embeddings_bg, tag, user_id, auth_token)
+    background_tasks.add_task(reindex_embeddings_bg, tag, user_id, auth_token, _svc_config.client)
     return {"message": "Re-indexation des embeddings lancée", "filter": {"tag": tag, "user_id": user_id}}
 
 
@@ -266,6 +267,9 @@ async def get_skills_coverage(
     ]
 
 
+_REANALYZE_DIRECT_THRESHOLD = int(os.getenv("REANALYZE_DIRECT_THRESHOLD", "1"))
+
+
 @router.post("/reanalyze")
 async def reanalyze_cvs(
     request: Request,
@@ -274,16 +278,17 @@ async def reanalyze_cvs(
     db: AsyncSession = Depends(get_db),
     token_payload: dict = Depends(verify_jwt)
 ):
-    """(Admin Only) Replanie le traitement des CVs via le pipeline Pub/Sub unifié.
+    """(Admin Only) Replanie le traitement d'UN SEUL consultant via le pipeline Pub/Sub.
 
-    Délègue intégralement au mécanisme nominal (drive_api → Pub/Sub → cv_api worker)
-    pour un seul chemin de traitement, de retry et de DLQ.
+    Règle d'architecture : 1 CV = appel direct (ce endpoint).
+    Pour N CVs > 1 (agence entière ou tous) → utiliser POST /bulk-reanalyse/start
+    qui s'appuie sur Vertex AI Batch (coût divisé par 2, pas de saturation).
 
     Étapes :
-    1. Efface les compétences existantes pour chaque user_id concerné
-    2. Remet les DriveSyncState correspondants en PENDING dans drive_api
-    3. Déclenche immédiatement drive_api /sync (sans attendre le scheduler horaire)
-    4. Retourne un JSON immédiat avec les compteurs
+    1. Guard-rail : rejette si count > REANALYZE_DIRECT_THRESHOLD (défaut=1)
+    2. Efface les compétences existantes pour le user_id concerné
+    3. Remet le DriveSyncState en PENDING dans drive_api
+    4. Déclenche immédiatement drive_api /sync
 
     La progression est observable via GET /reanalyze/status ou le scanner Drive.
     """
@@ -320,6 +325,19 @@ async def reanalyze_cvs(
             "pending_reset": 0,
             "skipped_manual": 0
         }
+
+    # ── Guard-rail : refus si plus d'un CV ciblé ─────────────────────────────
+    # Règle : 1 CV → direct (Pub/Sub). N CVs > 1 → Vertex AI Batch obligatoire.
+    if len(cvs) > _REANALYZE_DIRECT_THRESHOLD:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Ce endpoint est limité à {_REANALYZE_DIRECT_THRESHOLD} CV(s) en traitement direct. "
+                f"{len(cvs)} CVs seraient affectés (filtre tag='{tag}'). "
+                "Utilisez POST /bulk-reanalyse/start pour les traitements en masse "
+                "(Vertex AI Batch — coût divisé par 2, aucune saturation)."
+            )
+        )
 
     # ── 2. Obtenir un token de service longue durée (conforme AGENTS.md §4) ──
     effective_headers = dict(headers)

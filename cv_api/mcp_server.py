@@ -3,6 +3,7 @@ from tools.taxonomy_tools import (
     handle_recalculate_competencies_tree, handle_get_recalculate_tree_status,
     handle_get_skills_coverage, handle_global_reanalyze_cvs,
     handle_get_reanalyze_status, handle_reindex_cv_embeddings,
+    handle_reindex_mission_chunks,
     handle_start_bulk_cv_reanalyse, handle_get_bulk_cv_reanalyse_status,
     handle_cancel_bulk_cv_reanalyse, handle_get_data_quality_report
 )
@@ -53,7 +54,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "cv-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler
 )
@@ -112,10 +113,13 @@ async def list_tools() -> list[Tool]:
             name="search_best_candidates",
             description=(
                 "Outil de recherche sémantique vectorielle — trouve les meilleurs candidats pour un contexte technique donné. "
-                "RETOURNE UNIQUEMENT des user_ids. "
+                "Retourne une liste de résultats avec : 'user_id', 'similarity_score' (0-1, plus proche de 1 = meilleur), "
+                "'source_url' (URL Drive du CV source — utiliser pour citer la source documentaire), "
+                "'embedding_model' (modèle d'embedding utilisé). "
                 "Il faut ensuite appeler get_candidate_rag_context ou get_user (users_api) pour enrichir les profils. "
                 "Utiliser en priorité pour les questions 'qui maîtrise X ?' ou les missions de staffing. "
-                "Ne pas utiliser pour retrouver une personne par son nom (utiliser search_users à la place)."
+                "Ne pas utiliser pour retrouver une personne par son nom (utiliser search_users à la place). "
+                "IMPORTANT : si source_url est présent, toujours le mentionner dans la réponse finale comme référence du CV."
             ),
             inputSchema={
                 "type": "object",
@@ -126,7 +130,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Number of top candidates to return. Default is 5.",
+                        "description": (
+                            "Number of top candidates to return. Default is 5. "
+                            "IMPORTANT: if the user explicitly requests a specific number "
+                            "(e.g. 'top 10', 'les 50 meilleurs', 'give me 20 candidates'), "
+                            "you MUST use that exact value here. Do not silently cap to 5."
+                        ),
                         "default": 5
                     },
                     "skip": {
@@ -345,6 +354,27 @@ async def list_tools() -> list[Tool]:
             }
         ),
 
+        # R7 — Chunking par mission
+        Tool(
+            name="reindex_mission_chunks",
+            description=(
+                "(Admin Only) R7 — Génère les chunk-level embeddings pour le RAG multi-vecteur. "
+                "Pour chaque CVProfile, crée 1 chunk 'profile_summary' (ROLE+SUMMARY+COMPETENCIES) "
+                "et N chunks 'mission' (un par mission, toutes missions sans limite). "
+                "Activer ensuite le mode chunked avec RAG_CHUNKED_SEARCH=true. "
+                "Durée estimée : 30-90 min selon la taille du corpus. "
+                "Retour immédiat — traitement en arrière-plan. "
+                "Ne JAMAIS appeler sans confirmation explicite de l'administrateur."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tag": {"type": "string", "description": "Filtre par tag/agence (optionnel)"},
+                    "user_id": {"type": "integer", "description": "Filtre par user_id (optionnel)"}
+                }
+            }
+        ),
+
         # ── Sprint A ──────────────────────────────────────────────────────────
         Tool(
             name="find_similar_consultants",
@@ -517,7 +547,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             headers["Authorization"] = auth_header
         inject(headers)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             try:
                 if name == "analyze_cv":
                     return await handle_analyze_cv(client, arguments, headers, API_BASE_URL)
@@ -559,6 +589,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return await handle_get_reanalyze_status(client, headers, API_BASE_URL)
                 elif name == "reindex_cv_embeddings":
                     return await handle_reindex_cv_embeddings(client, arguments, headers, API_BASE_URL)
+                elif name == "reindex_mission_chunks":
+                    return await handle_reindex_mission_chunks(client, arguments, headers, API_BASE_URL)
                 elif name == "start_bulk_cv_reanalyse":
                     return await handle_start_bulk_cv_reanalyse(client, headers, API_BASE_URL)
                 elif name == "get_bulk_cv_reanalyse_status":

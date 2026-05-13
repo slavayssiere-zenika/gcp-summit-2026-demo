@@ -1,6 +1,8 @@
 import os
+import sys
 
-import pytest
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 
 # Injecter les variables d'environnement de test AVANT tout import des modules applicatifs
 os.environ["SECRET_KEY"] = "test-secret-key-missions"

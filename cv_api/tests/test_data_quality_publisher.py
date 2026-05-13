@@ -30,16 +30,25 @@ SAMPLE_REPORT = {
         "current_role":           {"pct": 80, "ok": 34, "total": 42, "status": "ok"},
         "competency_assignment":  {"pct": 92, "ok": 35, "total": 38, "status": "ok"},
         "ai_scoring":             {"pct": 84, "ok": 32, "total": 38, "status": "ok"},
+        "processing_errors":      {"pct": 100, "ok": 42, "total": 42, "status": "ok"},
     },
     "issues": [],
     "recommendation": "Tous les indicateurs sont dans les seuils nominaux.",
+    "rag": {
+        "recall_at_5": 0.85,
+        "nb_cases": 10,
+        "nb_cases_ok": 8,
+        "embedding_model": "text-embedding-004",
+    },
 }
 
 EXPECTED_PAYLOAD_KEYS = {
     "computed_at", "total_cvs", "users_with_cv", "score", "grade",
     "embedding_pct", "missions_pct", "competencies_pct", "summary_pct",
     "current_role_pct", "competency_assignment_pct", "ai_scoring_pct",
-    "issues_count", "trigger",
+    "processing_errors_pct", "issues_count", "trigger",
+    # Champs RAG ajoutés lors du feature R6 (rag_quality dans data_quality_publisher)
+    "rag_recall_at_5", "rag_nb_cases", "rag_nb_cases_ok", "rag_embedding_model",
 }
 
 

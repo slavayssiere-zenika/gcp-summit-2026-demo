@@ -148,34 +148,88 @@ def test_resume_bulk_scoring_failed(mock_update, mock_get_status):
 # --- verify_scheduler_oidc ---
 
 @pytest.mark.asyncio
-async def test_verify_scheduler_oidc_no_audience():
-    from fastapi import Request, HTTPException
+async def test_verify_scheduler_oidc_no_config_accepts_with_warning():
+    """Sans SCHEDULER_SA_EMAIL ni SCHEDULER_AUDIENCE, le token valide est accepté
+    (avec warning) — plus de 500 bloquant depuis la migration SA email."""
+    from fastapi import Request
     from src.competencies.scoring_router import verify_scheduler_oidc
-    
+
     with patch("src.competencies.scoring_router.SCHEDULER_AUDIENCE", ""):
-        with pytest.raises(HTTPException) as exc:
-            await verify_scheduler_oidc(Request(scope={"type": "http", "headers": []}))
-        assert exc.value.status_code == 500
+        with patch("src.competencies.scoring_router.SCHEDULER_SA_EMAIL", ""):
+            with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+                mock_verify.return_value = {"email": "scheduler@project.iam.gserviceaccount.com"}
+                req = Request(scope={
+                    "type": "http",
+                    "headers": [(b"authorization", b"Bearer valid-token")],
+                })
+                # Ne doit pas lever d'exception — accepté avec warning
+                await verify_scheduler_oidc(req)
+                mock_verify.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_verify_scheduler_oidc_no_header():
     from fastapi import Request, HTTPException
     from src.competencies.scoring_router import verify_scheduler_oidc
-    
+
     with patch("src.competencies.scoring_router.SCHEDULER_AUDIENCE", "aud"):
         with pytest.raises(HTTPException) as exc:
             await verify_scheduler_oidc(Request(scope={"type": "http", "headers": []}))
         assert exc.value.status_code == 401
 
+
 @pytest.mark.asyncio
-async def test_verify_scheduler_oidc_success():
+async def test_verify_scheduler_oidc_success_with_sa_email():
+    """Validation par SCHEDULER_SA_EMAIL — cas nominal."""
     from fastapi import Request
     from src.competencies.scoring_router import verify_scheduler_oidc
-    
-    with patch("src.competencies.scoring_router.SCHEDULER_AUDIENCE", "aud"):
-        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
-            mock_verify.return_value = {"email": "test@test.com"}
-            await verify_scheduler_oidc(Request(scope={"type": "http", "headers": [(b"authorization", b"Bearer token")]}))
-            mock_verify.assert_called_once()
 
+    expected_email = "sa-competencies-prd@project.iam.gserviceaccount.com"
+    with patch("src.competencies.scoring_router.SCHEDULER_SA_EMAIL", expected_email):
+        with patch("src.competencies.scoring_router.SCHEDULER_AUDIENCE", ""):
+            with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+                mock_verify.return_value = {"email": expected_email}
+                req = Request(scope={
+                    "type": "http",
+                    "headers": [(b"authorization", b"Bearer valid-token")],
+                })
+                await verify_scheduler_oidc(req)
+                mock_verify.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_verify_scheduler_oidc_wrong_sa_email():
+    """Rejet si le claim email du token ne correspond pas à SCHEDULER_SA_EMAIL."""
+    from fastapi import Request, HTTPException
+    from src.competencies.scoring_router import verify_scheduler_oidc
+
+    with patch("src.competencies.scoring_router.SCHEDULER_SA_EMAIL", "expected@project.iam.gserviceaccount.com"):
+        with patch("src.competencies.scoring_router.SCHEDULER_AUDIENCE", ""):
+            with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+                mock_verify.return_value = {"email": "attacker@evil.com"}
+                req = Request(scope={
+                    "type": "http",
+                    "headers": [(b"authorization", b"Bearer bad-token")],
+                })
+                with pytest.raises(HTTPException) as exc:
+                    await verify_scheduler_oidc(req)
+                assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_verify_scheduler_oidc_success_with_audience():
+    """Fallback audience — rétrocompat avec l'ancienne configuration."""
+    from fastapi import Request
+    from src.competencies.scoring_router import verify_scheduler_oidc
+
+    with patch("src.competencies.scoring_router.SCHEDULER_AUDIENCE", "https://competencies-api.run.app"):
+        with patch("src.competencies.scoring_router.SCHEDULER_SA_EMAIL", ""):
+            with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+                mock_verify.return_value = {"email": "scheduler@project.iam.gserviceaccount.com"}
+                req = Request(scope={
+                    "type": "http",
+                    "headers": [(b"authorization", b"Bearer valid-token")],
+                })
+                await verify_scheduler_oidc(req)
+                mock_verify.assert_called_once()
 

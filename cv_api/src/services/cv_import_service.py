@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import time
 from typing import List, Optional
@@ -22,7 +23,7 @@ async def process_cv_core(
     source_tag: Optional[str],
     headers: dict,
     token_payload: dict,
-    db: AsyncSession,
+    db: Optional[AsyncSession] = None,
     auth_token: str = None,
     folder_name: Optional[str] = None,
     file_type: str = "google_doc",
@@ -75,9 +76,9 @@ async def process_cv_core(
         raise
     except Exception as e:
         dur = int((time.monotonic() - t0) * 1000)
-        _step_error("download", "Téléchargement du document", dur, str(e))
+        _step_error("download", "Téléchargement du document", dur, repr(e))
         CV_PROCESSING_TOTAL.labels(status="failure").inc()
-        raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed downloading CV content: {e!r}")
 
     # ── Étape 2 : Analyse IA — Extraction du profil ──────────────────────────
     t0 = time.monotonic()
@@ -91,7 +92,14 @@ async def process_cv_core(
             genai_client=genai_client,
         )
         user_caller = token_payload.get("sub", "unknown")
-        await log_finops(user_caller, "analyze_cv", os.getenv("GEMINI_CV_MODEL", os.getenv("GEMINI_MODEL")), safe_meta, {"cv_url": url}, auth_token=auth_token)
+        await log_finops(
+            user_caller,
+            "analyze_cv",
+            os.getenv("GEMINI_CV_MODEL", os.getenv("GEMINI_MODEL")),
+            safe_meta,
+            {"cv_url": url},
+            auth_token=auth_token
+        )
 
         if not structured_cv.get("is_cv", False):
             dur = int((time.monotonic() - t0) * 1000)
@@ -125,9 +133,17 @@ async def process_cv_core(
     # ── Étape 3, 4 et 5 : Résolution, Création utilisateur et missions ───────
     t0 = time.monotonic()
     try:
-        user_id, importer_id, first_name, last_name, email, is_anonymous, resolve_warnings = await CVStorageService.resolve_identity_and_user(
-            db, structured_cv, folder_name, token_payload, url, headers
-        )
+        from database import SessionLocal
+        if db is None:
+            async with SessionLocal() as local_db:
+                result = await CVStorageService.resolve_identity_and_user(
+                    local_db, structured_cv, folder_name, token_payload, url, headers
+                )
+        else:
+            result = await CVStorageService.resolve_identity_and_user(
+                db, structured_cv, folder_name, token_payload, url, headers
+            )
+        user_id, importer_id, first_name, last_name, email, is_anonymous, resolve_warnings = result
         for w in resolve_warnings:
             pipeline_warnings.append(w)
             _step_warn("user_resolve", "Résolution d'identité", 0, w)
@@ -159,16 +175,17 @@ async def process_cv_core(
         emb_res = await embed_content_with_retry(
             genai_client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL"),
-            contents=distilled_content
+            contents=distilled_content,
+            config={"task_type": "RETRIEVAL_DOCUMENT"},
         )
         vector_data = emb_res.embeddings[0].values
         # Raw content embedding for quality check (limit to 20k chars)
-        import math
         raw_snippet = raw_text[:20000]
         raw_emb_res = await embed_content_with_retry(
             genai_client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL"),
-            contents=raw_snippet
+            contents=raw_snippet,
+            config={"task_type": "RETRIEVAL_DOCUMENT"},
         )
         raw_vector = raw_emb_res.embeddings[0].values
 
@@ -194,10 +211,18 @@ async def process_cv_core(
     # ── Étape 7 : Sauvegarde en base de données ───────────────────────────────
     t0 = time.monotonic()
     try:
-        await CVStorageService.upsert_cv_profile(
-            db, user_id, url, source_tag, structured_cv, raw_text, vector_data,
-            importer_id, extraction_reliability_score
-        )
+        from database import SessionLocal
+        if db is None:
+            async with SessionLocal() as local_db:
+                await CVStorageService.upsert_cv_profile(
+                    local_db, user_id, url, source_tag, structured_cv, raw_text, vector_data,
+                    importer_id, extraction_reliability_score
+                )
+        else:
+            await CVStorageService.upsert_cv_profile(
+                db, user_id, url, source_tag, structured_cv, raw_text, vector_data,
+                importer_id, extraction_reliability_score
+            )
         dur = int((time.monotonic() - t0) * 1000)
         _step_ok("db_save", "Sauvegarde en base de données", dur, f"CV ID utilisateur {user_id}")
     except Exception as e:
@@ -217,6 +242,7 @@ async def process_cv_core(
         "email": email,
         "is_anonymous": is_anonymous,
         "competencies_assigned": assigned_count,
+        "structured_cv": structured_cv,  # Transmis à pubsub pour bg_process sans re-extraction
         "warnings": pipeline_warnings,
         "steps": [s.model_dump() for s in pipeline_steps]
     }

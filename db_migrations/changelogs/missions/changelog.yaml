@@ -145,3 +145,26 @@ databaseChangeLog:
       rollback:
         - dropTable:
             tableName: mission_status_history
+
+  - changeSet:
+      id: "6"
+      author: "antigravity"
+      comment: "R1 — Versionning modele embedding : trace le modele utilise pour chaque vecteur de mission"
+      changes:
+        - addColumn:
+            tableName: missions
+            columns:
+              - column:
+                  name: embedding_model
+                  type: varchar(100)
+                  constraints:
+                    nullable: true
+        - sql:
+            sql: "CREATE INDEX IF NOT EXISTS idx_missions_embedding_model ON missions (embedding_model);"
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_missions_embedding_model;"
+        - dropColumn:
+            tableName: missions
+            columnName: embedding_model
+

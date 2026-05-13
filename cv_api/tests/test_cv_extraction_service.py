@@ -135,7 +135,6 @@ async def test_fetch_cv_content_google_doc_success():
 @pytest.mark.asyncio
 async def test_analyze_cv_tree_context_fallback_http():
     from src.services.config import _CV_CACHE
-    import copy
     
     with patch.dict(_CV_CACHE, {
         "tree_context": {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)},
@@ -147,7 +146,7 @@ async def test_analyze_cv_tree_context_fallback_http():
             mock_resp.status_code = 200
             # Mock pagination response structure
             mock_resp.json.return_value = {
-                "items": [{"id": 1, "name": "Python", "category": "Language"}],
+                "items": [{"id": 1, "name": "Python", "category": "Language", "parent_id": 2}],
                 "total": 1,
                 "skip": 0,
                 "limit": 100
@@ -220,7 +219,6 @@ async def test_fetch_cv_content_plain_text_auth_error():
 @pytest.mark.asyncio
 async def test_analyze_cv_fetch_prompt_from_api():
     from src.services.config import _CV_CACHE
-    import copy
     
     with patch.dict(_CV_CACHE, {
         "tree_context": {"value": "cached_context", "expires": datetime.now(timezone.utc) + __import__('datetime').timedelta(minutes=10)},
@@ -245,7 +243,6 @@ async def test_analyze_cv_fetch_prompt_from_api():
 @pytest.mark.asyncio
 async def test_analyze_cv_fetch_prompt_file_fallback():
     from src.services.config import _CV_CACHE
-    import os
     
     with patch.dict(_CV_CACHE, {
         "tree_context": {"value": "cached_context", "expires": datetime.now(timezone.utc) + __import__('datetime').timedelta(minutes=10)},

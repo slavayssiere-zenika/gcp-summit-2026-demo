@@ -81,13 +81,12 @@ async def log_finops(
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
 
-        async with httpx.AsyncClient() as http_client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as http_client:
             try:
                 await http_client.post(
                     f"{ANALYTICS_MCP_URL.rstrip('/')}/mcp/call",
                     json=payload,
                     headers=headers,
-                    timeout=2.0,
                 )
             except Exception as ex:
                 logger.warning(f"Analytics MCP unreachable for FinOps: {ex}")

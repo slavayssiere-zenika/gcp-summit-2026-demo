@@ -1,16 +1,11 @@
 import os
 
 from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.propagate import extract, inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.trace import SpanKind
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
@@ -21,13 +16,14 @@ else:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
         OTLPSpanExporter
 
+
 def setup_telemetry():
     sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
     sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
     provider = TracerProvider(
         resource=Resource.create({
             ResourceAttributes.SERVICE_NAME: "agent-router-api",
-            ResourceAttributes.SERVICE_VERSION: "1.0.0",
+            ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
         }),
         sampler=sampler
     )

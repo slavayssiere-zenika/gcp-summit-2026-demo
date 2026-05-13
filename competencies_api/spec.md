@@ -85,6 +85,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/user-score` : Set User Competency Score
 - **POST** `/evaluations/user/{user_id}/competency/{competency_id}/ai-score` : Trigger Ai Score Single
 - **POST** `/evaluations/user/{user_id}/ai-score-all` : Trigger Ai Score All
+- **GET** `/bulk-scoring-all/debug-config` : Get Scoring Debug Config
 - **POST** `/evaluations/bulk-scoring-all` : Trigger Bulk Scoring All
 - **GET** `/bulk-scoring-all/status` : Get Bulk Scoring Status
 - **POST** `/bulk-scoring-all/cancel` : Cancel Bulk Scoring

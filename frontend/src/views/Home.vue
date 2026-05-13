@@ -1139,6 +1139,183 @@ textarea {
   100% { transform: translateX(100%); }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MARKDOWN CONTENT STYLES — rendu des réponses LLM
+   ═══════════════════════════════════════════════════════════════ */
+.text-content {
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: #1e293b;
+}
+
+/* Paragraphes */
+.text-content :deep(p) {
+  margin: 0 0 0.9rem 0;
+  color: #334155;
+}
+.text-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+/* Titres */
+.text-content :deep(h1),
+.text-content :deep(h2),
+.text-content :deep(h3),
+.text-content :deep(h4),
+.text-content :deep(h5),
+.text-content :deep(h6) {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.4rem 0 0.6rem;
+  color: #0f172a;
+}
+.text-content :deep(h1) { font-size: 1.4rem; border-bottom: 2px solid rgba(227, 25, 55, 0.15); padding-bottom: 0.4rem; }
+.text-content :deep(h2) { font-size: 1.2rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3rem; }
+.text-content :deep(h3) { font-size: 1.05rem; color: var(--zenika-red); }
+.text-content :deep(h4) { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; }
+.text-content :deep(h1:first-child),
+.text-content :deep(h2:first-child),
+.text-content :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+/* Listes */
+.text-content :deep(ul),
+.text-content :deep(ol) {
+  margin: 0.5rem 0 0.9rem 0;
+  padding-left: 1.5rem;
+}
+.text-content :deep(ul) { list-style: none; padding-left: 1.2rem; }
+.text-content :deep(ul li) { position: relative; padding-left: 1rem; margin-bottom: 0.3rem; }
+.text-content :deep(ul li::before) {
+  content: '▸';
+  position: absolute;
+  left: -0.2rem;
+  color: var(--zenika-red);
+  font-size: 0.75rem;
+  top: 0.2rem;
+}
+.text-content :deep(ol) { list-style: decimal; }
+.text-content :deep(ol li) { margin-bottom: 0.3rem; padding-left: 0.3rem; }
+.text-content :deep(li > ul),
+.text-content :deep(li > ol) { margin-top: 0.3rem; margin-bottom: 0.2rem; }
+
+/* Liens */
+.text-content :deep(a) {
+  color: var(--zenika-red);
+  text-decoration: underline;
+  text-decoration-color: rgba(227, 25, 55, 0.35);
+  text-underline-offset: 2px;
+  font-weight: 500;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.text-content :deep(a:hover) {
+  color: var(--zenika-red-hover);
+  text-decoration-color: var(--zenika-red);
+}
+
+/* Code inline */
+.text-content :deep(code) {
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 0.15em 0.45em;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85em;
+  color: #c7254e;
+  white-space: nowrap;
+}
+
+/* Blocs de code (pre > code) */
+.text-content :deep(pre) {
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  overflow-x: auto;
+  margin: 0.75rem 0 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+.text-content :deep(pre code) {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  white-space: pre;
+  word-break: normal;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* Blockquotes */
+.text-content :deep(blockquote) {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 1.1rem;
+  border-left: 4px solid var(--zenika-red);
+  background: rgba(227, 25, 55, 0.04);
+  border-radius: 0 10px 10px 0;
+  color: #475569;
+  font-style: italic;
+}
+.text-content :deep(blockquote p) {
+  margin: 0;
+  color: #475569;
+}
+
+/* Séparateurs */
+.text-content :deep(hr) {
+  border: none;
+  border-top: 1.5px solid #e2e8f0;
+  margin: 1.2rem 0;
+}
+
+/* Tableaux */
+.text-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin: 0.75rem 0 1rem;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+.text-content :deep(thead) {
+  background: #f1f5f9;
+}
+.text-content :deep(th) {
+  padding: 0.65rem 1rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+}
+.text-content :deep(td) {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: top;
+}
+.text-content :deep(tr:last-child td) { border-bottom: none; }
+.text-content :deep(tr:hover td) { background: #f8fafc; }
+
+/* Texte gras / italique */
+.text-content :deep(strong) { font-weight: 700; color: #0f172a; }
+.text-content :deep(em) { font-style: italic; color: #475569; }
+
+/* Images */
+.text-content :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+
 /* Responsive UI Adjustments */
 @media (max-width: 768px) {
   .chat-wrapper {

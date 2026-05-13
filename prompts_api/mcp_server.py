@@ -5,7 +5,7 @@ import logging
 import os
 
 import httpx
-from mcp.server import InitializationOptions, NotificationOptions, Server
+from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from opentelemetry import propagate, trace
@@ -41,9 +41,8 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "prompts-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
@@ -259,7 +258,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
 
         except httpx.HTTPStatusError as e:
-            return [TextContent(type="text", text=json.dumps({"success": False, "error": f"HTTP {e.response.status_code}: {e.response.text}"}))]
+            return [TextContent(type="text", text=json.dumps(
+                {"success": False, "error": f"HTTP {e.response.status_code}: {e.response.text}"}))]
         except Exception as e:
             return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 

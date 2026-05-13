@@ -41,6 +41,7 @@ try:
 except Exception as e:
     logger.warning(f"Could not initialize Pub/Sub client: {e}")
 
+
 async def publish_user_event(event_type: str, data: dict):
     """
     Publishes a user event to GCP Pub/Sub.
@@ -49,7 +50,7 @@ async def publish_user_event(event_type: str, data: dict):
     # Inject OTel headers for trace propagation
     headers = {}
     inject(headers)
-    
+
     if not publisher or not PROJECT_ID:
         logger.info(f"[MOCK-PUBSUB] Event: {event_type} TraceHeaders: {headers} Data: {data}")
         return
@@ -60,10 +61,13 @@ async def publish_user_event(event_type: str, data: dict):
         "data": data
     })
     message_bytes = message_json.encode("utf-8")
-    
+
     try:
         # We pass the trace headers as attributes
         future = publisher.publish(topic_path, message_bytes, **headers)
-        logger.info(f"Published event {event_type} to {topic_path} with tracing: {future.result()}")
+        message_id = future.result(timeout=10)  # timeout 10s — évite de bloquer le worker indéfiniment
+        logger.info(f"Published event {event_type} to {topic_path} with message_id: {message_id}")
+    except TimeoutError:
+        logger.error(f"[PubSub/users] Timeout (10s) publishing event {event_type} — Pub/Sub indisponible")
     except Exception as e:
         logger.error(f"Failed to publish Pub/Sub event: {e}")

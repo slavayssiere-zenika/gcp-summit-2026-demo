@@ -18,30 +18,53 @@ from typing import Optional
 
 
 def build_taxonomy_context(items: list[dict]) -> tuple[str, int, int]:
-    """Formate l'arbre de compétences en texte structuré pour le LLM.
+    """Formate la liste de compétences en texte compact pour le LLM.
 
     Retourne (texte_formaté, nb_piliers, nb_feuilles).
-    Inclut les alias des compétences feuilles pour que le LLM reconnaisse
-    les formes alternatives (ex: 'Kubernetes (aka: K8s, kube)').
+
+    Format : liste CSV plate des noms canoniques UNIQUEMENT.
+    Pas de hiérarchie, pas de description, pas d'IDs.
+    Le LLM n'a besoin que des noms pour la normalisation :
+    - si le CV dit "K8s" et la liste a "Kubernetes" → le LLM output "Kubernetes"
+    - si la compétence est absente de la liste → le LLM la crée en snake_case naturel
+
+    Économie de tokens : ~600 tokens au lieu de ~4 000 (hiérarchie arborescente).
     """
     parents = [item for item in items if not item.get("parent_id")]
-    lines = []
-    nb_leaves = 0
-    for p in parents:
-        lines.append(f"- {p['name']}")
-        leaves = [item for item in items if item.get("parent_id") == p.get("id")]
-        nb_leaves += len(leaves)
-        if leaves:
-            leaf_parts = []
-            for leaf in leaves:
-                entry = leaf["name"]
-                # Inclure les alias pour que le LLM reconnaisse les formes alternatives
-                # Ex: "Kubernetes (aka: K8s, kube)" → le LLM sait que K8s = Kubernetes
-                if leaf.get("aliases"):
-                    entry += f" (aka: {leaf['aliases']})"
-                leaf_parts.append(entry)
-            lines.append(f"  └─ {', '.join(leaf_parts)}")
-    return "\n".join(lines), len(parents), nb_leaves
+    nb_parents = len(parents)
+
+    # Compétences feuilles uniquement (les vrais skills, pas les catégories)
+    leaves = [item for item in items if item.get("parent_id")]
+    nb_leaves = len(leaves)
+
+    # Construire un set plat : noms canoniques + aliases (pour aider la normalisation)
+    all_names: list[str] = []
+    for leaf in leaves:
+        all_names.append(leaf["name"])
+        if leaf.get("aliases"):
+            # Ajouter les aliases comme variantes reconnues
+            for alias in leaf["aliases"].split(","):
+                alias = alias.strip()
+                if alias:
+                    all_names.append(alias)
+
+    # Dédupliquer en préservant l'ordre (noms canoniques en premiers)
+    seen: set = set()
+    unique_names: list[str] = []
+    for name in all_names:
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_names.append(name)
+
+    # Format CSV compact — une seule ligne, pas de hiérarchie
+    csv_line = ", ".join(unique_names)
+    context = (
+        "\n\nEXISTING COMPETENCY NAMES (use exact canonical form if match found):\n"
+        + csv_line
+        + "\n"
+    )
+    return context, nb_parents, nb_leaves
 
 
 def _coerce_to_str(val) -> Optional[str]:
@@ -99,6 +122,51 @@ def _build_distilled_content(structured_cv: dict) -> str:
     )
 
 
+def _build_profile_summary_chunk(structured_cv: dict) -> str:
+    """Construit le chunk 'profile_summary' pour le RAG multi-vecteur (R7).
+
+    Signal pur 'qui est ce consultant' : ROLE + SUMMARY + COMPETENCIES, SANS missions.
+    Séparation intentionnelle des signaux :
+    - profile_summary → queries identitaires ('architecte cloud expert', 'coach agile certifié')
+    - mission chunks  → queries de pratique ('Spring Boot microservices', 'GCP Terraform')
+    """
+    comp_keywords = [
+        c.get("name") for c in structured_cv.get("competencies", []) if c.get("name")
+    ]
+    return (
+        f"ROLE: {structured_cv.get('current_role', 'Unknown')}\n"
+        f"EXPERIENCE: {structured_cv.get('years_of_experience', 0)} years\n"
+        f"SUMMARY: {structured_cv.get('summary', '')}\n"
+        f"COMPETENCIES: {', '.join(comp_keywords)}"
+    )
+
+
+def _build_mission_chunk_text(mission: dict) -> str:
+    """Construit le texte d'un chunk 'mission' individuel pour le RAG multi-vecteur (R7).
+
+    Encode TOUTES les informations d'une mission :
+    - dates + titre + entreprise (contexte temporel et client)
+    - skills déclarés (signal compétence fort)
+    - description complète (signal sémantique profond)
+
+    Pas de limite de caractères sur la description : gemini-embedding-001
+    gère nativement jusqu'à 2048 tokens — une description de mission reste
+    largement en dessous.
+    """
+    skills_str = ", ".join(mission.get("skills", []))
+    description = str(mission.get("description", "")).strip()
+    title = mission.get("title", "")
+    company = mission.get("company", "")
+    start = mission.get("start_date", "?")
+    end = mission.get("end_date", "present")
+    parts = [f"Mission ({start}-{end}): {title} @ {company}"]
+    if skills_str:
+        parts.append(f"Skills: {skills_str}")
+    if description:
+        parts.append(f"Description: {description}")
+    return "\n".join(parts)
+
+
 def _clean_llm_json(text: str) -> str:
     """Nettoie et répare une réponse LLM avant parsing JSON.
 
@@ -154,7 +222,6 @@ def _chunk_text(text: str, chunk_size: int = 150, overlap: int = 20) -> list[str
         chunks.append(" ".join(chunk_words))
         start += step
     return chunks
-
 
 
 # ── Schéma JSON partagé entre route unitaire ET batch Vertex ──────────────────

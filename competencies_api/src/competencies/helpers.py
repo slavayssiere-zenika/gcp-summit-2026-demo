@@ -10,6 +10,7 @@ Inclut :
   - Résolution d'utilisateur via users_api
 """
 
+import asyncio
 import logging
 import math
 import os
@@ -129,13 +130,18 @@ async def _generate_aliases_for_competency(name: str) -> str | None:
             f"Exemple pour 'Kubernetes' : 'K8s, kube, k8s, Kube, kubernetes'.\n"
             f"Retourne UNIQUEMENT une liste séparée par des virgules, sans aucun texte additionnel."
         )
-        res = await client.aio.models.generate_content(
-            model=GEMINI_MODEL, contents=prompt
+        res = await asyncio.wait_for(
+            client.aio.models.generate_content(
+                model=GEMINI_MODEL, contents=prompt
+            ),
+            timeout=30.0,
         )
         if res.text:
             aliases = res.text.strip().strip("'").strip('"')
             logger.info(f"Alias générés pour '{name}' : {aliases}")
             return aliases
+    except asyncio.TimeoutError:
+        logger.warning(f"[helpers] Timeout (30s) génération alias pour '{name}'")
     except Exception as e:
         logger.warning(f"Échec de génération d'alias pour '{name}': {e}")
     return None
@@ -153,7 +159,7 @@ def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks, request_or_he
 
     async def invalidate():
         try:
-            async with httpx.AsyncClient() as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.0)) as http_client:
                 headers = {}
                 if auth_header:
                     headers["Authorization"] = auth_header
@@ -161,7 +167,6 @@ def trigger_taxonomy_cache_invalidation(bg_tasks: BackgroundTasks, request_or_he
                 await http_client.post(
                     f"{CV_API_URL.rstrip('/')}/cache/invalidate-taxonomy",
                     headers=headers,
-                    timeout=3.0,
                 )
                 logger.info(
                     "[Cache Sync] Ordre d'invalidation de la taxonomie envoyé à cv_api."
@@ -218,7 +223,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
     inject(headers)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
             response = await client.get(
                 f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers

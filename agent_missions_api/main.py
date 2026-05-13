@@ -118,9 +118,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_origins_str = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:80,http://localhost:8080,"
+    "https://dev.zenika.slavayssiere.fr,https://uat.zenika.slavayssiere.fr,"
+    "https://zenika.slavayssiere.fr"
+)
+cors_origins = cors_origins_str.split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -55,7 +55,7 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     headers = {"Authorization": f"Bearer {token}"}
     inject(headers)
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
         try:
             await client.post(
                 f"{prompts_api_url}/errors/report",

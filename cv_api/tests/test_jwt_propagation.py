@@ -18,7 +18,6 @@ import pathlib
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from src.auth import verify_jwt
 
 os.environ["SECRET_KEY"] = "testsecret"
 
@@ -53,10 +52,9 @@ def test_cv_router_extracts_sub_for_finops():
     assert "user_caller = 'user_1'" not in source, \
         "REGRESSION: user_caller hardcodé à 'user_1'"
 
-    finops_calls = [line for line in source.splitlines()
-                    if "log_finops(" in line and "user_caller" in line]
-    assert len(finops_calls) >= 1, \
-        f"Attendu >= 1 appel log_finops(user_caller, ...), trouvé: {len(finops_calls)}"
+    import re
+    assert re.search(r"log_finops\(\s*user_caller", source), \
+        "Attendu >= 1 appel log_finops(user_caller, ...)"
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +72,8 @@ def test_analyze_cv_uses_jwt_sub_as_user_caller():
     assert "token_payload.get(\"sub\"" in source or "token_payload.get('sub'" in source, (
         "REGRESSION: user_caller n'extrait plus sub JWT en fallback strict"
     )
-    assert "log_finops(user_caller" in source, (
+    import re
+    assert re.search(r"log_finops\(\s*user_caller", source), (
         "REGRESSION: log_finops n'utilise plus user_caller dans cv_import_service"
     )
 

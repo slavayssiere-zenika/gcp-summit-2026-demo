@@ -63,7 +63,7 @@ async def test_prefetch_all_missions(mock_fetch):
 
 @pytest.mark.asyncio
 async def test_apply_scoring_results_success():
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
     mock_result = MagicMock()
     mock_result.scalars.return_value.first.return_value = None
     mock_db.execute = AsyncMock(return_value=mock_result)
@@ -89,6 +89,7 @@ async def test_bg_bulk_scoring_vertex_no_config():
 @pytest.mark.asyncio
 @patch("src.competencies.scoring_pipeline.GCP_PROJECT_ID", "test-project")
 @patch("src.competencies.scoring_pipeline.BATCH_GCS_BUCKET", "test-bucket")
+@patch("src.competencies.scoring_pipeline.VERTEX_BATCH_MODEL", "gemini-3.1-flash-lite")
 @patch("google.genai.Client")
 @patch("src.competencies.scoring_pipeline.database.SessionLocal")
 @patch("src.competencies.scoring_pipeline._prefetch_all_missions", new_callable=AsyncMock)
@@ -109,12 +110,14 @@ async def test_bg_bulk_scoring_vertex_success(mock_update_progress, mock_set_sch
     mock_vertex_client.batches.get.return_value = mock_job
     
     # Mock DB to return leaf competencies
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
     mock_result_1 = MagicMock()
     mock_result_1.scalars.return_value.all.return_value = [10]
+    mock_result_delta = MagicMock()
+    mock_result_delta.scalars.return_value.all.return_value = []
     mock_result_2 = MagicMock()
     mock_result_2.all.return_value = [(10, "Python")]
-    mock_db.execute = AsyncMock(side_effect=[mock_result_1, mock_result_2])
+    mock_db.execute = AsyncMock(side_effect=[mock_result_1, mock_result_delta, mock_result_2])
     
     mock_db_session.return_value = AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())
     
@@ -145,4 +148,5 @@ async def test_bg_bulk_scoring_vertex_success(mock_update_progress, mock_set_sch
                     mock_vertex_client.batches.create.assert_called_once()
                     mock_apply.assert_called_once()
                     mock_finops.assert_called_once()
-                    mock_set_scheduler.assert_called_once_with(False)
+                    from unittest.mock import call
+                    mock_set_scheduler.assert_has_calls([call(True), call(False)])

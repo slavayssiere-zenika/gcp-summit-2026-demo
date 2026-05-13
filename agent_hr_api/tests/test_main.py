@@ -1,6 +1,5 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 from main import app
 
@@ -37,52 +36,9 @@ def test_get_spec_fail(mocker):
     assert response.status_code == 200
     assert "# Specification introuvable" in response.text
 
-@pytest.fixture
-def mock_httpx(mocker):
-    mock = mocker.patch("main.httpx.AsyncClient")
-    client_instance = AsyncMock()
-    mock.return_value.__aenter__.return_value = client_instance
-    return client_instance
-
-def test_login_success(mock_httpx):
-    mock_resp = MagicMock(status_code=200, cookies={"access_token": "abc"})
-    mock_resp.json.return_value = {"message": "Success"}
-    mock_httpx.post.return_value = mock_resp
-
-    response = client.post("/login", json={"username": "bob", "password": "123"})
-    assert response.status_code == 200
-    assert response.cookies.get("access_token") == "abc"
-
-def test_login_fail(mock_httpx):
-    mock_resp = MagicMock(status_code=401)
-    mock_resp.json.return_value = {"detail": "Invalid creds"}
-    mock_httpx.post.return_value = mock_resp
-
-    response = client.post("/login", json={"username": "bob", "password": "123"})
-    assert response.status_code == 401
-    assert "Invalid creds" in response.json()["detail"]
-
-def test_logout():
-    client.cookies.set("access_token", "abc")
-    response = client.post("/logout")
-    assert response.status_code == 200
-    assert response.cookies.get("access_token") is None
-
-def test_get_me_success(mock_httpx):
-    mock_resp = MagicMock(status_code=200)
-    mock_resp.json.return_value = {"username": "bob"}
-    mock_httpx.get.return_value = mock_resp
-    
-    response = client.get("/me")
-    assert response.status_code == 200
-    assert response.json()["username"] == "bob"
-
-def test_get_me_fail(mock_httpx):
-    mock_resp = MagicMock(status_code=401)
-    mock_httpx.get.return_value = mock_resp
-    
-    response = client.get("/me")
-    assert response.status_code == 401
+# NOTE: Les endpoints /login, /logout, /me ont été supprimés de agent_hr_api.
+# Le frontend s'authentifie directement via /auth/ → users_api (LB prio 30).
+# Ces tests ne sont donc plus pertinents.
 
 def test_mcp_registry():
     token = get_auth_token()

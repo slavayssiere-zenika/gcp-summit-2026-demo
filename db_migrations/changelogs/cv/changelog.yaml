@@ -240,3 +240,130 @@ databaseChangeLog:
         - dropColumn:
             tableName: "cv_profiles"
             columnName: "extraction_reliability_score"
+
+  - changeSet:
+      id: "12"
+      author: "antigravity"
+      comment: "R1 — Versionning modele embedding : trace le modele utilise pour chaque vecteur"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "embedding_model"
+                  type: "varchar(100)"
+                  constraints:
+                    nullable: true
+        - sql:
+            sql: "CREATE INDEX IF NOT EXISTS idx_cv_embedding_model ON cv_profiles (embedding_model);"
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_cv_embedding_model;"
+        - dropColumn:
+            tableName: "cv_profiles"
+            columnName: "embedding_model"
+
+
+  - changeSet:
+      id: "13"
+      author: "antigravity"
+      comment: "R7 — Chunking par mission : table cv_mission_embeddings pour le RAG multi-vecteur"
+      preConditions:
+        onFail: MARK_RAN
+        not:
+          tableExists:
+            tableName: "cv_mission_embeddings"
+      changes:
+        - createTable:
+            tableName: "cv_mission_embeddings"
+            columns:
+              - column:
+                  name: "id"
+                  type: "integer"
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: "cv_profile_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "user_id"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "mission_index"
+                  type: "integer"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "chunk_type"
+                  type: "varchar(50)"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "chunk_text"
+                  type: "text"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "chunk_embedding"
+                  type: "vector(3072)"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "embedding_model"
+                  type: "varchar(100)"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "source_tag"
+                  type: "varchar(255)"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: "created_at"
+                  type: "datetime"
+                  defaultValueDate: "NOW()"
+        - sql:
+            sql: >
+              CREATE INDEX IF NOT EXISTS idx_mission_emb_user_id
+              ON cv_mission_embeddings (user_id);
+              CREATE INDEX IF NOT EXISTS idx_mission_emb_cv_profile_id
+              ON cv_mission_embeddings (cv_profile_id);
+              CREATE INDEX IF NOT EXISTS idx_mission_emb_model
+              ON cv_mission_embeddings (embedding_model);
+              CREATE INDEX IF NOT EXISTS idx_mission_emb_hnsw
+              ON cv_mission_embeddings
+              USING hnsw ((chunk_embedding::halfvec(3072)) halfvec_cosine_ops)
+              WITH (m = 16, ef_construction = 64);
+      rollback:
+        - sql:
+            sql: >
+              DROP INDEX IF EXISTS idx_mission_emb_hnsw;
+              DROP INDEX IF EXISTS idx_mission_emb_model;
+              DROP INDEX IF EXISTS idx_mission_emb_cv_profile_id;
+              DROP INDEX IF EXISTS idx_mission_emb_user_id;
+        - dropTable:
+            tableName: "cv_mission_embeddings"
+
+  - changeSet:
+      id: "14"
+      author: "antigravity"
+      comment: "Stockage des erreurs de post-traitement (assignation compétences, missions) — rend les échecs fonctionnels visibles et auditables"
+      changes:
+        - addColumn:
+            tableName: "cv_profiles"
+            columns:
+              - column:
+                  name: "processing_errors"
+                  type: "jsonb"
+                  defaultValueComputed: "'[]'::jsonb"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "cv_profiles"
+            columnName: "processing_errors"

@@ -101,3 +101,26 @@ deploy_logs/
 talk/token.json
 coverage_output.txt
 coverage.xml
+
+# =========================
+# Fichiers temporaires agent (règle §16 AGENTS.md)
+# =========================
+pytest_output*.txt
+*_pytest_out.txt
+cv_pytest_out.txt
+test_report.txt
+cov_summary.txt
+audit_static.txt
+audit_tests.txt
+htmlcov/
+temp_*.py
+split_*.py
+scratch2.py
+parse_log.py
+*_refactored.py
+sre_report_runner.py
+sre_report.md
+rapport_audit_*.md
+tools_extracted.json
+template_analysis.json
+scratch/

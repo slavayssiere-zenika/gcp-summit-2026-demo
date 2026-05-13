@@ -3,12 +3,13 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import {
   Activity, RefreshCw, BarChart2, CheckCircle2, AlertTriangle,
-  XCircle, Clock, Zap, FolderOpen, Users, ArrowLeft, Loader2,
+  XCircle, Clock, Zap, FolderOpen, Users, Loader2,
   ShieldCheck, Radio, Database, Network
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
 import DriveAdminPanel from '../components/DriveAdminPanel.vue'
+import DriveErrorsPanel from '../components/DriveErrorsPanel.vue'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface KPIMetric { value: number; pct: number; ok: number; total: number; status: string; unit: string }
@@ -39,6 +40,19 @@ const batchResult = ref<any>(null)
 const gateResult = ref<any>(null)
 const lastRefresh = ref<Date | null>(null)
 const pollingId = ref<ReturnType<typeof setInterval> | null>(null)
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+const activeTab = ref<'overview' | 'errors' | 'drive'>('overview')
+const errorCount = ref(0)
+const driveErrorsPanelRef = ref<InstanceType<typeof DriveErrorsPanel> | null>(null)
+
+const onErrorCountChanged = (count: number) => {
+  errorCount.value = count
+  // Auto-switch vers l'onglet erreurs si des erreurs sont détectées au premier chargement
+  if (count > 0 && activeTab.value === 'overview' && !stats.value) {
+    activeTab.value = 'errors'
+  }
+}
 
 const authHeader = () => ({ Authorization: `Bearer ${authService.state.token}` })
 
@@ -184,189 +198,245 @@ const runSync = async () => {
       :icon="BarChart2"
     />
 
-    <!-- ── Toolbar ── -->
-    <div class="toolbar">
-      <button class="btn-icon" @click="fetchAll" :disabled="isLoadingStats" aria-label="Rafraîchir">
-        <RefreshCw size="15" :class="{ spin: isLoadingStats }" />
-        <span>{{ lastRefresh ? `Rafraîchi à ${lastRefresh.toLocaleTimeString('fr-FR')}` : 'Chargement…' }}</span>
+    <!-- ── Tabs Navigation ── -->
+    <div class="tabs-nav">
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'overview' }"
+        @click="activeTab = 'overview'"
+      >
+        <Activity size="15" />
+        Vue d'ensemble
+        <span v-if="stats" class="tab-badge tab-badge-score">{{ stats.score }}/100</span>
       </button>
-      <div class="toolbar-actions">
-        <button class="btn-action btn-sync" @click="runSync" aria-label="Forcer sync Drive">
-          <Radio size="14" /> Forcer Sync Drive
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'errors' }"
+        @click="activeTab = 'errors'"
+      >
+        <XCircle size="15" />
+        Erreurs CV
+        <span v-if="errorCount > 0" class="tab-badge tab-badge-error">{{ errorCount }}</span>
+        <span v-else class="tab-badge tab-badge-ok">✓</span>
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'drive' }"
+        @click="activeTab = 'drive'"
+      >
+        <FolderOpen size="15" />
+        Gestion Drive
+      </button>
+    </div>
+
+    <!-- ── Tab: Vue d'ensemble ── -->
+    <div v-show="activeTab === 'overview'">
+      <!-- ── Toolbar ── -->
+      <div class="toolbar">
+        <button class="btn-icon" @click="fetchAll" :disabled="isLoadingStats" aria-label="Rafraîchir">
+          <RefreshCw size="15" :class="{ spin: isLoadingStats }" />
+          <span>{{ lastRefresh ? `Rafraîchi à ${lastRefresh.toLocaleTimeString('fr-FR')}` : 'Chargement…' }}</span>
         </button>
-        <button class="btn-action btn-sync" @click="runRebuildTree" :disabled="isRebuildingTree || stats?.is_rebuilding_tree" aria-label="Reconstruire l'arbre">
-          <Network size="14" :class="{ spin: isRebuildingTree || stats?.is_rebuilding_tree }" />
-          {{ isRebuildingTree || stats?.is_rebuilding_tree ? 'Reconstruction…' : "Reconstruire l'Arbre" }}
-        </button>
-        <button class="btn-action btn-gate" @click="runInvalidateCache" :disabled="isInvalidatingCache" aria-label="Invalider Cache">
-          <Database size="14" :class="{ spin: isInvalidatingCache }" />
-          {{ isInvalidatingCache ? 'Invalidation…' : 'Invalider Cache' }}
-        </button>
-        <button class="btn-action btn-retry" @click="runBatchRetry" :disabled="isRunningBatch" aria-label="Retry erreurs">
-          <Zap size="14" :class="{ spin: isRunningBatch }" />
-          {{ isRunningBatch ? 'En cours…' : 'Retry Erreurs' }}
-        </button>
-        <button class="btn-action btn-gate" @click="runQualityGate" :disabled="isRunningGate" aria-label="Quality Gate Batch">
-          <ShieldCheck size="14" :class="{ spin: isRunningGate }" />
-          {{ isRunningGate ? 'Analyse…' : 'Quality Gate Batch' }}
-        </button>
+        <div class="toolbar-actions">
+          <button class="btn-action btn-sync" @click="runSync" aria-label="Forcer sync Drive">
+            <Radio size="14" /> Forcer Sync Drive
+          </button>
+          <button class="btn-action btn-sync" @click="runRebuildTree" :disabled="isRebuildingTree || stats?.is_rebuilding_tree" aria-label="Reconstruire l'arbre">
+            <Network size="14" :class="{ spin: isRebuildingTree || stats?.is_rebuilding_tree }" />
+            {{ isRebuildingTree || stats?.is_rebuilding_tree ? 'Reconstruction…' : "Reconstruire l'Arbre" }}
+          </button>
+          <button class="btn-action btn-gate" @click="runInvalidateCache" :disabled="isInvalidatingCache" aria-label="Invalider Cache">
+            <Database size="14" :class="{ spin: isInvalidatingCache }" />
+            {{ isInvalidatingCache ? 'Invalidation…' : 'Invalider Cache' }}
+          </button>
+          <button class="btn-action btn-retry" @click="runBatchRetry" :disabled="isRunningBatch" aria-label="Retry erreurs">
+            <Zap size="14" :class="{ spin: isRunningBatch }" />
+            {{ isRunningBatch ? 'En cours…' : 'Retry Erreurs' }}
+          </button>
+          <button class="btn-action btn-gate" @click="runQualityGate" :disabled="isRunningGate" aria-label="Quality Gate Batch">
+            <ShieldCheck size="14" :class="{ spin: isRunningGate }" />
+            {{ isRunningGate ? 'Analyse…' : 'Quality Gate Batch' }}
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- ── Batch result banners ── -->
-    <div v-if="stats?.is_rebuilding_tree" class="result-banner banner-warning">
-      <Loader2 size="14" class="spin" style="display:inline-block; vertical-align: middle; margin-right: 5px;" />
-      Reconstruction complète de l'arbre en cours sur Google Drive... (Pendant ce temps, les CVs restent intacts)
-    </div>
+      <!-- ── Batch result banners ── -->
+      <div v-if="stats?.is_rebuilding_tree" class="result-banner banner-warning">
+        <Loader2 size="14" class="spin" style="display:inline-block; vertical-align: middle; margin-right: 5px;" />
+        Reconstruction complète de l'arbre en cours sur Google Drive...
+      </div>
+      <div v-if="batchResult" class="result-banner" :class="batchResult.error ? 'banner-error' : 'banner-ok'">
+        <template v-if="batchResult.error">❌ {{ batchResult.error }}</template>
+        <template v-else>✅ {{ batchResult.message }}</template>
+      </div>
+      <div v-if="gateResult" class="result-banner" :class="gateResult.error ? 'banner-error' : 'banner-ok'">
+        <template v-if="gateResult.error">❌ {{ gateResult.error }}</template>
+        <template v-else>
+          🛡️ {{ gateResult.message }}
+          <span v-if="gateResult.reason_breakdown" class="breakdown">
+            · user_id manquant: {{ gateResult.reason_breakdown.user_id_manquant }}
+            · nommage: {{ gateResult.reason_breakdown.nommage_manquant }}
+            · erreurs: {{ gateResult.reason_breakdown.erreur_persistante }}
+          </span>
+        </template>
+      </div>
 
-    <div v-if="batchResult" class="result-banner" :class="batchResult.error ? 'banner-error' : 'banner-ok'">
-      <template v-if="batchResult.error">❌ {{ batchResult.error }}</template>
-      <template v-else>✅ {{ batchResult.message }}</template>
-    </div>
-    <div v-if="gateResult" class="result-banner" :class="gateResult.error ? 'banner-error' : 'banner-ok'">
-      <template v-if="gateResult.error">❌ {{ gateResult.error }}</template>
-      <template v-else>
-        🛡️ {{ gateResult.message }}
-        <span v-if="gateResult.reason_breakdown" class="breakdown">
-          · user_id manquant: {{ gateResult.reason_breakdown.user_id_manquant }}
-          · nommage: {{ gateResult.reason_breakdown.nommage_manquant }}
-          · erreurs: {{ gateResult.reason_breakdown.erreur_persistante }}
-        </span>
+      <div v-if="isLoadingStats && !stats" class="loading-state">
+        <Loader2 size="32" class="spin" />
+        <p>Calcul des KPIs en cours…</p>
+      </div>
+
+      <template v-else-if="stats">
+        <!-- ── Grade + Volumes ── -->
+        <div class="top-row">
+          <div class="grade-card">
+            <div class="grade-circle" :style="{ borderColor: gradeColor, color: gradeColor }">
+              {{ stats.grade }}
+            </div>
+            <div class="grade-info">
+              <div class="grade-score">Score {{ stats.score }}/100</div>
+              <div class="grade-recommendation">{{ stats.recommendation }}</div>
+            </div>
+          </div>
+          <div class="volumes-grid">
+            <div class="vol-item vol-total"><Database size="16" /><span class="vol-n">{{ stats.total_files }}</span><span class="vol-l">Total</span></div>
+            <div class="vol-item vol-ok"><CheckCircle2 size="16" /><span class="vol-n">{{ stats.imported }}</span><span class="vol-l">Importés</span></div>
+            <div class="vol-item vol-err"><XCircle size="16" /><span class="vol-n">{{ stats.errors }}</span><span class="vol-l">Erreurs</span></div>
+            <div class="vol-item vol-pend"><Clock size="16" /><span class="vol-n">{{ stats.pending }}</span><span class="vol-l">En attente</span></div>
+            <div class="vol-item vol-queue"><Radio size="16" /><span class="vol-n">{{ stats.queued }}</span><span class="vol-l">En file</span></div>
+            <div class="vol-item vol-proc"><Loader2 size="16" class="spin-slow" /><span class="vol-n">{{ stats.processing }}</span><span class="vol-l">En cours</span></div>
+          </div>
+        </div>
+
+        <!-- ── Issues ── -->
+        <div v-if="stats.issues.length > 0" class="issues-panel">
+          <div class="issues-header"><AlertTriangle size="15" /> {{ stats.issues.length }} problème(s) détecté(s)</div>
+          <ul class="issues-list">
+            <li v-for="issue in stats.issues" :key="issue">{{ issue }}</li>
+          </ul>
+        </div>
+        <div v-else class="issues-panel issues-ok">
+          <CheckCircle2 size="15" /> Data quality satisfaisante — aucune anomalie détectée.
+        </div>
+
+        <!-- ── KPI Metrics ── -->
+        <div class="section-card">
+          <div class="section-header"><Activity size="17" /> Métriques de Data Quality</div>
+          <div class="metrics-grid">
+            <div v-for="(metric, label) in stats.metrics" :key="label" class="metric-row">
+              <div class="metric-label-row">
+                <span class="metric-label">{{ label }}</span>
+                <span class="metric-value" :class="metricStatusClass(metric.status)">
+                  {{ metric.unit === 's' ? metric.value + 's' : metric.pct + '%' }}
+                  <span class="metric-counts" v-if="metric.unit !== 's'">({{ metric.ok }}/{{ metric.total }})</span>
+                </span>
+              </div>
+              <div class="metric-bar-track">
+                <div
+                  class="metric-bar-fill"
+                  :class="metricStatusClass(metric.status)"
+                  :style="{ width: pctBarWidth(metric) }"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="freshness-row" v-if="stats.freshness_hours !== null">
+            <Clock size="13" />
+            Dernière ingestion il y a <strong>{{ stats.freshness_hours }}h</strong>
+          </div>
+        </div>
+
+        <!-- ── Folder KPIs ── -->
+        <div class="section-card">
+          <div class="section-header"><FolderOpen size="17" /> KPIs par Agence / Dossier</div>
+          <div v-if="isLoadingFolders" class="table-loading"><Loader2 size="18" class="spin" /></div>
+          <div v-else-if="folderKpis.length === 0" class="table-empty">
+            <Users size="24" /> Aucun dossier Drive configuré.
+          </div>
+          <div v-else class="table-wrapper">
+            <table class="kpi-table">
+              <thead>
+                <tr>
+                  <th>Dossier / Agence</th>
+                  <th class="num">Total</th>
+                  <th class="num">Importés</th>
+                  <th class="num">Erreurs</th>
+                  <th class="num">Taux import</th>
+                  <th class="num">Liaison user</th>
+                  <th class="num">Durée moy.</th>
+                  <th class="num">Dernière import</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="f in folderKpis" :key="f.folder_id" :class="folderStatusClass(f.status)">
+                  <td class="folder-name">
+                    <FolderOpen size="13" />
+                    <span>{{ f.folder_name || f.tag }}</span>
+                    <span class="tag-chip">{{ f.tag }}</span>
+                  </td>
+                  <td class="num">{{ f.total }}</td>
+                  <td class="num text-green">{{ f.imported }}</td>
+                  <td class="num text-red">{{ f.errors }}</td>
+                  <td class="num">
+                    <span :class="f.import_rate_pct < 75 ? 'text-red' : f.import_rate_pct < 90 ? 'text-orange' : 'text-green'">
+                      {{ f.import_rate_pct }}%
+                    </span>
+                  </td>
+                  <td class="num">
+                    <span :class="f.user_link_rate_pct < 80 ? 'text-red' : f.user_link_rate_pct < 90 ? 'text-orange' : 'text-green'">
+                      {{ f.imported > 0 ? f.user_link_rate_pct + '%' : '—' }}
+                    </span>
+                  </td>
+                  <td class="num">{{ formatMs(f.avg_processing_ms) }}</td>
+                  <td class="num">{{ formatDate(f.last_import_at) }}</td>
+                  <td>
+                    <span class="status-pill" :class="`pill-${f.status}`">
+                      {{ f.status === 'ok' ? '✓ OK' : f.status === 'warning' ? '⚠ Attention' : '✕ Critique' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </template>
     </div>
 
-    <div v-if="isLoadingStats && !stats" class="loading-state">
-      <Loader2 size="32" class="spin" />
-      <p>Calcul des KPIs en cours…</p>
+    <!-- ── Tab: Erreurs CV ── -->
+    <div v-show="activeTab === 'errors'" class="tab-content">
+      <DriveErrorsPanel
+        ref="driveErrorsPanelRef"
+        :folders="folderKpis.map(f => ({ id: f.folder_id, tag: f.tag, folder_name: f.folder_name }))"
+        @error-count-changed="onErrorCountChanged"
+      />
     </div>
 
-    <template v-else-if="stats">
-      <!-- ── Grade + Volumes ── -->
-      <div class="top-row">
-        <div class="grade-card">
-          <div class="grade-circle" :style="{ borderColor: gradeColor, color: gradeColor }">
-            {{ stats.grade }}
-          </div>
-          <div class="grade-info">
-            <div class="grade-score">Score {{ stats.score }}/100</div>
-            <div class="grade-recommendation">{{ stats.recommendation }}</div>
-          </div>
-        </div>
-
-        <div class="volumes-grid">
-          <div class="vol-item vol-total"><Database size="16" /><span class="vol-n">{{ stats.total_files }}</span><span class="vol-l">Total</span></div>
-          <div class="vol-item vol-ok"><CheckCircle2 size="16" /><span class="vol-n">{{ stats.imported }}</span><span class="vol-l">Importés</span></div>
-          <div class="vol-item vol-err"><XCircle size="16" /><span class="vol-n">{{ stats.errors }}</span><span class="vol-l">Erreurs</span></div>
-          <div class="vol-item vol-pend"><Clock size="16" /><span class="vol-n">{{ stats.pending }}</span><span class="vol-l">En attente</span></div>
-          <div class="vol-item vol-queue"><Radio size="16" /><span class="vol-n">{{ stats.queued }}</span><span class="vol-l">En file</span></div>
-          <div class="vol-item vol-proc"><Loader2 size="16" class="spin-slow" /><span class="vol-n">{{ stats.processing }}</span><span class="vol-l">En cours</span></div>
-        </div>
-      </div>
-
-      <!-- ── Issues ── -->
-      <div v-if="stats.issues.length > 0" class="issues-panel">
-        <div class="issues-header"><AlertTriangle size="15" /> {{ stats.issues.length }} problème(s) détecté(s)</div>
-        <ul class="issues-list">
-          <li v-for="issue in stats.issues" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
-      <div v-else class="issues-panel issues-ok">
-        <CheckCircle2 size="15" /> Data quality satisfaisante — aucune anomalie détectée.
-      </div>
-
-      <!-- ── KPI Metrics ── -->
-      <div class="section-card">
-        <div class="section-header"><Activity size="17" /> Métriques de Data Quality</div>
-        <div class="metrics-grid">
-          <div v-for="(metric, label) in stats.metrics" :key="label" class="metric-row">
-            <div class="metric-label-row">
-              <span class="metric-label">{{ label }}</span>
-              <span class="metric-value" :class="metricStatusClass(metric.status)">
-                {{ metric.unit === 's' ? metric.value + 's' : metric.pct + '%' }}
-                <span class="metric-counts" v-if="metric.unit !== 's'">({{ metric.ok }}/{{ metric.total }})</span>
-              </span>
-            </div>
-            <div class="metric-bar-track">
-              <div
-                class="metric-bar-fill"
-                :class="metricStatusClass(metric.status)"
-                :style="{ width: pctBarWidth(metric) }"
-              />
-            </div>
-          </div>
-        </div>
-        <div class="freshness-row" v-if="stats.freshness_hours !== null">
-          <Clock size="13" />
-          Dernière ingestion il y a <strong>{{ stats.freshness_hours }}h</strong>
-        </div>
-      </div>
-
-      <!-- ── Folder KPIs ── -->
-      <div class="section-card">
-        <div class="section-header"><FolderOpen size="17" /> KPIs par Agence / Dossier</div>
-        <div v-if="isLoadingFolders" class="table-loading"><Loader2 size="18" class="spin" /></div>
-        <div v-else-if="folderKpis.length === 0" class="table-empty">
-          <Users size="24" /> Aucun dossier Drive configuré.
-        </div>
-        <div v-else class="table-wrapper">
-          <table class="kpi-table">
-            <thead>
-              <tr>
-                <th>Dossier / Agence</th>
-                <th class="num">Total</th>
-                <th class="num">Importés</th>
-                <th class="num">Erreurs</th>
-                <th class="num">Taux import</th>
-                <th class="num">Liaison user</th>
-                <th class="num">Durée moy.</th>
-                <th class="num">Dernière import</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="f in folderKpis" :key="f.folder_id" :class="folderStatusClass(f.status)">
-                <td class="folder-name">
-                  <FolderOpen size="13" />
-                  <span>{{ f.folder_name || f.tag }}</span>
-                  <span class="tag-chip">{{ f.tag }}</span>
-                </td>
-                <td class="num">{{ f.total }}</td>
-                <td class="num text-green">{{ f.imported }}</td>
-                <td class="num text-red">{{ f.errors }}</td>
-                <td class="num">
-                  <span :class="f.import_rate_pct < 75 ? 'text-red' : f.import_rate_pct < 90 ? 'text-orange' : 'text-green'">
-                    {{ f.import_rate_pct }}%
-                  </span>
-                </td>
-                <td class="num">
-                  <span :class="f.user_link_rate_pct < 80 ? 'text-red' : f.user_link_rate_pct < 90 ? 'text-orange' : 'text-green'">
-                    {{ f.imported > 0 ? f.user_link_rate_pct + '%' : '—' }}
-                  </span>
-                </td>
-                <td class="num">{{ formatMs(f.avg_processing_ms) }}</td>
-                <td class="num">{{ formatDate(f.last_import_at) }}</td>
-                <td>
-                  <span class="status-pill" :class="`pill-${f.status}`">
-                    {{ f.status === 'ok' ? '✓ OK' : f.status === 'warning' ? '⚠ Attention' : '✕ Critique' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      <!-- ── Folder Settings & DLQ Management ── -->
+    <!-- ── Tab: Gestion Drive ── -->
+    <div v-show="activeTab === 'drive'" class="tab-content">
       <DriveAdminPanel />
+    </div>
 
-    </template>
   </div>
 </template>
+
 
 <style scoped>
 .page-wrapper { max-width: 1300px; margin: 0 auto; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
 .fade-in { animation: fadeIn 0.35s ease forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Tabs ── */
+.tabs-nav { display: flex; gap: 4px; background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.07); border-radius: 14px; padding: 5px; backdrop-filter: blur(12px); flex-wrap: wrap; }
+.tab-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 10px; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: none; background: transparent; color: #64748b; transition: all 0.2s; position: relative; white-space: nowrap; }
+.tab-btn:hover { background: rgba(255,255,255,0.7); color: #1e293b; }
+.tab-btn.active { background: white; color: #1e293b; box-shadow: 0 2px 8px rgba(0,0,0,0.08); font-weight: 700; }
+.tab-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 0.68rem; font-weight: 800; border-radius: 20px; padding: 1px 7px; min-width: 20px; }
+.tab-badge-error { background: #dc2626; color: white; animation: pulseBadge 2s ease-in-out infinite; }
+.tab-badge-ok { background: rgba(22,163,74,0.12); color: #16a34a; border: 1px solid rgba(22,163,74,0.25); }
+.tab-badge-score { background: rgba(99,102,241,0.1); color: #4f46e5; border: 1px solid rgba(99,102,241,0.2); }
+@keyframes pulseBadge { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); } 50% { box-shadow: 0 0 0 4px rgba(220,38,38,0.2); } }
+.tab-content { display: flex; flex-direction: column; gap: 1.5rem; }
 
 /* ── Toolbar ── */
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

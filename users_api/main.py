@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import database
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from logger import LoggingMiddleware, setup_logging
@@ -15,6 +16,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -26,6 +28,7 @@ from sqlalchemy import text
 from src.auth import get_password_hash, verify_jwt
 from src.users.models import User
 from src.users.router import router
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
@@ -42,7 +45,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "users-api",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler
 )
@@ -168,18 +171,13 @@ app.include_router(router)
 
 
 async def get_service_token_fallback() -> str:
-    import logging
-    import os
-
-    import httpx
-    logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token
 
     try:
         users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
             res_meta = await client.get(
                 "http://metadata.google.internal/computeMetadata/v1/instance/"
                 "service-accounts/default/identity?audience=users_api",
@@ -201,13 +199,9 @@ async def get_service_token_fallback() -> str:
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception:
-        raise
+    inject(headers)  # Propagate OTel trace context (inject is already imported at top-level)
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
             await client.post(
                 f"{prompts_api_url}/errors/report",
@@ -219,15 +213,13 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
                 headers=headers
             )
         except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
+            # Best-effort : ne jamais relancer pour ne pas masquer l'erreur originale.
+            logging.error("Failed to report error to prompts_api: %s", e)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    from fastapi.exceptions import RequestValidationError
-    from starlette.exceptions import HTTPException as StarletteHTTPException
-
+    # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
     if isinstance(exc, StarletteHTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     if isinstance(exc, RequestValidationError):
@@ -247,10 +239,12 @@ async def global_exception_handler(request: Request, exc: Exception):
             await report_exception_to_prompts_api("users_api", error_msg, trace_context, token)
 
     except Exception as fallback_e:
-        logging.error(f"Failed to process exception reporting: {fallback_e}")
+        logging.error("Failed to process exception reporting: %s", fallback_e)
 
     logging.error(
-        f"[users_api] Unhandled exception on {request.method} {request.url.path}: {error_msg}\n{trace_context}")
+        "[users_api] Unhandled exception on %s %s: %s\n%s",
+        request.method, request.url.path, error_msg, trace_context
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
@@ -268,7 +262,7 @@ async def proxy_mcp(path: str, request: Request):
 
     body = await request.body()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
         try:
             res = await client.request(
                 request.method,

@@ -1,20 +1,29 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { RefreshCw, Users, Tag, Search, AlertTriangle, ChevronDown, CheckCircle2 } from 'lucide-vue-next'
+import { RefreshCw, Users, Tag, Search, AlertTriangle, CheckCircle2, Zap } from 'lucide-vue-next'
 import { authService } from '../services/auth'
+
+const router = useRouter()
 
 const isLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
 const logs = ref<string[]>([])
 
-const filterType = ref<'all' | 'tag' | 'user'>('all')
+const filterType = ref<'user' | 'tag'>('user')
 const filterTag = ref('')
 const selectedUser = ref<any>(null)
 const userSearchQuery = ref('')
 const userResults = ref<any[]>([])
 const isSearchingUsers = ref(false)
+
+// Seule la ré-analyse d'un unique consultant est autorisée en temps réel.
+// Pour "tous les CVs" ou "une agence entière", on redirige vers le Pipeline Vertex AI Batch.
+const canRunRealtime = computed(() =>
+  filterType.value === 'user' && selectedUser.value !== null
+)
 
 const searchUsers = async () => {
   if (userSearchQuery.value.length < 2) {
@@ -42,25 +51,24 @@ const addLog = (msg: string) => {
   logs.value.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`)
 }
 
+const goToBulkImport = () => {
+  router.push('/admin/bulk-import')
+}
+
+// Ré-analyse temps réel — uniquement pour un seul consultant.
 const triggerReanalysis = async () => {
-  if (!confirm("Cette opération va EFFACER les compétences assignées aux utilisateurs ciblés et relancer l'analyse Gemini. Êtes-vous certain ?")) return
+  if (!selectedUser.value) return
+  if (!confirm(`Relancer l'analyse Gemini pour ${selectedUser.value.full_name || selectedUser.value.username} ?`)) return
+
   isLoading.value = true
   error.value = ''
   successMessage.value = ''
   logs.value = []
-  addLog("Démarrage du processus de réanalyse...")
-  
+  addLog(`Démarrage de la réanalyse pour user_id=${selectedUser.value.id}...`)
+
   try {
     const params = new URLSearchParams()
-    if (filterType.value === 'tag' && filterTag.value) {
-      params.append('tag', filterTag.value)
-      addLog(`Filtre: Tag = ${filterTag.value}`)
-    } else if (filterType.value === 'user' && selectedUser.value) {
-      params.append('user_id', selectedUser.value.id)
-      addLog(`Filtre: Utilisateur = ${selectedUser.value.username}`)
-    } else {
-      addLog("Filtre: TOUS LES CVS")
-    }
+    params.append('user_id', selectedUser.value.id)
 
     const response = await fetch(`/api/cv/reanalyze?${params.toString()}`, {
       method: 'POST',
@@ -68,20 +76,20 @@ const triggerReanalysis = async () => {
     })
 
     if (!response.ok) {
-        const d = await response.json()
-        throw new Error(d.detail || 'Erreur')
+      const d = await response.json()
+      throw new Error(d.detail || 'Erreur')
     }
-    
-    const contentType = response.headers.get("content-type")
-    if (contentType && contentType.includes("application/json")) {
-       const data = await response.json()
-       addLog(JSON.stringify(data, null, 4))
-       return
+
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json()
+      addLog(JSON.stringify(data, null, 4))
+      return
     }
 
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
-    
+
     if (reader) {
       let buffer = ''
       while (true) {
@@ -98,7 +106,9 @@ const triggerReanalysis = async () => {
               successMessage.value = data.message
               addLog(`TERMINÉ: ${data.message}`)
               if (data.errors?.length) data.errors.forEach((err: string) => addLog(`ERREUR: ${err}`))
-            } else addLog(data.message)
+            } else {
+              addLog(data.message)
+            }
           } catch (e) {
             console.error(e)
           }
@@ -106,28 +116,11 @@ const triggerReanalysis = async () => {
       }
     }
   } catch (e: any) {
-    const errData = e?.response?.data || {}
-    const detail = errData?.detail || e.message || 'Erreur'
-    if (detail.includes('déjà en cours')) {
-      error.value = detail + ' Utilisez "Écraser le verrou".'
-    } else {
-      error.value = detail
-    }
+    const detail = e?.response?.data?.detail || e.message || 'Erreur'
+    error.value = detail
     addLog(`ÉCHEC: ${error.value}`)
   } finally {
     isLoading.value = false
-  }
-}
-
-const resetReanalysisLock = async () => {
-  if (!confirm('Forcer la réinitialisation du verrou ?')) return
-  try {
-    await axios.delete('/api/cv/reanalyze/reset')
-    isLoading.value = false
-    error.value = ''
-    addLog('✅ Verrou réinitialisé.')
-  } catch (e: any) {
-    addLog(`Erreur: ${e?.response?.data?.detail || e.message}`)
   }
 }
 </script>
@@ -138,30 +131,36 @@ const resetReanalysisLock = async () => {
       <h3><RefreshCw size="20" /> Relancer l'Analyse IA</h3>
     </div>
     <div class="panel-content">
-      <p class="section-desc">Forcer Gemini à ré-analyser certains fichiers PDF Drive pour extraire les compétences (utile en cas d'erreur ou si le System Prompt a changé).</p>
+
+      <!-- Bannière d'information sur le batch -->
+      <div class="batch-info-banner">
+        <Zap size="16" />
+        <div>
+          <strong>Ré-analyse en masse = Pipeline Vertex AI Batch.</strong>
+          Pour traiter plusieurs CVs (agence entière ou tous les consultants),
+          utilisez le pipeline dédié qui garantit un coût réduit et aucune saturation.
+          <button class="link-btn" @click="goToBulkImport">
+            → Ouvrir le Pipeline Batch
+          </button>
+        </div>
+      </div>
+
+      <p class="section-desc">
+        Ré-analyser le CV d'<strong>un seul consultant</strong> avec Gemini (utile si son CV a changé ou en cas d'erreur ponctuelle).
+      </p>
 
       <div class="filter-controls">
-        <label class="radio-label">
-          <input type="radio" v-model="filterType" value="all">
-          <span>Tous les CVs (Danger)</span>
-        </label>
-        
-        <label class="radio-label">
-          <input type="radio" v-model="filterType" value="tag">
-          <span>Agence Spécifique</span>
-        </label>
-        
         <label class="radio-label">
           <input type="radio" v-model="filterType" value="user">
           <span>Un Consultant</span>
         </label>
+        <label class="radio-label">
+          <input type="radio" v-model="filterType" value="tag">
+          <span>Agence entière (→ Batch)</span>
+        </label>
       </div>
 
-      <div v-if="filterType === 'tag'" class="input-group">
-        <Tag size="16" class="mt-3.5" />
-        <input type="text" v-model="filterTag" placeholder="Nom de la Google Category (ex: 'zenika-lyon')" class="form-input">
-      </div>
-
+      <!-- Sélection d'un seul utilisateur -->
       <div v-if="filterType === 'user'" class="input-group relative">
         <Search size="16" class="mt-3.5" />
         <input type="text" v-model="userSearchQuery" @input="searchUsers" placeholder="Chercher un utilisateur..." class="form-input">
@@ -171,24 +170,42 @@ const resetReanalysisLock = async () => {
           </div>
         </div>
         <div v-if="selectedUser" class="selected-user-badge">
-          Selection : <strong>{{ selectedUser.full_name || selectedUser.username }}</strong>
+          Sélection : <strong>{{ selectedUser.full_name || selectedUser.username }}</strong>
         </div>
       </div>
 
-      <div class="actions mt-4">
-        <button class="action-btn warning-btn" @click="triggerReanalysis" :disabled="isLoading">
-          <RefreshCw size="18" :class="{ 'spin': isLoading }" />
-          {{ isLoading ? 'Réanalyse en cours...' : 'Lancer la Réanalyse' }}
+      <!-- Mode agence : redirection Batch uniquement -->
+      <div v-if="filterType === 'tag'" class="batch-redirect-block">
+        <div class="input-group">
+          <Tag size="16" class="mt-3.5" />
+          <input type="text" v-model="filterTag" placeholder="Nom de l'agence (ex: 'zenika-lyon')" class="form-input">
+        </div>
+        <p class="redirect-hint">
+          ⚠️ L'analyse d'une agence entière traite potentiellement des centaines de CVs.
+          Elle doit obligatoirement passer par le <strong>Pipeline Vertex AI Batch</strong>.
+        </p>
+        <button class="action-btn primary-btn" @click="goToBulkImport">
+          <Zap size="18" /> Ouvrir le Pipeline Batch
         </button>
-        <button class="action-btn danger-btn-outline ml-2" @click="resetReanalysisLock" v-if="error.includes('déjà en cours')">
-          Écraser le verrou
+      </div>
+
+      <!-- Action temps réel (user seulement) -->
+      <div v-if="filterType === 'user'" class="actions mt-4">
+        <button
+          class="action-btn warning-btn"
+          @click="triggerReanalysis"
+          :disabled="isLoading || !canRunRealtime"
+          :title="!canRunRealtime ? 'Sélectionnez un consultant d\'abord' : 'Relancer l\'analyse pour ce consultant'"
+        >
+          <RefreshCw size="18" :class="{ 'spin': isLoading }" />
+          {{ isLoading ? 'Réanalyse en cours...' : 'Relancer pour ce consultant' }}
         </button>
       </div>
 
       <div v-if="error" class="status-box error-box mt-4">
         <AlertTriangle size="20" /> <span>{{ error }}</span>
       </div>
-      
+
       <div v-if="successMessage" class="status-box success-box mt-4">
         <CheckCircle2 size="20" /> <span>{{ successMessage }}</span>
       </div>
@@ -214,6 +231,41 @@ const resetReanalysisLock = async () => {
 .panel-header h3 { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; color: #1a1a1a; margin: 0; font-weight: 600; }
 .panel-content { padding: 30px; }
 .section-desc { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5; }
+
+/* Bannière info Batch */
+.batch-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-left: 3px solid #6366f1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 0.88rem;
+  color: #312e81;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.batch-info-banner svg { color: #6366f1; flex-shrink: 0; margin-top: 2px; }
+.link-btn {
+  background: none; border: none; color: #6366f1; font-weight: 700; cursor: pointer;
+  font-size: 0.88rem; padding: 0; text-decoration: underline;
+}
+.link-btn:hover { color: #4338ca; }
+
+/* Redirection block */
+.batch-redirect-block { display: flex; flex-direction: column; gap: 12px; }
+.redirect-hint {
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  color: #92400e;
+  line-height: 1.5;
+}
+
 .filter-controls { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
 .radio-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #334155; font-size: 0.95rem; }
 .input-group { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
@@ -222,14 +274,14 @@ const resetReanalysisLock = async () => {
 .autocomplete-dropdown { position: absolute; top: 100%; left: 28px; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; }
 .autocomplete-item { padding: 10px 16px; cursor: pointer; border-bottom: 1px solid #f8fafc; font-size: 0.9rem; }
 .autocomplete-item:hover { background: #f1f5f9; }
-.selected-user-badge { background: #ecfdf5; color: #059669; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; border: 1px solid #a7f3d0; margin-top: 8px; margin-left: 28px;}
+.selected-user-badge { background: #ecfdf5; color: #059669; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; border: 1px solid #a7f3d0; margin-top: 8px; margin-left: 28px; }
 .actions { display: flex; gap: 12px; }
 .action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; font-size: 0.95rem; }
 .warning-btn { background: #f59e0b; color: white; }
 .warning-btn:hover { background: #d97706; }
 .warning-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-.danger-btn-outline { background: transparent; border: 1px solid #ef4444; color: #ef4444; }
-.danger-btn-outline:hover { background: #fef2f2; }
+.primary-btn { background: #6366f1; color: white; }
+.primary-btn:hover { background: #4f46e5; }
 .status-box { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 10px; font-size: 0.95rem; font-weight: 500; }
 .error-box { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
 .success-box { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
@@ -241,6 +293,5 @@ const resetReanalysisLock = async () => {
 @keyframes spin { to { transform: rotate(360deg); } }
 .mt-4 { margin-top: 1rem; }
 .mt-3\.5 { margin-top: 0.875rem; }
-.ml-2 { margin-left: 0.5rem; }
 .relative { position: relative; }
 </style>

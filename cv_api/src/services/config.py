@@ -64,6 +64,11 @@ except Exception as e:
 #   Défaut 10 — conservative vs quota Gemini Embedding (600 QPM Vertex AI).
 BULK_APPLY_SEMAPHORE: int = int(os.getenv("BULK_APPLY_SEMAPHORE", "5"))
 BULK_EMBED_SEMAPHORE: int = int(os.getenv("BULK_EMBED_SEMAPHORE", "10"))
+# ITEMS_DELETE_SEMAPHORE : limite la concurrence des DELETE /user/{id}/items vers items-api-prd.
+# Le pipeline bulk-apply lance BULK_APPLY_SEMAPHORE workers simultanés, chacun faisant un DELETE
+# items en parallèle. Sans sémaphore dédié, cela sature le pool AlloyDB de items-api → 500.
+# Défaut 2 : conservatif vs items-api pool_size=10 (laisse de la marge aux requêtes API normales).
+ITEMS_DELETE_SEMAPHORE: int = int(os.getenv("ITEMS_DELETE_SEMAPHORE", "2"))
 
 # ── Scaling dynamique des Cloud Run cibles pendant le Bulk Apply ──────────────
 # CLOUDRUN_WORKSPACE : workspace Terraform (ex: "prd", "dev") — injecté via cr_cv.tf.

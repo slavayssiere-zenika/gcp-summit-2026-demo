@@ -1,50 +1,28 @@
 import json
-import os
 
 from cache import delete_cache, get_cache, set_cache
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from . import models, schemas
 from .analyzer import (generate_error_correction_prompt, generate_test_cases,
                        improve_prompt_with_gemini, run_promptfoo_analysis)
+from .auth import verify_jwt
 from .schemas import PaginatedPromptsResponse
-
-security = HTTPBearer()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY must be set in environment variables")
-os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
-ALGORITHM = "HS256"
-
-
-def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
-router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 
 def verify_admin(payload: dict = Depends(verify_jwt)):
-    if payload.get("role") != "admin":
+    if payload.get("role") not in ("admin", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privilege required"
         )
     return payload
+
+
+router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 
 @router.get("/user/me", response_model=schemas.Prompt)

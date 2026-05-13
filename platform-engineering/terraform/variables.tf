@@ -64,6 +64,27 @@ variable "competencies_api_min_instances" {
   default     = 1
 }
 
+# =========================================================
+# Throttling Pipeline CV Ingestion
+# cv_api est le service le plus mémoire-intensif (LLM Gemini
+# + connexions AlloyDB). Son max_instances DOIT être plafonné
+# indépendamment du global cloudrun_max_instances pour éviter
+# la saturation du pool SQL (QueuePool TimeoutError).
+# Règle : cv_api_max_instances × pool_size ≤ alloydb_max_connections
+# Avec alloydb_cpu=2 → ~400 connexions max → 8 instances × 50 = 400.
+# =========================================================
+variable "cv_api_max_instances" {
+  description = "Nombre maximum d'instances EXCLUSIF pour cv_api (pipeline LLM). Indépendant de cloudrun_max_instances. Limiter à alloydb_max_connections/pool_size."
+  type        = number
+  default     = 10
+}
+
+variable "max_drive_cv_import" {
+  description = "Nombre max de CVs publié dans Pub/Sub par cycle d'ingestion drive_api. Robinet principal du pipeline : réduire si AlloyDB sature."
+  type        = number
+  default     = 5
+}
+
 variable "items_api_min_instances" {
   description = "Min instances pour items_api. Override cloudrun_min_instances pendant le bulk reanalyse."
   type        = number
@@ -199,9 +220,15 @@ variable "gemini_cv_model" {
 }
 
 variable "gemini_pro_model" {
-  description = "Modèle Gemini Pro (pour les tâches complexes comme Taxonomy Reduce)"
+  description = "Modele Gemini Pro pour Taxonomy Reduce (Vertex AI Batch) — etape critique de restructuration taxonomique. Ne pas changer sans tests qualitatifs."
   type        = string
-  default     = "gemini-3.1-pro-preview"
+  default     = "gemini-2.5-pro"
+}
+
+variable "gemini_batch_model" {
+  description = "Modele Gemini pour Taxonomy Map+Sweep (Vertex AI Batch) — etapes simples (extraction/assignment). Recommande : gemini-2.5-flash (14x moins cher que Pro, meme context window)."
+  type        = string
+  default     = "gemini-2.5-flash"
 }
 
 # Les objectifs SLO (disponibilité, latence) sont définis
@@ -292,10 +319,4 @@ variable "bq_location" {
   description = "Localisation par défaut pour les datasets BigQuery (ex: europe-west1)"
   type        = string
   default     = "europe-west1"
-}
-
-variable "competencies_scheduler_audience" {
-  description = "URL exacte du service Cloud Run competencies_api, utilisée comme audience OIDC par le Cloud Scheduler. Obtenir via : gcloud run services describe competencies-api-prd --region europe-west1 --format=value(status.url)"
-  type        = string
-  default     = ""
 }

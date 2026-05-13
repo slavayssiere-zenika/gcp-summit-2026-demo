@@ -105,7 +105,7 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
     if query_params:
         target_path += "?" + query_params
         
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
         try:
             res = await client.request(
                 method=request.method,

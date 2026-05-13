@@ -30,12 +30,15 @@ admin_user:               "sebastien.lavayssiere@zenika.com"
 finops_anomaly_threshold: 500000
 
 # ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
-gemini_router_model:       "gemini-3.1-pro-preview"         # Orchestrateur : raisonnement complexe
-gemini_hr_model:           "gemini-3.1-flash-lite-preview"  # RH : RAG + MCP
-gemini_ops_model:          "gemini-3.1-flash-lite-preview"  # Ops : SQL + logs
-gemini_missions_model:     "gemini-3.1-flash-lite-preview"  # Missions : matching staffing
-gemini_cv_model:           "gemini-3.1-flash-lite-preview"  # CV API : extraction JSON contrainte
-gemini_pro_model:          "gemini-3.1-flash-lite-preview"  # Taxonomy Reduce (batch)
-gemini_model:              "gemini-3.1-flash-lite-preview"  # [LEGACY] fallback
+# Migration 2026-05-12 : gemini-3.1-flash-lite est passé GA (sans -preview).
+# gemini-3.1-pro reste en preview (pas de GA 3.1-pro disponible).
+gemini_router_model:       "gemini-3.1-pro-preview"         # Orchestrateur : raisonnement complexe (reste preview — pas de GA 3.1-pro)
+gemini_hr_model:           "gemini-3.1-flash-lite"          # RH : RAG + MCP
+gemini_ops_model:          "gemini-3.1-flash-lite"          # Ops : SQL + logs
+gemini_missions_model:     "gemini-3.1-flash-lite"          # Missions : matching staffing
+gemini_cv_model:           "gemini-3.1-flash-lite"          # CV API : extraction JSON contrainte
+gemini_pro_model:          "gemini-3.1-flash-lite"          # Taxonomy Reduce (batch) — flash-lite en dev (économie)
+gemini_batch_model:        "gemini-3.1-flash-lite"          # Taxonomy Map+Sweep (batch) — flash-lite en dev (économie)
+gemini_model:              "gemini-3.1-flash-lite"          # [LEGACY] fallback
 gemini_embedding_model:    "gemini-embedding-001"           # SEC-F06 Semantic Cache
 trace_sampling_rate: 1.0

@@ -177,7 +177,9 @@ resource "google_compute_region_url_map" "internal_url_map" {
       service = google_compute_region_backend_service.users_internal_backend.id
       route_action {
         url_rewrite {
-          path_prefix_rewrite = "/users/"
+          # /auth/login  →  /login  (cohérent avec le LB externe)
+          # Avant : "/users/" — BUG : générait /users/login inexistant sur users_api
+          path_prefix_rewrite = "/"
         }
       }
     }

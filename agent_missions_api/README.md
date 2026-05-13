@@ -9,8 +9,8 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 381 | ✅ |
-| `conftest.py` | 16 | ✅ |
+| `main.py` | 389 | ✅ |
+| `conftest.py` | 18 | ✅ |
 | `metrics.py` | 20 | ✅ |
 | `agent.py` | 243 | ✅ |
 
@@ -27,7 +27,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 | `ROOT_PATH` | Comportement | `/agent-missions-api` |
 | `APP_VERSION` | Comportement | `dev` |
 | `SERVICE_NAME` | Comportement | `agent-missions` |
-| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `MISSIONS_MCP_URL` | Infra | `http://missions_mcp:8000` |
 | `CV_MCP_URL` | Infra | `http://cv_mcp:8000` |
 | `USERS_MCP_URL` | Infra | `http://users_mcp:8000` |

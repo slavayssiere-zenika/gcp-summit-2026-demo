@@ -46,7 +46,7 @@ ENV OTEL_SERVICE_NAME=agent-missions-api
 ENV ROOT_PATH=/agent-missions-api
 ENV APP_VERSION=dev
 ENV SERVICE_NAME=agent-missions
-ENV GEMINI_MODEL=gemini-2.5-flash
+ENV GEMINI_MODEL=gemini-3.1-flash-lite-preview
 
 # ── MCP Sidecars — internal, no JWT (Level 1) ─────────────────────────────────
 ENV MISSIONS_MCP_URL=http://missions_mcp:8000

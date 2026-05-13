@@ -45,7 +45,7 @@ async def fetch_prompt(prompt_name: str, auth_header: str) -> str:
         RuntimeError: Si le prompt est introuvable ou l'API injoignable.
     """
     try:
-        async with httpx.AsyncClient() as http_client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as http_client:
             headers_downstream = {"Authorization": auth_header}
             res_prompt = await http_client.get(
                 f"{PROMPTS_API_URL.rstrip('/')}/{prompt_name}",
@@ -542,7 +542,7 @@ async def run_taxonomy_step(
 
             bulk_merge_result = []
             try:
-                async with httpx.AsyncClient() as http_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as http_client:
                     bulk_headers = {"Authorization": auth_header}
                     inject(bulk_headers)
                     bulk_res = await http_client.post(

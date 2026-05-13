@@ -13,6 +13,7 @@ const props = defineProps<{
     is_anonymous?: boolean
     picture_url?: string
     role?: string
+    processing_errors?: string[]
   }
 }>()
 
@@ -48,6 +49,9 @@ const goToProfile = () => {
       <div class="name-row">
         <span class="name">{{ consultant.full_name || consultant.username }}</span>
         <span class="id-tag"><Hash size="10" />{{ consultant.id || consultant.user_id }}</span>
+        <span v-if="consultant.processing_errors && consultant.processing_errors.length > 0" class="error-indicator" title="Ce profil a des erreurs de post-traitement (ex: compétences manquantes)">
+          <XCircle size="12" />
+        </span>
       </div>
       <div class="email-row" v-if="consultant.email && !consultant.is_anonymous">
         <Mail size="11" />
@@ -164,6 +168,22 @@ const goToProfile = () => {
   padding: 1px 5px;
   border-radius: 4px;
   flex-shrink: 0;
+}
+
+.error-indicator {
+  display: inline-flex;
+  align-items: center;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+  border-radius: 50%;
+  padding: 2px;
+  animation: pulse-error 2s infinite;
+}
+
+@keyframes pulse-error {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  70% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }
 
 .email-row {

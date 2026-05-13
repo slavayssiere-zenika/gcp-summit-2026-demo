@@ -24,7 +24,7 @@ from src.cvs.schemas import (PaginationResponse, SearchCandidateRequest,
 from src.gemini_retry import embed_content_with_retry
 from src.services.bulk_service import bg_retry_apply
 from src.services.finops import log_finops
-from src.services.search_service import execute_search
+from src.services.search_service import execute_search, execute_search_chunked
 from src.services.taxonomy_service import (fetch_prompt,
                                            get_existing_competencies)
 from shared.schemas.users import UserItem
@@ -53,7 +53,16 @@ async def search_candidates(
     token_payload: dict = Depends(verify_jwt),
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    return await execute_search(request, response, query, skip, limit, skills, db, token_payload, credentials, _svc_config.client, agency)
+    # R7 — Toggle RAG multi-vecteur : RAG_CHUNKED_SEARCH=true active le chunking par mission
+    if os.getenv("RAG_CHUNKED_SEARCH", "").lower() == "true":
+        return await execute_search_chunked(
+            request, response, query, skip, limit,
+            db, token_payload, credentials, _svc_config.client, agency,
+        )
+    return await execute_search(
+        request, response, query, skip, limit, skills,
+        db, token_payload, credentials, _svc_config.client, agency,
+    )
 
 
 @router.post("/search", response_model=PaginationResponse[SearchCandidateResponse])
@@ -66,7 +75,15 @@ async def search_candidates_post(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     skip = getattr(req_body, 'skip', 0)
-    return await execute_search(request, response, req_body.query, skip, req_body.limit, req_body.skills, db, token_payload, credentials, _svc_config.client, req_body.agency)
+    if os.getenv("RAG_CHUNKED_SEARCH", "").lower() == "true":
+        return await execute_search_chunked(
+            request, response, req_body.query, skip, req_body.limit,
+            db, token_payload, credentials, _svc_config.client, req_body.agency,
+        )
+    return await execute_search(
+        request, response, req_body.query, skip, req_body.limit, req_body.skills,
+        db, token_payload, credentials, _svc_config.client, req_body.agency,
+    )
 
 
 @router.get("/user/{user_id}/similar")
@@ -174,7 +191,8 @@ async def search_candidates_multi_criteria(
             emb_res = await embed_content_with_retry(
                 _svc_config.client,
                 model=os.getenv("GEMINI_EMBEDDING_MODEL"),
-                contents=q[:3000]
+                contents=q[:3000],
+                config={"task_type": "RETRIEVAL_QUERY"},
             )
             embeddings.append(emb_res.embeddings[0].values)
         except Exception as e:
@@ -297,7 +315,8 @@ async def get_rag_snippet(
         query_emb_res = await embed_content_with_retry(
             _svc_config.client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL"),
-            contents=query[:3000]
+            contents=query[:3000],
+            config={"task_type": "RETRIEVAL_QUERY"},
         )
         query_vector = query_emb_res.embeddings[0].values
     except Exception as e:
@@ -311,7 +330,8 @@ async def get_rag_snippet(
             res = await embed_content_with_retry(
                 _svc_config.client,
                 model=os.getenv("GEMINI_EMBEDDING_MODEL"),
-                contents=p
+                contents=p,
+                config={"task_type": "RETRIEVAL_DOCUMENT"},
             )
             return res.embeddings[0].values
         except Exception:
@@ -409,7 +429,10 @@ async def match_mission_to_candidates(
     if not mission_embedding:
         raise HTTPException(
             status_code=422,
-            detail=f"La mission {mission_id} n'a pas d'embedding vectoriel. Lancez une ré-analyse via missions_api d'abord."
+            detail=(
+                f"La mission {mission_id} n'a pas d'embedding vectoriel. "
+                "Lancez une ré-analyse via missions_api d'abord."
+            ),
         )
 
     # 2. Cosine search dans cv_profiles

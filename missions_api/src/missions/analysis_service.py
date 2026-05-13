@@ -304,11 +304,15 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
 
             # Embed
             try:
-                emb_res = await embed_content_with_retry(client, model=os.getenv("GEMINI_EMBEDDING_MODEL"), contents=search_context)
+                _embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL")
+                emb_res = await embed_content_with_retry(
+                    client, model=_embedding_model, contents=search_context
+                )
                 vector_data = emb_res.embeddings[0].values
             except Exception as e:
                 logger.warning(f"[analysis_service] Embedding mission échoué (best-effort): {e}")
                 vector_data = None
+                _embedding_model = None
 
             # 5. Save to DB decoupled
             async for db in database.get_db():
@@ -325,6 +329,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         existing_mission.proposed_team = proposed_team
                         existing_mission.fallback_full_scan = is_fallback
                         existing_mission.semantic_embedding = vector_data
+                        # R1 — MàJ du modèle d'embedding
+                        existing_mission.embedding_model = _embedding_model
                         existing_mission.status = MissionStatus.STAFFED
                         history_entry = MissionStatusHistory(
                             mission_id=existing_mission.id,
@@ -349,6 +355,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     prefiltered_candidates=candidates_data,
                     proposed_team=proposed_team,
                     semantic_embedding=vector_data,
+                    # R1 — Enregistre le modèle d'embedding utilisé
+                    embedding_model=_embedding_model,
                     fallback_full_scan=is_fallback,
                     status=MissionStatus.STAFFED,
                 )

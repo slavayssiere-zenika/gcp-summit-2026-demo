@@ -36,19 +36,24 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "missions-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(
+        BatchSpanProcessor(
+            OTLPSpanExporter() if os.getenv(
+                "TRACE_EXPORTER",
+                "grpc") == "http" else OTLPSpanExporter(
+                insecure=True)))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
 server = Server("missions-api")
+
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -59,8 +64,8 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "title": { "type": "string" },
-                    "description": { "type": "string" }
+                    "title": {"type": "string"},
+                    "description": {"type": "string"}
                 },
                 "required": ["title", "description"]
             }
@@ -83,7 +88,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "mission_id": { "type": "integer" }
+                    "mission_id": {"type": "integer"}
                 },
                 "required": ["mission_id"]
             }
@@ -94,7 +99,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "mission_id": { "type": "integer", "description": "L'ID de la mission" }
+                    "mission_id": {"type": "integer", "description": "L'ID de la mission"}
                 },
                 "required": ["mission_id"]
             }
@@ -105,7 +110,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "mission_id": { "type": "integer", "description": "L'ID de la mission" }
+                    "mission_id": {"type": "integer", "description": "L'ID de la mission"}
                 },
                 "required": ["mission_id"]
             }
@@ -124,13 +129,13 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "mission_id": { "type": "integer", "description": "L'ID de la mission à mettre à jour" },
+                    "mission_id": {"type": "integer", "description": "L'ID de la mission à mettre à jour"},
                     "status": {
                         "type": "string",
                         "enum": ["NO_GO", "SUBMITTED_TO_CLIENT", "WON", "LOST", "CANCELLED"],
                         "description": "Le nouveau statut à appliquer"
                     },
-                    "reason": { "type": "string", "description": "Motif du changement de statut (obligatoire pour l'audit)" }
+                    "reason": {"type": "string", "description": "Motif du changement de statut (obligatoire pour l'audit)"}
                 },
                 "required": ["mission_id", "status"]
             }
@@ -141,7 +146,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "mission_id": { "type": "integer", "description": "L'ID de la mission" }
+                    "mission_id": {"type": "integer", "description": "L'ID de la mission"}
                 },
                 "required": ["mission_id"]
             }
@@ -157,7 +162,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "user_id": { "type": "integer", "description": "L'ID du consultant" }
+                    "user_id": {"type": "integer", "description": "L'ID du consultant"}
                 },
                 "required": ["user_id"]
             }
@@ -173,7 +178,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": { "type": "string", "description": "L'ID de la tâche retourné par create_mission ou reanalyze_mission" }
+                    "task_id": {"type": "string", "description": "L'ID de la tâche retourné par create_mission ou reanalyze_mission"}
                 },
                 "required": ["task_id"]
             }
@@ -192,6 +197,7 @@ async def list_tools() -> list[Tool]:
         )
     ]
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
@@ -201,7 +207,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             headers["Authorization"] = auth_header
         inject(headers)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             if name == "create_mission":
                 payload = {
                     "title": arguments.get("title"),
@@ -212,7 +218,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Request failed: {str(e)}"}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": False, "error": f"Request failed: {str(e)}"}))]
             elif name == "list_missions":
                 skip = arguments.get("skip", 0)
                 limit = arguments.get("limit", 50)
@@ -243,7 +250,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Request failed: {str(e)}"}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": False, "error": f"Request failed: {str(e)}"}))]
             elif name == "get_mission":
                 mission_id = arguments.get("mission_id")
                 try:
@@ -251,7 +259,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Request failed: {str(e)}"}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": False, "error": f"Request failed: {str(e)}"}))]
             elif name == "get_mission_candidates":
                 mission_id = arguments.get("mission_id")
                 try:
@@ -286,7 +295,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "get_user_active_missions":
                 user_id = arguments.get("user_id")
                 if not user_id:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'user_id' manquant."}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": False, "error": "Paramètre 'user_id' manquant."}))]
                 try:
                     response = await client.get(f"{API_BASE_URL}/missions/user/{user_id}/active", headers=headers, timeout=20.0)
                     response.raise_for_status()
@@ -296,7 +306,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "get_mission_task_status":
                 task_id = arguments.get("task_id")
                 if not task_id:
-                    return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'task_id' manquant."}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": False, "error": "Paramètre 'task_id' manquant."}))]
                 try:
                     response = await client.get(f"{API_BASE_URL}/missions/task/{task_id}", headers=headers, timeout=20.0)
                     response.raise_for_status()
@@ -307,11 +318,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 try:
                     response = await client.delete(f"{API_BASE_URL}/missions", headers=headers, timeout=30.0)
                     response.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps({"success": True, "message": "Toutes les missions ont été supprimées."}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": True, "message": "Toutes les missions ont été supprimées."}))]
                 except Exception as e:
                     return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
             else:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
+
 
 async def main():
     from mcp.server import InitializationOptions

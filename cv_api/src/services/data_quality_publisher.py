@@ -89,8 +89,14 @@ async def publish_data_quality_snapshot(
         "current_role_pct": round(report["metrics"]["current_role"]["pct"] / 100, 4),
         "competency_assignment_pct": round(report["metrics"]["competency_assignment"]["pct"] / 100, 4),
         "ai_scoring_pct": round(report["metrics"]["ai_scoring"]["pct"] / 100, 4),
+        "processing_errors_pct": round(report["metrics"]["processing_errors"]["pct"] / 100, 4),
         "issues_count": len(report["issues"]),
         "trigger": trigger,
+        # ── RAG quality snapshot (R3) — null si golden dataset absent ──
+        "rag_recall_at_5": report.get("rag", {}).get("recall_at_5"),
+        "rag_nb_cases": report.get("rag", {}).get("nb_cases"),
+        "rag_nb_cases_ok": report.get("rag", {}).get("nb_cases_ok"),
+        "rag_embedding_model": report.get("rag", {}).get("embedding_model"),
     }
 
     try:

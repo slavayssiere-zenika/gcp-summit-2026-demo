@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from fastapi import Request
 from opentelemetry import trace
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger import json as jsonlogger
 from starlette.middleware.base import BaseHTTPMiddleware
 
 SILENT_PATHS: frozenset = frozenset({

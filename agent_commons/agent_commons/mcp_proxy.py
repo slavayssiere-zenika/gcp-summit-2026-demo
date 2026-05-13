@@ -30,6 +30,16 @@ NON_BUSINESS_TOOLS: frozenset[str] = frozenset({
     "health_check", "ping", "healthcheck", "health", "status"
 })
 
+# Tools reserved for admin users only — must NEVER be callable by any agent.
+# These trigger LLM calls or heavy reprocessing on the entire CV corpus.
+# Agents must not initiate these operations; only admins via the API/frontend.
+ADMIN_ONLY_TOOLS: frozenset[str] = frozenset({
+    "analyze_cv",            # POST /api/cv/import — LLM extraction unitaire
+    "global_reanalyze_cvs",  # POST /api/cv/reanalyze — ré-analyse (limité à 1 CV, mais tool inéligible)
+    "reindex_cv_embeddings",  # POST /api/cv/reindex-embeddings — recompute tous embeddings
+    "reindex_mission_chunks",  # POST /api/cv/bulk-reanalyse/reindex-mission-chunks — reindex batch
+})
+
 
 class StatelessMcpSession:
     """Bridges a single MCPHttpClient REST call into the ADK MCP session protocol."""
@@ -79,7 +89,7 @@ class StatelessMcpSessionManager:
     """Provides a fresh StatelessMcpSession per ADK invocation (no persistent connection)."""
 
     def __init__(self, client: MCPHttpClient) -> None:
-        self._client = client
+        self._client = client  # retained for create_session delegation
 
     async def create_session(self, headers: dict | None = None) -> StatelessMcpSession:
         return StatelessMcpSession(self._client)
@@ -230,7 +240,8 @@ async def get_cached_tools(
             )
 
     # Deduplicate by tool name (Gemini rejects duplicate function declarations
-    # with 400 INVALID_ARGUMENT) and filter out non-business infrastructure tools.
+    # with 400 INVALID_ARGUMENT) and filter out non-business infrastructure tools
+    # and admin-only tools (CV analysis triggers reserved for human admins).
     # NOTE: McpTool exposes `.name` (not `.__name__` which is a callable-only attr).
     seen_names: set[str] = set()
     tools: list[McpTool] = []
@@ -238,6 +249,12 @@ async def get_cached_tools(
         fn_name = proxy.name  # McpTool.name == mcp_tool.name (str) — NOT proxy.__name__
         if fn_name in NON_BUSINESS_TOOLS:
             logger.debug("%s Skipping non-business tool: %s", agent_prefix, fn_name)
+            continue
+        if fn_name in ADMIN_ONLY_TOOLS:
+            logger.info(
+                "%s Blocking admin-only tool '%s' — reserved for human admins via API/frontend.",
+                agent_prefix, fn_name,
+            )
             continue
         if fn_name in seen_names:
             logger.warning("%s Duplicate tool name '%s' skipped (kept first).", agent_prefix, fn_name)

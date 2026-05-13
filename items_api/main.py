@@ -35,7 +35,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "items-api",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler
 )
@@ -113,7 +113,7 @@ async def get_service_token_fallback() -> str:
 
     try:
         users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
             res_meta = await client.get(
                 "http://metadata.google.internal/computeMetadata/v1/instance/"
                 "service-accounts/default/identity?audience=users_api",
@@ -141,7 +141,7 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     except Exception:
         raise
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
             await client.post(
                 f"{prompts_api_url}/errors/report",
@@ -203,7 +203,7 @@ async def proxy_mcp(path: str, request: Request):
 
     body = await request.body()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
         try:
             res = await client.request(
                 request.method,

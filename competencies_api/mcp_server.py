@@ -62,7 +62,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "competencies-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler
 )

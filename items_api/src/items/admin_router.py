@@ -1,12 +1,17 @@
+import base64
+import json
+import logging
 
 from cache import delete_cache_pattern
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Path
 from pydantic import BaseModel, Field
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import delete as sa_delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth import verify_jwt
-from src.items.models import Item
+from src.items.models import Item, item_category
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["items_admin"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["items_public"])
@@ -22,6 +27,11 @@ async def delete_user_items(
     (Admin / Service Account only) Supprime tous les items (missions) d'un utilisateur.
     Utilisé par le pipeline de ré-analyse globale (Vertex AI Batch) avant la
     ré-indexation complète des missions extraites du nouveau prompt.
+
+    Ordre de suppression obligatoire :
+    1. item_category (FK item_id → items.id) — doit être supprimé EN PREMIER
+    2. items — peut être supprimé une fois les FK levées
+    Sans cette séquence, PostgreSQL lève ForeignKeyViolationError (HTTP 500).
     """
     user_role = auth_payload.get("role", "")
     if user_role not in ("admin", "service_account"):
@@ -30,7 +40,24 @@ async def delete_user_items(
             detail="Privilèges admin ou service_account requis."
         )
 
-    await db.execute(sa_delete(Item).where(Item.user_id == user_id))
+    # ── Étape 1 : récupérer les IDs des items de l'utilisateur ──────────────
+    result = await db.execute(select(Item.id).where(Item.user_id == user_id))
+    item_ids = result.scalars().all()
+
+    if item_ids:
+        # ── Étape 2 : supprimer item_category AVANT items (contrainte FK) ───
+        await db.execute(
+            sa_delete(item_category).where(
+                item_category.c.item_id.in_(item_ids)
+            )
+        )
+        # ── Étape 3 : supprimer les items ────────────────────────────────────
+        await db.execute(sa_delete(Item).where(Item.user_id == user_id))
+        logger.info(
+            "[items] Purge user_id=%s : %d items + associations item_category supprimés.",
+            user_id, len(item_ids),
+        )
+
     await db.commit()
 
     delete_cache_pattern(f"items:user:{user_id}:*")
@@ -52,8 +79,6 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
     """
     Handle GCP Pub/Sub Push Notifications.
     """
-    import base64
-    import json
     try:
         body = await request.body()
         if not body:
@@ -75,7 +100,6 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
             source_id = data.get("source_id")
             target_id = data.get("target_id")
             if source_id and target_id:
-                from sqlalchemy import update
                 stmt = update(Item).where(Item.user_id == source_id).values(user_id=target_id)
                 await db.execute(stmt)
                 await db.commit()
@@ -93,7 +117,6 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
     """
     Internal endpoint to merge user data (Legacy).
     """
-    from sqlalchemy import update
     stmt = update(Item).where(Item.user_id == req.source_id).values(user_id=req.target_id)
     await db.execute(stmt)
     await db.commit()

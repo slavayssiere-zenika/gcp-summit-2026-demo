@@ -40,7 +40,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "users-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler
 )
@@ -56,29 +56,33 @@ trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 server = Server("users-api")
 
+
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     return get_mcp_tools()
+
 
 def get_trace_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     headers = get_trace_headers()
-    
+
     # DEBUG LOGS FOR THE USER
     logging.warning(f">>> [MCP SERVER DEBUG] call_tool triggered! Tool: {name}, Args: {arguments}")
     logging.warning(f">>> [MCP SERVER DEBUG] Trace Headers: {headers}")
-    
+
     auth_header = mcp_auth_header_var.get(None)
     if auth_header:
         headers["Authorization"] = auth_header
-    
+
     async with httpx.AsyncClient(follow_redirects=True, headers=headers) as client:
         return await handle_tool_call(name, arguments, headers, client)
+
 
 async def main():
     """Main entry point for the MCP server when run as a script."""

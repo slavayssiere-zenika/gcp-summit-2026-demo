@@ -120,6 +120,11 @@ resource "google_cloud_run_v2_service" "prompts_api" {
           }
         }
       }
+      env {
+        # Email du SA cv_api autorisé à appeler prompts_api via OIDC (batch taxonomy)
+        name  = "BATCH_CALLER_SA_EMAIL"
+        value = google_service_account.cv_sa.email
+      }
     }
 
 

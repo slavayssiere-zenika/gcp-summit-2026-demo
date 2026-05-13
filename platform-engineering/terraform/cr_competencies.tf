@@ -124,6 +124,14 @@ resource "google_cloud_run_v2_service" "competencies_api" {
         value = var.gemini_model
       }
       env {
+        # Modèle Vertex AI Batch pour le scoring bulk des compétences.
+        # DOIT être un ID stable (non-preview) accepté par l'API Vertex Batch Prediction.
+        # Valeur : gemini-2.5-flash (partagée avec cv_api bulk reanalyse)
+        # Sans cette variable, VERTEX_BATCH_MODEL vaut None → 400 INVALID_ARGUMENT Vertex.
+        name  = "VERTEX_BATCH_MODEL"
+        value = var.gemini_batch_model
+      }
+      env {
         name = "GOOGLE_API_KEY"
         value_source {
           secret_key_ref {
@@ -150,13 +158,28 @@ resource "google_cloud_run_v2_service" "competencies_api" {
         value = terraform.workspace
       }
       env {
-        # SCHEDULER_AUDIENCE = URL exacte du service Cloud Run competencies (ex: https://competencies-api-prd-HASH.a.run.app)
-        # Terraform ne peut pas auto-référencer ce service pour obtenir son URI.
-        # Action requise : après le 1er déploiement, lancer :
-        #   gcloud run services describe competencies-api-prd --region europe-west1 --format="value(status.url)"
-        # Et mettre à jour cette valeur dans prd.yaml (competencies_scheduler_audience) puis re-appliquer.
-        name  = "SCHEDULER_AUDIENCE"
-        value = var.competencies_scheduler_audience
+        # SCHEDULER_SA_EMAIL = email du SA Cloud Scheduler utilisant le service.
+        # Utilisée par verify_scheduler_oidc() pour valider le claim 'email' du token OIDC.
+        # Pas d'auto-référence → pas de cycle Terraform.
+        name  = "SCHEDULER_SA_EMAIL"
+        value = google_service_account.competencies_sa.email
+      }
+      env {
+        name  = "BATCH_CALLER_SA_EMAIL"
+        value = google_service_account.cv_sa.email
+      }
+      # ── Contrôle du pool de connexions DB (AlloyDB) ─────────────────────────────
+      # pool_size=10, max_overflow=20 → max 30 connexions simultanées par instance.
+      # Les semaphores batch doivent rester bien en deçà pour éviter la starvation
+      # du pool pendant les requêtes HTTP normales (assign, query, etc.).
+      # Règle : SCORING_APPLY_SEMAPHORE × ~3 connexions/chunk ≤ pool_size
+      env {
+        name  = "SCORING_APPLY_SEMAPHORE"
+        value = "3"
+      }
+      env {
+        name  = "SCORING_MISSIONS_FETCH_SEMAPHORE"
+        value = "5"
       }
     }
 
@@ -236,6 +259,7 @@ resource "google_cloud_run_v2_service" "competencies_api" {
     null_resource.run_db_migrations_job
   ]
 }
+
 
 
 # ==========================================

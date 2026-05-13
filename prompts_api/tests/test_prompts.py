@@ -157,6 +157,7 @@ def test_analyze_not_found():
 
 def test_auth_verify_jwt_pass():
     import os
+    from unittest.mock import MagicMock
 
     import jose.jwt
     from fastapi.security import HTTPAuthorizationCredentials
@@ -166,18 +167,25 @@ def test_auth_verify_jwt_pass():
     token = jose.jwt.encode({"sub": "1", "role": "admin"}, secret, algorithm="HS256")
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-    payload = verify_jwt(creds)
+    # verify_jwt(request, credentials) — request needed for cookie fallback
+    mock_request = MagicMock()
+    mock_request.cookies = {}
+    payload = verify_jwt(mock_request, creds)
     assert payload["role"] == "admin"
 
 
 def test_auth_verify_jwt_fail():
+    from unittest.mock import MagicMock
+
     from fastapi import HTTPException
     from fastapi.security import HTTPAuthorizationCredentials
     from src.prompts.router import verify_jwt
 
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="bad")
+    mock_request = MagicMock()
+    mock_request.cookies = {}
     with pytest.raises(HTTPException) as exc:
-        verify_jwt(creds)
+        verify_jwt(mock_request, creds)
     assert exc.value.status_code == 401
 
 
@@ -390,7 +398,11 @@ def test_delete_prompt_not_found():
 
 @pytest.mark.asyncio
 async def test_global_exception_handler_500():
-    """Vérifie que le global exception handler intercepte une exception inattendue et la logge."""
+    """Vérifie que le global exception handler intercepte une exception inattendue et la logge.
+
+    prompts_api ne se reporte PAS à elle-même (anti-boucle récursive).
+    Le handler logue en local et retourne 500.
+    """
     from main import global_exception_handler
     mock_request = MagicMock()
     mock_request.method = "GET"
@@ -399,28 +411,27 @@ async def test_global_exception_handler_500():
 
     exc = ValueError("Simulated violent crash")
 
-    with patch("main.report_exception_to_prompts_api", new_callable=AsyncMock) as mock_report, \
-         patch("main.get_service_token_fallback", new_callable=AsyncMock, return_value="fake"):
+    with patch("main.logging.error") as mock_log:
         resp = await global_exception_handler(mock_request, exc)
         assert resp.status_code == 500
         import json
         assert json.loads(resp.body)["detail"] == "Internal Server Error"
-        mock_report.assert_called_once()
+        mock_log.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_global_exception_handler_422():
-    """Vérifie que la RequestValidationError ne déclenche pas le report d'erreur 500."""
+    """Vérifie que la RequestValidationError retourne 422 sans déclencher de log d'erreur non gérée."""
     from main import global_exception_handler
     from fastapi.exceptions import RequestValidationError
 
     mock_request = MagicMock()
     exc = RequestValidationError(errors=[])
 
-    with patch("main.report_exception_to_prompts_api", new_callable=AsyncMock) as mock_report:
+    with patch("main.logging.error") as mock_log:
         resp = await global_exception_handler(mock_request, exc)
         assert resp.status_code == 422
-        mock_report.assert_not_called()
+        mock_log.assert_not_called()
 
 # ── Main.py Endpoints ──────────────────────────────────────────────────────────
 

@@ -83,3 +83,14 @@ def _decode_and_validate(token: str) -> dict:
     except JWTError as e:
         logger.debug(f"[JWT] Erreur de décodage JWTError: {e}")
         raise
+
+def verify_admin(payload: dict = Depends(verify_jwt)) -> dict:
+    """Vérifie que l'utilisateur a le rôle admin."""
+    role = payload.get("role")
+    if role != "admin":
+        logger.warning(f"[Auth] Tentative d'accès admin par un utilisateur non-admin: {payload.get('sub')} (role: {role})")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès refusé : privilèges administrateur requis."
+        )
+    return payload

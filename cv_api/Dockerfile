@@ -31,6 +31,7 @@ COPY cv_api/ .
 ENV PYTHONPATH=/app
 ENV GEMINI_MODEL=gemini-2.5-flash
 ENV GEMINI_PRO_MODEL=gemini-2.5-pro
+ENV GEMINI_BATCH_MODEL=gemini-2.5-flash
 ENV GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 ENV PORT=8004
 ENV MCP_SIDECAR_URL=http://cv_mcp:8000
@@ -44,9 +45,9 @@ ENV USE_IAM_AUTH=false
 ENV USERS_API_URL=http://users_api:8000
 ENV COMPETENCIES_API_URL=http://competencies_api:8003
 ENV ITEMS_API_URL=http://items_api:8001
-ENV DRIVE_API_URL=http://drive_api:8080
+ENV DRIVE_API_URL=http://drive_api:8006
 ENV PROMPTS_API_URL=http://prompts_api:8000
-ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
+ENV ANALYTICS_MCP_URL=http://analytics_mcp:8008
 ENV PUBSUB_INVOKER_SA_EMAIL=sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com
 ENV GCP_PROJECT_ID=your-gcp-project-id
 # Paramètres de parallélisme du pipeline bulk-reanalyse

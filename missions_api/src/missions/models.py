@@ -56,6 +56,8 @@ class Mission(Base):
 
     # Semantic Search
     semantic_embedding = Column(Vector(3072), nullable=True)
+    # R1 — versionning du modèle d'embedding : invalide les recherches cross-modèle
+    embedding_model = Column(String(100), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

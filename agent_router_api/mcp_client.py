@@ -168,7 +168,7 @@ _mcp_lock = threading.Lock()
 
 
 def init_mcp_clients():
-    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client, loki_mcp_client
+    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client, loki_mcp_client  # noqa: E501
     import os
 
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))
@@ -230,7 +230,7 @@ async def get_drive_mcp() -> MCPHttpClient:
 
 
 async def get_analytics_mcp() -> MCPHttpClient:
-    await init_mcp_clients()
+    init_mcp_clients()
     return analytics_mcp_client
 
 

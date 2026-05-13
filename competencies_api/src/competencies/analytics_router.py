@@ -41,15 +41,42 @@ router = APIRouter(prefix="", tags=["analytics"], dependencies=[Depends(verify_j
 
 @router.get("/stats/coverage")
 async def get_competency_coverage(
-    _: dict = Depends(verify_jwt), db: AsyncSession = Depends(get_db)
+    request: Request,
+    _: dict = Depends(verify_jwt),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Retourne le nombre de consultants ayant au moins 1 compétence assignée (Data Quality Dashboard)."""
+    """Retourne le nombre de consultants ayant au moins 1 compétence assignée (Data Quality Dashboard).
+
+    total_users est récupéré depuis users_api (non-anonymes) pour refléter la population réelle.
+    Fallback sur users_with_competencies si users_api est indisponible.
+    """
     users_with_competencies = (
         await db.execute(select(func.count(func.distinct(user_competency.c.user_id))))
     ).scalar_one() or 0
+
+    # Récupérer le total réel depuis users_api (consultants non-anonymes)
+    total_real_users = None
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    try:
+        headers = {"Authorization": auth_header}
+        inject(headers)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as hc:
+            res = await hc.get(
+                f"{USERS_API_URL.rstrip('/')}/users/",
+                params={"skip": 0, "limit": 1, "is_anonymous": "false"},
+                headers=headers,
+            )
+            if res.status_code == 200:
+                data = res.json()
+                total_real_users = data.get("total")
+    except Exception as exc:
+        logger.warning("[stats/coverage] users_api indisponible pour total_users: %s", exc)
+
+    # Fallback : si users_api indisponible, on ne peut pas corriger le ratio
+    # → retourner None pour que data_quality_service utilise users_with_cv comme fallback
     return {
         "users_with_competencies": users_with_competencies,
-        "total_users": users_with_competencies,
+        "total_users": total_real_users,
     }
 
 

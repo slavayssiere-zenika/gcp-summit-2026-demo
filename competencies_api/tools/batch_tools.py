@@ -1,5 +1,8 @@
 # flake8: noqa: E501, E701, E302, F541, E306
+import asyncio
 import json
+import random
+
 import httpx
 from mcp.types import TextContent
 
@@ -43,16 +46,35 @@ async def handle_batch_evaluate_competencies_users(client, arguments: dict, head
 
 
 async def handle_assign_competencies_bulk(client, arguments: dict, headers: dict, api_base_url: str):
+    """Assigne des compétences via MCP avec retry sur 429 (pool DB saturé).
 
+    Retry avec backoff exponentiel : competencies_api retourne 429 quand son
+    ASSIGN_BULK_SEMAPHORE est plein. L'agent peut retenter sans intervention.
+    """
     user_id = arguments["user_id"]
     payload = {"competencies": arguments["competencies"]}
-    response = await client.post(
-        f"{api_base_url}/user/{user_id}/assign/bulk",
-        json=payload,
-        timeout=60.0,
-    )
-    response.raise_for_status()
-    return [TextContent(type="text", text=json.dumps(response.json()))]
+    url = f"{api_base_url}/user/{user_id}/assign/bulk"
+
+    last_response: httpx.Response | None = None
+    for attempt in range(3):
+        try:
+            last_response = await client.post(url, json=payload, timeout=60.0)
+            if last_response.status_code not in (429, 500, 502, 503, 504):
+                last_response.raise_for_status()
+                return [TextContent(type="text", text=json.dumps(last_response.json()))]
+            wait = min(2 ** attempt + random.uniform(0, 1), 15.0)
+        except httpx.TimeoutException:
+            wait = min(2 ** attempt + random.uniform(0, 1), 15.0)
+            last_response = None
+        if attempt < 2:
+            await asyncio.sleep(wait)
+
+    status = last_response.status_code if last_response is not None else "timeout"
+    detail = last_response.text[:300] if last_response is not None else "timeout"
+    return [TextContent(
+        type="text",
+        text=json.dumps({"success": False, "error": f"assign/bulk échoué après 3 tentatives (HTTP {status}): {detail}"}),
+    )]
 
 
 async def handle_bulk_scoring_all(client, arguments: dict, headers: dict, api_base_url: str):

@@ -38,6 +38,7 @@ from src.competencies.scheduler_control import set_scoring_scheduler_enabled
 from src.competencies.scoring_service import (
     BATCH_GCS_BUCKET,
     GCP_PROJECT_ID,
+    VERTEX_BATCH_MODEL,
     VERTEX_LOCATION,
     _apply_scoring_results,
     bg_bulk_scoring_vertex,
@@ -48,6 +49,7 @@ USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 logger = logging.getLogger(__name__)
 
 SCHEDULER_AUDIENCE = os.getenv("SCHEDULER_AUDIENCE", "")
+SCHEDULER_SA_EMAIL = os.getenv("SCHEDULER_SA_EMAIL", "")
 
 router = APIRouter(prefix="", tags=["scoring"], dependencies=[Depends(verify_jwt)])
 
@@ -55,17 +57,37 @@ router = APIRouter(prefix="", tags=["scoring"], dependencies=[Depends(verify_jwt
 scheduler_router = APIRouter(prefix="", tags=["analytics_scheduler"])
 
 
+@router.get("/bulk-scoring-all/debug-config")
+async def get_scoring_debug_config(_: dict = Depends(verify_jwt)):
+    """Debug endpoint admin : retourne la configuration Vertex Batch active.
+
+    Permet de diagnostiquer les 400 INVALID_ARGUMENT sans accéder aux logs Cloud Run.
+    Les valeurs sensibles (clés) ne sont pas exposées.
+    """
+    return {
+        "GCP_PROJECT_ID": GCP_PROJECT_ID or "⚠️ ABSENT",
+        "VERTEX_LOCATION": VERTEX_LOCATION or "⚠️ ABSENT",
+        "BATCH_GCS_BUCKET": BATCH_GCS_BUCKET or "⚠️ ABSENT",
+        "VERTEX_BATCH_MODEL": VERTEX_BATCH_MODEL or "⚠️ ABSENT — cause du 400 Vertex",
+        "vertex_ready": bool(GCP_PROJECT_ID and BATCH_GCS_BUCKET and VERTEX_BATCH_MODEL),
+        "vertex_console_url": (
+            f"https://console.cloud.google.com/vertex-ai/batch-predictions?project={GCP_PROJECT_ID}"
+            if GCP_PROJECT_ID else None
+        ),
+    }
+
+
 async def verify_scheduler_oidc(request: Request) -> None:
+    """Valide le token OIDC Google émis par le Cloud Scheduler Service Account.
+
+    Stratégie de validation (par ordre de priorité) :
+    1. Si SCHEDULER_SA_EMAIL configuré → valide le claim 'email' du token (sans audience check).
+       Privilégié car l'URL du service CR ne peut pas être auto-référencée en Terraform.
+    2. Si SCHEDULER_AUDIENCE configuré → valide l'audience exacte (ancienne approche).
+    3. Si aucun configuré → token vérifié cryptographiquement, claim email loggué (warn).
+
+    Dans tous les cas le token est vérifié par Google (signature RS256 + expiration).
     """
-    Valide le token OIDC Google émis par le Cloud Scheduler Service Account.
-    L'audience doit correspondre à SCHEDULER_AUDIENCE (URL du service Cloud Run).
-    Protège POST /bulk-scoring-all/resume contre les appels non authentifiés.
-    """
-    if not SCHEDULER_AUDIENCE:
-        raise HTTPException(
-            status_code=500,
-            detail="[scheduler] SCHEDULER_AUDIENCE non configuré — appel refusé par sécurité.",
-        )
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(
@@ -74,10 +96,33 @@ async def verify_scheduler_oidc(request: Request) -> None:
     token = auth_header[7:]
     try:
         google_request = google.auth.transport.requests.Request()
+        # Validation cryptographique — audience=None = skip audience check
+        audience = SCHEDULER_AUDIENCE if SCHEDULER_AUDIENCE else None
         claims = google.oauth2.id_token.verify_oauth2_token(
-            token, google_request, SCHEDULER_AUDIENCE
+            token, google_request, audience
         )
-        logger.debug("[scheduler] OIDC token valide — email=%s", claims.get("email"))
+        caller_email = claims.get("email", "")
+        logger.debug("[scheduler] OIDC token valide — email=%s", caller_email)
+
+        # Vérification de l'identité du SA (plus fiable que l'audience pour CR)
+        if SCHEDULER_SA_EMAIL and caller_email != SCHEDULER_SA_EMAIL:
+            logger.warning(
+                "[scheduler] Email SA inattendu: got=%s expected=%s",
+                caller_email,
+                SCHEDULER_SA_EMAIL,
+            )
+            raise HTTPException(
+                status_code=401,
+                detail=f"[scheduler] SA non autorisé: {caller_email}",
+            )
+        if not SCHEDULER_SA_EMAIL and not SCHEDULER_AUDIENCE:
+            logger.warning(
+                "[scheduler] SCHEDULER_SA_EMAIL et SCHEDULER_AUDIENCE absents — "
+                "appel accepté sans vérification d'identité (caller=%s)",
+                caller_email,
+            )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.warning("[scheduler] Échec validation OIDC: %s", exc)
         raise HTTPException(
@@ -102,11 +147,23 @@ async def trigger_bulk_scoring_all(
         False,
         description="Si True, re-score TOUS les consultants avec compétences assignées",
     ),
+    delta_only: bool = Query(
+        True,
+        description=(
+            "Si True (défaut), ne score que les compétences sans ai_score (delta). "
+            "Si False, re-score toutes les compétences feuilles (même celles déjà scorées)."
+        ),
+    ),
     semaphore_limit: int = Query(2, ge=1, le=5),
     min_scored_threshold: int = Query(10, ge=1),
     db: AsyncSession = Depends(get_db),
 ):
     """Déclenche le scoring IA pour les consultants sous le seuil (ou tous si force=True).
+
+    Modes :
+    - delta_only=True  (défaut) : ne score QUE les compétences sans ai_score → économique
+    - delta_only=False          : re-score toutes les compétences feuilles (coûteux)
+    - force=True                : inclut TOUS les users, pas seulement ceux sous le seuil
 
     Obtient un service token longue durée avant de lancer la background task (AGENTS.md §4).
     """
@@ -186,10 +243,10 @@ async def trigger_bulk_scoring_all(
             f"[bulk-scoring-all] → Pipeline Vertex AI Batch (project={gcp_project}, bucket={gcs_bucket})"
         )
         background_tasks.add_task(
-            bg_bulk_scoring_vertex, list(user_ids_to_score), dict(headers)
+            bg_bulk_scoring_vertex, list(user_ids_to_score), dict(headers), delta_only
         )
-        # Active le Cloud Scheduler keepalive dès le déclenchement Vertex
-        background_tasks.add_task(set_scoring_scheduler_enabled, True)
+        # Note : set_scoring_scheduler_enabled(True) est appelé en DÉBUT de bg_bulk_scoring_vertex
+        # pour garantir l'ordre enable → pipeline → disable dans le même flux d'exécution.
     else:
         logger.warning(
             "[bulk-scoring-all] GCP_PROJECT_ID ou BATCH_GCS_BUCKET absent — fallback pipeline séquentiel "
@@ -200,13 +257,15 @@ async def trigger_bulk_scoring_all(
             list(user_ids_to_score),
             dict(headers),
             semaphore_limit,
+            delta_only,
         )
 
+    scope = "delta (compétences sans score)" if delta_only else "complet (toutes compétences)"
     return BulkScoringStatus(
         triggered=total,
         skipped=0,
         total_users=total,
-        message=f"Scoring IA lancé pour {total} consultant(s) via {'Vertex AI Batch' if gcp_project and gcs_bucket else 'pipeline séquentiel'}.",  # noqa: E501
+        message=f"{total} consultant(s) à scorer — mode {scope}.",
     )
 
 
@@ -341,8 +400,6 @@ async def resume_bulk_scoring(
     if not st or st.get("status") not in (
         "batch_running",
         "running",
-        "error",
-        "completed",
     ):
         return {
             "action": "noop",

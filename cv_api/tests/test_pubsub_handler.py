@@ -122,6 +122,7 @@ async def test_pubsub_handler_nominal_success():
 
     with (
         patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(return_value=mock_result)),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -155,6 +156,7 @@ async def test_pubsub_handler_pipeline_failure_triggers_500():
     with (
         patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(
             side_effect=HTTPException(status_code=500, detail="Gemini timeout"))),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -183,6 +185,7 @@ async def test_pubsub_handler_non_cv_returns_200_ack():
     with (
         patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(
             side_effect=HTTPException(status_code=400, detail="Not a CV - LLM Parsing failed"))),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -225,6 +228,7 @@ async def test_pubsub_handler_oidc_exchange_success():
 
     with (
         patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(return_value=mock_result)),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -261,8 +265,9 @@ async def test_pubsub_handler_delete_action_archives_and_deactivates():
     mock_execute_result = MagicMock()
     mock_execute_result.scalars.return_value.all.return_value = [mock_cv]
 
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
     mock_db.execute = AsyncMock(return_value=mock_execute_result)
+    mock_db.commit = AsyncMock()
 
     mock_user_response = MagicMock()
     mock_user_response.status_code = 200
@@ -281,7 +286,7 @@ async def test_pubsub_handler_delete_action_archives_and_deactivates():
         patch("httpx.AsyncClient") as mock_http,
         patch("fastapi.BackgroundTasks.add_task") as mock_bg_task
     ):
-        mock_http_instance = AsyncMock()
+        mock_http_instance = MagicMock()
         mock_http_instance.get = AsyncMock(return_value=mock_user_response)
         mock_http_instance.put = AsyncMock(return_value=mock_put_response)
         mock_http_instance.patch = AsyncMock(return_value=mock_patch_response)
@@ -331,8 +336,11 @@ async def test_pubsub_handler_delete_action_archives_and_deactivates():
 
 @pytest.mark.asyncio
 async def test_run_cv_delete_bg_no_cv():
-    mock_db = AsyncMock()
-    mock_db.execute.return_value.scalars.return_value.all.return_value = []
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_execute_res = MagicMock()
+    mock_execute_res.scalars.return_value.all.return_value = []
+    mock_db.execute.return_value = mock_execute_res
 
     with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
         await PubsubService._run_cv_delete_bg("http://url", "123", "jwt", "http://drive", {})
@@ -342,12 +350,16 @@ async def test_run_cv_delete_bg_no_cv():
 async def test_run_cv_delete_bg_admin_user():
     mock_cv = MagicMock()
     mock_cv.user_id = 1
-    mock_db = AsyncMock()
-    mock_db.execute.return_value.scalars.return_value.all.return_value = [mock_cv]
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_execute_res = MagicMock()
+    mock_execute_res.scalars.return_value.all.return_value = [mock_cv]
+    mock_db.execute.return_value = mock_execute_res
+    mock_db.commit = AsyncMock()
 
-    mock_http_instance = AsyncMock()
-    mock_http_instance.get.return_value = MagicMock(status_code=200, json=lambda: {"role": "admin"})
-    mock_http_instance.patch.return_value = MagicMock(is_error=True, status_code=500)
+    mock_http_instance = MagicMock()
+    mock_http_instance.get = AsyncMock(return_value=MagicMock(status_code=200, json=lambda: {"role": "admin"}))
+    mock_http_instance.patch = AsyncMock(return_value=MagicMock(is_error=True, status_code=500))
 
     with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
         with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
@@ -358,13 +370,17 @@ async def test_run_cv_delete_bg_admin_user():
 async def test_run_cv_delete_bg_deactivation_failure():
     mock_cv = MagicMock()
     mock_cv.user_id = 1
-    mock_db = AsyncMock()
-    mock_db.execute.return_value.scalars.return_value.all.return_value = [mock_cv]
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_execute_res = MagicMock()
+    mock_execute_res.scalars.return_value.all.return_value = [mock_cv]
+    mock_db.execute.return_value = mock_execute_res
+    mock_db.commit = AsyncMock()
 
-    mock_http_instance = AsyncMock()
-    mock_http_instance.get.return_value = MagicMock(status_code=200, json=lambda: {"role": "user"})
-    mock_http_instance.put.return_value = MagicMock(is_success=False, text="Error")
-    mock_http_instance.patch.side_effect = Exception("Patch error")
+    mock_http_instance = MagicMock()
+    mock_http_instance.get = AsyncMock(return_value=MagicMock(status_code=200, json=lambda: {"role": "user"}))
+    mock_http_instance.put = AsyncMock(return_value=MagicMock(is_success=False, text="Error"))
+    mock_http_instance.patch = AsyncMock(side_effect=Exception("Patch error"))
 
     with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
         with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
@@ -381,5 +397,6 @@ async def test_run_cv_pipeline_bg_imported_cv_patch_error():
 
     with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock())):
         with patch("src.services.pubsub_service.process_cv_core", return_value=mock_result):
-            with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
-                await PubsubService._run_cv_pipeline_bg("123", "http", None, None, None, {}, "jwt", {}, "http")
+            with patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])):
+                with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
+                    await PubsubService._run_cv_pipeline_bg("123", "http", None, None, None, {}, "jwt", {}, "http")

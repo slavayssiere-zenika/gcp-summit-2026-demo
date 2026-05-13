@@ -9,7 +9,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 314 | ✅ |
+| `main.py` | 271 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `agent.py` | 283 | ✅ |
@@ -18,7 +18,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 | Var | Type | Valeur dev |
 |---|---|---|
 | `PYTHONPATH` | Comportement | `/app` |
-| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |
@@ -50,9 +50,6 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 - `GET /spec`
 - `POST /query`
 - `POST /a2a/query`
-- `POST /login`
-- `POST /logout`
-- `GET /me`
 - `GET /mcp/registry`
 - `GET /version`
 

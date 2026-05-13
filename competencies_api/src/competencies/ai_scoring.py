@@ -248,12 +248,15 @@ async def _compute_ai_score(
     # 5. Appel Gemini avec JSON forcé
     try:
         client = genai.Client(api_key=api_key)
-        response = await client.aio.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json", temperature=0.1
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json", temperature=0.1
+                ),
             ),
+            timeout=60.0,
         )
         raw = response.text.strip()
         if not raw.startswith("{"):
@@ -266,6 +269,11 @@ async def _compute_ai_score(
         justification = str(data.get("justification", ""))[:500]
         logger.info(f"[AI Score] user={user_id} comp='{competency_name}' score={score}")
         return score, justification
+    except asyncio.TimeoutError:
+        logger.error(
+            f"[AI Score] Timeout (60s) Gemini pour '{competency_name}' user={user_id} — Vertex AI indisponible"
+        )
+        return None, "Calcul IA échoué (timeout Vertex AI)."
     except json.JSONDecodeError as e:
         logger.error(f"[AI Score] JSON parse error for '{competency_name}': {e}")
         return None, "Réponse Gemini non parseable en JSON."
@@ -321,13 +329,15 @@ async def _score_all_bg(
 
 
 async def _bulk_scoring_all_bg(
-    user_ids: list[int], headers: dict, semaphore_limit: int = 2
+    user_ids: list[int], headers: dict, semaphore_limit: int = 2, delta_only: bool = True
 ):
     """BackgroundTask : déclenche ai-score-all pour chaque user, avec Semaphore.
 
     Orchestre N users avec contrôle du débit quota Gemini.
+    delta_only=True (défaut) : ne score que les compétences sans ai_score.
     """
-    logger.info(f"[bulk-scoring-all BG] Démarrage — {len(user_ids)} users à scorer")
+    mode_label = "delta (ai_score IS NULL)" if delta_only else "complet"
+    logger.info(f"[bulk-scoring-all BG] Démarrage — {len(user_ids)} users à scorer (mode {mode_label})")
     sem = asyncio.Semaphore(semaphore_limit)
     success = 0
     errors = 0
@@ -364,6 +374,27 @@ async def _bulk_scoring_all_bg(
                             new_log=f"User {uid} ignoré (0 compétence feuille)",
                         )
                         return
+
+                    # ── Filtre delta : exclure les compétences déjà scorées ──────
+                    if delta_only:
+                        already_scored = (
+                            await db.execute(
+                                select(CompetencyEvaluation.competency_id).where(
+                                    CompetencyEvaluation.user_id == uid,
+                                    CompetencyEvaluation.competency_id.in_(leaf_ids),
+                                    CompetencyEvaluation.ai_score.isnot(None),
+                                )
+                            )
+                        ).scalars().all()
+                        leaf_ids = [lid for lid in leaf_ids if lid not in already_scored]
+                        if not leaf_ids:
+                            skipped += 1
+                            await bulk_scoring_manager.update_progress(
+                                processed_inc=1,
+                                new_log=f"User {uid} ignoré (toutes compétences déjà scorées)",
+                            )
+                            return
+
                     comps_raw = (
                         await db.execute(
                             select(Competency.id, Competency.name).where(

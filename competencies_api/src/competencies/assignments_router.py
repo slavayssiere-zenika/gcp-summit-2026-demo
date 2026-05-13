@@ -2,9 +2,11 @@
 assignments_router.py — Routes d'assignation compétences/utilisateurs.
 """
 
+import asyncio
 import base64
 import json
 import logging
+import os
 from datetime import datetime, timezone
 
 from cache import delete_cache_pattern, get_cache, set_cache
@@ -26,6 +28,25 @@ CACHE_TTL = 60
 router = APIRouter(prefix="", tags=["assignments"], dependencies=[Depends(verify_jwt)])
 public_router = APIRouter(prefix="", tags=["assignments_public"])
 
+# ── Protection pool DB — semaphore pour /user/{id}/assign/bulk ────────────────
+# Limite le nombre d'appels assign/bulk traités SIMULTANÉMENT par instance.
+# Quand le semaphore est plein → HTTP 429, ce qui déclenche le retry
+# exponentiel de l'appelant (cv_storage_service, bulk_service) au lieu de
+# laisser SQLAlchemy lever une QueuePool Overflow (HTTP 500 non retriable).
+#
+# Valeur : DB_POOL_SIZE / ~2 connexions par assign/bulk = 10/2 = 5.
+# Configurable via ASSIGN_BULK_SEMAPHORE pour ajuster sans redéploiement code.
+_ASSIGN_BULK_SEM: asyncio.Semaphore | None = None
+
+
+def _get_assign_sem() -> asyncio.Semaphore:
+    global _ASSIGN_BULK_SEM
+    if _ASSIGN_BULK_SEM is None:
+        limit = int(os.getenv("ASSIGN_BULK_SEMAPHORE", "5"))
+        _ASSIGN_BULK_SEM = asyncio.Semaphore(limit)
+        logger.info("[assign/bulk] ASSIGN_BULK_SEMAPHORE=%d", limit)
+    return _ASSIGN_BULK_SEM
+
 
 class UserMergeRequest(BaseModel):
     source_id: int
@@ -36,44 +57,57 @@ class UserMergeRequest(BaseModel):
 async def assign_competencies_bulk(
     user_id: int, request: Request, db: AsyncSession = Depends(get_db)
 ):
-    """Assigne en masse une liste de compétences à un utilisateur (idempotent via ON CONFLICT DO NOTHING)."""
-    body = await request.json()
-    competency_ids = body.get("competency_ids", [])
-    if not competency_ids:
-        return {"assigned": 0, "skipped": 0, "message": "Aucune compétence fournie."}
+    """Assigne en masse une liste de compétences à un utilisateur (idempotent via ON CONFLICT DO NOTHING).
 
-    await get_user_from_api(user_id, request)
-    existing = (
-        (
+    Protégé par ASSIGN_BULK_SEMAPHORE : retourne HTTP 429 si le pool est saturé,
+    ce qui permet aux appelants (cv_storage_service, bulk_service) de retenter
+    avec backoff exponentiel au lieu de récupérer un 500 pool overflow non retriable.
+    """
+    sem = _get_assign_sem()
+    if sem.locked():
+        # Tous les slots occupés : signalé 429 AVANT d'acquérir une connexion DB
+        raise HTTPException(
+            status_code=429,
+            detail="assign/bulk: service sous charge — réessayer dans quelques secondes.",
+        )
+    async with sem:
+        body = await request.json()
+        competency_ids = body.get("competency_ids", [])
+        if not competency_ids:
+            return {"assigned": 0, "skipped": 0, "message": "Aucune compétence fournie."}
+
+        await get_user_from_api(user_id, request)
+        existing = (
+            (
+                await db.execute(
+                    select(Competency.id).where(Competency.id.in_(competency_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        valid_ids = set(existing)
+        invalid_ids = [cid for cid in competency_ids if cid not in valid_ids]
+
+        for cid in valid_ids:
             await db.execute(
-                select(Competency.id).where(Competency.id.in_(competency_ids))
+                pg_insert(user_competency)
+                .values(
+                    user_id=user_id,
+                    competency_id=cid,
+                    created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                )
+                .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
             )
-        )
-        .scalars()
-        .all()
-    )
-    valid_ids = set(existing)
-    invalid_ids = [cid for cid in competency_ids if cid not in valid_ids]
 
-    for cid in valid_ids:
-        await db.execute(
-            pg_insert(user_competency)
-            .values(
-                user_id=user_id,
-                competency_id=cid,
-                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
-            )
-            .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
-        )
-
-    await db.commit()
-    delete_cache_pattern(f"competencies:user:{user_id}:*")
-    return {
-        "assigned": len(valid_ids),
-        "skipped": len(invalid_ids),
-        "invalid_ids": invalid_ids,
-        "message": f"{len(valid_ids)} compétences assignées à l'utilisateur {user_id}.",
-    }
+        await db.commit()
+        delete_cache_pattern(f"competencies:user:{user_id}:*")
+        return {
+            "assigned": len(valid_ids),
+            "skipped": len(invalid_ids),
+            "invalid_ids": invalid_ids,
+            "message": f"{len(valid_ids)} compétences assignées à l'utilisateur {user_id}.",
+        }
 
 
 @router.post("/user/{user_id}/assign/{competency_id}", status_code=201)

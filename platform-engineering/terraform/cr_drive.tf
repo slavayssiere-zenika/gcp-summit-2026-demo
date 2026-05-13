@@ -111,6 +111,13 @@ resource "google_cloud_run_v2_service" "drive_api" {
         value = var.project_id
       }
       env {
+        # Robinet principal du pipeline d'ingestion.
+        # Contrôle combien de CVs sont publiés dans Pub/Sub par cycle.
+        # Réduire si AlloyDB sature (QueuePool TimeoutError dans les logs cv_api).
+        name  = "MAX_DRIVE_CV_IMPORT"
+        value = var.max_drive_cv_import
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }

@@ -6,7 +6,6 @@ attributes instead of __name__, __doc__, __signature__.
 """
 
 import asyncio
-import pytest
 
 from mcp.types import CallToolResult
 from agent_commons.mcp_proxy import sanitize_input_schema
@@ -51,6 +50,7 @@ from agent_commons.mcp_proxy import (
     create_mcp_tool_proxy,
     get_cached_tools,
     NON_BUSINESS_TOOLS,
+    ADMIN_ONLY_TOOLS,
     StatelessMcpSession,
 )
 from google.adk.tools.mcp_tool import McpTool
@@ -199,6 +199,52 @@ class TestGetCachedTools:
     def test_non_business_tools_set_contains_health_check(self):
         assert "health_check" in NON_BUSINESS_TOOLS
         assert "ping" in NON_BUSINESS_TOOLS
+
+    def test_admin_only_tools_are_filtered(self):
+        """Les tools réservés aux admins (analyse CV) ne doivent JAMAIS être
+        exposés aux agents LLM, même s'ils sont listés par le MCP."""
+        client = _FakeClient()
+
+        async def list_tools_with_admin():
+            return [
+                _make_tool_def("search_users"),
+                _make_tool_def("analyze_cv"),           # admin-only — doit être filtré
+                _make_tool_def("global_reanalyze_cvs"),  # admin-only — doit être filtré
+                _make_tool_def("reindex_cv_embeddings"),  # admin-only — doit être filtré
+                _make_tool_def("reindex_mission_chunks"),  # admin-only — doit être filtré
+                _make_tool_def("get_user_cv"),
+            ]
+        client.list_tools = list_tools_with_admin
+        cache: dict = {}
+        tools = asyncio.get_event_loop().run_until_complete(
+            get_cached_tools([("cv_mcp", client)], "[TEST]", ttl=300, _cache=cache)
+        )
+        tool_names = [t.name for t in tools]
+        # Seuls les tools non-admin doivent être exposés
+        assert "search_users" in tool_names
+        assert "get_user_cv" in tool_names
+        # Les tools admin NE DOIVENT PAS être exposés
+        assert "analyze_cv" not in tool_names
+        assert "global_reanalyze_cvs" not in tool_names
+        assert "reindex_cv_embeddings" not in tool_names
+        assert "reindex_mission_chunks" not in tool_names
+
+
+class TestAdminOnlyToolsFilter:
+    """Garantit que ADMIN_ONLY_TOOLS contient les tools d'analyse CV attendus."""
+
+    def test_admin_only_tools_contains_expected_tools(self):
+        assert "analyze_cv" in ADMIN_ONLY_TOOLS
+        assert "global_reanalyze_cvs" in ADMIN_ONLY_TOOLS
+        assert "reindex_cv_embeddings" in ADMIN_ONLY_TOOLS
+        assert "reindex_mission_chunks" in ADMIN_ONLY_TOOLS
+
+    def test_admin_only_tools_is_frozenset(self):
+        assert isinstance(ADMIN_ONLY_TOOLS, frozenset)
+
+    def test_admin_and_non_business_are_disjoint(self):
+        """Les deux frozensets ne doivent pas se chevaucher."""
+        assert ADMIN_ONLY_TOOLS.isdisjoint(NON_BUSINESS_TOOLS)
 
 
 class TestSanitizeInputSchema:

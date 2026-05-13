@@ -82,16 +82,20 @@ const sections = [
     title: "Intelligence Sémantique & RAG",
     icon: BrainCircuit,
     color: "#8B5CF6",
-    description: "Exploitez la recherche vectorielle pour des requêtes sémantiques approfondies sur CVs et documents.",
+    description: "Exploitez la recherche vectorielle pour des requêtes sémantiques approfondies sur CVs et documents. La qualité des résultats dépend directement du vocabulaire utilisé — privilégiez les termes techniques et les noms de frameworks.",
     examples: [
-      { label: "Matching sémantique", prompt: "Explique pourquoi ce consultant correspond à ma recherche Kubernetes." },
-      { label: "Résumé de CV", prompt: "Fais-moi un résumé des missions marquantes de ce consultant." },
-      { label: "Points forts", prompt: "Quels sont les points forts extraits du CV de cette personne ?" },
-      { label: "Recherche conceptuelle", prompt: "Trouve un consultant qui a travaillé sur des problématiques de résilience distribuée." },
-      { label: "Formation académique", prompt: "Quels consultants sont issus d'une grande école d'ingénieurs ?" },
-      { label: "Expertise implicite", prompt: "Qui dans l'équipe a une expérience en sécurité applicative, même si ce n'est pas sa compétence principale ?" },
+      { label: "✅ Bonne formulation", prompt: "Spring Boot microservices architecture backend Java" },
+      { label: "⚠️ Moins efficace", prompt: "Développeur Java senior 10 ans d'expérience" },
+      { label: "✅ Bonne formulation", prompt: "Kubernetes GKE Terraform infrastructure cloud" },
+      { label: "✅ Recherche conceptuelle", prompt: "Trouve un consultant qui a travaillé sur des problématiques de résilience distribuée." },
+      { label: "✅ Expertise implicite", prompt: "Qui a une expérience en sécurité applicative, même si ce n'est pas sa compétence principale ?" },
+      { label: "✅ Matching mission", prompt: "Ce consultant correspond-il à une mission de lead technique sur un projet GCP ?" },
     ],
-    tips: ["La recherche sémantique comprend les synonymes et concepts proches — pas besoin du mot exact.", "Les embeddings sont générés sur le contenu distillé des CVs : compétences, missions, formations."]
+    tips: [
+      "Utilisez les frameworks et technologies exactes (Spring Boot, Hibernate, JPA) plutôt que le langage seul (Java) — les CVs décrivent des missions, pas des niveaux.",
+      "Les termes d'ancienneté (\"senior\", \"10 ans\", \"expert\") sont peu présents dans les CVs indexés. Préférez les compétences techniques précises.",
+      "La recherche sémantique comprend les synonymes et concepts proches — \"microservices backend\" trouve des profils Java/Node/Go sans préciser le langage.",
+    ]
   },
   {
     id: 'ops',
@@ -116,6 +120,8 @@ const limits = [
   { icon: AlertTriangle, color: "#E31937", title: "Documents externes", text: "L'agent ne peut pas accéder à des URLs ou fichiers extérieurs à la plateforme Zenika sans les avoir uploadés au préalable." },
   { icon: AlertTriangle, color: "#8B5CF6", title: "Calculs complexes", text: "Pour des calculs financiers ou statistiques très précis, préférez un export des données brutes depuis les APIs." },
   { icon: AlertTriangle, color: "#3B82F6", title: "Modifications directes", text: "L'agent peut recommander des actions mais n'exécute pas lui-même de modifications en base de données (sauf outils dédiés)." },
+  { icon: AlertTriangle, color: "#8B5CF6", title: "Recherche par niveau ou ancienneté", text: "Les termes \"senior\", \"10 ans d'expérience\" ou \"expert\" sont rarement présents dans les CVs indexés. La recherche par technologie (Spring Boot, Kubernetes, dbt...) est beaucoup plus efficace que la recherche par niveau." },
+  { icon: AlertTriangle, color: "#10B981", title: "Résultats = top pertinents, pas exhaustif", text: "La recherche sémantique retourne les N profils les plus proches de votre query, pas tous les consultants du domaine. Si les résultats semblent incomplets, reformulez avec d'autres termes (ex: \"JEE\" au lieu de \"Java\")." },
 ]
 
 const advanced = [

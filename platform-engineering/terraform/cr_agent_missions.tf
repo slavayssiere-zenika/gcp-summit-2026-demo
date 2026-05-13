@@ -248,16 +248,10 @@ resource "google_compute_region_backend_service" "agent_missions_internal_backen
   }
 }
 
-# Backend externe (LB global HTTPS — exposé via /api/agent-missions/ dans lb.tf)
-resource "google_compute_backend_service" "agent_missions_backend" {
-  name                  = "backend-agent-missions-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
-  backend {
-    group = google_compute_region_network_endpoint_group.agent_missions_neg.id
-  }
-}
+# NOTE: Le backend service externe (agent_missions_backend) a été supprimé.
+# Les sous-agents sont uniquement accessibles via le LB interne (agent_missions_internal_backend).
+# Le trafic public passe exclusivement par agent_router_api → /api/ catch-all.
+
 
 # ==============================================================
 # Monitoring Custom Service & SLOs

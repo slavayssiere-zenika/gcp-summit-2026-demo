@@ -3,60 +3,24 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-import httpx
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 from database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
-                     Request, Response)
-from fastapi.security import HTTPAuthorizationCredentials
-from google import genai
-from google.cloud import run_v2 as cloudrun_v2
-from google.cloud import storage as gcs_storage
-from metrics import CV_MISSING_EMBEDDINGS, CV_PROCESSING_TOTAL
-from opentelemetry.propagate import inject
+                     Request)
 from pydantic import BaseModel
-from sqlalchemy import delete as sa_delete
 from sqlalchemy import func
-from sqlalchemy import text as sa_text
-from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import SECRET_KEY as _AUTH_SECRET_KEY
-from src.auth import security, verify_jwt
+from src.auth import verify_jwt
 from src.cvs.bulk_task_state import bulk_reanalyse_manager
 from src.cvs.models import CVProfile
-from src.cvs.routers._shared import (ADMIN_SERVICE_PASSWORD,
-                                     ADMIN_SERVICE_USERNAME, ANALYTICS_MCP_URL,
-                                     BATCH_GCS_BUCKET, BULK_APPLY_SEMAPHORE,
-                                     BULK_EMBED_SEMAPHORE,
-                                     BULK_SCALE_MIN_INSTANCES,
-                                     BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
-                                     COMPETENCIES_API_URL)
-from src.cvs.routers._shared import CV_RESPONSE_SCHEMA as _CV_RESPONSE_SCHEMA
-from src.cvs.routers._shared import (DRIVE_API_URL, GCP_PROJECT_ID,
-                                     ITEMS_API_URL, MISSIONS_API_URL,
-                                     PROMPTS_API_URL, USERS_API_URL,
-                                     VERTEX_LOCATION,
-                                     MultiCriteriaSearchRequest,
-                                     RecalculateStepRequest)
-from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
-                             CVImportStep, CVProfileResponse, CVResponse,
-                             RankedExperienceResponse, SearchCandidateRequest,
-                             SearchCandidateResponse, UserMergeRequest)
-from src.cvs.task_state import task_state_manager, tree_task_manager
-from src.gemini_retry import (embed_content_with_retry,
-                              generate_content_with_retry)
 from src.services.bulk_service import (_acquire_service_token,
                                        bg_bulk_reanalyse, bg_retry_apply)
-from src.services.cv_import_service import process_cv_core
-from src.services.embedding_service import reindex_embeddings_bg
-from src.services.finops import log_finops
-from src.services.search_service import execute_search, scale_bulk_dependencies
+from src.services.embedding_service import (
+    reindex_mission_chunks_bg,
+)
 from src.services.taxonomy_service import (fetch_prompt,
-                                           get_existing_competencies,
-                                           run_taxonomy_step)
-from src.services.utils import (_build_distilled_content, _chunk_text,
-                                _clean_llm_json)
+                                           get_existing_competencies)
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -66,17 +30,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["Bulk Reanalyse"], dependencies=[Depends(verify_jwt)])
 
+
+class BulkReanalyseRequest(BaseModel):
+    cv_ids: list[int] | None = None
+    """IDs de CVs à retraiter. Si None ou vide — tous les CVs sont traités."""
+
+
 @router.post("/bulk-reanalyse/start", status_code=202)
 async def start_bulk_reanalyse(
     request: Request,
     background_tasks: BackgroundTasks,
+    body: BulkReanalyseRequest = BulkReanalyseRequest(),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(verify_jwt),
 ):
     """
-    (Admin only) Lance la ré-analyse globale de tous les CVs via Vertex AI Batch.
-    Retourne immédiatement 202 — le traitement est asynchrone.
-    Utiliser GET /bulk-reanalyse/status pour suivre la progression.
+    (Admin only) Lance la ré-analyse via Vertex AI Batch.
+
+    Body JSON optionnel :
+    - `cv_ids` (list[int]) : si fourni, seuls ces CVs sont traités.
+      Utilisé pour récupérer les CVs sans résultat GCS après un batch partial.
+      Si absent ou liste vide → tous les CVs sont traités (comportement par défaut).
+
+    Retourne 202 immédiatement — traitement asynchrone.
+    Suivre via GET /bulk-reanalyse/status.
     """
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
@@ -87,20 +64,27 @@ async def start_bulk_reanalyse(
             detail="Une ré-analyse est déjà en cours. Utiliser /bulk-reanalyse/status pour suivre.",
         )
 
-    total = (await db.execute(select(func.count()).select_from(CVProfile))).scalar_one()
+    # Si cv_ids fourni : total = nombre de CVs ciblés, sinon : tous les CVs
+    cv_ids_filter = body.cv_ids if body.cv_ids else None
+    if cv_ids_filter:
+        total = len(cv_ids_filter)
+    else:
+        total = (await db.execute(select(func.count()).select_from(CVProfile))).scalar_one()
 
     # Service token longue durée (AGENTS.md §4 — jamais le JWT utilisateur pour tâche longue)
     auth_header = request.headers.get("Authorization", "")
     service_token = await _acquire_service_token(auth_header)
 
     await bulk_reanalyse_manager.initialize(total_cvs=total)
-    background_tasks.add_task(bg_bulk_reanalyse, service_token)
+    background_tasks.add_task(bg_bulk_reanalyse, service_token, cv_ids_filter)
 
+    scope = f"{total} CVs ciblés" if cv_ids_filter else f"{total} CVs (tous)"
     return {
         "success": True,
         "total_cvs": total,
+        "cv_ids_filter": cv_ids_filter,
         "status": "building",
-        "message": f"Ré-analyse de {total} CVs démarrée. Suivre via GET /bulk-reanalyse/status.",
+        "message": f"Ré-analyse de {scope} démarrée. Suivre via GET /bulk-reanalyse/status.",
     }
 
 
@@ -286,3 +270,55 @@ async def retry_bulk_apply(
 
 
 
+
+
+@router.post("/bulk-reanalyse/reindex-mission-chunks", status_code=202)
+async def reindex_mission_chunks(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    tag: str = Query(None, description="Filtre optionnel par agence (source_tag)"),
+    user_id: int = Query(None, description="Filtre optionnel par user_id"),
+    force: bool = Query(
+        False,
+        description="Si true, supprime et recrée tous les chunks (défaut: false = skip déjà indexés)",
+    ),
+    user: dict = Depends(verify_jwt),
+):
+    """(Admin only) R7 — Lance la ré-indexation des chunks de missions en arrière-plan.
+
+    Pour chaque CVProfile :
+    - 1 chunk 'profile_summary' (ROLE + SUMMARY + COMPETENCIES, sans missions)
+    - N chunks 'mission' (1 par mission, toutes missions sans limite)
+
+    force=false (défaut) : skip les profils déjà indexés (reprise sûr après restart).
+    force=true : supprime et recrée tous les chunks (re-indexation complète).
+
+    Durée estimée : 30-90 min selon la taille du corpus.
+    Activer le mode chunked avec RAG_CHUNKED_SEARCH=true après indexation complète.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
+
+    auth_header = request.headers.get("Authorization", "")
+    service_token = await _acquire_service_token(auth_header)
+
+    background_tasks.add_task(
+        reindex_mission_chunks_bg,
+        tag,
+        user_id,
+        f"Bearer {service_token}",
+        _svc_config.client,
+        5,      # semaphore_count
+        force,
+    )
+
+    return {
+        "success": True,
+        "message": (
+            "Ré-indexation des chunks de missions démarrée. "
+            "Suivre via les logs Cloud Run [CHUNK_REINDEX]."
+        ),
+        "tag_filter": tag,
+        "user_id_filter": user_id,
+        "force": force,
+    }

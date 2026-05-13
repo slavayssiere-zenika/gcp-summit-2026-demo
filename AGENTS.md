@@ -912,3 +912,166 @@ GCLOUD_BIN=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin/gcloud \
 ```
 
 > **🚨 RÈGLE ANTI-HALLUCINATION** : Ne jamais estimer ou inventer des données de production (coûts, nombre de tokens, taux d'erreur). Toujours interroger les tools MCP ou la CLI pour obtenir des chiffres réels. Une estimation sans source MCP est une **hallucination FinOps**.
+
+---
+
+## 🧹 16. HYGIÈNE DU RÉPERTOIRE DE TRAVAIL (RÈGLE OBLIGATOIRE)
+
+> **RÈGLE ABSOLUE** : L'agent Antigravity est **responsable du nettoyage systématique** de tout fichier temporaire qu'il crée. Un répertoire de travail pollué est un anti-pattern qui génère de la confusion et alourdit le repo.
+
+### Catégories de fichiers temporaires à supprimer obligatoirement
+
+| Catégorie | Patterns | Exemple |
+|---|---|---|
+| **Sorties pytest** | `pytest_output*.txt`, `*_pytest_out.txt`, `test_report.txt`, `cov_summary.txt` | `pytest_output_2.txt` |
+| **Coverage** | `coverage_output.txt`, `.coverage`, `coverage.json`, `htmlcov/` | `cv_api/htmlcov/` |
+| **Scripts scratch** | `scratch*.py`, `fix*.py`, `patch*.py`, `refactor_*.py`, `split_*.py`, `temp_*.py` | `scratch_extract.py` |
+| **Scripts one-shot racine** | Scripts d'analyse ou de correction ponctuels créés à la racine du projet | `analyze_schemas_coverage.py` |
+| **Fichiers d'audit** | `audit_static.txt`, `audit_tests.txt`, `rapport_audit_*.md` (après traitement) | `audit_static.txt` |
+| **Rapports LLM horodatés** | `reports/llm_analysis_*.md`, `reports/run_*.log` | `reports/llm_analysis_all_*.md` |
+| **Fichiers parasites scripts/** | Scripts `.sh` doublons créés à la racine (`audit.sh`, `run_tests.sh`, `get_coverage.sh`) | `audit.sh` |
+| **Fichiers d'erreur** | `*.error_correction.txt`, `parse_log.py` | `prompts_api/prompts_api.error_correction.txt` |
+| **Répertoire scratch** | `scratch/` à la racine (répertoire entier) | `scratch/*.py` |
+
+> **Fichiers légitimes à NE PAS supprimer** : `seed_data.py` (seeding de la plateforme), `scripts/a.txt` + `scripts/b.txt` (fichiers de référence), `*.error_correction.txt` dans les services (corrections actives), `platform-engineering/spec.md`.
+
+### Règles d'application
+
+1. **Nettoyage immédiat** : Tout fichier temporaire créé par l'agent DOIT être supprimé dès que sa mission est accomplie — **pas à la fin de la session**, mais immédiatement après usage.
+
+2. **Emplacement légitime des scripts utilitaires** : Si un script est réellement réutilisable, il doit être placé dans `scripts/` avec un nom descriptif. S'il n'a pas vocation à être commité, il ne doit pas exister.
+
+3. **`.gitignore` comme filet de sécurité** : Les patterns suivants DOIVENT être présents dans `.gitignore` pour éviter l'accumulation accidentelle :
+   ```gitignore
+   # Fichiers temporaires agent
+   pytest_output*.txt
+   *_pytest_out.txt
+   test_report.txt
+   cov_summary.txt
+   coverage_output.txt
+   coverage.json
+   scratch*.py
+   fix*.py
+   patch*.py
+   refactor_*.py
+   split_*.py
+   temp_*.py
+   parse_log.py
+   audit_static.txt
+   audit_tests.txt
+   htmlcov/
+   .coverage
+   reports/run_*.log
+   reports/llm_analysis_*.md
+   scratch/
+   ```
+
+4. **Commande de nettoyage de référence** : Si l'agent détecte une accumulation de fichiers temporaires existants (héritage de sessions passées), il DOIT proposer et exécuter (si autorisé) :
+   ```bash
+   # Nettoyage racine
+   find . -maxdepth 1 -type f \( \
+     -name "pytest_output*.txt" -o -name "*_pytest_out.txt" -o \
+     -name "test_report.txt" -o -name "cov_summary.txt" -o \
+     -name "coverage.json" -o -name "audit_static.txt" -o \
+     -name "audit_tests.txt" -o -name "scratch*.py" -o \
+     -name "fix*.py" -o -name "patch*.py" -o -name "refactor_*.py" -o \
+     -name "split_*.py" -o -name "temp_*.py" -o -name "parse_log.py" \
+   \) -delete
+
+   # Coverage par service
+   find . -maxdepth 2 -name "coverage_output.txt" -delete
+   find . -maxdepth 2 -name ".coverage" -delete
+   find . -maxdepth 2 -type d -name "htmlcov" -exec rm -rf {} +
+
+   # Rapports horodatés
+   rm -f reports/llm_analysis_*.md reports/run_*.log
+   rm -f scripts/a.txt scripts/b.txt
+   rm -rf scratch/
+   ```
+
+> **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu as créé un fichier temporaire (script one-shot, output de test, fichier de debug) et que ta tâche est terminée, tu **DOIS immédiatement le supprimer** avant de rendre la main au user. Ne jamais laisser de fichiers temporaires dans le répertoire de travail sans accord explicite du user sur leur conservation.
+
+## 🔄 17. BACKGROUND TASKS LONGUES — COMMIT PAR UNITÉ DE TRAVAIL (RÈGLE OBLIGATOIRE)
+
+Toute background task itérant sur un corpus de données (ex: batch d'embeddings, réindexation, enrichissement LLM) **DOIT** committer la DB après chaque unité de travail traitée, jamais en un seul commit global à la fin.
+
+### Pourquoi c'est critique
+
+Un commit unique à la fin cumule **trois risques majeurs** :
+1. **Perte totale de progression** : si le service redémarre (OOM kill, déploiement, scale-to-zero), 0 données ne sont persistées malgré des heures de traitement.
+2. **Fuite mémoire / OOM** : SQLAlchemy garde tous les objets `pending` dans son identity map jusqu'au commit → RAM croît linéairement avec le corpus → OOM kill → retour au problème 1.
+3. **Non-reprenabilité** : le skip `force=False` pour reprendre après interruption ne peut fonctionner que si les données sont en DB.
+
+### Pattern OBLIGATOIRE pour tout batch loop
+
+```python
+# ✅ CORRECT — commit immédiat par item
+for item in items:
+    try:
+        result = await process(item)
+        db.add(result)
+        await db.commit()          # ← INSIDE the loop
+        success += 1
+    except Exception as e:
+        await db.rollback()        # ← rollback du seul item fautif
+        logger.error(...)
+        failed += 1
+
+# ❌ INTERDIT — commit global hors boucle
+for item in items:
+    result = await process(item)
+    db.add(result)                 # accumule en mémoire
+
+await db.commit()                  # ← OUTSIDE = perte totale si crash avant
+```
+
+### Checklist avant de coder une background task
+
+- [ ] Le `db.commit()` est-il **dans** la boucle for (pas après) ?
+- [ ] Y a-t-il un `db.rollback()` dans le `except` pour libérer la transaction ?
+- [ ] Le skip de reprise (`force=False`) fonctionne-t-il grâce aux commits intermédiaires ?
+- [ ] Un test vérifie-t-il que `commit()` est appelé `N` fois (une par item) ?
+
+> **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu écris une boucle `for item in corpus` avec des `db.add()` et que le `await db.commit()` n'est pas **à l'intérieur** de cette boucle, tu **DOIS immédiatement corriger** avant de soumettre le code. Un commit global hors boucle est un **bug de fiabilité critique**.
+
+## 🔠 18. ASYNCPG & SA_TEXT — SYNTAXE SQL COMPATIBLE (RÈGLE OBLIGATOIRE)
+
+asyncpg utilise les paramètres nommés (`:param`) dans les requêtes `text()` SQLAlchemy. Deux incompatibilités **systémiques** doivent être évitées à la source :
+
+### ❌ INTERDIT — Syntaxe `::type` (cast court PostgreSQL)
+
+```sql
+-- ❌ asyncpg confond :: avec un paramètre nommé → PostgresSyntaxError
+SELECT * FROM t WHERE :model::text IS NULL
+SELECT * FROM t WHERE val = :x::text
+```
+
+### ✅ OBLIGATOIRE — `CAST(x AS type)`
+
+```sql
+-- ✅ Compatible asyncpg + named params
+SELECT * FROM t WHERE CAST(:model AS text) IS NULL
+SELECT * FROM t WHERE val = CAST(:x AS text)
+```
+
+### ❌ INTERDIT — Paramètres NULL sans type explicite
+
+```sql
+-- ❌ asyncpg ne peut pas inférer le type de $3 quand la valeur est None → AmbiguousParameterError
+SELECT * FROM t WHERE (:model IS NULL OR col = :model)
+```
+
+### ✅ OBLIGATOIRE — Toujours typer les paramètres nullable
+
+```sql
+-- ✅ asyncpg connaît le type → pas d'ambiguïté
+SELECT * FROM t WHERE (CAST(:model AS text) IS NULL OR col = CAST(:model AS text))
+```
+
+### Checklist pour toute requête `sa_text()` / `text()`
+
+- [ ] Aucun `::type` dans la requête → utiliser `CAST(x AS type)` exclusivement
+- [ ] Tous les paramètres potentiellement `None` ont un `CAST(... AS type)` explicite
+- [ ] Mix SQLAlchemy ORM + `sa_text()` dans un `where()` évité — utiliser `sa_text()` pur ou ORM pur
+
+> **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu écris une requête `text("""...""")` contenant `::type` ou un paramètre nullable sans cast, tu **DOIS immédiatement corriger** avant de livrer. Ces erreurs passent à la revue de code mais crashent en production (asyncpg mode prepared statement).

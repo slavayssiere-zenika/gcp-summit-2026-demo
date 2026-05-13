@@ -17,14 +17,17 @@ FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
+
 class ToolCallRequest(BaseModel):
     name: str
     arguments: dict = {}
+
 
 @app.get("/mcp/tools")
 async def get_tools():
     tools = await list_tools()
     return [{"name": t.name, "description": t.description, "inputSchema": t.inputSchema} for t in tools]
+
 
 @app.post("/mcp/call")
 async def execute_tool(request: ToolCallRequest, http_request: Request):
@@ -32,21 +35,18 @@ async def execute_tool(request: ToolCallRequest, http_request: Request):
     if auth_header:
         from mcp_server import mcp_auth_header_var
         mcp_auth_header_var.set(auth_header)
-    
+
     try:
         result = await call_tool(request.name, request.arguments)
         return {"result": [r.model_dump() for r in result]}
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "cv-mcp"}
-
-
-
 
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
@@ -55,9 +55,10 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     try:
         from opentelemetry.propagate import inject
         inject(headers)
-    except Exception: raise
+    except Exception:
+        raise
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
         try:
             await client.post(
                 f"{prompts_api_url}/errors/report",
@@ -72,17 +73,18 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             logging.error(f"Failed to report error to prompts_api: {e}")
             raise e
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    
+
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    
+
     if token:
         await report_exception_to_prompts_api("missions_api", error_msg, trace_context, token)
-    
+
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":

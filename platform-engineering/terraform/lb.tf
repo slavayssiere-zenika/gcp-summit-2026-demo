@@ -199,39 +199,10 @@ resource "google_compute_url_map" "default" {
       }
     }
 
-    route_rules {
-      priority = 17
-      match_rules { prefix_match = "/api/agent-hr/" }
-      service = google_compute_backend_service.agent_hr_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 18
-      match_rules { prefix_match = "/api/agent-ops/" }
-      service = google_compute_backend_service.agent_ops_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
-    route_rules {
-      priority = 19
-      match_rules { prefix_match = "/api/agent-missions/" }
-      service = google_compute_backend_service.agent_missions_backend.id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/"
-        }
-      }
-    }
-
+    # ── Agent Router : point d'entrée unique public pour tous les agents ────
+    # Les sous-agents (agent_hr, agent_ops, agent_missions) sont des workers A2A
+    # appelés UNIQUEMENT par agent_router_api via le LB interne.
+    # Leurs routes directes ont été supprimées pour réduire la surface d'attaque.
     route_rules {
       priority = 20
       match_rules { prefix_match = "/api/" }

@@ -32,7 +32,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
     auth_header = request.headers.get("Authorization")
     if auth_header:
         headers["Authorization"] = auth_header
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
             response = await client.get(f"{USERS_API_URL.rstrip('/')}/users/{user_id}", headers=headers)
             if response.status_code == 404:

@@ -154,7 +154,7 @@ async def login(request: Request, response: Response):
     data = await request.json()
     headers = {}
     inject(headers)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
         if res.status_code != 200:
             from pydantic import BaseModel
@@ -184,7 +184,7 @@ async def logout(response: Response):
 async def get_me(request: Request):
     headers = {}
     inject(headers)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         cookies = request.cookies
         res = await client.get(f"{USERS_API_URL}/me", cookies=cookies, headers=headers)
         if res.status_code != 200:

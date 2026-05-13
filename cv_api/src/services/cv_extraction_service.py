@@ -82,7 +82,10 @@ class CVExtractionService:
                 if not resp.content[:4].startswith(_DOCX_MAGIC):
                     raise HTTPException(
                         status_code=400,
-                        detail="Fichier refusé : le contenu ne correspond pas à un document DOCX valide (signature ZIP invalide).",
+                        detail=(
+                            "Fichier refusé : le contenu ne correspond pas "
+                            "à un document DOCX valide (signature ZIP invalide)."
+                        ),
                     )
 
                 from io import BytesIO
@@ -171,19 +174,23 @@ class CVExtractionService:
         Extrait les données structurées du CV via le modèle Gemini.
         Retourne un tuple: (structured_cv, response_usage_metadata)
         """
+        _prompt_ttl = int(os.getenv("CV_PROMPT_CACHE_TTL_MIN", "60"))
         prompt = None
         if _CV_CACHE["prompt"]["expires"] > datetime.now(
                 timezone.utc) and _CV_CACHE["prompt"]["value"]:
             prompt = _CV_CACHE["prompt"]["value"]
         else:
             try:
-                async with httpx.AsyncClient() as http_client:
-                    res_prompt = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info", headers=headers, timeout=5.0)
+                async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as http_client:
+                    prompt_url = f"{PROMPTS_API_URL.rstrip('/')}/cv_api.extract_cv_info"
+                    res_prompt = await http_client.get(
+                        prompt_url, headers=headers, timeout=5.0
+                    )
                     res_prompt.raise_for_status()
                     prompt = res_prompt.json()["value"]
                     _CV_CACHE["prompt"]["value"] = prompt
                     _CV_CACHE["prompt"]["expires"] = datetime.now(
-                        timezone.utc) + timedelta(minutes=5)
+                        timezone.utc) + timedelta(minutes=_prompt_ttl)
             except Exception as e:
                 if os.path.exists("cv_api.extract_cv_info.txt"):
                     with open("cv_api.extract_cv_info.txt", "r", encoding="utf-8") as f:
@@ -193,12 +200,13 @@ class CVExtractionService:
                         status_code=500, detail=f"Cannot fetch generic prompt: {e}")
 
         tree_context = ""
+        _taxonomy_ttl = int(os.getenv("CV_TAXONOMY_CACHE_TTL_MIN", "60"))
         if _CV_CACHE["tree_context"]["expires"] > datetime.now(
                 timezone.utc) and _CV_CACHE["tree_context"]["value"]:
             tree_context = _CV_CACHE["tree_context"]["value"]
         else:
             try:
-                async with httpx.AsyncClient() as http_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as http_client:
                     items: list = []
                     skip = 0
                     page_size = 100
@@ -223,10 +231,10 @@ class CVExtractionService:
                             items)
                         _CV_CACHE["tree_context"]["value"] = tree_context
                         _CV_CACHE["tree_context"]["expires"] = datetime.now(
-                            timezone.utc) + timedelta(minutes=5)
+                            timezone.utc) + timedelta(minutes=_taxonomy_ttl)
                         _CV_CACHE["tree_items"]["value"] = items
                         _CV_CACHE["tree_items"]["expires"] = datetime.now(
-                            timezone.utc) + timedelta(minutes=5)
+                            timezone.utc) + timedelta(minutes=_taxonomy_ttl)
             except Exception as e:
                 logger.warning(
                     f"Failed to fetch competencies tree for context: {e}")

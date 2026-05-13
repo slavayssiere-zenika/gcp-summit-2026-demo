@@ -1,5 +1,6 @@
 002561d484e154bd41897f8f258036d08df964aa  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/resolvelib/providers.py
 0036c3f9aeac6cb95f85c767a35586eb54e1a526  ./agent_router_api/.venv_test/lib/python3.9/site-packages/tenacity/wait.py
+00930c23a337d8d177bb9d849084dc261332b524  ./agent_router_api/telemetry.py
 00ae5a610444aa33ea0fb32ecd7beb69e5455fdf  ./agent_router_api/.venv_test/lib/python3.9/site-packages/ecdsa/ellipticcurve.py
 00c13e60d6ed6fd447c814478aa66aef5278c6bc  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/html5lib/treebuilders/base.py
 0104aada39820848d6f7e765423e9fe49f7d8568  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/fantom.py
@@ -39,6 +40,7 @@
 0583580ef1601d43593bbabefa57c3633e54f9ab  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/chardet/big5prober.py
 0585bf773e565039e118b3d72482b72de846cfbe  ./agent_router_api/.venv_test/lib/python3.9/site-packages/redis/commands/core.py
 05866c5b4bc804615a5274a0a8bc928cc6ec4ab0  ./agent_router_api/.venv_test/lib/python3.9/site-packages/prometheus_client/django/exposition.py
+05b0cd00748309efca16d99309e9939eadd7ccbd  ./agent_router_api/mcp_client.py
 05c8bfaac70a046a5d03e8d5588fdb3b70067e5d  ./agent_router_api/.venv_test/lib/python3.9/site-packages/ecdsa/__init__.py
 0628f2618034526e316c518855d644090ece8d81  ./agent_router_api/.venv_test/lib/python3.9/site-packages/anyio/abc/_resources.py
 069dcab9a79137caf807f8f3e9e0a0bb33898139  ./agent_router_api/.venv_test/bin/pygmentize
@@ -77,6 +79,7 @@
 09f3357f8fac4196ef0086c6191b6b71f54533a2  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/vendor.txt
 0a523935c521cd39b62bff55b6c2fbe75f06fe48  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/__init__.py
 0a652d7b973e06ce2668f83a14b8436608f4431f  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/sql.py
+0a9d319ea0de205e1ea2443cabb7706776e6a464  ./agent_router_api/agent.py
 0ab64869e89c6509602a48ac10ad142c7d2a2c2f  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/extern/__init__.py
 0ab979a5112ab8d8f9dce2658f4cf73cd678f98d  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/backends/__init__.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
@@ -178,7 +181,6 @@
 15d82d9c52a345a51671dca1b34a1db8e634102f  ./agent_router_api/.venv_test/lib/python3.9/site-packages/httpcore/_async/http_proxy.py
 15e1aee8691a6bd163a49d569710dfd72e1995a3  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/bindings/_rust/test_support.pyi
 163512cf89e6f2cc761354c0c06597f1a7e2b9fd  ./agent_router_api/.venv_test/lib/python3.9/site-packages/jose/backends/native.py
-163ef857febd5cfe744aad6e86c99a156e48fc4c  ./agent_router_api/logger.py
 16698d45aca14dba1daddb8ca0ed9ac2b9731acf  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/special.py
 168d6fadd32a0a6740c353edcedfbfa900c0e9ef  ./agent_router_api/.venv_test/lib/python3.9/site-packages/redis/_parsers/base.py
 16a45dd8198eccdb9b3719a09b50017baae4792a  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/deprecated/class_validators.py
@@ -252,7 +254,6 @@
 1fd5ff6136fba36e9ee22598ecd250af3180ee53  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/gui-64.exe
 1fe2ba5d9e2cd3968f5a67822e190445135c2107  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/parse.py
 1fe45cf8127db8a9a38e1eb105e6e4f76272825b  ./agent_router_api/.venv_test/lib/python3.9/site-packages/anyio/streams/stapled.py
-1fe5835ce0e75597d88b4f8371ae07e144bf5bb8  ./agent_router_api/mcp_client.py
 1fe6190636462e94488b056a56770c84d48f3370  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/chardet/euctwfreq.py
 1ff82dc6c6014893c2992994f8b7aa9c18ce8069  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/_internal/_import_utils.py
 2053937a60d342b8175faf2c97a91d2ec686c3b7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/r.py
@@ -261,7 +262,6 @@
 20aa6e132fcfe59b56b646bdd83d79a400bbdd3e  ./agent_router_api/.venv_test/lib/python3.9/site-packages/prometheus_client/gc_collector.py
 20b160c81bfd42f3d926287b6df6cda2d3223ed1  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/packaging/__about__.py
 21519d6229c7bc78e072f00018cd35434b3b449b  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/config.py
-216bebceed941c965e57318460e079a5b5084238  ./agent_router_api/tools_registry.py
 2189d6691a0df009bf8a4366d5b1b29c5f35c041  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/primitives/serialization/pkcs12.py
 21eee86557f19cea85a9be89350284b4215ef095  ./agent_router_api/.venv_test/lib/python3.9/site-packages/idna/__init__.py
 21fbe68aa11fe7d9faac95bb4f9d15d4cf33ff6c  ./agent_router_api/.venv_test/lib/python3.9/site-packages/httpcore/_backends/trio.py
@@ -269,7 +269,6 @@
 2235807621d8b72548c24792d112c83911873b9c  ./agent_router_api/.venv_test/lib/python3.9/site-packages/httpx/__version__.py
 227ccf827f342a7fb9ba2ea7655a3899fc1c32c7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/bindings/_rust/openssl/ed448.pyi
 22924deb02a012dec6667ff2d26cc80f9dc849d3  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/requests/certs.py
-23475d18e1240b1a3b6acb3d971fd850f8ee66c5  ./agent_router_api/main.py
 238343122f4225ea799a01c5ab8b03a069ea3be2  ./agent_router_api/.venv_test/lib/python3.9/site-packages/redis/commands/sentinel.py
 23a4a12932ba13b04c648645d82d89b42d320178  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/resolvelib/__init__.py
 23bc09eda8bb463b78bac4b7a9576e8b87751ea3  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/parasail.py
@@ -279,7 +278,6 @@
 24259a7a8708b66ab391e3b472f6e27b60ad052b  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/clean.py
 242918d005ae10b4ca2462bf2dcae00dfd6fa373  ./agent_router_api/.venv_test/lib/python3.9/site-packages/iniconfig/_parse.py
 243f55055e37244bcf6fda8468c5652e3a0bb2b7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/styles/zenburn.py
-2465dd17f16de0856494d077efc9a2db788a3916  ./agent_commons/tests/test_mcp_proxy.py
 248128c204700bb260fa9e91d7f5ac3c01efe9ad  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pytest_asyncio-1.2.0.dist-info/METADATA
 249fdb01ad3e3f71356e33e1897d06f23cfb20c2  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip-21.2.4.dist-info/WHEEL
 24a2af4c2d3f396bfec7f405ab71da8d05cac0b0  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/styles/sas.py
@@ -478,6 +476,7 @@
 3cd173ca966ada6ccd0196f374fa77c7e00807cc  ./agent_router_api/.venv_test/lib/python3.9/site-packages/_pytest/outcomes.py
 3cdafffa7a6a6a590a9f46c49f816e82c3490bda  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/_vendor/more_itertools/recipes.py
 3d12580f487cb17457ee054f4256f5d0af49c0ae  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/mips.py
+3d426c04d0e43ac0a825bf0fb5a04b2c671a90b3  ./agent_commons/agent_commons/mcp_proxy.py
 3d6cb8eecc655fbe9284909e781ed246147a2062  ./agent_router_api/.venv_test/lib/python3.9/site-packages/jose/backends/__init__.py
 3da96b0c21a3df11227b46b69f94afbc936d26fe  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/command/upload_docs.py
 3ddbb19ae22a6910a9cc13455e2482cd4e8f1fd9  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pycparser/c_lexer.py
@@ -563,7 +562,6 @@
 47e6bc08654c6251b4d0dd21efef80db0f97f8bf  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/primitives/twofactor/hotp.py
 481f50b10a9a9d0a68f94c07c095065eee124d59  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/distlib/_backport/shutil.py
 4820d95698ea20f85815ac22063ca3289125a621  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/certifi/__init__.py
-482eaa3071792b74e2ad43dff5bfac9942b7feaa  ./agent_commons/agent_commons/mcp_proxy.py
 483a26554261f6c839703c0e1183f3ef33ff97f1  ./agent_router_api/.venv_test/lib/python3.9/site-packages/six-1.17.0.dist-info/METADATA
 483dc203064c439e500cddde0f1d63ae310bf6f1  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pycparser/_c_ast.cfg
 48526a2e629f7226199936363598fc31c115d5ec  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/pep517/wrappers.py
@@ -889,7 +887,6 @@
 7048b383ea6113f66ae41e5288682645f80f0fe9  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/primitives/serialization/base.py
 707aa262749c73b709ee169fe3b24040c7e1b386  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/primitives/constant_time.py
 707dc63c9b0961b36cc1127216af38de6b1b31e7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/resolvelib/compat/collections_abc.py
-7097f4cfc3927002baa7b08c3827c785c97dc5c3  ./agent_router_api/Dockerfile
 70a29e9650c0ac85fcdabcd17077bd36538fc29f  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_internal/distributions/base.py
 70c2241423f14e151908d1e41ed0f70154f1858b  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/formatters/_mapping.py
 70cb6bd8bb4ef9fde8e8ffd60de6374dc5ef2fe4  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/bindings/_rust/openssl/ed25519.pyi
@@ -1021,7 +1018,6 @@
 811aab3e35ceecabfff61cc0dd2d9253674b76a3  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/gdscript.py
 813114391e2d26516931b66da79190ec77cc6a8d  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_internal/req/req_set.py
 8153c010cc1e5b15f32fb043cdb8e70b9c0bbafd  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/_stan_builtins.py
-8184de5686e6c2b54bcaeda63ac9497c4b8c2136  ./agent_router_api/agent.py
 81851f5deacd4a38c95a42c872dba2fbc2273c3a  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/plugin/__init__.py
 81a1cffd7bb7a2e0046c2befcd8d1aafc492582c  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_internal/cache.py
 81ffe885943f6ad8f3a2009c4b9bd4abce652d26  ./agent_router_api/.venv_test/lib/python3.9/site-packages/_pytest/faulthandler.py
@@ -1060,6 +1056,7 @@
 85f3d5c9688bed47724f47be026b53d9a9adb2a2  ./agent_router_api/.venv_test/lib/python3.9/site-packages/click/__init__.py
 85fca54f336137a9fe058e599350b256ea4af645  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/_distutils/log.py
 869789df85083fe9bfabb65950094c9a496aedcd  ./agent_router_api/.venv_test/lib/python3.9/site-packages/anyio/_core/_testing.py
+86c54776c7649a0df6775dfa5bc4b2df6e2d09e0  ./agent_router_api/Dockerfile
 86ce5c2b700e3e32ebac79e6f248fc2ea13e5d04  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic/_internal/_core_metadata.py
 86e6cae880c6b5d59950e7be38ef99be3a05e6a7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/_vendor/packaging/requirements.py
 86febeb278e82246d422447ec8ed31d43ace82f3  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pytest_mock/plugin.py
@@ -1090,6 +1087,7 @@
 8933f41ba0c9eee134fd834d4638c49a84cacace  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/pyparsing.py
 89392bf286e8630c4d621d6ec757bcc83aec4010  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/chardet/metadata/languages.py
 8969194ef430252d944f53965b892d27cdb5fc08  ./agent_router_api/.venv_test/lib/python3.9/site-packages/starlette/config.py
+897d01d28845915f0ac5a9d55f5f3f7675c8ae9c  ./agent_router_api/logger.py
 89b4dc23bcf2d41f0309783eb065a8a148c29990  ./agent_router_api/.venv_test/lib/python3.9/site-packages/_pytest/assertion/util.py
 89e2cae050855d950ba6b0266e4ed4b26e1e00ae  ./agent_router_api/.venv_test/lib/python3.9/site-packages/httpx/_urls.py
 89ed22aeab7a968f104f6a83593a936967cb8d4a  ./agent_router_api/.venv_test/lib/python3.9/site-packages/fastapi/_compat/v2.py
@@ -1190,7 +1188,7 @@
 96404c8f7d423c29d8466e6ca6d64e95e705d749  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/x509/name.py
 964168040291c60b6c1196e4ce6f29ecd085d7f7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/redis/sentinel.py
 96507dc5fc975f98fb2581802fdcb0c38584a0b7  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/__init__.py
-967466d2b231b4e9b23ce94f9e86997222691414  ./agent_router_api/tests/test_main.py
+96c9e41399f680efa08246893f7b77923ffe309b  ./agent_router_api/tools_registry.py
 96d8cc5b2f116255329d69dfdc46eb6450adcd50  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/ruby.py
 9745bafcfb9894a5a38bc83509cc3d50190c5c0c  ./agent_router_api/.venv_test/lib/python3.9/site-packages/anyio/abc/__init__.py
 97bdd0dcd044f8f894fd6a2cc9c0cdbfe6ae7e94  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/gsql.py
@@ -1519,6 +1517,7 @@ be90e08eda3c6ed5e8b600734a437930bc7117ed  ./agent_router_api/.venv_test/lib/pyth
 beba8381e2977fa24cbcde5691dadfe8cc1e127d  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/styles/inkpot.py
 bef4768731e3c4c08fd3e3e1c09eba4349f92fac  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/hazmat/bindings/openssl/_conditional.py
 befc23b29e99464f7d8eeaf047b845d9c0c1ad3b  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/_distutils/versionpredicate.py
+bf1465c96a816be4d3424b1c455ddd89a12dfe74  ./agent_router_api/tests/test_main.py
 bf19808a34d99985b8617a115654296b2d554c01  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/json5.py
 bf67db611e8a2137cad1d7f341e5fe20ce30ee60  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/procfile.py
 bf72ee3d09bf2d042462ad94a256fe24e96edd02  ./agent_router_api/.venv_test/lib/python3.9/site-packages/fastapi/security/http.py
@@ -1574,7 +1573,6 @@ c4e0643168d103b36efec289a8dc792ee2403c35  ./agent_router_api/.venv_test/lib/pyth
 c4e793c421107bfb128f3880a93381e5249e67ba  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/archive_util.py
 c515189bb855fc7902810eaae7e599b0efde1f99  ./agent_router_api/.venv_test/lib/python3.9/site-packages/fastapi-0.128.8.dist-info/WHEEL
 c51a1b94fd8d9f54f411ac2334a1ea14df16345d  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pygments/lexers/web.py
-c521cfdc6a2489b4e765f529d52b1c4ee940b758  ./agent_router_api/telemetry.py
 c55dfd9bd1698eff077be8e9cf6b73830d50fe1a  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/_distutils/command/register.py
 c5c2ce18351f8f2ae0f4a6f7c84c523f342010ee  ./agent_router_api/.venv_test/lib/python3.9/site-packages/typing_extensions-4.15.0.dist-info/METADATA
 c5e01dea69688cf905337c91fef7ed9df4e83b9e  ./agent_router_api/.venv_test/lib/python3.9/site-packages/redis/asyncio/sentinel.py
@@ -1600,6 +1598,7 @@ c7e20f56f33e4eb9424552a6a183a4ac8a6e699e  ./agent_router_api/.venv_test/lib/pyth
 c7f591c622cb14d0a875adc2e6c1f85bbdd0cb02  ./agent_router_api/.venv_test/lib/python3.9/site-packages/click/shell_completion.py
 c80ef84413f18ce9d905b9064163c1d2c13a1337  ./agent_router_api/.venv_test/lib/python3.9/site-packages/fastapi/middleware/__init__.py
 c8303dce1148499d0d54040c80802c197a4c8aa4  ./agent_router_api/.venv_test/lib/python3.9/site-packages/redis-7.0.1.dist-info/licenses/LICENSE
+c84130d0b8ee874171b0a55cde31b85d7ff41432  ./agent_router_api/main.py
 c86b4560b93b364895371c97e30bb06fd5450ce9  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_internal/operations/install/legacy.py
 c880ad7d47a80032848486533199c76bb73020b5  ./agent_router_api/.venv_test/lib/python3.9/site-packages/setuptools/_distutils/dep_util.py
 c891720e2955aa90c58b82835bc326f234e38057  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pkg_resources/_vendor/packaging/utils.py
@@ -1715,6 +1714,7 @@ d6a983953f1a221790c7b5c1686e4f71778a36ed  ./agent_router_api/.venv_test/lib/pyth
 d6ad03133822d628df034283fe1b906dc9a2e44a  ./agent_router_api/.venv_test/lib/python3.9/site-packages/uvicorn/importer.py
 d6e068bf49e4b86b4cb211345b5d59afc5946eb9  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pydantic_core-2.46.1.dist-info/METADATA
 d71ff839590e516a8f6722a5fac208c0eaef621a  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_internal/req/req_install.py
+d7435f8b9649ca0768307c7780b2d34ba9c4928f  ./agent_commons/tests/test_mcp_proxy.py
 d74aea118dbd783aaa35f961821a0ad683f22cb8  ./agent_router_api/.venv_test/lib/python3.9/site-packages/cryptography/__about__.py
 d76f1b6a816edd413be699896753cbdf474a83db  ./agent_router_api/.venv_test/lib/python3.9/site-packages/starlette/middleware/exceptions.py
 d77ab76973b52168a71323029daea0889884c5dd  ./agent_router_api/.venv_test/lib/python3.9/site-packages/pip/_vendor/html5lib/_ihatexml.py

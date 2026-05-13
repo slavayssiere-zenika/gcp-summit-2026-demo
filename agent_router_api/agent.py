@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 
 import httpx  # noqa: F401,F811 — re-exported so tests can patch "agent.httpx.AsyncClient"
 from a2a_tools import (  # noqa: F401 — backward-compat re-exports for test patching
@@ -29,6 +30,14 @@ from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 
+# ── System prompt cache (P1) ──────────────────────────────────────────────────
+# Évite 2 appels HTTP à prompts_api à chaque requête LLM (hotpath).
+# TTL configurable via PROMPT_CACHE_TTL_S (défaut : 60s).
+# Clés : "router" pour le prompt global, "user:{session_id}" pour les prompts utilisateur.
+_PROMPT_CACHE_TTL_S: float = float(os.getenv("PROMPT_CACHE_TTL_S", "60"))
+# {cache_key: (prompt_text, expires_at_monotonic)}
+_prompt_cache: dict[str, tuple[str, float]] = {}
+
 _session_service = None
 
 
@@ -40,8 +49,61 @@ def get_session_service():
     return _session_service
 
 
+async def _fetch_prompt_cached(cache_key: str, url: str, headers: dict) -> str | None:
+    """Récupère un prompt depuis prompts_api avec cache TTL in-process.
+
+    Retourne le texte du prompt si disponible (cache chaud ou API réussie),
+    ou None si le cache est froid et l'API échoue.
+
+    Args:
+        cache_key: Clé de cache unique (ex: "router" ou "user:abc123").
+        url:       URL complète de l'endpoint prompts_api.
+        headers:   Headers HTTP à propager (Authorization + OTel).
+    """
+    now = time.monotonic()
+    cached = _prompt_cache.get(cache_key)
+    if cached is not None:
+        prompt_text, expires_at = cached
+        if now < expires_at:
+            logger.debug("[PromptCache] HIT key=%s (expires in %.1fs)", cache_key, expires_at - now)
+            return prompt_text
+        logger.debug("[PromptCache] EXPIRED key=%s", cache_key)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(url, headers=headers)
+            if res.status_code == 200:
+                prompt_text = res.json().get("value", "")
+                if prompt_text:
+                    _prompt_cache[cache_key] = (prompt_text, now + _PROMPT_CACHE_TTL_S)
+                    logger.debug(
+                        "[PromptCache] STORED key=%s TTL=%.0fs",
+                        cache_key, _PROMPT_CACHE_TTL_S,
+                    )
+                    return prompt_text
+            else:
+                logger.warning(
+                    "[PromptCache] prompts_api returned HTTP %s for key=%s — using cached/default",
+                    res.status_code, cache_key,
+                )
+    except Exception as e:
+        logger.warning("[PromptCache] Fetch failed for key=%s: %s — using cached/default", cache_key, e)
+
+    # Stale-while-revalidate : retourner le cache expiré plutôt que rien
+    if cached is not None:
+        logger.warning("[PromptCache] Serving STALE cache for key=%s after fetch failure", cache_key)
+        return cached[0]
+
+    return None
+
+
 async def create_agent(session_id: str | None = None):
-    """Construit l'Agent ADK Router avec le prompt système récupéré depuis prompts_api."""
+    """Construit l'Agent ADK Router avec le prompt système récupéré depuis prompts_api.
+
+    Le system prompt global et le prompt utilisateur sont mis en cache in-process
+    avec un TTL de PROMPT_CACHE_TTL_S secondes (défaut : 60s) pour éviter
+    2 appels HTTP à chaque inférence LLM.
+    """
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     instruction_text = (
         "Tu es l'Orchestrateur Principal de la plateforme Zenika, le 'Front-Desk'. "
@@ -52,48 +114,33 @@ async def create_agent(session_id: str | None = None):
     auth_header = auth_header_var.get(None)
     headers = {"Authorization": auth_header} if auth_header else {}
 
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(
-                f"{prompts_api_url.rstrip('/')}/agent_router_api.system_instruction/compiled",
-                headers=headers,
-            )
-            if res.status_code == 200:
-                instruction_text = res.json()["value"]
-            else:
-                logger.warning(
-                    f"Failed to fetch system prompt from prompts_api: {res.status_code} (using built-in default)"
-                )
-    except Exception as e:
-        logger.warning(f"Error fetching system prompt: {e}")
+    # ── Appel 1 : system prompt router (caché TTL 60s) ───────────────────────
+    router_prompt_url = f"{prompts_api_url.rstrip('/')}/agent_router_api.system_instruction/compiled"
+    fetched = await _fetch_prompt_cached("router", router_prompt_url, headers)
+    if fetched:
+        instruction_text = fetched
 
+    # ── Appel 2 : prompt utilisateur (caché par session_id, TTL 60s) ─────────
     if session_id and session_id != "anon":
-        try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(
-                    f"{prompts_api_url.rstrip('/')}/user_{session_id}",
-                    headers=headers,
-                    timeout=5.0,
+        from pydantic import BaseModel, ValidationError
+
+        user_prompt_url = f"{prompts_api_url.rstrip('/')}/user_{session_id}"
+        user_prompt_raw = await _fetch_prompt_cached(f"user:{session_id}", user_prompt_url, headers)
+        if user_prompt_raw:
+            try:
+                class PromptResp(BaseModel):
+                    value: str
+
+                p_data = PromptResp.model_validate({"value": user_prompt_raw})
+                user_prompt = p_data.value
+            except ValidationError:
+                user_prompt = user_prompt_raw  # déjà une str valide depuis _fetch_prompt_cached
+            if user_prompt:
+                instruction_text += (
+                    f"\n\n--- INSTRUCTIONS UTILISATEUR ({session_id}) ---\n"
+                    f"{user_prompt}\n"
+                    "------------------------------------------------------------"
                 )
-                if res.status_code == 200:
-                    from pydantic import BaseModel
-
-                    class PromptResp(BaseModel):
-                        value: str
-
-                    try:
-                        p_data = PromptResp.model_validate(res.json())
-                        user_prompt = p_data.value
-                    except Exception:
-                        user_prompt = ""
-                    if user_prompt:
-                        instruction_text += (
-                            f"\n\n--- INSTRUCTIONS UTILISATEUR ({session_id}) ---\n"
-                            f"{user_prompt}\n"
-                            "------------------------------------------------------------"
-                        )
-        except Exception as e:
-            logger.warning(f"Error fetching user system prompt for session {session_id}: {e}")
 
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"))

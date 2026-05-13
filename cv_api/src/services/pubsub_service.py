@@ -121,87 +121,113 @@ class PubsubService:
         bg_drive_api_url: str,
         bg_file_type: str = "google_doc",
     ):
-        """Pipeline complet exécuté en arrière-plan après ACK Pub/Sub."""
-        pipeline_start_time = time.monotonic()  # Chrono pour KPI processing_duration_ms
-        async with database.SessionLocal() as bg_db:
-            try:
-                local_bg_tasks = BackgroundTasks()
-                result = await process_cv_core(
-                    url=bg_url,
-                    google_access_token=bg_google_access_token,
-                    source_tag=bg_source_tag,
-                    folder_name=bg_folder_name,
-                    headers=bg_headers,
-                    token_payload=bg_token_payload,
-                    db=bg_db,
-                    auth_token=bg_jwt,
-                    file_type=bg_file_type,
-                    background_tasks=local_bg_tasks, genai_client=_svc_config.client
+        """Pipeline complet exécuté en arrière-plan après ACK Pub/Sub.
+
+        Architecture de l'acquittement Drive :
+        - UN SEUL PATCH final après toutes les étapes (extraction + compétences + missions)
+        - Statut = IMPORTED_CV si bg_errors vide, ERROR sinon
+        - Élimine la race condition (IMPORTED_CV puis ERROR) qui causait des CVs zombies
+        """
+        pipeline_start_time = time.monotonic()
+        try:
+            # ── Étape 1 : Extraction LLM + résolution identité + save BDD ─────────
+            # On passe background_tasks=None pour que process_cv_core ne schedule
+            # PAS bg_process en tâche détachée — on l'execute nous-mêmes ci-dessous.
+            result = await process_cv_core(
+                url=bg_url,
+                google_access_token=bg_google_access_token,
+                source_tag=bg_source_tag,
+                folder_name=bg_folder_name,
+                headers=bg_headers,
+                token_payload=bg_token_payload,
+                db=None,
+                auth_token=bg_jwt,
+                file_type=bg_file_type,
+                background_tasks=None,
+                genai_client=_svc_config.client
+            )
+
+            # ── Étape 2 : Compétences + Missions (awaité — résultat récupéré) ────
+            from src.services.cv_storage_service import CVStorageService
+            bg_errors = await CVStorageService.bg_process_competencies_and_missions(
+                result.user_id, result.structured_cv, bg_headers, bg_url
+            )
+
+            # ── Étape 3 : UN SEUL PATCH Drive avec le vrai statut final ─────────
+            pipeline_duration_ms = int((time.monotonic() - pipeline_start_time) * 1000)
+            if bg_errors:
+                final_status = "ERROR"
+                error_msg = " | ".join(list(dict.fromkeys(bg_errors)))
+                logger.error(
+                    "[PubSub/BG] %s — %d erreur(s) post-traitement : %s",
+                    bg_google_file_id, len(bg_errors), error_msg
+                )
+            else:
+                final_status = "IMPORTED_CV"
+                error_msg = None
+                logger.info(
+                    "[PubSub/BG] Import réussi %s → user_id=%s duration=%dms",
+                    bg_google_file_id, result.user_id, pipeline_duration_ms
                 )
 
-                # IMPORTANT: Starlette's BackgroundTasks are not automatically executed
-                # when not returned in an HTTP response. We must execute them
-                # manually.
-                await local_bg_tasks()
-                # Notification succès → drive_api (avec durée de traitement
-                # pour KPIs)
-                pipeline_duration_ms = int(
-                    (time.monotonic() - pipeline_start_time) * 1000)
-                try:
-                    async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                        res = await patch_client.patch(
-                            f"{
-                                bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
-                            json={
-                                "status": "IMPORTED_CV",
-                                "user_id": result.user_id,
-                                "error_message": None,
-                                "processing_duration_ms": pipeline_duration_ms,
-                            },
-                            headers=bg_headers
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                    res = await patch_client.patch(
+                        f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
+                        json={
+                            "status": final_status,
+                            "user_id": result.user_id,
+                            "error_message": error_msg,
+                            "processing_duration_ms": pipeline_duration_ms,
+                        },
+                        headers=bg_headers
+                    )
+                    if res.is_error:
+                        logger.error(
+                            "[PubSub/BG] Échec PATCH %s: HTTP %s",
+                            final_status, res.status_code
                         )
-                        if res.is_error:
-                            logger.error(
-                                f"[PubSub/BG] Échec PATCH IMPORTED_CV: HTTP {res.status_code}")
-                        else:
-                            logger.info(
-                                f"[PubSub/BG] Import réussi {bg_google_file_id} → user_id={
-                                    result.user_id} duration={pipeline_duration_ms}ms")
-                except Exception as e:
-                    logger.warning(
-                        f"[PubSub/BG] Impossible de notifier drive_api (IMPORTED_CV): {e}")
+            except Exception as e:
+                logger.warning(
+                    "[PubSub/BG] Impossible de notifier drive_api (%s): %s",
+                    final_status, e
+                )
 
-            except HTTPException as he:
-                error_detail = he.detail
-                status = "IGNORED_NOT_CV" if ("Not a CV" in str(
-                    error_detail) or "LLM Parsing failed" in str(error_detail)) else "ERROR"
-                logger.error(
-                    f"[PubSub/BG] Échec pipeline {bg_google_file_id}: {error_detail} → statut={status}")
-                try:
-                    async with httpx.AsyncClient(timeout=10.0) as patch_client:
-                        await patch_client.patch(
-                            f"{
-                                bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
-                            json={
-                                "status": status,
-                                "error_message": str(error_detail)},
-                            headers=bg_headers
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"[PubSub/BG] Impossible de notifier drive_api ({status}): {e}")
-
-            except Exception as ex:
-                logger.error(
-                    f"[PubSub/BG] Erreur inattendue pour {bg_google_file_id}: {ex}",
-                    exc_info=True)
+        except HTTPException as he:
+            error_detail = he.detail
+            status = "IGNORED_NOT_CV" if "Not a CV" in str(error_detail) else "ERROR"
+            logger.error(
+                "[PubSub/BG] Échec pipeline %s: %s → statut=%s",
+                bg_google_file_id, error_detail, status
+            )
+            try:
                 async with httpx.AsyncClient(timeout=10.0) as patch_client:
                     await patch_client.patch(
                         f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
-                        json={"status": "ERROR",
-                              "error_message": f"Erreur inattendue: {ex}"},
+                        json={"status": status, "error_message": str(error_detail)},
                         headers=bg_headers
                     )
+            except Exception as e:
+                logger.warning(
+                    "[PubSub/BG] Impossible de notifier drive_api (%s): %s", status, e
+                )
+
+        except Exception as ex:
+            logger.error(
+                "[PubSub/BG] Erreur inattendue pour %s: %s",
+                bg_google_file_id, ex, exc_info=True
+            )
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as patch_client:
+                    await patch_client.patch(
+                        f"{bg_drive_api_url.rstrip('/')}/files/{bg_google_file_id}",
+                        json={"status": "ERROR", "error_message": f"Erreur inattendue: {ex}"},
+                        headers=bg_headers
+                    )
+            except Exception as e:
+                logger.warning(
+                    "[PubSub/BG] Impossible de notifier drive_api (ERROR): %s", e
+                )
 
     @staticmethod
     async def handle_pubsub_cv_import(

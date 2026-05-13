@@ -1,0 +1,35 @@
+[
+  {
+    "httpRequest": {
+      "latency": "37.187011490s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "fda3:e722:ac3:cc00:b3:ea79:a00:15",
+      "requestMethod": "POST",
+      "requestSize": "629",
+      "requestUrl": "http://api.internal.zenika/user/338/assign/130",
+      "responseSize": "121",
+      "status": 500,
+      "userAgent": "python-httpx/0.28.1"
+    },
+    "insertId": "6a03b1a30008817b44ba67b7",
+    "labels": {
+      "instanceId": "0007b734d9ffbe7e551fd3513d0a1b0e1fdee8d5958ec66c4cd4e3b3af12f1e72b29802f27a199a553f62b9169669fac9e24316cc2464952bda3061ebd53290503ac3c423b00de7caad6394249ad69ad33a2bb295382befc2f266b"
+    },
+    "logName": "projects/prod-ia-staffing/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-05-12T23:02:59.662625817Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "competencies-api-prd",
+        "location": "europe-west1",
+        "project_id": "prod-ia-staffing",
+        "revision_name": "competencies-api-prd-00055-w8r",
+        "service_name": "competencies-api-prd"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "e7e0b36686df1456",
+    "timestamp": "2026-05-12T23:02:22.368909Z",
+    "trace": "projects/prod-ia-staffing/traces/2c4229b6bb8c094e469f9632ec2961cb"
+  }
+]

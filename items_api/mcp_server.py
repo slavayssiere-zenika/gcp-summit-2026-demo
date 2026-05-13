@@ -5,11 +5,10 @@ import logging
 import os
 
 import httpx
-from mcp.server import InitializationOptions, NotificationOptions, Server
-from mcp.server.stdio import stdio_server
+from mcp.server import InitializationOptions, Server
 from mcp.types import TextContent, Tool
 from opentelemetry import propagate, trace
-from opentelemetry.propagate import extract, inject
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -44,29 +43,36 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "items-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(
+        BatchSpanProcessor(
+            OTLPSpanExporter() if os.getenv(
+                "TRACE_EXPORTER",
+                "grpc") == "http" else OTLPSpanExporter(
+                insecure=True)))
 trace.set_tracer_provider(provider)
 
 tracer = trace.get_tracer(__name__)
 
 server = Server("items-api")
 
+
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     return get_categories_tools() + get_items_tools()
+
 
 def get_trace_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
+
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -74,7 +80,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     auth = mcp_auth_header_var.get(None)
     if auth:
         headers["Authorization"] = auth
-    
+
     async with httpx.AsyncClient(follow_redirects=True, headers=headers) as client:
         try:
             # Try categories tools first
@@ -91,7 +97,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 409:
-                return [TextContent(type="text", text=f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"CONFLIT (409) : {
+                            e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres.")]
             return [TextContent(type="text", text=f"HTTP Error: {e.response.status_code} - {e.response.text}")]
         except Exception as e:
             return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]

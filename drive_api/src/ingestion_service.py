@@ -14,6 +14,10 @@ from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 logger = logging.getLogger(__name__)
 
 MAX_DRIVE_CV_IMPORT = int(os.getenv("MAX_DRIVE_CV_IMPORT", "15"))
+# Plafond de CVs actifs simultanément (PROCESSING + QUEUED).
+# Garantit qu'on n'injecte jamais plus de N requêtes Gemini en parallèle
+# quelle que soit la taille du backlog Drive.
+MAX_PROCESSING_CONCURRENT = int(os.getenv("MAX_PROCESSING_CONCURRENT", "5"))
 PUBSUB_CV_IMPORT_TOPIC = os.getenv("PUBSUB_CV_IMPORT_TOPIC", "")
 _GCP_PROJECT_ID_ENV = os.getenv("GCP_PROJECT_ID", "")
 
@@ -54,11 +58,43 @@ class IngestionService:
         await self.db.execute(zombie_stmt)
         await self.db.commit()
 
+        # ── Throttling intelligent ─────────────────────────────────────────────
+        # Compte les fichiers actuellement actifs (PROCESSING + QUEUED) et
+        # calcule le nombre de slots disponibles avant d'en ajouter d'autres.
+        # Garantit que jamais plus de MAX_PROCESSING_CONCURRENT CVs ne tournent
+        # en parallèle dans Gemini, même avec un backlog de 1 400 fichiers.
+        active_count_result = await self.db.execute(
+            select(DriveSyncState).filter(
+                DriveSyncState.status.in_([
+                    DriveSyncStatus.PROCESSING, DriveSyncStatus.QUEUED
+                ])
+            )
+        )
+        currently_active = len(active_count_result.scalars().all())
+        available_slots = max(0, MAX_PROCESSING_CONCURRENT - currently_active)
+
+        if available_slots == 0:
+            logger.info(
+                "[PubSub] Throttling actif — %d/%d CVs en traitement, aucun slot disponible.",
+                currently_active, MAX_PROCESSING_CONCURRENT
+            )
+            return 0
+
+        # Limite le nombre de fichiers à publier au minimum entre les slots disponibles
+        # et la limite absolue MAX_DRIVE_CV_IMPORT (garde-fou secondaire).
+        publish_limit = min(available_slots, MAX_DRIVE_CV_IMPORT)
+        logger.info(
+            "[PubSub] Throttling — actifs=%d/%d, publish_limit=%d",
+            currently_active, MAX_PROCESSING_CONCURRENT, publish_limit
+        )
+
         base_query = (
             select(DriveSyncState)
-            .filter(DriveSyncState.status.in_([DriveSyncStatus.PENDING.value, DriveSyncStatus.OUT_OF_SCOPE.value]))
+            .filter(DriveSyncState.status.in_([
+                DriveSyncStatus.PENDING.value, DriveSyncStatus.OUT_OF_SCOPE.value
+            ]))
             .order_by(DriveSyncState.modified_time.asc())
-            .limit(MAX_DRIVE_CV_IMPORT)
+            .limit(publish_limit)
         )
         pending_files = (await self.db.execute(base_query)).scalars().all()
 

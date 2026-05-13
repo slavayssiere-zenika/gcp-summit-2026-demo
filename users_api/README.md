@@ -9,8 +9,8 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 296 | ✅ |
-| `mcp_server.py` | 94 | ✅ |
+| `main.py` | 290 | ✅ |
+| `mcp_server.py` | 98 | ✅ |
 | `conftest.py` | 72 | ✅ |
 | `metrics.py` | 4 | ✅ |
 | `src/users/auth_router.py` | 293 | ✅ |

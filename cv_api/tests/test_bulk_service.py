@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from src.services.bulk_service import bg_bulk_reanalyse, bg_retry_apply
+from src.services.bulk_service import bg_bulk_reanalyse
 
 
 @pytest.mark.asyncio
@@ -34,6 +34,7 @@ async def test_bg_bulk_reanalyse_success():
                 with patch("src.services.bulk_service._get_cv_extraction_prompt", new_callable=AsyncMock) as mock_prompt:
                     mock_prompt.return_value = "Prompt"
                     with patch("src.services.bulk_service.bulk_reanalyse_manager.update_progress") as mock_update:
-                        await bg_bulk_reanalyse("token")
-                        assert mock_batch_client.batches.create.call_count == 1
-                        mock_update.assert_called()
+                        with patch("src.services.bulk_service.asyncio.sleep", new_callable=AsyncMock):
+                            await bg_bulk_reanalyse("token")
+                            assert mock_batch_client.batches.create.call_count == 1
+                            mock_update.assert_called()

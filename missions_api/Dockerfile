@@ -29,7 +29,7 @@ COPY shared/ /app/shared/
 COPY missions_api/ .
 
 ENV PYTHONPATH=/app
-ENV GEMINI_MODEL=gemini-2.5-flash
+ENV GEMINI_MODEL=gemini-3.1-flash-lite-preview
 ENV GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 ENV PORT=8009
 ENV MCP_SIDECAR_URL=http://missions_mcp:8000

@@ -7,7 +7,7 @@ import {
   BarChart3, RefreshCcw, Loader2, CheckCircle2, AlertCircle,
   AlertTriangle, Zap, Database, Brain, FileText, Clock,
   TrendingUp, ShieldCheck, Activity, FolderOpen, ArrowRight,
-  Users, Link
+  Users, Link, Search, Layers
 } from 'lucide-vue-next'
 
 
@@ -55,6 +55,14 @@ interface DriveStats {
   issues: string[]; recommendation: string; computed_at: string
 }
 
+interface RagQuality {
+  recall_at_5: number | null
+  nb_cases: number | null
+  nb_cases_ok: number | null
+  embedding_model: string | null
+  status: 'ok' | 'warning' | 'error' | 'unknown'
+}
+
 interface IssueAction {
   label: string
   to: string
@@ -75,6 +83,16 @@ const driveLoading = ref(false)
 const taxonomyStatus = ref<any>(null)
 const taxonomyQuality = ref<any>(null)
 const taxonomyLoading = ref(false)
+
+// RAG Quality — issu du rapport DQ (report.rag)
+const ragQuality = computed<RagQuality | null>(() => (dqReport.value as any)?.rag ?? null)
+// RAG Chunking (R7) — issu du rapport DQ (report.rag_chunking)
+const ragChunking = computed<any>(() => (dqReport.value as any)?.rag_chunking ?? null)
+
+
+
+// Onglets
+const activeTab = ref<'summary' | 'cv' | 'scoring' | 'drive' | 'taxonomy' | 'rag'>('summary')
 
 const lastRefreshDate = ref<Date | null>(null)
 const relativeTime = ref('')
@@ -121,6 +139,7 @@ const metricLabels: Record<string, string> = {
   competency_assignment: 'Compétences assignées',
   ai_scoring: 'Scoring IA (≥10)',
   extraction_reliability: 'Fiabilité Extraction (≥75%)',
+  processing_errors: 'Absence d\'erreurs (Ingestion)',
 }
 
 const driveMetricIcons: Record<string, any> = {
@@ -140,6 +159,7 @@ const metricIcons: Record<string, any> = {
   competency_assignment: Users,
   ai_scoring: Zap,
   extraction_reliability: ShieldCheck,
+  processing_errors: ShieldCheck,
 }
 
 // ── Issue CTA mapping ─────────────────────────────────────────────────────────
@@ -150,7 +170,7 @@ const issueAction = (issue: string): IssueAction | null => {
 
     return { label: 'Retry Apply', to: '/admin/bulk-import' }
   }
-  if (lc.includes('drive') || lc.includes('ingestion') || lc.includes('nommage')) {
+  if (lc.includes('drive') || lc.includes('ingestion') || lc.includes('nommage') || lc.includes('post-traitement')) {
     return { label: 'Dashboard Drive', to: '/admin/drive-ingestion' }
   }
   if (lc.includes('embedding')) {
@@ -316,8 +336,22 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       <AlertCircle :size="16" /> {{ dqError }}
     </div>
 
-    <!-- ── GLOBAL SCORE HERO ── -->
-    <div v-if="dqReport" class="score-hero" role="status" aria-live="polite">
+    <!-- ── ONGLES DE NAVIGATION ── -->
+    <div class="dq-tabs">
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">Résumé</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'cv' }" @click="activeTab = 'cv'">Pipeline CV</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'scoring' }" @click="activeTab = 'scoring'">Scoring IA</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'drive' }" @click="activeTab = 'drive'">Drive Ingestion</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'taxonomy' }" @click="activeTab = 'taxonomy'">Taxonomie</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'rag' }" @click="activeTab = 'rag'">RAG Sémantique</button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ONGLET 1 : RÉSUMÉ                          -->
+    <!-- ========================================== -->
+    <div v-if="activeTab === 'summary'" class="tab-content fade-in">
+      <!-- ── GLOBAL SCORE HERO ── -->
+      <div v-if="dqReport" class="score-hero" role="status" aria-live="polite">
       <!-- SVG Ring Score -->
       <div class="score-ring-wrap">
         <svg class="score-ring" viewBox="0 0 100 100" aria-hidden="true">
@@ -370,12 +404,112 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
         </RouterLink>
       </div>
     </div>
-    <div v-else-if="dqLoading" class="loading-placeholder">
-      <Loader2 :size="28" class="spin" /> Analyse en cours…
+      <div v-else-if="dqLoading" class="loading-placeholder">
+        <Loader2 :size="28" class="spin" /> Analyse en cours…
+      </div>
+
+      <!-- ── PIPELINE GLOBALE — SYNTHÈSE ── -->
+      <div class="card">
+        <div class="card-header">
+          <BarChart3 :size="18" class="icon-purple" />
+          <span>Synthèse des Pipelines</span>
+        </div>
+        <div class="pipeline-grid">
+          <!-- Pipeline CV -->
+          <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
+            <div class="pc-icon" :class="dqReport ? `pc-icon-grade-${dqReport.grade.toLowerCase()}` : ''"><Database :size="22" /></div>
+            <div class="pc-label">Pipeline CV (Vertex Batch)</div>
+            <div class="pc-value" v-if="dqReport">{{ fmt(dqReport.total_cvs) }} CVs</div>
+            <div class="pc-sub" v-if="dqReport">{{ fmt(dqReport.users_with_cv) }} consultants</div>
+            <div class="pc-bar" v-if="dqReport">
+              <div class="pc-bar-fill" :class="`grade-bar-${dqReport.grade.toLowerCase()}`" :style="{ width: dqReport.score + '%' }" />
+            </div>
+            <div class="pc-status" :class="dqReport ? `grade-${dqReport.grade.toLowerCase()}` : ''">
+              Grade {{ dqReport?.grade ?? '—' }}
+            </div>
+          </RouterLink>
+
+          <!-- Scoring IA -->
+          <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
+            <div class="pc-icon" :class="scoringStatus.status === 'completed' ? 'pc-icon-grade-a' : scoringStatus.status === 'error' ? 'pc-icon-grade-d' : 'pc-icon-grade-b'"><Zap :size="22" /></div>
+            <div class="pc-label">Scoring IA Compétences</div>
+            <div class="pc-value" v-if="dqReport?.metrics?.ai_scoring">{{ (dqReport.metrics.ai_scoring as any).pct }}%</div>
+            <div class="pc-sub" v-if="scoringStatus.status === 'completed'">
+              {{ fmt(scoringStatus.success) }} / {{ fmt(scoringStatus.total_users) }}
+            </div>
+            <div class="pc-bar" v-if="dqReport?.metrics?.ai_scoring">
+              <div class="pc-bar-fill" :class="`grade-bar-${(dqReport.metrics.ai_scoring as any).status === 'ok' ? 'a' : (dqReport.metrics.ai_scoring as any).status === 'warning' ? 'c' : 'd'}`" :style="{ width: (dqReport.metrics.ai_scoring as any).pct + '%' }" />
+            </div>
+            <div class="pc-status" :class="scoringStatus.status === 'completed' ? 'grade-a' : scoringStatus.status === 'error' ? 'grade-d' : 'grade-b'">
+              {{ scoringStatus.status === 'completed' ? 'OK' : scoringStatus.status === 'running' ? 'En cours' : scoringStatus.status === 'error' ? 'Erreur' : 'Veille' }}
+            </div>
+          </RouterLink>
+
+          <!-- Embeddings -->
+          <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
+            <div class="pc-icon" :class="`pc-icon-grade-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`"><Brain :size="22" /></div>
+            <div class="pc-label">Embeddings Sémantiques</div>
+            <div class="pc-value" v-if="dqReport">{{ dqReport.metrics['embedding']?.pct ?? 0 }}%</div>
+            <div class="pc-sub" v-if="dqReport">{{ fmt(dqReport.metrics['embedding']?.ok) }} indexés</div>
+            <div class="pc-bar" v-if="dqReport">
+              <div class="pc-bar-fill" :class="`grade-bar-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`" :style="{ width: (dqReport.metrics['embedding']?.pct ?? 0) + '%' }" />
+            </div>
+            <div class="pc-status" :class="`grade-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`">
+              {{ dqReport?.metrics['embedding']?.status === 'ok' ? 'Sain' : dqReport?.metrics['embedding']?.status === 'warning' ? 'Dégradé' : 'Critique' }}
+            </div>
+          </RouterLink>
+
+          <!-- Drive -->
+          <RouterLink to="/admin/drive-ingestion" class="pipeline-card pipeline-card-link">
+            <div class="pc-icon" :class="driveStats ? `pc-icon-grade-${driveStats.grade.toLowerCase()}` : ''"><FolderOpen :size="22" /></div>
+            <div class="pc-label">Drive Ingestion</div>
+            <div class="pc-value" v-if="driveStats">{{ fmt(driveStats.imported) }} CVs</div>
+            <div class="pc-sub" v-if="driveStats">Score {{ driveStats.score }}/100</div>
+            <div class="pc-bar" v-if="driveStats">
+              <div class="pc-bar-fill" :class="`grade-bar-${driveStats.grade.toLowerCase()}`" :style="{ width: driveStats.score + '%' }" />
+            </div>
+            <div class="pc-status" v-if="driveStats" :class="`grade-${driveStats.grade.toLowerCase()}`">
+              Grade {{ driveStats.grade }}
+            </div>
+            <div class="pc-status grade-b" v-else>—</div>
+          </RouterLink>
+
+          <!-- RAG Sémantique -->
+          <div class="pipeline-card">
+            <div class="pc-icon" :class="ragQuality?.status === 'ok' ? 'pc-icon-grade-a' : ragQuality?.status === 'warning' ? 'pc-icon-grade-c' : ragQuality?.status === 'error' ? 'pc-icon-grade-d' : 'pc-icon-grade-b'"><Search :size="22" /></div>
+            <div class="pc-label">RAG Sémantique</div>
+            <div class="pc-value" v-if="ragQuality?.recall_at_5 != null">{{ Math.round((ragQuality.recall_at_5 ?? 0) * 100) }}%</div>
+            <div class="pc-value" v-else>—</div>
+            <div class="pc-sub" v-if="ragQuality?.nb_cases != null">{{ ragQuality.nb_cases_ok }}/{{ ragQuality.nb_cases }} cas calibrés</div>
+            <div class="pc-bar" v-if="ragQuality?.recall_at_5 != null">
+              <div class="pc-bar-fill" :class="`grade-bar-${ragQuality?.status === 'ok' ? 'a' : ragQuality?.status === 'warning' ? 'c' : 'd'}`" :style="{ width: ((ragQuality?.recall_at_5 ?? 0) * 100) + '%' }" />
+            </div>
+            <div class="pc-status" :class="ragQuality?.status === 'ok' ? 'grade-a' : ragQuality?.status === 'warning' ? 'grade-c' : ragQuality?.status === 'error' ? 'grade-d' : 'grade-b'">
+              {{ ragQuality?.status === 'ok' ? 'Sain' : ragQuality?.status === 'warning' ? 'Dégradé' : ragQuality?.status === 'error' ? 'À calibrer' : 'Non calibré' }}
+            </div>
+          </div>
+
+          <!-- RAG Chunking (R7) -->
+          <div class="pipeline-card">
+            <div class="pc-icon" :class="ragChunking?.status === 'ok' ? 'pc-icon-grade-a' : ragChunking?.status === 'partial' ? 'pc-icon-grade-c' : 'pc-icon-grade-b'"><Layers :size="22" /></div>
+            <div class="pc-label">RAG Multi-Vecteur</div>
+            <div class="pc-value" v-if="ragChunking?.total_chunks > 0">{{ ragChunking.total_chunks.toLocaleString() }}</div>
+            <div class="pc-value" v-else>—</div>
+            <div class="pc-sub" v-if="ragChunking?.profiles_indexed > 0">{{ ragChunking.profiles_indexed }} profils · {{ ragChunking.avg_chunks_per_profile }} chunks/profil</div>
+            <div class="pc-status" :class="ragChunking?.chunked_search_active ? 'grade-a' : 'grade-b'">
+              {{ ragChunking?.chunked_search_active ? '✓ Actif' : ragChunking?.status === 'not_indexed' ? 'Non indexé' : 'Indexé (inactif)' }}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- ── MÉTRIQUES CV PIPELINE ── -->
-    <div v-if="dqReport" class="card">
+    <!-- ========================================== -->
+    <!-- ONGLET 2 : PIPELINE CV                     -->
+    <!-- ========================================== -->
+    <div v-if="activeTab === 'cv'" class="tab-content fade-in">
+      <!-- ── MÉTRIQUES CV PIPELINE ── -->
+      <div v-if="dqReport" class="card">
       <div class="card-header">
         <Database :size="18" class="icon-blue" />
         <span>Pipeline CV — Qualité des données extraites</span>
@@ -429,7 +563,12 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
         <CheckCircle2 :size="16" /> {{ dqReport.recommendation }}
       </div>
     </div>
+    </div>
 
+    <!-- ========================================== -->
+    <!-- ONGLET 3 : SCORING IA                      -->
+    <!-- ========================================== -->
+    <div v-if="activeTab === 'scoring'" class="tab-content fade-in">
     <!-- ── SCORING IA COMPÉTENCES ── -->
     <div class="card">
       <div class="card-header">
@@ -544,7 +683,12 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
         </RouterLink>
       </div>
     </div>
+    </div>
 
+    <!-- ========================================== -->
+    <!-- ONGLET 4 : DRIVE INGESTION                 -->
+    <!-- ========================================== -->
+    <div v-if="activeTab === 'drive'" class="tab-content fade-in">
     <!-- ── DRIVE INGESTION KPIs ── -->
     <div class="card">
       <div class="card-header">
@@ -630,7 +774,12 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
         <Activity :size="16" /> Données Drive non disponibles.
       </div>
     </div>
+    </div>
 
+    <!-- ========================================== -->
+    <!-- ONGLET 5 : TAXONOMIE                       -->
+    <!-- ========================================== -->
+    <div v-if="activeTab === 'taxonomy'" class="tab-content fade-in">
     <!-- ── TAXONOMY QUALITY ── -->
     <div class="card">
       <div class="card-header">
@@ -677,73 +826,155 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
         <Activity :size="16" /> Aucun rapport de Quality Gate récupéré pour la taxonomie.
       </div>
     </div>
+    </div>
 
-    <!-- ── PIPELINE GLOBALE — SYNTHÈSE ── -->
-    <div class="card">
+    <!-- ========================================== -->
+    <!-- ONGLET 6 : RAG SÉMANTIQUE                  -->
+    <!-- ========================================== -->
+    <div v-if="activeTab === 'rag'" class="tab-content fade-in">
+      <!-- ── RAG SÉMANTIQUE SECTION ── -->
+      <div class="card">
       <div class="card-header">
-        <BarChart3 :size="18" class="icon-purple" />
-        <span>Synthèse des Pipelines</span>
+        <Search :size="18" class="icon-teal" />
+        <span>RAG Sémantique — Qualité de la Recherche Vectorielle</span>
       </div>
-      <div class="pipeline-grid">
-        <!-- Pipeline CV -->
-        <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
-          <div class="pc-icon" :class="dqReport ? `pc-icon-grade-${dqReport.grade.toLowerCase()}` : ''"><Database :size="22" /></div>
-          <div class="pc-label">Pipeline CV (Vertex Batch)</div>
-          <div class="pc-value" v-if="dqReport">{{ fmt(dqReport.total_cvs) }} CVs</div>
-          <div class="pc-sub" v-if="dqReport">{{ fmt(dqReport.users_with_cv) }} consultants</div>
-          <div class="pc-bar" v-if="dqReport">
-            <div class="pc-bar-fill" :class="`grade-bar-${dqReport.grade.toLowerCase()}`" :style="{ width: dqReport.score + '%' }" />
-          </div>
-          <div class="pc-status" :class="dqReport ? `grade-${dqReport.grade.toLowerCase()}` : ''">
-            Grade {{ dqReport?.grade ?? '—' }}
-          </div>
-        </RouterLink>
 
-        <!-- Scoring IA -->
-        <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
-          <div class="pc-icon" :class="scoringStatus.status === 'completed' ? 'pc-icon-grade-a' : scoringStatus.status === 'error' ? 'pc-icon-grade-d' : 'pc-icon-grade-b'"><Zap :size="22" /></div>
-          <div class="pc-label">Scoring IA Compétences</div>
-          <div class="pc-value" v-if="dqReport?.metrics?.ai_scoring">{{ (dqReport.metrics.ai_scoring as any).pct }}%</div>
-          <div class="pc-sub" v-if="scoringStatus.status === 'completed'">
-            {{ fmt(scoringStatus.success) }} / {{ fmt(scoringStatus.total_users) }}
-          </div>
-          <div class="pc-bar" v-if="dqReport?.metrics?.ai_scoring">
-            <div class="pc-bar-fill" :class="`grade-bar-${(dqReport.metrics.ai_scoring as any).status === 'ok' ? 'a' : (dqReport.metrics.ai_scoring as any).status === 'warning' ? 'c' : 'd'}`" :style="{ width: (dqReport.metrics.ai_scoring as any).pct + '%' }" />
-          </div>
-          <div class="pc-status" :class="scoringStatus.status === 'completed' ? 'grade-a' : scoringStatus.status === 'error' ? 'grade-d' : 'grade-b'">
-            {{ scoringStatus.status === 'completed' ? 'OK' : scoringStatus.status === 'running' ? 'En cours' : scoringStatus.status === 'error' ? 'Erreur' : 'Veille' }}
-          </div>
-        </RouterLink>
-
-        <!-- Embeddings -->
-        <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
-          <div class="pc-icon" :class="`pc-icon-grade-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`"><Brain :size="22" /></div>
-          <div class="pc-label">Embeddings Sémantiques</div>
-          <div class="pc-value" v-if="dqReport">{{ dqReport.metrics['embedding']?.pct ?? 0 }}%</div>
-          <div class="pc-sub" v-if="dqReport">{{ fmt(dqReport.metrics['embedding']?.ok) }} indexés</div>
-          <div class="pc-bar" v-if="dqReport">
-            <div class="pc-bar-fill" :class="`grade-bar-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`" :style="{ width: (dqReport.metrics['embedding']?.pct ?? 0) + '%' }" />
-          </div>
-          <div class="pc-status" :class="`grade-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`">
-            {{ dqReport?.metrics['embedding']?.status === 'ok' ? 'Sain' : dqReport?.metrics['embedding']?.status === 'warning' ? 'Dégradé' : 'Critique' }}
-          </div>
-        </RouterLink>
-
-        <!-- Drive -->
-        <RouterLink to="/admin/drive-ingestion" class="pipeline-card pipeline-card-link">
-          <div class="pc-icon" :class="driveStats ? `pc-icon-grade-${driveStats.grade.toLowerCase()}` : ''"><FolderOpen :size="22" /></div>
-          <div class="pc-label">Drive Ingestion</div>
-          <div class="pc-value" v-if="driveStats">{{ fmt(driveStats.imported) }} CVs</div>
-          <div class="pc-sub" v-if="driveStats">Score {{ driveStats.score }}/100</div>
-          <div class="pc-bar" v-if="driveStats">
-            <div class="pc-bar-fill" :class="`grade-bar-${driveStats.grade.toLowerCase()}`" :style="{ width: driveStats.score + '%' }" />
-          </div>
-          <div class="pc-status" v-if="driveStats" :class="`grade-${driveStats.grade.toLowerCase()}`">
-            Grade {{ driveStats.grade }}
-          </div>
-          <div class="pc-status grade-b" v-else>—</div>
-        </RouterLink>
+      <div v-if="!ragQuality || ragQuality.status === 'unknown'" class="scoring-idle">
+        <Activity :size="16" /> Golden dataset non calibré — lancez <code>manage_env.py rag-calibrate --env prd</code>
       </div>
+
+      <template v-else>
+        <div class="drive-hero">
+          <div class="drive-grade" :style="{
+            borderColor: ragQuality.status === 'ok' ? '#10b981' : ragQuality.status === 'warning' ? '#f59e0b' : '#ef4444',
+            color: ragQuality.status === 'ok' ? '#10b981' : ragQuality.status === 'warning' ? '#f59e0b' : '#ef4444'
+          }">
+            {{ ragQuality.status === 'ok' ? 'A' : ragQuality.status === 'warning' ? 'B' : 'C' }}
+          </div>
+          <div class="drive-volumes">
+            <div class="dv-item">
+              <span class="dv-n" :class="(ragQuality.recall_at_5 ?? 0) >= 1.0 ? 'text-ok' : (ragQuality.recall_at_5 ?? 0) >= 0.5 ? 'text-warn' : 'text-err'">
+                {{ Math.round((ragQuality.recall_at_5 ?? 0) * 100) }}%
+              </span>
+              <span class="dv-l">Recall@5</span>
+            </div>
+            <div class="dv-item">
+              <span class="dv-n">{{ ragQuality.nb_cases_ok }}</span>
+              <span class="dv-l">Cas calibrés</span>
+            </div>
+            <div class="dv-item">
+              <span class="dv-n">{{ ragQuality.nb_cases }}</span>
+              <span class="dv-l">Total cas</span>
+            </div>
+          </div>
+          <div class="drive-score">
+            {{ Math.round((ragQuality.recall_at_5 ?? 0) * 100) }}<span class="drive-score-max">/100</span>
+          </div>
+        </div>
+
+        <!-- Barre de recall -->
+        <div class="metrics-list">
+          <div class="metric-row">
+            <div class="metric-label"><Search :size="14" class="metric-icon" :class="`status-${ragQuality.status}`" /> Recall@5 Global</div>
+            <div class="bar-wrap">
+              <div class="bar-fill" :class="`bar-${ragQuality.status}`" :style="{ width: ((ragQuality.recall_at_5 ?? 0) * 100) + '%' }" />
+            </div>
+            <div class="metric-pct" :class="`pct-${ragQuality.status}`">{{ Math.round((ragQuality.recall_at_5 ?? 0) * 100) }}%</div>
+            <div class="metric-count">{{ ragQuality.nb_cases_ok }}/{{ ragQuality.nb_cases }}</div>
+            <div class="metric-badge" :class="`badge-${ragQuality.status}`">
+              <CheckCircle2 v-if="ragQuality.status === 'ok'" :size="12" />
+              <AlertTriangle v-else-if="ragQuality.status === 'warning'" :size="12" />
+              <AlertCircle v-else :size="12" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Embedding model + action -->
+        <div v-if="ragQuality.embedding_model" class="scoring-idle" style="font-size:0.8rem; color: #64748b; background:transparent; border:none; padding: 0.5rem 1rem;">
+          <Brain :size="13" /> Modèle : <strong>{{ ragQuality.embedding_model }}</strong>
+        </div>
+
+        <div v-if="ragQuality.status !== 'ok'" class="issues-box">
+          <div class="issue-line">
+            <AlertTriangle :size="13" class="issue-icon" />
+            <span class="issue-text">
+              {{ ragQuality.nb_cases! - ragQuality.nb_cases_ok! }} cas non calibrés — Recall@5 {{ ragQuality.status === 'warning' ? 'partiel' : 'insuffisant' }}.
+            </span>
+          </div>
+        </div>
+        <div v-else class="all-ok">
+          <CheckCircle2 :size="16" /> Golden dataset complet — {{ ragQuality.nb_cases }} cas calibrés avec Recall@5 optimal.
+        </div>
+      </template>
+    </div>
+
+    <!-- ── RAG CHUNKING SECTION (R7) ── -->
+    <div class="card" v-if="ragChunking">
+      <div class="card-header">
+        <Layers :size="18" class="icon-teal" />
+        <span>RAG Multi-Vecteur — Chunking par Mission</span>
+        <span v-if="ragChunking?.chunked_search_active" class="badge-ok" style="margin-left: auto; font-size: 0.72rem; padding: 0.15rem 0.6rem;">✓ Mode Chunked Actif</span>
+        <span v-else style="margin-left: auto; font-size: 0.72rem; color: #94a3b8;">Mode global (sans chunking)</span>
+      </div>
+
+      <div v-if="!ragChunking || ragChunking.status === 'not_indexed'" class="scoring-idle">
+        <Activity :size="16" /> Table cv_mission_embeddings vide — lancez
+        <code>POST /bulk-reanalyse/reindex-mission-chunks</code> puis activez
+        <code>RAG_CHUNKED_SEARCH=true</code>
+      </div>
+
+      <template v-else>
+        <div class="drive-hero">
+          <div class="drive-grade" :style="{
+            borderColor: ragChunking.chunked_search_active ? '#10b981' : '#f59e0b',
+            color: ragChunking.chunked_search_active ? '#10b981' : '#f59e0b'
+          }">
+            {{ ragChunking.status === 'ok' ? 'A' : 'B' }}
+          </div>
+          <div class="drive-volumes">
+            <div class="dv-item">
+              <span class="dv-n text-ok">{{ ragChunking.total_chunks?.toLocaleString() }}</span>
+              <span class="dv-l">Total chunks</span>
+            </div>
+            <div class="dv-item">
+              <span class="dv-n">{{ ragChunking.profiles_indexed?.toLocaleString() }}</span>
+              <span class="dv-l">Profils indexés</span>
+            </div>
+            <div class="dv-item">
+              <span class="dv-n">{{ ragChunking.avg_chunks_per_profile }}</span>
+              <span class="dv-l">Chunks / profil</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics-list">
+          <div class="metric-row">
+            <div class="metric-label"><Layers :size="14" class="metric-icon" :class="ragChunking.status === 'ok' ? 'status-ok' : 'status-warning'" /> Couverture d'indexation</div>
+            <div class="bar-wrap">
+              <div class="bar-fill" :class="ragChunking.status === 'ok' ? 'bar-ok' : 'bar-warning'"
+                :style="{ width: Math.min(100, (ragChunking.profiles_indexed / Math.max(1, ragChunking.profiles_indexed)) * 100) + '%' }" />
+            </div>
+            <div class="metric-pct" :class="ragChunking.status === 'ok' ? 'pct-ok' : 'pct-warning'">{{ ragChunking.status === 'ok' ? '≥90%' : 'Partiel' }}</div>
+            <div class="metric-badge" :class="ragChunking.status === 'ok' ? 'badge-ok' : 'badge-warning'">
+              <CheckCircle2 v-if="ragChunking.status === 'ok'" :size="12" />
+              <AlertTriangle v-else :size="12" />
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!ragChunking.chunked_search_active" class="issues-box">
+          <div class="issue-line">
+            <AlertTriangle :size="13" class="issue-icon" />
+            <span class="issue-text">
+              Indexation complète — activez <code>RAG_CHUNKED_SEARCH=true</code> dans Terraform pour activer la recherche multi-vecteur.
+            </span>
+          </div>
+        </div>
+        <div v-else class="all-ok">
+          <CheckCircle2 :size="16" /> Recherche multi-vecteur active — {{ ragChunking.avg_chunks_per_profile }} chunks/profil, scoring MAX+bonus.
+        </div>
+      </template>
+    </div>
     </div>
 
   </div>
@@ -765,6 +996,44 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tabs */
+.dq-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.06);
+  overflow-x: auto;
+}
+.dq-tab-btn {
+  padding: 0.6rem 1.2rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.dq-tab-btn:hover {
+  background: rgba(0,0,0,0.04);
+  color: #334155;
+}
+.dq-tab-btn.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 /* Toolbar */
@@ -913,6 +1182,8 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
 .icon-blue { color: #0284c7; }
 .icon-amber { color: #d97706; }
 .icon-purple { color: #9333ea; }
+.icon-violet { color: #7c3aed; }
+.icon-teal { color: #0d9488; }
 
 /* Metrics List */
 .metrics-list {

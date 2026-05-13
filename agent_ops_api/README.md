@@ -9,7 +9,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 320 | ✅ |
+| `main.py` | 274 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `agent.py` | 261 | ✅ |
@@ -18,7 +18,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 | Var | Type | Valeur dev |
 |---|---|---|
 | `PYTHONPATH` | Comportement | `/app` |
-| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |
@@ -32,15 +32,14 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 | `CV_API_URL` | Infra | `http://cv_api:8004` |
 | `MISSIONS_API_URL` | Infra | `http://missions_api:8009` |
 | `PROMPTS_API_URL` | Infra | `http://prompts_api:8000` |
-| `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8080` |
-| `USERS_MCP_URL` | Infra | `http://users_api:8000` |
-| `ITEMS_MCP_URL` | Infra | `http://items_api:8001` |
-| `COMPETENCIES_MCP_URL` | Infra | `http://competencies_api:8003` |
-| `CV_MCP_URL` | Infra | `http://cv_api:8004` |
-| `MISSIONS_MCP_URL` | Infra | `http://missions_api:8009` |
-| `DRIVE_MCP_URL` | Infra | `http://drive_api:8080` |
-| `PROMPTS_MCP_URL` | Infra | `http://prompts_api:8000` |
-| `LOKI_MCP_URL` | Infra | `http://loki:3100/mcp` |
+| `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8008` |
+| `USERS_MCP_URL` | Infra | `http://users_mcp:8000` |
+| `ITEMS_MCP_URL` | Infra | `http://items_mcp:8000` |
+| `COMPETENCIES_MCP_URL` | Infra | `http://competencies_mcp:8000` |
+| `CV_MCP_URL` | Infra | `http://cv_mcp:8000` |
+| `MISSIONS_MCP_URL` | Infra | `http://missions_mcp:8000` |
+| `DRIVE_MCP_URL` | Infra | `http://drive_mcp:8000` |
+| `PROMPTS_MCP_URL` | Infra | `http://prompts_mcp:8000` |
 | `MONITORING_MCP_URL` | Infra | `http://monitoring_mcp:8010` |
 
 ## Redis
@@ -51,9 +50,6 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 - `GET /spec`
 - `POST /query`
 - `POST /a2a/query`
-- `POST /login`
-- `POST /logout`
-- `GET /me`
 - `GET /mcp/registry`
 - `GET /version`
 

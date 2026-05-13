@@ -84,18 +84,15 @@ Après chaque appel outil retournant une **liste de consultants ou de profils**,
 - **GET** `/metrics` : Metrics
 - **GET** `/` : Root
 - **GET** `/spec` : Get Spec
-- **GET** `/history` : Get History
-- **DELETE** `/history` : Delete History
-- **POST** `/login` : Login
-- **POST** `/logout` : Logout
-- **GET** `/me` : Get Me
 - **GET** `/health` : Health
 - **GET** `/version` : Get Version
+- **GET** `/history` : Get History
+- **DELETE** `/history` : Delete History
 - **POST** `/query` : Query
 - **POST** `/a2a/query` : A2A Query
 - **GET** `/mcp/registry` : Mcp Registry
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

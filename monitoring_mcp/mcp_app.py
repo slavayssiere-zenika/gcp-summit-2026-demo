@@ -46,7 +46,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "monitoring-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler,
 )
@@ -223,12 +223,21 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
                 headers=headers,
             )
         except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
+            # Best-effort : ne jamais relancer l'exception pour ne pas masquer l'erreur originale.
+            logging.error("Failed to report error to prompts_api: %s", e)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
@@ -238,6 +247,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     if token:
         await report_exception_to_prompts_api("monitoring_mcp", error_msg, trace_context, token)
 
+    logging.error(
+        "[monitoring_mcp] Unhandled exception on %s %s: %s\n%s",
+        request.method, request.url.path, error_msg, trace_context
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 

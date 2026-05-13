@@ -1,6 +1,7 @@
 # flake8: noqa: E501
 from tools.finops_tools import handle_log_ai_consumption, handle_get_finops_report, handle_detect_usage_anomalies, handle_get_aiops_dashboard_data
 from tools.market_tools import handle_get_top_market_skills, handle_get_market_demand_volume
+from tools.rag_quality_tools import handle_log_rag_quality_snapshot, handle_get_rag_quality_history
 import asyncio
 import contextvars
 import json
@@ -80,6 +81,7 @@ TABLE_REF = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 FINOPS_DATASET_ID = os.getenv("FINOPS_DATASET_ID", "finops")
 FINOPS_TABLE_ID = os.getenv("FINOPS_TABLE_ID", "ai_usage")
 FINOPS_TABLE_REF = f"{PROJECT_ID}.{FINOPS_DATASET_ID}.{FINOPS_TABLE_ID}"
+RAG_QUALITY_TABLE_REF = f"{PROJECT_ID}.{FINOPS_DATASET_ID}.rag_quality_snapshots"
 
 server = Server("analytics-mcp")
 
@@ -175,6 +177,36 @@ async def list_tools() -> list[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="log_rag_quality_snapshot",
+            description="Persiste un snapshot de qualité RAG (Recall@K, MRR) dans BigQuery après calibrage. Alimente le dashboard AIOps et la gate de qualité données.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "env": {"type": "string", "description": "Environnement cible (dev, uat, prd)."},
+                    "embedding_model": {"type": "string", "description": "Modèle d'embedding utilisé."},
+                    "nb_cases": {"type": "integer", "description": "Nombre total de cas golden évalués."},
+                    "nb_cases_ok": {"type": "integer", "description": "Nombre de cas dont Recall@5 >= seuil."},
+                    "global_recall": {"type": "number", "description": "Recall@5 global (moyenne)."},
+                    "global_mrr": {"type": "number", "description": "MRR global (moyenne)."},
+                    "cases_detail": {"type": "array", "description": "Détail par cas golden [{id, recall, mrr}]."},
+                    "triggered_by": {"type": "string", "description": "Origine : manual | model_change | deploy.", "default": "manual"}
+                },
+                "required": ["env", "embedding_model", "nb_cases", "nb_cases_ok", "global_recall"]
+            }
+        ),
+        Tool(
+            name="get_rag_quality_history",
+            description="Retourne l'historique des snapshots de qualité RAG pour un env donné. Utilisé par le dashboard AIOps pour afficher la tendance Recall@K.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "env": {"type": "string", "description": "Environnement cible (dev, uat, prd)."},
+                    "days_back": {"type": "integer", "description": "Nombre de jours d'historique. Défaut: 30.", "default": 30}
+                },
+                "required": ["env"]
+            }
         )
     ]
 
@@ -194,6 +226,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await handle_get_aiops_dashboard_data(get_aiops_dashboard_data_internal)
         elif name == "detect_usage_anomalies":
             return await handle_detect_usage_anomalies(arguments, client, FINOPS_TABLE_REF)
+        elif name == "log_rag_quality_snapshot":
+            return await handle_log_rag_quality_snapshot(arguments, client, PROJECT_ID, FINOPS_DATASET_ID)
+        elif name == "get_rag_quality_history":
+            return await handle_get_rag_quality_history(arguments, client, PROJECT_ID, FINOPS_DATASET_ID)
         else:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
     except Exception as e:

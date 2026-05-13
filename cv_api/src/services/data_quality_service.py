@@ -10,9 +10,11 @@ Responsabilités :
 Ce module est intentionnellement SANS état global — le cache TTL est géré par config.py.
 """
 
+import json
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 from opentelemetry.propagate import inject
@@ -34,13 +36,15 @@ CACHE_TTL_SECONDS: int = 30
 # Les métriques structurelles (summary, current_role) pèsent moins car
 # leur absence a moins d'impact sur la qualité opérationnelle.
 _WEIGHTS: dict[str, float] = {
-    "embedding":             0.15,  # extraction technique — important mais auto
-    "competencies":          0.10,  # extraction LLM — validé par competency_assignment
-    "missions":              0.10,  # extraction LLM — moins critique que le scoring final
-    "summary":               0.05,  # cosmétique — impact limité sur la recherche
-    "current_role":          0.05,  # cosmétique — impact limité sur le staffing
-    "competency_assignment": 0.30,  # liaison consultant → compétences taxonomie ← critique
-    "ai_scoring":            0.25,  # scoring IA effectif ← critique (était 0.10)
+    "embedding":                0.10,  # extraction technique
+    "competencies":             0.10,  # extraction LLM
+    "missions":                 0.10,  # extraction LLM
+    "summary":                  0.05,  # cosmétique
+    "current_role":             0.05,  # cosmétique
+    "competency_assignment":    0.20,  # liaison taxonomie
+    "ai_scoring":               0.20,  # scoring effectif
+    "processing_errors":        0.10,  # erreurs post-traitement (historique)
+    "extraction_reliability":   0.10,  # fiabilité extraction Gemini
 }
 # sum(_WEIGHTS.values()) == 1.0 — invariant vérifié
 
@@ -132,13 +136,24 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         )
     ).scalar_one() or 0
 
+    processing_errors_count: int = (
+        await db.execute(
+            sa_text(
+                "SELECT COUNT(*) FROM cv_profiles "
+                "WHERE processing_errors IS NOT NULL "
+                "AND jsonb_array_length(processing_errors) > 0"
+            )
+        )
+    ).scalar_one() or 0
+    processing_errors_ok = total_cvs - processing_errors_count
+
     res_extraction = await db.execute(
         sa_text("""
         SELECT
-            COUNT(extraction_reliability_score) as count_scored,
-            AVG(extraction_reliability_score) as mean_score,
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY extraction_reliability_score) as median_score,
-            SUM(CASE WHEN extraction_reliability_score >= 75 THEN 1 ELSE 0 END) as ok_count
+            COUNT(extraction_reliability_score) AS count_scored,
+            AVG(extraction_reliability_score)   AS mean_score,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY extraction_reliability_score) AS median_score,
+            SUM(CASE WHEN extraction_reliability_score >= 75 THEN 1 ELSE 0 END) AS ok_count
         FROM cv_profiles
         WHERE extraction_reliability_score IS NOT NULL
         """)
@@ -146,7 +161,12 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
     row_ext = res_extraction.fetchone()
     mean_score = round(row_ext[1] or 0, 1) if row_ext else 0.0
     median_score = round(row_ext[2] or 0, 1) if row_ext else 0.0
-    extraction_ok_count = row_ext[3] if row_ext else 0
+    extraction_scored_count = int(row_ext[0] or 0) if row_ext else 0  # CVs avec score renseigné
+    extraction_ok_count = int(row_ext[3] or 0) if row_ext else 0
+    # Dénominateur = CVs ayant un score (pas total_cvs) :
+    # Les CVs sans score (NULL après bulk-apply BUG4 fix) sont 'non évalués', pas 'en erreur'.
+    # Si aucun CV n'a encore été évalué → métrique ignorée (pct=100, status=ok).
+    extraction_denominator = extraction_scored_count if extraction_scored_count > 0 else None
 
     # ── 2. Métriques externes (soft-dependencies) ─────────────────────────────
     competencies_api_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8000")
@@ -221,18 +241,36 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         "min_scored_count": MIN_SCORED_COUNT,
         "avg_scored_per_user": ai_scoring_avg,
     }
+    # extraction_reliability : dénominateur = CVs avec score renseigné uniquement.
+    # Si aucun CV évalué (ex: post bulk-apply sans scoring), status=ok par défaut
+    # pour ne pas pénaliser un pipeline en cours d'exécution.
+    if extraction_denominator is None:
+        ext_pct = 100  # aucun CV évalué = pas d'erreur détectable
+        ext_status_override = "ok"
+    else:
+        ext_pct = _pct(extraction_ok_count, extraction_denominator)
+        ext_status_override = None  # calculé normalement
     m_extraction_reliability = {
         "ok": extraction_ok_count,
-        "total": total,
-        "pct": _pct(extraction_ok_count, total),
+        "total": extraction_denominator or 0,  # affiche 0 si non évalué
+        "pct": ext_pct,
         "mean": mean_score,
         "median": median_score,
+        "scored_count": extraction_scored_count,
+    }
+    m_processing_errors = {
+        "ok": processing_errors_ok,
+        "total": total,
+        "pct": _pct(processing_errors_ok, total),
     }
 
     all_metrics = [m_missions, m_embedding, m_competencies, m_summary,
-                   m_current_role, m_comp_assign, m_ai_scoring, m_extraction_reliability]
+                   m_current_role, m_comp_assign, m_ai_scoring, m_extraction_reliability, m_processing_errors]
     for m in all_metrics:
         m["status"] = _status(m["pct"])
+    # Override extraction_reliability status si aucun CV évalué
+    if ext_status_override:
+        m_extraction_reliability["status"] = ext_status_override
 
     # ── 4. Score global (moyenne pondérée) ────────────────────────────────────
     score = round(
@@ -243,6 +281,8 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         + m_current_role["pct"] * _WEIGHTS["current_role"]
         + m_comp_assign["pct"] * _WEIGHTS["competency_assignment"]
         + m_ai_scoring["pct"] * _WEIGHTS["ai_scoring"]
+        + m_processing_errors["pct"] * _WEIGHTS["processing_errors"]
+        + m_extraction_reliability["pct"] * _WEIGHTS["extraction_reliability"]
     )
 
     if score >= 85:
@@ -287,11 +327,18 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             f"{users_with_cv - ai_scoring_ok} consultant(s) n'ont pas atteint "
             f"{MIN_SCORED_COUNT} compétences scorées."
         )
-    if m_extraction_reliability["status"] != "ok":
+    if m_extraction_reliability["status"] != "ok" and extraction_denominator:
+        below_threshold = extraction_denominator - extraction_ok_count
         issues.append(
             f"Fiabilité d'extraction IA insuffisante : "
-            f"{total - extraction_ok_count} CVs ont un score inférieur à 75%. "
+            f"{below_threshold}/{extraction_denominator} CVs évalués ont un score inférieur à 75%. "
             "À vérifier dans l'interface de Qualité d'Extraction."
+        )
+    if m_processing_errors["status"] != "ok":
+        issues.append(
+            f"Erreurs d'ingestion non résolues : "
+            f"{processing_errors_count} CVs ont des erreurs de post-traitement. "
+            "Relancer les imports depuis l'onglet Erreurs CV."
         )
 
     recommendation = (
@@ -299,6 +346,63 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         if not issues
         else "Relancer le pipeline bulk (Retry Apply ou Bulk Scoring) pour résoudre les anomalies détectées."
     )
+
+    # ── 6. Métriques RAG Sémantique (R3) ─────────────────────────────────────
+    # Source : golden_queries.json (versionné en git, mis à jour par rag-calibrate)
+    # Non-bloquant : si le fichier est absent ou vide, rag_* sont null.
+    rag_recall_at_5: float | None = None
+    rag_nb_cases: int | None = None
+    rag_nb_cases_ok: int | None = None
+    rag_embedding_model: str | None = os.getenv("GEMINI_EMBEDDING_MODEL")
+
+    try:
+        # Résolution robuste : parents[2] = /app (Cloud Run) ou cv_api/ (dev local)
+        # Structure Cloud Run : /app/src/services/data_quality_service.py → parents[2] = /app
+        # Structure dev local : /…/cv_api/src/services/data_quality_service.py → parents[2] = cv_api/
+        _svc_file = Path(__file__).resolve()
+        _candidate = _svc_file.parents[2] / "eval" / "golden_queries.json"
+        if not _candidate.exists():
+            # Fallback explicite Cloud Run si workdir non standard
+            _candidate = Path("/app/eval/golden_queries.json")
+
+        if _candidate.exists():
+            golden_data = json.loads(_candidate.read_text(encoding="utf-8"))
+            cases = golden_data.get("cases", [])
+            rag_nb_cases = len(cases)
+            rag_nb_cases_ok = sum(1 for c in cases if c.get("expected_user_ids"))
+            rag_recall_at_5 = round(rag_nb_cases_ok / rag_nb_cases, 4) if rag_nb_cases else None
+        else:
+            logger.warning(
+                "[data-quality] golden_queries.json introuvable (%s). RAG metrics non disponibles.",
+                _candidate,
+            )
+    except Exception as exc:
+        logger.warning("[data-quality] Lecture golden_queries.json échouée (non-bloquant): %s", exc)
+
+    # ── 7. Métrique RAG Chunking (R7) — non-bloquant ──────────────────────────
+    # Mesure l'état d'indexation de la table cv_mission_embeddings.
+    # Si la table est vide (avant première indexation), status='not_indexed'.
+    mission_chunks_total = 0
+    mission_chunks_profiles = 0
+    mission_chunks_avg = 0.0
+    mission_chunks_status = "not_indexed"
+    try:
+        row_chunks = (await db.execute(sa_text("""
+            SELECT
+                COUNT(*) AS total_chunks,
+                COUNT(DISTINCT user_id) AS profiles_indexed
+            FROM cv_mission_embeddings
+            WHERE chunk_embedding IS NOT NULL
+        """))).fetchone()
+        if row_chunks:
+            mission_chunks_total = int(row_chunks[0] or 0)
+            mission_chunks_profiles = int(row_chunks[1] or 0)
+            if mission_chunks_profiles > 0:
+                mission_chunks_avg = round(mission_chunks_total / mission_chunks_profiles, 1)
+            if mission_chunks_total > 0:
+                mission_chunks_status = "ok" if mission_chunks_profiles >= total_cvs * 0.9 else "partial"
+    except Exception as exc:
+        logger.warning("[data-quality] Lecture cv_mission_embeddings échouée (non-bloquant): %s", exc)
 
     return {
         "computed_at": datetime.now(timezone.utc).isoformat(),
@@ -315,7 +419,29 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             "competency_assignment": m_comp_assign,
             "ai_scoring":            m_ai_scoring,
             "extraction_reliability": m_extraction_reliability,
+            "processing_errors":     m_processing_errors,
         },
         "issues": issues,
         "recommendation": recommendation,
+        # ── RAG Quality (R3) — ajouté au rapport sans impacter le score global ──
+        "rag": {
+            "recall_at_5": rag_recall_at_5,
+            "nb_cases": rag_nb_cases,
+            "nb_cases_ok": rag_nb_cases_ok,
+            "embedding_model": rag_embedding_model,
+            "status": (
+                "ok" if rag_recall_at_5 is not None and rag_recall_at_5 >= 1.0
+                else "warning" if rag_recall_at_5 is not None and rag_recall_at_5 >= 0.5
+                else "error" if rag_recall_at_5 is not None
+                else "unknown"
+            ),
+        },
+        # ── RAG Chunking (R7) — état de la table cv_mission_embeddings ──
+        "rag_chunking": {
+            "total_chunks": mission_chunks_total,
+            "profiles_indexed": mission_chunks_profiles,
+            "avg_chunks_per_profile": mission_chunks_avg,
+            "status": mission_chunks_status,
+            "chunked_search_active": os.getenv("RAG_CHUNKED_SEARCH", "").lower() == "true",
+        },
     }

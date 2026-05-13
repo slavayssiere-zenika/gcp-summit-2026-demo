@@ -95,23 +95,23 @@ def test_get_aiops_metrics_cache_hit(mock_redis_from_url, override_verify_jwt):
     assert response.status_code == 200
     assert response.json() == {"dashboard": "data"}
 
-@patch('mcp_server.client')
+@patch('mcp_app.bq_client')
 @patch('httpx.AsyncClient.post', new_callable=AsyncMock)
 def test_detect_finops_anomalies(mock_post, mock_bq_client, override_verify_jwt):
     mock_query_job = MagicMock()
-    
+
     class MockRow:
         def __init__(self, email, total):
             self.user_email = email
             self.total_tokens = total
-            
+
     mock_query_job.result.return_value = [MockRow("bad_user@example.com", 600000)]
     mock_bq_client.query.return_value = mock_query_job
-    
+
     mock_post_res = MagicMock()
     mock_post_res.status_code = 200
     mock_post.return_value = mock_post_res
-    
+
     response = client.post("/admin/finops/detect", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json()["anomalies_detected"] == 1

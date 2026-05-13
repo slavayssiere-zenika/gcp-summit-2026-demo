@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 import asyncio
 import json
 import logging
@@ -11,10 +11,20 @@ import uvicorn
 from auth import verify_jwt
 from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
                      HTTPException, Request, Response)
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from google.cloud import bigquery
 from logger import LoggingMiddleware, setup_logging
-from mcp_server import call_tool, get_aiops_dashboard_data_internal, list_tools
+from mcp_server import (
+    FINOPS_TABLE_REF,
+    call_tool,
+    client as bq_client,
+    get_aiops_dashboard_data_internal,
+    list_tools,
+    mcp_auth_header_var,
+)
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -48,7 +58,7 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "analytics-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     }),
     sampler=sampler
 )
@@ -73,7 +83,11 @@ Instrumentator().instrument(app).expose(app)
 
 
 cors_origins = os.getenv(
-    "CORS_ORIGINS", "http://localhost:5173,http://localhost:80,http://localhost:8080,https://dev.zenika.slavayssiere.fr,https://uat.zenika.slavayssiere.fr,https://zenika.slavayssiere.fr").split(",")
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:80,http://localhost:8080,"
+    "https://dev.zenika.slavayssiere.fr,https://uat.zenika.slavayssiere.fr,"
+    "https://zenika.slavayssiere.fr"
+).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -120,8 +134,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                 data = await get_aiops_dashboard_data_internal()
                 r.set(cache_key, json.dumps(data), ex=3600 * 24)
             except Exception as e:
-                import logging
-                logging.error(f"Background refresh failed: {e}")
+                logging.error("Background refresh failed: %s", e)
             finally:
                 r.delete(lock_key)
 
@@ -132,7 +145,6 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                 if cached_data_str:
                     cached_data = json.loads(cached_data_str)
                     # Check age for Soft TTL
-                    from datetime import datetime
                     if "generated_at" in cached_data:
                         gen_str = cached_data["generated_at"]
                         gen_time = datetime.fromisoformat(gen_str)
@@ -142,8 +154,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                             background_tasks.add_task(async_background_refresh)
                     return cached_data
             except Exception as re:
-                import logging
-                logging.warning(f"Redis cache access failed: {re}")
+                logging.warning("Redis cache access failed: %s", re)
 
         # 2. Cache Miss ou Force -> Calcul direct
         acquired = False
@@ -166,7 +177,6 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
                 r.delete(lock_key)
 
     except Exception as e:
-        import logging
         logging.exception("Failed to fetch AIOps metrics in Analytics MCP REST endpoint")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -175,15 +185,13 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from mcp_server import mcp_auth_header_var
         mcp_auth_header_var.set(auth_header)
 
     try:
         result = await call_tool(request.name, request.arguments)
         return {"result": [r.model_dump() for r in result]}
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logging.exception("MCP tool call failed: %s", request.name)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -200,10 +208,6 @@ async def detect_finops_anomalies(http_request: Request, token_payload: dict = D
             status_code=403,
             detail="Accès refusé : le Kill-Switch FinOps est réservé aux administrateurs."
         )
-    import httpx
-    from mcp_server import FINOPS_TABLE_REF
-    from mcp_server import client as bq_client
-
     threshold = int(os.getenv("FINOPS_ANOMALY_THRESHOLD", 500000))
     users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000/")
 
@@ -215,7 +219,6 @@ async def detect_finops_anomalies(http_request: Request, token_payload: dict = D
         HAVING total_tokens > @threshold
     """
 
-    from google.cloud import bigquery
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("threshold", "INT64", threshold)
@@ -242,12 +245,10 @@ async def detect_finops_anomalies(http_request: Request, token_payload: dict = D
                 if res.status_code == 200:
                     suspended_users.append({"email": user_email, "tokens": total_tokens, "status": "suspended"})
                 else:
-                    import logging
-                    logging.error(f"Echec suspension {user_email}: {res.text}")
+                    logging.error("Echec suspension %s: %s", user_email, res.text)
                     suspended_users.append({"email": user_email, "tokens": total_tokens, "status": "failed"})
             except Exception as e:
-                import logging
-                logging.exception(f"Exception suspension {user_email}")
+                logging.exception("Exception suspension %s", user_email)
                 suspended_users.append({"email": user_email, "tokens": total_tokens,
                                        "status": "error", "message": str(e)})
 
@@ -328,6 +329,12 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
@@ -337,6 +344,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     if token:
         await report_exception_to_prompts_api("analytics_mcp", error_msg, trace_context, token)
 
+    logging.error(
+        "[analytics_mcp] Unhandled exception on %s %s: %s\n%s",
+        request.method, request.url.path, error_msg, trace_context
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":

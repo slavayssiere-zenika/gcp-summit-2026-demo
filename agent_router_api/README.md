@@ -12,13 +12,13 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 | `main.py` | 200 | ✅ |
 | `conftest.py` | 20 | ✅ |
 | `metrics.py` | 45 | ✅ |
-| `agent.py` | 415 | ⚠️ |
+| `agent.py` | 462 | ⚠️ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
 | `PYTHONPATH` | Comportement | `/app` |
-| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |

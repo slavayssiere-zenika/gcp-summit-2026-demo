@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import uvicorn
-from agent import OPS_TOOLS, get_session_service, run_agent_query
+from agent import OPS_TOOLS, run_agent_query
 from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
                      Response)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -54,9 +54,9 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "agent-ops-api",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
     })
-,
+    ,
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
@@ -197,57 +197,10 @@ async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthor
             raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
-app.include_router(_history_router)
-
-
-USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
-
-
-@app.post("/login")
-async def login(request: Request, response: Response):
-    data = await request.json()
-    headers = {}
-    inject(headers)
-    async with httpx.AsyncClient() as client:
-        res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
-        if res.status_code != 200:
-            from pydantic import BaseModel
-
-            class ErrorDetail(BaseModel):
-                detail: str
-            try:
-                err_data = ErrorDetail.model_validate(res.json())
-                detail_msg = err_data.detail
-            except Exception:
-                detail_msg = "Erreur de connexion"
-            raise HTTPException(status_code=res.status_code, detail=detail_msg)
-
-        # Forward the cookie from users_api to the client
-        for name, value in res.cookies.items():
-            response.set_cookie(key=name, value=value, httponly=True, samesite="lax")
-
-        return res.json()
-
-
-@app.post("/logout")
-async def logout(response: Response):
-    async with httpx.AsyncClient() as client:
-        # res = await client.post(f"{USERS_API_URL}/logout")
-        response.delete_cookie("access_token")
-        return {"message": "Déconnecté"}
-
-
-@app.get("/me")
-async def get_me(request: Request):
-    headers = {}
-    inject(headers)
-    async with httpx.AsyncClient() as client:
-        # Forward the incoming cookie to users_api
-        cookies = request.cookies
-        res = await client.get(f"{USERS_API_URL}/me", cookies=cookies, headers=headers)
-        if res.status_code != 200:
-            raise HTTPException(status_code=res.status_code, detail="Non connecté")
-        return res.json()
+# NOTE: Les endpoints /login, /me, /logout ont été supprimés.
+# Le frontend s'authentifie directement via /auth/ → users_api (LB prio 30).
+# agent_ops_api est un worker A2A : il n'est appelé que par agent_router_api
+# via le LB interne (http://api.internal.zenika/api/agent-ops/).
 
 
 @protected_router.get("/mcp/registry")
@@ -310,6 +263,7 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
             raise HTTPException(status_code=502, detail=f"Erreur de communication avec {server_name}: {str(exc)}")
 
 
+app.include_router(_history_router)
 app.include_router(protected_router)
 
 

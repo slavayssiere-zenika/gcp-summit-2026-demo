@@ -180,7 +180,7 @@ async def list_user_evaluations(
     total = len(leaf_ids)
 
     # Apply pagination on the leaf IDs
-    paginated_leaf_ids = leaf_ids[skip : skip + limit]
+    paginated_leaf_ids = leaf_ids[skip:skip + limit]
 
     if not paginated_leaf_ids:
         return {"items": [], "total": total, "skip": skip, "limit": limit}
@@ -300,30 +300,49 @@ async def trigger_ai_score_single(
     user_id: int,
     competency_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),
 ):
-    """Declenche le calcul IA pour une competence specifique."""
-    comp = (
-        (await db.execute(select(Competency).where(Competency.id == competency_id)))
-        .scalars()
-        .first()
-    )
-    if not comp:
-        raise HTTPException(status_code=404, detail="Competency not found")
+    """Declenche le calcul IA pour une competence specifique.
+
+    Implémente le pattern "short-lived session" pour éviter la starvation du pool
+    de connexions DB (AGENTS.md §8) : la connexion est acquise uniquement le temps
+    de la lecture initiale, relâchée avant l'appel IA (potentiellement long : 5-15s),
+    puis réacquise pour la seule écriture du résultat.
+    """
+    from database import SessionLocal
+
+    # Phase 1 : lecture courte — vérifier que la compétence existe
+    async with SessionLocal() as db:
+        comp = (
+            (await db.execute(select(Competency).where(Competency.id == competency_id)))
+            .scalars()
+            .first()
+        )
+        if not comp:
+            raise HTTPException(status_code=404, detail="Competency not found")
+        comp_name = comp.name  # sérialiser avant de fermer la session
+    # Connexion DB libérée ici — le pool est disponible pour d'autres requêtes
+
     auth_header = request.headers.get("Authorization", "")
     headers = {"Authorization": auth_header}
     inject(headers)
-    score, justification = await _compute_ai_score(user_id, comp.name, headers)
-    ev = await _get_or_create_evaluation(db, user_id, competency_id)
-    ev.ai_score = score
-    ev.ai_justification = justification
-    ev.ai_scored_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    ev.scoring_version = "v2"
-    ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    await db.commit()
-    await db.refresh(ev)
+
+    # Phase 2 : inférence IA (5-15s) sans tenir de connexion DB
+    score, justification = await _compute_ai_score(user_id, comp_name, headers)
+
+    # Phase 3 : écriture courte — persister le résultat
+    async with SessionLocal() as db:
+        ev = await _get_or_create_evaluation(db, user_id, competency_id)
+        ev.ai_score = score
+        ev.ai_justification = justification
+        ev.ai_scored_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        ev.scoring_version = "v2"
+        ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await db.commit()
+        await db.refresh(ev)
+        result = _serialize_evaluation(ev, comp_name)
+
     delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
-    return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
+    return CompetencyEvaluationResponse(**result)
 
 
 @router.post(
@@ -345,7 +364,6 @@ async def trigger_ai_score_all(
     user_comp_subq = (
         select(user_competency.c.competency_id)
         .where(user_competency.c.user_id == user_id)
-        .subquery()
     )
 
     leaf_ids_stmt = (

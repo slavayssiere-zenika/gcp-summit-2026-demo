@@ -130,7 +130,7 @@ def _make_mock_event(role: str, text: str | None = None, tool_name: str | None =
 
 def _setup_runner_mock(mocker, events: list):
     """Configure les mocks Runner, create_agent et get_session_service."""
-    mock_session_svc = AsyncMock()
+    mock_session_svc = MagicMock()
     mock_session_svc.create_session = AsyncMock()
     mock_session_svc.get_session = AsyncMock(return_value=None)
 

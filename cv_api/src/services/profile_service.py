@@ -59,7 +59,8 @@ class ProfileService:
                 is_anonymous=user_enrich_map.get(p.user_id, {}).get("is_anonymous", False),
                 full_name=user_enrich_map.get(p.user_id, {}).get("full_name"),
                 email=user_enrich_map.get(p.user_id, {}).get("email"),
-                username=user_enrich_map.get(p.user_id, {}).get("username")
+                username=user_enrich_map.get(p.user_id, {}).get("username"),
+                processing_errors=p.processing_errors or []
             ) for p in paginated_profiles
         ]
         return total, responses
@@ -90,7 +91,8 @@ class ProfileService:
                 source_url=p.source_url,
                 source_tag=p.source_tag,
                 imported_by_id=p.imported_by_id,
-                is_anonymous=is_anon
+                is_anonymous=is_anon,
+                processing_errors=p.processing_errors or []
             ) for p in profiles
         ]
         return total, responses
@@ -202,7 +204,8 @@ class ProfileService:
             competencies_keywords=list(merged_comp_keywords),
             missions=merged_missions,
             educations=merged_educations,
-            is_anonymous=is_anon
+            is_anonymous=is_anon,
+            processing_errors=base_profile.processing_errors or []
         )
 
     @staticmethod

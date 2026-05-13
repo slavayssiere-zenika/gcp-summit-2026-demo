@@ -35,19 +35,24 @@ sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
 provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "drive-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: "1.0.0",
-    })
-,
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(
+        BatchSpanProcessor(
+            OTLPSpanExporter() if os.getenv(
+                "TRACE_EXPORTER",
+                "grpc") == "http" else OTLPSpanExporter(
+                insecure=True)))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
 server = Server("drive-api")
+
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -285,41 +290,41 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         # OTel Propagation
         inject(headers)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             try:
                 if name == "add_drive_folder":
                     res = await client.post(f"{API_BASE_URL}/folders", json=arguments, headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
                 elif name == "list_drive_folders":
                     skip = arguments.get("skip", 0)
                     limit = arguments.get("limit", 50)
                     res = await client.get(f"{API_BASE_URL}/folders", params={"skip": skip, "limit": limit}, headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
                 elif name == "delete_drive_folder":
                     fid = arguments.get("folder_id")
                     res = await client.delete(f"{API_BASE_URL}/folders/{fid}", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
                 elif name == "get_drive_status":
                     res = await client.get(f"{API_BASE_URL}/status", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
                 elif name == "list_drive_files":
                     res = await client.get(f"{API_BASE_URL}/files", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
                 elif name == "retry_drive_errors":
                     res = await client.post(f"{API_BASE_URL}/retry-errors", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
-                    
+
                 elif name == "trigger_drive_sync":
                     # This endpoint might take longer to return (Cloud Run default limit 60 min, but HTTP is standard)
                     res = await client.post(f"{API_BASE_URL}/sync", headers=headers, timeout=300.0)
@@ -329,7 +334,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 elif name == "get_drive_file_state":
                     gfid = arguments.get("google_file_id")
                     if not gfid:
-                        return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'google_file_id' manquant."}))]
+                        return [TextContent(type="text", text=json.dumps(
+                            {"success": False, "error": "Paramètre 'google_file_id' manquant."}))]
                     res = await client.get(f"{API_BASE_URL}/files/{gfid}", headers=headers, timeout=10.0)
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
@@ -355,10 +361,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if arguments.get("google_file_id"):
                         params["google_file_id"] = arguments["google_file_id"]
                     if not params:
-                        return [TextContent(type="text", text=json.dumps({"success": False, "error": "Fournir 'ack_id' ou 'google_file_id'."}))]
+                        return [TextContent(type="text", text=json.dumps(
+                            {"success": False, "error": "Fournir 'ack_id' ou 'google_file_id'."}))]
                     res = await client.delete(f"{API_BASE_URL}/dlq/message", params=params, headers=headers, timeout=20.0)
                     res.raise_for_status()
-                    return [TextContent(type="text", text=json.dumps({"success": True, "message": "Message DLQ supprimé."}))]
+                    return [TextContent(type="text", text=json.dumps(
+                        {"success": True, "message": "Message DLQ supprimé."}))]
 
                 elif name == "replay_dlq":
                     res = await client.post(f"{API_BASE_URL}/dlq/replay", headers=headers, timeout=60.0)
@@ -368,7 +376,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 elif name == "update_drive_file":
                     file_id = arguments.get("file_id")
                     if not file_id:
-                        return [TextContent(type="text", text=json.dumps({"success": False, "error": "Paramètre 'file_id' manquant."}))]
+                        return [TextContent(type="text", text=json.dumps(
+                            {"success": False, "error": "Paramètre 'file_id' manquant."}))]
                     body = {k: v for k, v in arguments.items() if k != "file_id" and v is not None}
                     res = await client.patch(f"{API_BASE_URL}/files/{file_id}", json=body, headers=headers, timeout=10.0)
                     res.raise_for_status()
@@ -392,6 +401,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 else:
                     return [TextContent(type="text", text=f"Unknown tool: {name}")]
             except httpx.HTTPStatusError as e:
-                return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
+                return [TextContent(type="text", text=json.dumps(
+                    {"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
             except Exception as e:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]

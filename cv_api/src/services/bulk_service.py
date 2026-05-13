@@ -27,6 +27,7 @@ from src.services.config import (_CV_CACHE, BATCH_GCS_BUCKET,
                                  BULK_APPLY_SEMAPHORE, BULK_EMBED_SEMAPHORE,
                                  BULK_SCALE_MIN_INSTANCES,
                                  COMPETENCIES_API_URL, ITEMS_API_URL,
+                                 ITEMS_DELETE_SEMAPHORE,
                                  PROMPTS_API_URL, USERS_API_URL, client,
                                  vertex_batch_client)
 from src.services.finops import log_finops
@@ -36,6 +37,12 @@ from src.services.utils import (_CV_RESPONSE_SCHEMA, _build_distilled_content,
                                 build_taxonomy_context)
 
 logger = logging.getLogger(__name__)
+
+# Sémaphore global de concurrence pour les DELETE /user/{id}/items vers items-api.
+# Partagé entre bg_bulk_reanalyse et bg_retry_apply pour éviter la saturation
+# du pool AlloyDB de items-api-prd pendant les phases apply en parallèle.
+# Valeur : ITEMS_DELETE_SEMAPHORE (défaut 2 — override via env var).
+_items_delete_sem: asyncio.Semaphore = asyncio.Semaphore(ITEMS_DELETE_SEMAPHORE)
 
 
 async def _acquire_service_token(auth_header: str) -> str:
@@ -85,6 +92,70 @@ async def _get_cv_extraction_prompt() -> str:
     return ""
 
 
+async def _resolve_competency_ids(
+    comps_payload: list,
+    hc: httpx.AsyncClient,
+    req_headers: dict,
+    sem: asyncio.Semaphore | None = None,
+) -> list[int]:
+    """Résout une liste de {name, aliases, practiced} en IDs entiers depuis competencies_api.
+
+    Pour chaque compétence :
+      1. Cherche par nom exact (ou alias) via GET /search?q={name}
+      2. Si non trouvé → crée via POST / (get-or-create idempotent)
+    Retourne les IDs résolus (les échecs sont logés et ignorés).
+    """
+    _sem = sem or asyncio.Semaphore(10)
+
+    def _normalize(s: str) -> str:
+        return s.strip().lower().replace("-", " ").replace("_", " ")
+
+    async def _resolve_one(comp: dict) -> int | None:
+        name = (comp.get("name") or "").strip()
+        if not name:
+            return None
+        if not comp.get("practiced", True):
+            return None  # Compétence non pratiquée : on n'assigne pas
+        n_norm = _normalize(name)
+        async with _sem:
+            try:
+                res = await hc.get(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/search",
+                    params={"q": name, "limit": 10},
+                    headers=req_headers,
+                    timeout=10.0,
+                )
+                if res.status_code == 200:
+                    data = PaginationResponse[dict].model_validate(res.json())
+                    for item in data.items:
+                        if _normalize(item.get("name", "")) == n_norm:
+                            return item["id"]
+                        for alias in (item.get("aliases") or "").split(","):
+                            if _normalize(alias.strip()) == n_norm:
+                                return item["id"]
+            except Exception as search_exc:
+                logger.debug("[bulk_resolve] search '%s' failed: %s", name, search_exc)
+            # Pas trouvé — création (idempotent)
+            aliases_str = ", ".join(comp.get("aliases", []) or []) or None
+            try:
+                c_res = await hc.post(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                    json={"name": name, "description": "Candidate CV Skill",
+                          **(({"aliases": aliases_str}) if aliases_str else {})},
+                    headers=req_headers,
+                    timeout=10.0,
+                )
+                if c_res.status_code < 400:
+                    return c_res.json().get("id")
+            except Exception as create_exc:
+                logger.warning("[bulk_resolve] create '%s' failed: %s", name, create_exc)
+        return None
+
+    tasks = [_resolve_one(c) for c in comps_payload]
+    resolved = await asyncio.gather(*tasks, return_exceptions=True)
+    return [r for r in resolved if isinstance(r, int)]
+
+
 async def _post_missions_bulk(hc: httpx.AsyncClient, user_id: int, missions: list, headers: dict):
     if not missions:
         return
@@ -116,14 +187,21 @@ async def _post_missions_bulk(hc: httpx.AsyncClient, user_id: int, missions: lis
         logger.warning(f"[bulk_reanalyse] items_api /bulk user={user_id}: {e}")
 
 
-async def bg_bulk_reanalyse(service_token: str):
+async def bg_bulk_reanalyse(service_token: str, cv_ids_filter: list[int] | None = None):
     headers = {"Authorization": f"Bearer {service_token}"}
     inject(headers)
 
     try:
-        await bulk_reanalyse_manager.update_progress(status="building", new_log="Lecture des CVs...")
+        if cv_ids_filter:
+            log_scope = f"Lecture de {len(cv_ids_filter)} CVs ciblés (filtre cv_ids)..."
+        else:
+            log_scope = "Lecture des CVs..."
+        await bulk_reanalyse_manager.update_progress(status="building", new_log=log_scope)
         async with database.SessionLocal() as db:
-            rows = (await db.execute(select(CVProfile.id, CVProfile.raw_content, CVProfile.user_id).order_by(CVProfile.id))).all()
+            stmt = select(CVProfile.id, CVProfile.raw_content, CVProfile.user_id).order_by(CVProfile.id)
+            if cv_ids_filter:
+                stmt = stmt.where(CVProfile.id.in_(cv_ids_filter))
+            rows = (await db.execute(stmt)).all()
 
         gemini_model = os.getenv("GEMINI_PRO_MODEL", os.getenv("GEMINI_MODEL"))
         prompt = await _get_cv_extraction_prompt()
@@ -170,13 +248,22 @@ async def bg_bulk_reanalyse(service_token: str):
             jsonl_lines.append(json.dumps({
                 "id": id_str,
                 "request": {
-                    "contents": [{"role": "user", "parts": [{"text": f"{full_prompt}\n\nRESUME:\n{raw_content[:100000]}"}]}],
-                    "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json", "responseSchema": _CV_RESPONSE_SCHEMA},
+                    "contents": [{
+                        "role": "user",
+                        "parts": [{"text": f"{full_prompt}\n\nRESUME:\n{raw_content[:100000]}"}],
+                    }],
+                    "generationConfig": {
+                        "temperature": 0.1,
+                        "responseMimeType": "application/json",
+                        "responseSchema": _CV_RESPONSE_SCHEMA,
+                    },
                 },
             }))
             cv_index[id_str] = (cv_id, user_id)
 
-        await bulk_reanalyse_manager.update_progress(skipped_count_inc=skipped, new_log=f"JSONL: {len(jsonl_lines)} CVs.")
+        await bulk_reanalyse_manager.update_progress(
+            skipped_count_inc=skipped, new_log=f"JSONL: {len(jsonl_lines)} CVs."
+        )
         if not jsonl_lines:
             await bulk_reanalyse_manager.update_progress(status="error", error="Aucun CV")
             return
@@ -203,8 +290,15 @@ async def bg_bulk_reanalyse(service_token: str):
             return
 
         try:
-            job = await asyncio.to_thread(vertex_batch_client.batches.create, model=gemini_model, src=input_uri, config={"display_name": "cv-bulk-reanalyse", "dest": dest_uri})
-            await bulk_reanalyse_manager.update_progress(status="batch_running", batch_job_id=job.name, new_log=f"Vertex Job: {job.name}")
+            job = await asyncio.to_thread(
+                vertex_batch_client.batches.create,
+                model=gemini_model,
+                src=input_uri,
+                config={"display_name": "cv-bulk-reanalyse", "dest": dest_uri},
+            )
+            await bulk_reanalyse_manager.update_progress(
+                status="batch_running", batch_job_id=job.name, new_log=f"Vertex Job: {job.name}"
+            )
         except Exception as e:
             await bulk_reanalyse_manager.update_progress(status="error", error=f"Vertex create: {e}")
             return
@@ -283,9 +377,14 @@ async def bg_bulk_reanalyse(service_token: str):
                 _waited += _readiness_step
             else:
                 logger.warning(
-                    f"[bulk_readiness] {_health_url} non disponible après {_readiness_timeout}s — on continue quand même (retry intégré)")
+                    "[bulk_readiness] %s non disponible après %ss — on continue quand même (retry intégré)",
+                    _health_url, _readiness_timeout,
+                )
         await bulk_reanalyse_manager.update_progress(
-            new_log=f"Services prêts — démarrage pipeline {len(results)} CVs (embed={BULK_EMBED_SEMAPHORE} / apply={BULK_APPLY_SEMAPHORE})."
+            new_log=(
+                f"Services prêts — démarrage pipeline {len(results)} CVs "
+                f"(embed={BULK_EMBED_SEMAPHORE} / apply={BULK_APPLY_SEMAPHORE})."
+            )
         )
 
         # ── Pipeline producteur/consommateur (Queue) ──────────────────────────
@@ -316,16 +415,32 @@ async def bg_bulk_reanalyse(service_token: str):
                 await apply_queue.put(_SENTINEL)
 
         async def _apply_with_retry(hc: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
-            """Retry exponentiel sur 5xx/timeout."""
+            """Retry exponentiel sur 429 (pool saturé), 5xx et timeouts.
+
+            Le 429 est explicitement inclus : competencies_api le retourne quand
+            son semaphore ASSIGN_BULK_SEMAPHORE est plein, signalant une surcharge
+            transitoire du pool DB. Un retry après backoff suffit à résoudre.
+            Jitter aléatoire : évite le thundering herd quand plusieurs instances
+            retentent simultanément après un pic d'import massif.
+            """
+            import random
             for attempt in range(4):
                 try:
                     resp = await getattr(hc, method)(url, **kwargs)
-                    if resp.status_code < 500:
+                    if resp.status_code not in (429, 500, 502, 503, 504):
                         return resp
-                    logger.warning(f"[bulk_apply] {method.upper()} {url} → {resp.status_code}, retry {attempt+1}/4")
+                    wait = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                    logger.warning(
+                        "[bulk_apply] %s %s → %s, retry %d/4 dans %.1fs",
+                        method.upper(), url, resp.status_code, attempt + 1, wait,
+                    )
                 except (httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
-                    logger.warning(f"[bulk_apply] {method.upper()} {url} → {type(exc).__name__}, retry {attempt+1}/4")
-                await asyncio.sleep(2 ** attempt)
+                    wait = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                    logger.warning(
+                        "[bulk_apply] %s %s → %s, retry %d/4 dans %.1fs",
+                        method.upper(), url, type(exc).__name__, attempt + 1, wait,
+                    )
+                await asyncio.sleep(wait)
             raise RuntimeError(f"[bulk_apply] Échec 4 tentatives: {method.upper()} {url}")
 
         async def _consumer() -> None:
@@ -348,25 +463,42 @@ async def bg_bulk_reanalyse(service_token: str):
                                 educations=structured_cv.get("educations", []),
                                 extracted_competencies=structured_cv.get("competencies", []),
                                 semantic_embedding=embedding_values,
+                                # Réinitialise les erreurs historiques : un apply réussi = profil sain
+                                processing_errors=[],
+                                # BUG 4 fix : score non disponible en Vertex Batch
+                                # (pas d'embedding raw pour cosine sim) — reset à None
+                                extraction_reliability_score=None,
                             )
                         )
                         await db.commit()
 
-                    # Copie locale des headers pour éviter la race condition OTel
                     req_headers = dict(headers)
                     inject(req_headers)
                     async with httpx.AsyncClient(timeout=30.0) as hc:
                         await _apply_with_retry(hc, "delete",
-                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations",
+                                                headers=req_headers)
                         await _apply_with_retry(hc, "delete",
-                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear",
+                                                headers=req_headers)
                         comps_payload = structured_cv.get("competencies", [])
                         if comps_payload:
-                            await _apply_with_retry(hc, "post",
-                                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
-                                                    json={"competencies": comps_payload}, headers=req_headers, timeout=120.0)
-                        await hc.delete(
-                            f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items", headers=req_headers)
+                            competency_ids = await _resolve_competency_ids(
+                                comps_payload, hc, req_headers
+                            )
+                            if competency_ids:
+                                await _apply_with_retry(
+                                    hc, "post",
+                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
+                                    json={"competency_ids": competency_ids},
+                                    headers=req_headers, timeout=120.0,
+                                )
+                        async with _items_delete_sem:
+                            await _apply_with_retry(
+                                hc, "delete",
+                                f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items",
+                                headers=req_headers,
+                            )
                         await _post_missions_bulk(hc, user_id, structured_cv.get("missions", []), req_headers)
 
                     input_tok = usage.get("promptTokenCount", 0)
@@ -466,12 +598,30 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
             await bulk_reanalyse_manager.update_progress(status="error", error=f"[retry-apply] GCS read: {e}")
             return
 
+        loaded_cv_ids = {cv_id for cv_id, _, _, _ in results}
+        all_cv_ids = {cv_id for cv_id, _ in cv_index.values()}
+        missing_cv_ids = all_cv_ids - loaded_cv_ids
         await bulk_reanalyse_manager.update_progress(
-            new_log=f"[retry-apply] {len(results)} CVs chargés depuis GCS."
+            new_log=f"[retry-apply] {len(results)} CVs charg\u00e9s depuis GCS."
         )
+        if missing_cv_ids:
+            sample = sorted(missing_cv_ids)[:20]
+            logger.warning(
+                "[retry-apply] %d CVs absents des outputs GCS (parsing \u00e9chou\u00e9 ou absents du batch) "
+                "| IDs \u00e9chantillon: %s%s",
+                len(missing_cv_ids), sample,
+                " (+ autres)" if len(missing_cv_ids) > 20 else "",
+            )
+            await bulk_reanalyse_manager.update_progress(
+                new_log=(
+                    f"[retry-apply] \u26a0\ufe0f {len(missing_cv_ids)} CVs sans r\u00e9sultat Vertex dans GCS. "
+                    f"IDs: {sample}"
+                    f"{'...' if len(missing_cv_ids) > 20 else ''}"
+                )
+            )
         if not results:
             await bulk_reanalyse_manager.update_progress(
-                status="error", error="[retry-apply] Aucun résultat GCS valide trouvé."
+                status="error", error="[retry-apply] Aucun r\u00e9sultat GCS valide trouv\u00e9."
             )
             return
 
@@ -524,15 +674,25 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
                 await apply_queue.put(_SENTINEL)
 
         async def _apply_with_retry(hc: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
+            """Retry exponentiel sur 429, 5xx et timeouts (voir bg_bulk_reanalyse pour la doc)."""
+            import random
             for attempt in range(4):
                 try:
                     resp = await getattr(hc, method)(url, **kwargs)
-                    if resp.status_code < 500:
+                    if resp.status_code not in (429, 500, 502, 503, 504):
                         return resp
-                    logger.warning(f"[retry-apply] {method.upper()} {url} → {resp.status_code}, retry {attempt+1}/4")
+                    wait = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                    logger.warning(
+                        "[retry-apply] %s %s → %s, retry %d/4 dans %.1fs",
+                        method.upper(), url, resp.status_code, attempt + 1, wait,
+                    )
                 except (httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
-                    logger.warning(f"[retry-apply] {method.upper()} {url} → {type(exc).__name__}, retry {attempt+1}/4")
-                await asyncio.sleep(2 ** attempt)
+                    wait = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                    logger.warning(
+                        "[retry-apply] %s %s → %s, retry %d/4 dans %.1fs",
+                        method.upper(), url, type(exc).__name__, attempt + 1, wait,
+                    )
+                await asyncio.sleep(wait)
             raise RuntimeError(f"[retry-apply] Échec 4 tentatives: {method.upper()} {url}")
 
         async def _consumer() -> None:
@@ -555,6 +715,11 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
                                 educations=structured_cv.get("educations", []),
                                 extracted_competencies=structured_cv.get("competencies", []),
                                 semantic_embedding=embedding_values,
+                                # Réinitialise les erreurs historiques : un apply réussi = profil sain
+                                processing_errors=[],
+                                # BUG 4 fix : score non disponible en Vertex Batch
+                                # (pas d'embedding raw pour cosine sim) — reset à None
+                                extraction_reliability_score=None,
                             )
                         )
                         await db.commit()
@@ -563,16 +728,29 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
                     inject(req_headers)
                     async with httpx.AsyncClient(timeout=30.0) as hc:
                         await _apply_with_retry(hc, "delete",
-                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/evaluations",
+                                                headers=req_headers)
                         await _apply_with_retry(hc, "delete",
-                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear", headers=req_headers)
+                                                f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/clear",
+                                                headers=req_headers)
                         comps_payload = structured_cv.get("competencies", [])
                         if comps_payload:
-                            await _apply_with_retry(hc, "post",
-                                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
-                                                    json={"competencies": comps_payload}, headers=req_headers, timeout=120.0)
-                        await hc.delete(
-                            f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items", headers=req_headers)
+                            competency_ids = await _resolve_competency_ids(
+                                comps_payload, hc, req_headers
+                            )
+                            if competency_ids:
+                                await _apply_with_retry(
+                                    hc, "post",
+                                    f"{COMPETENCIES_API_URL.rstrip('/')}/user/{user_id}/assign/bulk",
+                                    json={"competency_ids": competency_ids},
+                                    headers=req_headers, timeout=120.0,
+                                )
+                        async with _items_delete_sem:
+                            await _apply_with_retry(
+                                hc, "delete",
+                                f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items",
+                                headers=req_headers,
+                            )
                         await _post_missions_bulk(hc, user_id, structured_cv.get("missions", []), req_headers)
 
                     input_tok = usage.get("promptTokenCount", 0)

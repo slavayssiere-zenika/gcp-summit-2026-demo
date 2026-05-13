@@ -1,8 +1,6 @@
 00400833f2cde5770a584e7114d650f326ab4538  ./frontend/src/components/agent/CloudRunLogsViewer.vue
 00e95f45f0ecf5d2702f4df37fef62a6e16fe421  ./frontend/coverage/src/views/Competencies.vue.html
-01364187526fec690ce017ae8f877cd95269811c  ./frontend/src/views/Admin.vue
 0297f7edf85030a6451611ba296609ad0e706367  ./frontend/package-lock.json
-049443ee54842a58b1d89755d82405a60eaec57c  ./frontend/src/views/DataQuality.vue
 06d081cf40e951e1be6161b06670d5b6927dc448  ./frontend/src/components/ui/BaseButton.vue
 07bbac86e7a6a6fc13e8ca1d0c3903e6e25d1d4b  ./frontend/coverage/src/components/agent/ConsultantAvailabilityCard.vue.html
 0851c892e20b4ced54e6514f6dbee337f8757bb2  ./frontend/src/components/agent/__tests__/CompetencyList.spec.ts
@@ -10,6 +8,7 @@
 0a0b0fdcd18dfbdc8d16ded5b975aa77313e6a8e  ./frontend/coverage/src/views/PromptsAdmin.vue.html
 0a6c088d4f99fb2d72017570116c5202ed07fe52  ./frontend/coverage/src/views/AdminBulkImport.vue.html
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
+0da16c0616ef6d530eb48e2b82b54a1356838fac  ./frontend/src/components/agent/ConsultantCard.vue
 0f8b2cb2502e0eff73e81cc0dc2c05f5c97d0e6c  ./frontend/src/views/AdminAvailability.vue
 11ee1a775da50f38c3df1e92b9adc871c481e79f  ./frontend/coverage/src/views/Specs.vue.html
 1273bbcdf15c517a4a2cda6eb66aa42e98c519d5  ./frontend/src/views/AiOps.vue
@@ -30,8 +29,6 @@
 2d54a2195675e6b11f31c0382d27da88cb1ac914  ./frontend/coverage/src/views/AgentsDocs.vue.html
 2d59ba3640ebb11ea8664e0cbece88c7d16a397f  ./frontend/src/views/AdminReanalysis.vue
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
-2f41ddfd27076076103b55f58a1a43f1585aef8c  ./frontend/src/components/CVReanalysisPanel.vue
-2f49f444c2a959df9117152d48bc2bfb2c739143  ./frontend/src/views/Help.vue
 3001d071fc2195d9d77c4c11eaeccdb403566a78  ./frontend/coverage/index.html
 30988755cdb0001f633572baf25b085d6372cd17  ./frontend/src/components/agent/__tests__/SystemHealthCard.spec.ts
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
@@ -39,7 +36,6 @@
 34d33da995ac5880ebfd16772af8050e05175ab1  ./frontend/.dockerignore
 350f349e077ffb587fc98fc1bfab88a27e559417  ./frontend/src/components/agent/__tests__/EvaluationCard.spec.ts
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
-3962452a53fd62514e32cd9bff87f5e72993faa7  ./frontend/src/views/Home.vue
 39faa90252bbef74a6218caac8260abb1e86f074  ./frontend/src/stores/__tests__/chatStore.spec.ts
 3c3b8b386cea6d650f9f6c0a827533ac98c5602f  ./frontend/src/style.css
 3cb0d718930fd839bea92a553efd772324b90cd7  ./frontend/src/views/AdminUsers.vue
@@ -62,17 +58,18 @@
 56fb9d02c7fd9e54e18dddc20297e8b3df078e78  ./frontend/coverage/src/views/Profile.vue.html
 57194a33a37db9585b368696294808a55aa50c4c  ./frontend/coverage/src/views/DataQuality.vue.html
 5ad26e9cc50a29dd96f8dfd7c3f1a50cce0b2539  ./frontend/coverage/favicon.png
-5bb152e98718becf674c1f6678f28b7e9e8b9fc9  ./frontend/src/App.vue
 5e40d99d6a4a43abfae8350e7b5e06f6074eaa4d  ./frontend/src/views/PromptsAdmin.vue
 5ea74b8d982bfa2c077854728d1409db536b2c06  ./frontend/coverage/src/components/ui/index.html
 5f5e4e38c2ab569279c807c91991e50737ca8b10  ./frontend/src/views/Docs.vue
 605853978aa324dab689511ad91b691beadf8934  ./frontend/src/components/agent/DebugPromptCard.vue
 605c53683a76cb939c105f4c7d8f4cc43e445261  ./frontend/src/components/DriveTreeGraph.vue
 607c4375c5cfe6c0f4b9c027474c71fca1c2f66e  ./frontend/src/components/CompetencyNode.vue
+618ea0845c3f5a6f3dcf8b8c45d817ac631f0cd5  ./frontend/src/components/CVReanalysisPanel.vue
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 628e602160d666d7a860eb9fd1431c3f344317a9  ./frontend/coverage/src/views/FinopsAdmin.vue.html
 62c50abbf6d626016ea56b9f6a4cf6e4bdf6ad5c  ./frontend/coverage/src/components/agent/ConsultantCard.vue.html
 6398a5d15b02dc4c0d2d4560b6639dc6678b9b78  ./frontend/coverage/src/router/index.ts.html
+64bdb72f85e204aaa542ef3c9da253d212c3c381  ./frontend/src/App.vue
 65893a82995cee39923390df7cefb56430148cbc  ./frontend/coverage/src/components/agent/SystemHealthCard.vue.html
 65f2b499f59c1298428823959fd9ec8bab733eef  ./frontend/coverage/src/components/CVImportMonitor.vue.html
 68380a0f0ca5994eedb89bd1d386d3c893948199  ./frontend/src/components/__tests__/CVImportMonitor.spec.ts
@@ -87,9 +84,9 @@
 74c6f4787bc8fd403ef558078b8a41802421e820  ./frontend/coverage/src/stores/index.html
 75a765483970c61ff35d9dafc195b26cd9dfab3a  ./frontend/src/views/Profile.vue
 75ff87d721e89ad55c543f80f7ccdef5d6fa721f  ./frontend/coverage/src/components/agent/DebugPromptCard.vue.html
-7880e4fec16e1b214c5b329cdcec5984d6d187d7  ./frontend/vitest.log
 7929669130975ec3d4495c21c86d1865db869c19  ./frontend/coverage/clover.xml
 79e2be8ce0e72a7d6d0ebdd962ce3771bb4084e7  ./frontend/coverage/src/stores/uxStore.ts.html
+79eb9784e9e1bb179c7d86fb55892ede43c72de6  ./frontend/src/views/Admin.vue
 7a7fa28325425774f8c6ecdfbea1d189f3ebeb68  ./frontend/coverage/src/components/CVReanalysisPanel.vue.html
 7b35c73cf76e15a73c24b2e9cbd8213d3c5d8284  ./frontend/src/views/ImportCV.vue
 7c6a119a197897cc7b83d749de2d3381d15f549b  ./frontend/coverage/src/views/index.html
@@ -97,13 +94,16 @@
 80bde06ae9bb857c4a0d6d3b0258f7fa850ac6f6  ./frontend/coverage/src/components/agent/FinopsBadge.vue.html
 826b5611ba0cc7754f207a21f3b098a607be81a0  ./frontend/coverage/coverage-final.json
 84470b29579f3a859a511d161fd3c1d61b823713  ./frontend/coverage/src/stores/chatStore.ts.html
+855c35446e7a0a0883c396b576a2dfc201044136  ./frontend/vitest.log
 8666fe21bbb1ad9c05e884485d1ddb11d24d34bd  ./frontend/coverage/src/views/Docs.vue.html
+877e79ca5a1d1b502c290e8ce41fcc170569608e  ./frontend/src/views/DataQuality.vue
 884b9218d2984dabee9b80ae611a628d456db80e  ./frontend/coverage/src/components/StarRating.vue.html
 8907cae430171ed070575a72bb61a0af7cdadf80  ./frontend/src/views/__tests__/Login.spec.ts
 89b936797db1af622d2a700191b3f081d9e6741f  ./frontend/src/components/ui/__tests__/ToastNotification.spec.ts
 89c443e9e52dd5a5592e1737055ae08f11c86a60  ./frontend/src/services/auth.ts
 8ac8e5b1798091cdeaa353fd7d4d9e43e20c817d  ./frontend/coverage/src/router/index.html
 8aea36e46b54cb300127668b82d61c604c7a3707  ./frontend/coverage/src/views/UserDetail.vue.html
+8d838622bdd87f07aef097d10cce641d01767ff1  ./frontend/src/components/DriveAdminPanel.vue
 8df0d1b70fad4f57f316126b44c90fec188f69fd  ./shared/tests/__init__.py
 8e726963869287c9fad878c795881e14a878dfa4  ./frontend/coverage/src/components/agent/MissionCard.vue.html
 8f6b1199fff8a36958efae5c3290e67234841fd9  ./frontend/vite.config.ts
@@ -122,6 +122,7 @@ a0cf103abdaae0c87252b6ac1033530b05a80ed3  ./frontend/coverage/src/components/Dri
 a129203c910b6e1781fa93e8e23bc2964fbb6890  ./frontend/src/components/TaxonomySuggestions.vue
 a2a9df1e2c8347657b3ca5074649f58a11ece975  ./frontend/coverage/src/components/agent/EvaluationTable.vue.html
 a345a51e69c22119fff064c42c75d58ecea537b4  ./frontend/coverage/src/components/agent/ItemCard.vue.html
+a533036cfe05a4ac0264e3071d71dfdc88ac9a10  ./frontend/src/components/DriveErrorsPanel.vue
 a7bca08b4212b8a9b13285ccedbbf452a6c8b079  ./frontend/src/views/Competencies.vue
 a9f55bce18ee6bc559fed8373cdce23399fd44f8  ./frontend/src/views/__tests__/Competencies.spec.ts
 b0402ccbfd495601fdead0c79a27b5d9b361c794  ./frontend/src/types/index.ts
@@ -167,6 +168,7 @@ d9a48401c21325b78b99e7afabee0f140d576604  ./frontend/src/components/agent/__test
 da5c0ef467a330913336cd9b0da5f3c900af6c3e  ./frontend/coverage/sort-arrow-sprite.png
 dc8e4d271329feadc712d7f69c562a41495a01b4  ./frontend/coverage/src/components/index.html
 dcbb45db432abba394eb3e23de25f7432a4fdc71  ./frontend/src/main.ts
+de8796db50433f8e47eccff02d52b09c7ab2eb7c  ./frontend/src/views/Home.vue
 e0484c39e28e5af98638303e3ef87779467bf3d9  ./frontend/src/components/CVImportMonitor.vue
 e4c679c4a43d97fe029d44a79444a8946166605f  ./frontend/coverage/src/views/InfraMap.vue.html
 e55cda1200722fd6d03aa9b829d57991a357cffa  ./frontend/nginx/default.conf
@@ -176,7 +178,6 @@ e7461ddc6a1b4d4f3adca1d32651ff6c861f9f79  ./frontend/src/views/MissionsList.vue
 e9c940d13b1e1e2a43fcf570c3d35a590970f8d7  ./frontend/coverage/src/components/ui/PageHeader.vue.html
 ea50c6ce6112776848f67e79b3425ac7d8d3d84a  ./frontend/src/components/agent/EvaluationTable.vue
 ebd4dd0f52120c103f04e329a394675be2087385  ./frontend/src/views/AdminBulkImport.vue
-ecbb61ed193476a3d70ae85e68897deff9ecc54d  ./frontend/src/components/DriveAdminPanel.vue
 ef4aae33f911e5735f3ec5300e6207ce2acf2a65  ./frontend/src/components/ConsultantProfile.vue
 efe00a3b6cac3db77f727c4ea3df585dc7b8f7aa  ./frontend/coverage/src/views/Registry.vue.html
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
@@ -187,6 +188,6 @@ f52f52ffba69043b7e74a4aae9ee42bf4aa873c7  ./frontend/src/views/__tests__/Mission
 f56a67213dde8f35526fd0fe87bb38220d7eb356  ./frontend/src/components/agent/__tests__/MissionCard.spec.ts
 f94d77cae348118c0fb71ecaacfef742167b82cf  ./frontend/src/components/ui/__tests__/BaseButton.spec.ts
 fa63b09a8b8ee67f2f7bd1cf124a5b86d9daccc0  ./frontend/coverage/src/services/agentApi.ts.html
-fd7fd90075376b1b3e06f24361c22b4e0f731fe0  ./frontend/src/components/agent/ConsultantCard.vue
+fc443804b65c1df07ddde3d1beb9a9287f059e49  ./frontend/src/views/Help.vue
 ff38b8c0c743f989f59173ead79a5c6a828ffbaa  ./frontend/coverage/src/types/index.ts.html
 ff9453763cfd49403cd43f34d3cf4b8ebc9e59a4  ./frontend/src/components/ui/__tests__/PageHeader.spec.ts

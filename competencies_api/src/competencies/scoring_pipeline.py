@@ -154,10 +154,14 @@ async def _apply_scoring_results(
 async def bg_bulk_scoring_vertex(
     user_ids: list[int],
     headers: dict,
+    delta_only: bool = True,
 ) -> None:
     """
     Background task principale : pipeline complet de bulk scoring via Vertex AI Batch.
     Appelée depuis router.py en remplacement de _bulk_scoring_all_bg.
+
+    delta_only=True (défaut) : ne score que les compétences sans ai_score (moins coûteuses).
+    delta_only=False          : re-score toutes les compétences feuilles assignées.
     """
     from google import genai  # import local pour éviter erreur si non installé
 
@@ -165,6 +169,20 @@ async def bg_bulk_scoring_vertex(
         await bulk_scoring_manager.update_progress(
             status="error",
             error="GCP_PROJECT_ID ou BATCH_GCS_BUCKET non configuré — scoring Vertex désactivé.",
+        )
+        return
+
+    if not VERTEX_BATCH_MODEL:
+        await bulk_scoring_manager.update_progress(
+            status="error",
+            error=(
+                "VERTEX_BATCH_MODEL non configuré (variable d'environnement absente). "
+                "Ajouter VERTEX_BATCH_MODEL dans cr_competencies.tf (ex: gemini-2.5-flash). "
+                "Sans ce paramètre, Vertex AI Batch retourne 400 INVALID_ARGUMENT."
+            ),
+        )
+        logger.error(
+            "[scoring_pipeline] VERTEX_BATCH_MODEL absent — impossible de soumettre le job Vertex."
         )
         return
 
@@ -179,17 +197,21 @@ async def bg_bulk_scoring_vertex(
         return
 
     try:
+        # Active le Cloud Scheduler keepalive en premier — garantit l'ordre enable→pipeline→disable.
+        # Ne pas déléguer au router (background task séparée) : l'ordre d'exécution n'est pas garanti.
+        await set_scoring_scheduler_enabled(True)
+
         # ── Étape 1 : Collecter (user_id, comp_id, comp_name) depuis la DB ──────
+        mode_label = "delta (ai_score IS NULL)" if delta_only else "complet (toutes feuilles)"
         await bulk_scoring_manager.update_progress(
-            new_log=f"Collecte des compétences feuilles pour {len(user_ids)} users..."
+            new_log=f"Collecte des compétences — mode {mode_label} pour {len(user_ids)} users..."
         )
         user_comp_list: list[tuple[int, int, str]] = []
         async with database.SessionLocal() as db:
             for uid in user_ids:
-                user_comp_subq = (
+                user_comp_select = (
                     select(user_competency.c.competency_id)
                     .where(user_competency.c.user_id == uid)
-                    .subquery()
                 )
                 leaf_stmt = (
                     select(user_competency.c.competency_id)
@@ -197,7 +219,7 @@ async def bg_bulk_scoring_vertex(
                     .where(
                         ~select(Competency.id)
                         .where(Competency.parent_id == user_competency.c.competency_id)
-                        .where(Competency.id.in_(user_comp_subq))
+                        .where(Competency.id.in_(user_comp_select))
                         .correlate(user_competency)
                         .exists()
                     )
@@ -205,6 +227,22 @@ async def bg_bulk_scoring_vertex(
                 leaf_ids = (await db.execute(leaf_stmt)).scalars().all()
                 if not leaf_ids:
                     continue
+
+                # ── Filtre delta : exclure les compétences déjà scorées ─────────
+                if delta_only:
+                    already_scored_ids = (
+                        await db.execute(
+                            select(CompetencyEvaluation.competency_id).where(
+                                CompetencyEvaluation.user_id == uid,
+                                CompetencyEvaluation.competency_id.in_(leaf_ids),
+                                CompetencyEvaluation.ai_score.isnot(None),
+                            )
+                        )
+                    ).scalars().all()
+                    leaf_ids = [lid for lid in leaf_ids if lid not in already_scored_ids]
+                    if not leaf_ids:
+                        continue  # Ce user est déjà entièrement scoré
+
                 comps = (
                     await db.execute(
                         select(Competency.id, Competency.name).where(
@@ -286,14 +324,22 @@ async def bg_bulk_scoring_vertex(
                     "dest": dest_uri,
                 },
             )
+            vertex_console_url = (
+                f"https://console.cloud.google.com/vertex-ai/batch-predictions"
+                f"?project={GCP_PROJECT_ID}"
+            )
             await bulk_scoring_manager.update_progress(
                 status="batch_running",
                 batch_job_id=job.name,
                 dest_uri=dest_uri,
-                new_log=f"Job Vertex AI soumis : {job.name} (model={VERTEX_BATCH_MODEL})",
+                new_log=(
+                    f"Job Vertex AI soumis : {job.name} (model={VERTEX_BATCH_MODEL}) "
+                    f"| Suivi : {vertex_console_url}"
+                ),
             )
             logger.info(
-                f"[scoring_service] Vertex batch job créé : {job.name} (model={VERTEX_BATCH_MODEL})"
+                f"[scoring_service] Vertex batch job créé : {job.name} "
+                f"(model={VERTEX_BATCH_MODEL}) | Console : {vertex_console_url}"
             )
 
         except Exception as e:

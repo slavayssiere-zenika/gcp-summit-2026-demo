@@ -22,7 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from google.cloud import run_v2 as cloudrun_v2
 from pydantic import ValidationError
 from shared.schemas.pagination import PaginationResponse
-from metrics import CV_MISSING_EMBEDDINGS
+from metrics import CV_MISSING_EMBEDDINGS, CV_SEARCH_THRESHOLD_FILTERED, CV_SEARCH_RESULT_SCORE
 from opentelemetry.propagate import inject
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,19 @@ from src.services.config import (BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
 from src.services.finops import log_finops
 
 logger = logging.getLogger(__name__)
+
+# R2 — Seuil de pertinence : les candidats au-delà de ce seuil cosine distance
+# sont considérés hors-sujet et exclus du résultat.
+# Valeur par défaut 0.55 (distance cosine, soit ~0.45 de similarité).
+# Réduire pour être plus strict, augmenter pour avoir plus de résultats.
+VECTOR_DISTANCE_THRESHOLD = float(os.getenv("VECTOR_DISTANCE_THRESHOLD", "0.55"))
+
+# 2.12 — Pool maximum de candidats explorés par la recherche vectorielle.
+# Remplace le pattern anti-pattern (limit+skip)*2 qui rendait invisibles
+# les candidats au-delà du rang 100.
+# Le filtre R2 (VECTOR_DISTANCE_THRESHOLD) garantit la qualité de ce pool.
+# Ajuster selon la taille du corpus : 500 pour <5k CVs, 1000 pour >5k CVs.
+MAX_VECTOR_CANDIDATES = int(os.getenv("MAX_VECTOR_CANDIDATES", "500"))
 
 
 async def execute_search(
@@ -120,6 +133,7 @@ async def execute_search(
             genai_client,
             model=os.getenv("GEMINI_EMBEDDING_MODEL"),
             contents=safe_embed_query,
+            config={"task_type": "RETRIEVAL_QUERY"},
         )
         search_vector = emb_res.embeddings[0].values
 
@@ -147,10 +161,25 @@ async def execute_search(
         raise HTTPException(status_code=400, detail=f"Embedding search query failed: {e}")
 
     # ── 2. Recherche vectorielle pgvector ────────────────────────────────────
+    current_embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL")
     stmt = select(
         CVProfile,
         CVProfile.semantic_embedding.cosine_distance(search_vector).label("distance"),
     ).filter(CVProfile.semantic_embedding.is_not(None))
+
+    # R1 — Filtre par version du modèle d'embedding (cohérence vectorielle)
+    # Autorise aussi les profils sans modèle enregistré (antérieurs à la migration R1).
+    if current_embedding_model:
+        stmt = stmt.filter(
+            (CVProfile.embedding_model == current_embedding_model)
+            | (CVProfile.embedding_model.is_(None))
+        )
+
+    # R2 — Seuil de pertinence : exclut les candidats trop éloignés sémantiquement.
+    # Configurable via VECTOR_DISTANCE_THRESHOLD (défaut 0.55).
+    stmt = stmt.filter(
+        CVProfile.semantic_embedding.cosine_distance(search_vector) < VECTOR_DISTANCE_THRESHOLD
+    )
 
     if agency:
         stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
@@ -179,7 +208,7 @@ async def execute_search(
         headers_downstream = {"Authorization": auth_header} if auth_header else {}
 
         try:
-            async with httpx.AsyncClient() as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as http_client:
                 for skill in required_skills:
                     search_res = await http_client.get(
                         f"{COMPETENCIES_API_URL.rstrip('/')}/search",
@@ -210,15 +239,23 @@ async def execute_search(
 
         if approved_user_ids:
             stmt_filtered = stmt.filter(CVProfile.user_id.in_(list(approved_user_ids)))
-            query_results = (await db.execute(stmt_filtered.order_by("distance").limit((limit + skip) * 2))).all()
+            query_results = (
+                await db.execute(stmt_filtered.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+            ).all()
             if not query_results:
                 fallback_scan = True
-                query_results = (await db.execute(stmt.order_by("distance").limit((limit + skip) * 2))).all()
+                query_results = (
+                    await db.execute(stmt.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+                ).all()
         else:
             fallback_scan = True
-            query_results = (await db.execute(stmt.order_by("distance").limit((limit + skip) * 2))).all()
+            query_results = (
+                await db.execute(stmt.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+            ).all()
     else:
-        query_results = (await db.execute(stmt.order_by("distance").limit((limit + skip) * 2))).all()
+        query_results = (
+            await db.execute(stmt.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+        ).all()
 
     if response:
         response.headers["X-Fallback-Full-Scan"] = str(fallback_scan).lower()
@@ -226,12 +263,41 @@ async def execute_search(
     # Déduplication et formatage
     mapped_results = []
     seen_users: set = set()
+    agency_label = agency or "all"
+
+    # R6 — Calcul du nombre de candidats élagués par le seuil R2
+    # On exécute la même query SANS le filtre de distance pour avoir le total brut
+    stmt_unfiltered = select(
+        func.count(CVProfile.user_id)
+    ).filter(CVProfile.semantic_embedding.is_not(None))
+    if current_embedding_model:
+        stmt_unfiltered = stmt_unfiltered.filter(
+            (CVProfile.embedding_model == current_embedding_model)
+            | (CVProfile.embedding_model.is_(None))
+        )
+    if agency:
+        stmt_unfiltered = stmt_unfiltered.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
+    total_before_threshold = (await db.execute(stmt_unfiltered)).scalar() or 0
+    filtered_count = max(0, total_before_threshold - len(query_results))
+    if filtered_count > 0:
+        CV_SEARCH_THRESHOLD_FILTERED.labels(agency=agency_label).inc(filtered_count)
+    if response:
+        response.headers["X-Threshold-Filtered-Count"] = str(filtered_count)
+        response.headers["X-Distance-Threshold"] = str(VECTOR_DISTANCE_THRESHOLD)
 
     for row, distance in query_results:
         if row.user_id not in seen_users:
             seen_users.add(row.user_id)
             score = 1.0 - (distance if distance is not None else 0.0)
-            mapped_results.append({"user_id": row.user_id, "similarity_score": round(score, 4)})
+            # R6 — Observe la distribution des scores dans l'histogram
+            CV_SEARCH_RESULT_SCORE.observe(score)
+            mapped_results.append({
+                "user_id": row.user_id,
+                "similarity_score": round(score, 4),
+                # R5 — Citation de la source documentaire (URL Drive)
+                "source_url": row.source_url,
+                "embedding_model": row.embedding_model,
+            })
 
     total = len(mapped_results)
     paginated_results = mapped_results[skip:skip+limit]
@@ -266,6 +332,164 @@ async def execute_search(
             detail=(
                 "Aucun collaborateur correspondant à ces critères (compétences/expérience) "
                 "n'a été trouvé dans la base de CVs Zenika."
+            ),
+        )
+
+    return {"items": paginated_results, "total": total, "skip": skip, "limit": limit}
+
+
+async def execute_search_chunked(
+    request,
+    response,
+    query: str,
+    skip: int,
+    limit: int,
+    db: AsyncSession,
+    token_payload: dict,
+    credentials,
+    genai_client,
+    agency: Optional[str] = None,
+) -> dict:
+    """R7 — Recherche RAG multi-vecteur (chunk-level) via cv_mission_embeddings.
+
+    Stratégie de scoring MAX + bonus :
+    - Score de base = 1 - MIN(distance cosine) parmi tous les chunks du consultant
+    - Bonus +0.05 si >= 2 chunks passent le seuil VECTOR_DISTANCE_THRESHOLD
+      (indique une profondeur d'expertise, pas une occurrence isolée)
+
+    Activé via la variable d'env RAG_CHUNKED_SEARCH=true.
+    Fallback automatique sur execute_search() si la table est vide.
+    """
+    from sqlalchemy import func, text
+
+    from src.cvs.models import CVMissionEmbedding
+
+    if not genai_client:
+        raise HTTPException(status_code=500, detail="GenAI Client not configured.")
+
+    # ── 1. Embedding de la query ─────────────────────────────────────────────
+    try:
+        safe_query = query[:3000] if query and len(query) > 3000 else query
+        emb_res = await embed_content_with_retry(
+            genai_client,
+            model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+            contents=safe_query,
+            config={"task_type": "RETRIEVAL_QUERY"},
+        )
+        search_vector = emb_res.embeddings[0].values
+        await log_finops(
+            token_payload.get("sub", "unknown"),
+            "search_chunked_embedding",
+            os.getenv("GEMINI_EMBEDDING_MODEL"),
+            {"prompt_token_count": len(query) // 4, "candidates_token_count": 0},
+            auth_token=credentials.credentials if credentials else None,
+        )
+    except Exception as e:
+        logger.error(f"[CHUNKED_SEARCH] Embedding query échoué: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Embedding search query failed: {e}")
+
+    # ── 2. Vérification que la table chunks est peuplée ──────────────────────
+    count_stmt = select(func.count(CVMissionEmbedding.id)).filter(
+        CVMissionEmbedding.chunk_embedding.is_not(None)
+    )
+    chunk_count = (await db.execute(count_stmt)).scalar() or 0
+    if chunk_count == 0:
+        logger.warning(
+            "[CHUNKED_SEARCH] Table cv_mission_embeddings vide — "
+            "fallback sur recherche globale. Lancez /reindex-mission-chunks."
+        )
+        return await execute_search(
+            request, response, query, skip, limit, [], db,
+            token_payload, credentials, genai_client, agency,
+        )
+
+    # ── 3. Requête pgvector groupée par user_id ───────────────────────────────
+    # MIN(distance) = meilleur chunk (score MAX)
+    # COUNT FILTER = nombre de chunks sous le seuil (profondeur)
+    current_model = os.getenv("GEMINI_EMBEDDING_MODEL")
+    vector_str = f"[{','.join(str(v) for v in search_vector)}]"
+
+    raw_sql = text("""
+        SELECT
+            user_id,
+            MIN(chunk_embedding <=> CAST(:vec AS vector)) AS best_distance,
+            COUNT(*) FILTER (
+                WHERE chunk_embedding <=> CAST(:vec AS vector) < :threshold
+            ) AS matching_chunks
+        FROM cv_mission_embeddings
+        WHERE chunk_embedding IS NOT NULL
+          AND (CAST(:model AS text) IS NULL OR embedding_model = CAST(:model AS text))
+          AND (CAST(:agency AS text) IS NULL OR source_tag ILIKE CAST(:agency_pattern AS text))
+          AND chunk_embedding <=> CAST(:vec AS vector) < :threshold
+        GROUP BY user_id
+        ORDER BY best_distance ASC
+        LIMIT :max_candidates
+    """)
+
+    rows = (await db.execute(raw_sql, {
+        "vec": vector_str,
+        "threshold": VECTOR_DISTANCE_THRESHOLD,
+        "model": current_model,
+        "agency": agency,
+        "agency_pattern": f"%{agency}%" if agency else None,
+        "max_candidates": MAX_VECTOR_CANDIDATES,
+    })).fetchall()
+
+    # ── 4. Scoring MAX + bonus profondeur ────────────────────────────────────
+    DEPTH_BONUS = 0.05
+    mapped_results = []
+    for row in rows:
+        user_id, best_distance, matching_chunks = row
+        base_score = 1.0 - (best_distance if best_distance is not None else 0.0)
+        depth_bonus = DEPTH_BONUS if (matching_chunks or 0) >= 2 else 0.0
+        final_score = min(1.0, round(base_score + depth_bonus, 4))
+        CV_SEARCH_RESULT_SCORE.observe(final_score)
+        mapped_results.append({
+            "user_id": user_id,
+            "similarity_score": final_score,
+            "matching_chunks": int(matching_chunks or 0),
+            "source_url": None,  # enrichi dans l'étape 5
+            "embedding_model": current_model,
+        })
+
+    if response:
+        response.headers["X-Chunked-Search"] = "true"
+        response.headers["X-Distance-Threshold"] = str(VECTOR_DISTANCE_THRESHOLD)
+        response.headers["X-Threshold-Filtered-Count"] = str(len(rows))
+
+    total = len(mapped_results)
+    paginated_results = mapped_results[skip:skip + limit]
+
+    # ── 5. Enrichissement via users_api ─────────────────────────────────────
+    auth_header = request.headers.get("Authorization") if request else None
+    headers_downstream = {"Authorization": auth_header} if auth_header else {}
+    inject(headers_downstream)
+
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        async def fetch_user_chunked(res):
+            try:
+                u_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/{res['user_id']}",
+                    headers=headers_downstream,
+                )
+                if u_res.status_code == 200:
+                    u_data = u_res.json()
+                    res["full_name"] = u_data.get("full_name")
+                    res["email"] = u_data.get("email")
+                    res["username"] = u_data.get("username")
+                    res["is_active"] = u_data.get("is_active")
+                    res["is_anonymous"] = u_data.get("is_anonymous", False)
+            except Exception as e:
+                logger.warning(f"[CHUNKED_SEARCH] Enrichissement user {res['user_id']}: {e}")
+
+        await asyncio.gather(*(fetch_user_chunked(res) for res in paginated_results))
+
+    if not paginated_results and skip == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Aucun collaborateur correspondant à ces critères n'a été trouvé "
+                "(recherche multi-vecteur)."
             ),
         )
 

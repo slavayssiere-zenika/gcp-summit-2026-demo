@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 
@@ -57,7 +58,7 @@ class TaxonomyBatchService:
                     oidc_token = sa_id_token.fetch_id_token(req, users_api_url)
                     async with httpx.AsyncClient(timeout=10.0) as hc:
                         res = await hc.post(
-                            f"{users_api_url.rstrip('/')}/service-account/login",
+                            f"{users_api_url.rstrip('/')}/auth/service-account/login",
                             json={"id_token": oidc_token}
                         )
                         if res.status_code == 200:
@@ -71,7 +72,7 @@ class TaxonomyBatchService:
             if short_jwt:
                 async with httpx.AsyncClient(timeout=10.0) as hc:
                     res2 = await hc.post(
-                        f"{users_api_url.rstrip('/')}/internal/service-token",
+                        f"{users_api_url.rstrip('/')}/auth/internal/service-token",
                         headers={"Authorization": f"Bearer {short_jwt}"}
                     )
                     if res2.status_code == 200:
@@ -82,6 +83,44 @@ class TaxonomyBatchService:
             logger.error(
                 f"[batch-auth] Erreur fatale génération token autonome: {e}")
         return ""
+
+    @staticmethod
+    async def _get_oidc_token_for_service(service_url: str, service_name: str = "service") -> str:
+        """
+        Génère un token OIDC frais (RS256) signé par l'identité du SA cv_api,
+        avec pour audience l'URL cible du service.
+
+        Ce token est directement accepté par les services supportant Zero-Trust OIDC
+        (competencies_api, prompts_api) sans échange intermédiaire avec users_api.
+
+        En mode local (USE_IAM_AUTH != true), retourne "" et l'appelant utilisera
+        le token HS256 applicatif déjà disponible.
+        """
+        is_local = os.getenv("USE_IAM_AUTH", "false").lower() != "true"
+        if is_local:
+            logger.debug(f"[batch-oidc] Mode local — token OIDC pour {service_name} non généré.")
+            return ""
+
+        try:
+            import google.auth.transport.requests as google_requests
+            from google.oauth2 import id_token as sa_id_token
+
+            # L'audience correspond à l'URL interne du service (sans trailing slash)
+            audience = service_url.rstrip("/")
+            req = google_requests.Request()
+            oidc_token = await asyncio.to_thread(sa_id_token.fetch_id_token, req, audience)
+            logger.info(f"[batch-oidc] Token OIDC frais généré pour {service_name} (audience: {audience})")
+            return oidc_token
+        except Exception as e:
+            logger.error(f"[batch-oidc] Impossible de générer le token OIDC pour {service_name}: {e}")
+            return ""
+
+    @staticmethod
+    async def _get_oidc_token_for_competencies(competencies_api_url: str) -> str:
+        """Alias pour la compatibilité : génère un token OIDC ciblant competencies_api."""
+        return await TaxonomyBatchService._get_oidc_token_for_service(
+            competencies_api_url, service_name="competencies_api"
+        )
 
     @staticmethod
     async def start_batch(auth_header: str) -> dict:
@@ -166,7 +205,27 @@ class TaxonomyBatchService:
                     "id": f"chunk-{i}",
                     "request": {
                         "contents": [{"role": "user", "parts": [{"text": map_instruction}]}],
-                        "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
+                        "generationConfig": {
+                            "temperature": 0.1,
+                            "responseMimeType": "application/json",
+                            "responseSchema": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "API & Integration": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Artificial Intelligence & Machine Learning": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Business Architecture & Applications": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Cloud, DevOps & Infrastructure": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Cybersecurity": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Data Analytics & Business Intelligence": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Data Engineering & Management": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Leadership & Management": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Product & Project Management": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Quality Engineering & Testing": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "Software Engineering": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "UX & Product Design": {"type": "ARRAY", "items": {"type": "STRING"}}
+                                }
+                            }
+                        }
                     }
                 }
                 f.write(json.dumps(req) + "\n")
@@ -191,7 +250,7 @@ class TaxonomyBatchService:
 
             batch_job = await asyncio.to_thread(
                 _svc_config.vertex_batch_client.batches.create,
-                model=os.environ["GEMINI_PRO_MODEL"],
+                model=os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]),
                 src=src_uri,
                 config={"display_name": "taxonomy-map-batch", "dest": dest_uri}
             )
@@ -391,11 +450,20 @@ class TaxonomyBatchService:
 
     @staticmethod
     async def _handle_map_step(user_caller, auth_token, map_result, usage, persisted_svc_token):
-        await log_finops(user_caller, "recalculate_tree_batch_map", os.environ["GEMINI_MODEL"], usage, auth_token=auth_token)
+        await log_finops(user_caller, "recalculate_tree_batch_map", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)
 
         if not map_result:
             return {
                 "success": False, "error": "Aucun chunk JSONL n'a pu être parsé correctement."}
+
+        # P1.2 — Contrôle nb piliers produits par le Map (attendu : 12)
+        pillar_count = len(map_result)
+        if pillar_count > 14:
+            logger.warning(
+                f"[map] Le LLM a produit {pillar_count} piliers (attendu: 12). "
+                "Le Dedup va tenter de fusionner les doublons, mais la charge est supérieure à la normale. "
+                "Vérifiez que le prompt Map contient bien les PILIERS OBLIGATOIRES."
+            )
 
         await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")
 
@@ -404,8 +472,19 @@ class TaxonomyBatchService:
         if fresh:
             await tree_task_manager.update_progress(service_token=fresh)
 
-        async def run_dedup(svc_token: str = dedup_service_token):
-            _svc_auth_header = f"Bearer {svc_token}"
+        # Token OIDC dédié pour prompts_api (même stratégie que le Sweep — audience correcte)
+        _dedup_prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+        _dedup_prompts_oidc = await TaxonomyBatchService._get_oidc_token_for_service(
+            _dedup_prompts_api_url, service_name="prompts_api"
+        )
+        dedup_prompts_header = (
+            f"Bearer {_dedup_prompts_oidc}" if _dedup_prompts_oidc
+            else f"Bearer {dedup_service_token}"
+        )
+
+        async def run_dedup(svc_token: str = dedup_service_token,
+                            prompts_header: str = dedup_prompts_header):
+            _svc_auth_header = prompts_header  # OIDC en priorité, JWT applicatif en fallback
             try:
                 instruction_dedup = await _fetch_prompt("cv_api.generate_taxonomy_tree_deduplicate", _svc_auth_header)
                 map_json_str = json.dumps(
@@ -415,7 +494,7 @@ class TaxonomyBatchService:
 
                 response_dedup = await generate_content_with_retry(
                     _svc_config.client,
-                    model=os.environ["GEMINI_PRO_MODEL"],
+                    model=os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]),
                     contents=[dedup_instruction],
                     config=types.GenerateContentConfig(
                         temperature=0.1,
@@ -423,7 +502,7 @@ class TaxonomyBatchService:
                         max_output_tokens=65536,
                     )
                 )
-                await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ["GEMINI_PRO_MODEL"], response_dedup.usage_metadata, auth_token=svc_token)
+                await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), response_dedup.usage_metadata, auth_token=svc_token)
 
                 finish_reason = None
                 if response_dedup.candidates:
@@ -582,9 +661,29 @@ class TaxonomyBatchService:
         if fresh:
             await tree_task_manager.update_progress(service_token=fresh)
 
+        # Token OIDC dédié pour prompts_api (ne dépend pas de generate_autonomous_service_token)
+        prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+        prompts_oidc_token = await TaxonomyBatchService._get_oidc_token_for_service(
+            prompts_api_url, service_name="prompts_api"
+        )
+        prompts_auth_header = (
+            f"Bearer {prompts_oidc_token}" if prompts_oidc_token
+            else f"Bearer {sweep_service_token}"
+        )
+
         try:
-            instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", f"Bearer {sweep_service_token}")
-            existing_names = await _get_existing_competencies(f"Bearer {sweep_service_token}")
+            instruction_sweep = await _fetch_prompt("cv_api.generate_taxonomy_tree_sweep", prompts_auth_header)
+
+            # Token OIDC dédié pour competencies_api (audience correcte)
+            competencies_api_url = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8000")
+            comp_oidc_token = await TaxonomyBatchService._get_oidc_token_for_service(
+                competencies_api_url, service_name="competencies_api"
+            )
+            comp_auth_header = (
+                f"Bearer {comp_oidc_token}" if comp_oidc_token
+                else f"Bearer {sweep_service_token}"
+            )
+            existing_names = await _get_existing_competencies(comp_auth_header)
 
             used_names = get_all_used_names(res_tree)
             missing = list(set(existing_names) - used_names)
@@ -594,13 +693,13 @@ class TaxonomyBatchService:
 
                 competencies_api_url = os.getenv(
                     "COMPETENCIES_API_URL", "http://competencies_api:8000")
-                apply_headers = {
-                    "Authorization": f"Bearer {sweep_service_token}"}
+                apply_token = await TaxonomyBatchService._get_oidc_token_for_competencies(competencies_api_url)
+                apply_headers = {"Authorization": f"Bearer {apply_token}"}
                 from opentelemetry.propagate import inject
                 inject(apply_headers)
-                async with httpx.AsyncClient() as http_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=5.0)) as http_client:
                     res = await http_client.post(
-                        f"{competencies_api_url}/bulk_tree",
+                        f"{competencies_api_url.rstrip('/')}/bulk_tree",
                         json={
                             "tree": res_tree,
                             "sweep_assignments": [],
@@ -630,32 +729,131 @@ class TaxonomyBatchService:
                             "success": False, "error": f"Erreur d'application: {res.text}"}
             else:
                 with tempfile.NamedTemporaryFile("w", delete=False) as f:
-                    chunk_size = 150
+                    chunk_size = 45  # Réduit 80→45 : évite les troncations Vertex output (7/12 chunks tronqués)
 
                     def minify_tree(node):
                         if isinstance(node, dict):
-                            keys_to_drop = ("description", "merge_from", "id", "created_at",
-                                            "keywords", "examples")
+                            # Pour le Sweep, on ne conserve QUE les clés structurelles.
+                            # aliases, description, merge_from sont inutiles et gonflent le prompt.
+                            keys_to_drop = (
+                                "description", "merge_from", "id", "created_at",
+                                "keywords", "examples", "aliases",
+                            )
                             return {k: minify_tree(v) for k, v in node.items() if k not in keys_to_drop}
                         elif isinstance(node, list):
                             return [minify_tree(item) for item in node]
                         return node
 
+                    def _tree_outline(node, depth=0, max_depth=3) -> str:
+                        """Représentation textuelle compacte : piliers + sous-piliers + sous-sous-piliers (max_depth=3).
+                        Inclut la profondeur 3 pour que le LLM puisse utiliser les noms de sous-sous-piliers
+                        comme valeur de 'pillar'. Réduction ~8x vs JSON complet.
+                        Ex: '- Cloud & Infrastructure\n  - Cloud Platforms\n    - Managed Kubernetes'"""
+                        lines = []
+                        indent = "  " * depth
+                        if depth > max_depth:
+                            return ""
+                        if isinstance(node, dict):
+                            for k, v in node.items():
+                                if k in ("sub_competencies", "sub", "children",
+                                         "description", "aliases", "merge_from",
+                                         "name", "id", "created_at"):
+                                    if k in ("sub_competencies", "sub", "children"):
+                                        lines.append(_tree_outline(v, depth, max_depth))
+                                    continue
+                                if isinstance(k, str) and len(k) > 1:
+                                    lines.append(f"{indent}- {k}")
+                                    if isinstance(v, dict):
+                                        inner = v.get("sub_competencies") or v.get("sub") or v.get("children")
+                                        if inner:
+                                            lines.append(_tree_outline(inner, depth + 1, max_depth))
+                                    elif isinstance(v, list):
+                                        lines.append(_tree_outline(v, depth + 1, max_depth))
+                        elif isinstance(node, list):
+                            for item in node:
+                                if isinstance(item, dict):
+                                    name = item.get("name") or item.get("key") or ""
+                                    if name:
+                                        lines.append(f"{indent}- {name}")
+                                        inner = item.get("sub_competencies") or item.get("sub") or item.get("children")
+                                        if inner:
+                                            lines.append(_tree_outline(inner, depth + 1, max_depth))
+                                    else:
+                                        lines.append(_tree_outline(item, depth, max_depth))
+                                elif isinstance(item, str) and len(item) > 1:
+                                    lines.append(f"{indent}- {item}")
+                        return "\n".join(line for line in lines if line.strip())
+
+                    def _extract_node_names(node, depth=0, max_depth=3) -> list:
+                        """Extrait la liste plate des nœuds valides jusqu'à profondeur 3.
+                        Aligné sur _tree_outline : les nœuds injectés dans le prompt
+                        sont les mêmes que ceux acceptés comme 'pillar' dans les assignments."""
+                        if depth > max_depth:
+                            return []
+                        names = []
+                        if isinstance(node, dict):
+                            for k, v in node.items():
+                                if k in ("sub_competencies", "sub", "children",
+                                         "description", "aliases", "merge_from"):
+                                    if k in ("sub_competencies", "sub", "children"):
+                                        names.extend(_extract_node_names(v, depth + 1, max_depth))
+                                    continue
+                                if isinstance(k, str) and len(k) > 1:
+                                    names.append(k)
+                                names.extend(_extract_node_names(v, depth + 1, max_depth))
+                            # Cas: liste d'objets avec champ "name"
+                            for v in node.values():
+                                if isinstance(v, dict) and "name" in v:
+                                    names.append(v["name"])
+                        elif isinstance(node, list):
+                            for item in node:
+                                if isinstance(item, dict) and "name" in item:
+                                    names.append(item["name"])
+                                elif isinstance(item, str) and len(item) > 1:
+                                    names.append(item)
+                                names.extend(_extract_node_names(item, depth + 1, max_depth))
+                        return names
+
                     minified_res_tree = minify_tree(res_tree)
+
+                    # Outline textuel compact de l'arbre (noms uniquement, indentés).
+                    # Remplace le JSON complet dans le prompt Sweep : ~10-15x moins de tokens.
+                    tree_outline_str = _tree_outline(minified_res_tree)
+
+                    # Liste plate des nœuds valides (dédupliquée, triée) — injectée dans le prompt
+                    # pour contraindre le LLM à n'utiliser QUE ces noms comme valeur de 'pillar'
+                    raw_node_names = _extract_node_names(minified_res_tree)
+                    valid_node_names = sorted(set(n.strip() for n in raw_node_names if n.strip()))
+                    valid_nodes_str = "\n".join(f"- {n}" for n in valid_node_names)
+                    logger.info(
+                        f"[sweep] {len(valid_node_names)} nœuds valides, outline={len(tree_outline_str)} chars "
+                        f"(vs JSON={len(json.dumps(minified_res_tree))} chars) pour le prompt Sweep."
+                    )
+
+                    # P0.2 — Vérifie que le prompt Sweep supporte {{VALID_NODES}} (détection prompt obsolète)
+                    if "{{VALID_NODES}}" not in instruction_sweep:
+                        logger.warning(
+                            "[sweep] ATTENTION : le prompt Sweep ne contient pas {{VALID_NODES}}. "
+                            "Les assignments risquent d'être filtrés à 100% par la validation car le LLM "
+                            "va inventer des noms de piliers. Mettez à jour le prompt via prompts_api."
+                        )
 
                     for i in range(0, len(missing), chunk_size):
                         missing_chunk = missing[i:i + chunk_size]
+                        # {{RES_TREE}} et {{TREE_OUTLINE}} sont tous deux remplacés pour
+                        # compatibilité avec l'ancienne et la nouvelle version du prompt.
                         sweep_instruction = instruction_sweep.replace(
                             "{{MISSING_COMPETENCIES}}", ", ".join(missing_chunk)).replace(
-                            "{{RES_TREE}}", json.dumps(
-                                minified_res_tree, ensure_ascii=False))
+                            "{{RES_TREE}}", tree_outline_str).replace(
+                            "{{TREE_OUTLINE}}", tree_outline_str).replace(
+                            "{{VALID_NODES}}", valid_nodes_str)
                         req = {
                             "request": {
                                 "contents": [{"role": "user", "parts": [{"text": sweep_instruction}]}],
                                 "generationConfig": {
                                     "temperature": 0.1,
                                     "responseMimeType": "application/json",
-                                    "maxOutputTokens": 8192,
+                                    "maxOutputTokens": 16384,  # 8192 →16384 : évite troncations (7/12 chunks tronqués observés)
                                     "responseSchema": {
                                         "type": "OBJECT",
                                         "properties": {
@@ -707,7 +905,7 @@ class TaxonomyBatchService:
 
                 sweep_batch_job = await asyncio.to_thread(
                     _svc_config.vertex_batch_client.batches.create,
-                    model=os.environ["GEMINI_PRO_MODEL"],
+                    model=os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]),
                     src=src_sweep_uri,
                     config={
                         "display_name": "taxonomy-sweep-batch",
@@ -725,7 +923,7 @@ class TaxonomyBatchService:
 
     @staticmethod
     async def _handle_sweep_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token):
-        await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
+        await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)
 
         try:
             import json_repair
@@ -747,7 +945,8 @@ class TaxonomyBatchService:
                         if "merges" in raw_res and isinstance(raw_res["merges"], list):
                             valid_merges = [
                                 x for x in raw_res["merges"]
-                                if isinstance(x, dict) and "canonical" in x and "merge_from" in x and isinstance(x["merge_from"], list)
+                                if isinstance(x, dict) and "canonical" in x and "merge_from" in x
+                                and isinstance(x["merge_from"], list)
                             ]
                             merges.extend(valid_merges)
                         if "drops" in raw_res and isinstance(raw_res["drops"], list):
@@ -762,20 +961,95 @@ class TaxonomyBatchService:
                 raise ValueError(
                     "L'arbre (res_tree) est manquant dans l'état de la tâche. Impossible d'appliquer la taxonomie.")
 
-            await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges, {len(drops)} drops). Application en base de données...")
+            # ── Validation pré-bulk_tree : filtrer les assignments avec piliers fantômes ─────
+            # Extrait tous les noms de nœuds de l'arbre Reduce (même fonction que dans le build Sweep)
+            def _extract_node_names_flat(node, depth=0, max_depth=8) -> set:
+                """Extrait TOUS les noms de nœuds de l'arbre Reduce à toutes les profondeurs.
+                max_depth=8 pour couvrir la profondeur max observée (7 niveaux).
+                Accepte les noms de clés dict ET les champs 'name' dans les listes."""
+                names = set()
+                if depth > max_depth:
+                    return names
+                if isinstance(node, dict):
+                    for k, v in node.items():
+                        if isinstance(k, str) and k not in (
+                            "description", "aliases", "merge_from", "id", "created_at",
+                            "keywords", "examples", "sub_competencies", "sub", "children"
+                        ) and len(k) > 1:
+                            names.add(k.strip())
+                        if isinstance(v, dict):
+                            if "name" in v:
+                                names.add(str(v["name"]).strip())
+                            names.update(_extract_node_names_flat(v, depth + 1, max_depth))
+                        elif isinstance(v, list):
+                            names.update(_extract_node_names_flat(v, depth + 1, max_depth))
+                elif isinstance(node, list):
+                    for item in node:
+                        if isinstance(item, dict):
+                            if "name" in item:
+                                names.add(str(item["name"]).strip())
+                            names.update(_extract_node_names_flat(item, depth + 1, max_depth))
+                        elif isinstance(item, str) and len(item) > 1:
+                            names.add(item.strip())
+                return names
 
-            fresh = await TaxonomyBatchService.generate_autonomous_service_token()
-            sweep_token = fresh if fresh else persisted_svc_token
+            valid_tree_nodes = _extract_node_names_flat(res_tree)
+            valid_tree_nodes_lower = {n.lower() for n in valid_tree_nodes}
+
+            # P0.2 — Fuzzy normalization : retire ponctuation et espaces superflus pour comparaison
+            def _normalize_node(s: str) -> str:
+                return re.sub(r'[\s&,.()/]+', ' ', s.strip().lower()).strip()
+
+            valid_tree_nodes_norm = {_normalize_node(n) for n in valid_tree_nodes}
+
+            def _node_is_valid(pillar: str) -> bool:
+                """Exact match (lower) d'abord, puis normalized fuzzy match."""
+                p = pillar.strip()
+                if p.lower() in valid_tree_nodes_lower:
+                    return True
+                return _normalize_node(p) in valid_tree_nodes_norm
+
+            filtered_assignments = [
+                a for a in sweep_assignments
+                if _node_is_valid(a.get("pillar", ""))
+            ]
+            ignored_count = len(sweep_assignments) - len(filtered_assignments)
+            if ignored_count > 0:
+                ignored_pillars = {
+                    a.get("pillar", "?") for a in sweep_assignments
+                    if not _node_is_valid(a.get("pillar", ""))
+                }
+                logger.warning(
+                    f"[sweep-validation] {ignored_count}/{len(sweep_assignments)} assignments ignorés "
+                    f"(piliers absents de l'arbre Reduce, même après fuzzy match normalisé). "
+                    f"Piliers fantômes ({len(ignored_pillars)}): {sorted(ignored_pillars)[:10]}"
+                )
+                # Si 100% des assignments ont été filtrés, c'est un échec de cohérence critique
+                if not filtered_assignments and sweep_assignments:
+                    logger.error(
+                        "[sweep-validation] ÉCHEC TOTAL : 100% des assignments filtrés. "
+                        "Le prompt Sweep utilise probablement des noms de piliers non présents dans l'arbre Reduce. "
+                        f"Nœuds valides ({len(valid_tree_nodes)}): {sorted(valid_tree_nodes)[:15]}"
+                    )
+            sweep_assignments = filtered_assignments
+
+            # P0.2 — Warning si {{VALID_NODES}} manquant dans le prompt Sweep (diagnostic proactif)
+            # Note : vérifié ici sur les noms des nœuds déjà extraits ; le prompt lui-même est
+            # validé au moment de la construction du JSONL (ligne instruction_sweep).
+            # ────────────────────────────────────────────────────────────────────────────────
+
+            await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges, {len(drops)} drops). Application en base de données...")
 
             competencies_api_url = os.getenv(
                 "COMPETENCIES_API_URL", "http://competencies_api:8000")
-            apply_headers = {"Authorization": f"Bearer {sweep_token}"}
+            apply_token = await TaxonomyBatchService._get_oidc_token_for_competencies(competencies_api_url)
+            apply_headers = {"Authorization": f"Bearer {apply_token}"}
             from opentelemetry.propagate import inject
             inject(apply_headers)
 
-            async with httpx.AsyncClient() as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=5.0)) as http_client:
                 res = await http_client.post(
-                    f"{competencies_api_url}/bulk_tree",
+                    f"{competencies_api_url.rstrip('/')}/bulk_tree",
                     json={
                         "tree": res_tree,
                         "sweep_assignments": sweep_assignments,

@@ -78,7 +78,8 @@ class TestStatus:
 # ── compute_data_quality_report() ────────────────────────────────────────────
 
 def _make_mock_db(total_cvs=10, missions_ok=8, embedding_ok=9,
-                  competencies_ok=7, summary_ok=10, current_role_ok=10):
+                  competencies_ok=7, summary_ok=10, current_role_ok=10,
+                  users_with_cv=10, processing_errors_count=0):
     """Construit un AsyncSession mock avec les résultats scalaires attendus.
 
     data_quality_service appelle `result.scalar_one()` (synchrone sur l'objet résultat SQLAlchemy).
@@ -88,12 +89,14 @@ def _make_mock_db(total_cvs=10, missions_ok=8, embedding_ok=9,
 
     # Chaque appel scalaire retourne une valeur différente selon l'ordre
     scalar_calls = [
-        total_cvs,       # SELECT COUNT(*) CVProfile
-        missions_ok,     # missions_ok
-        embedding_ok,    # embedding_ok
-        competencies_ok,  # competencies_ok
-        summary_ok,      # summary_ok
-        current_role_ok,  # current_role_ok
+        total_cvs,                 # SELECT COUNT(*) CVProfile
+        users_with_cv,             # SELECT COUNT(DISTINCT user_id)
+        missions_ok,               # missions_ok
+        embedding_ok,              # embedding_ok
+        competencies_ok,           # competencies_ok
+        summary_ok,                # summary_ok
+        current_role_ok,           # current_role_ok
+        processing_errors_count,   # processing_errors_count
     ]
     call_count = [0]
 

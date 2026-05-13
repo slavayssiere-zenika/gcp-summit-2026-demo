@@ -4,28 +4,54 @@ import traceback
 from contextlib import asynccontextmanager
 
 import database
-import httpx
+import httpx  # noqa: F401 — kept for potential use by routers
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-# 2. Initialize FastAPI
 from logger import LoggingMiddleware, setup_logging
+from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import inject
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
 from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from src.prompts import router
 from src.prompts.router import verify_jwt
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    pass
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
+        OTLPSpanExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    pass
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 else:
-    pass
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+        OTLPSpanExporter
+
+
+sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
+provider = TracerProvider(
+    resource=Resource.create({
+        ResourceAttributes.SERVICE_NAME: "prompts-api",
+        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
+    }),
+    sampler=sampler
+)
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+else:
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
+        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+trace.set_tracer_provider(provider)
 
 
 # 1. Setup DB Schema
@@ -45,9 +71,16 @@ app = FastAPI(lifespan=lifespan, title="Prompts API", version="1.0.0", root_path
 app.add_middleware(LoggingMiddleware)
 
 # 3. Setup CORS
+cors_origins_str = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:80,http://localhost:8080,"
+    "https://dev.zenika.slavayssiere.fr,https://uat.zenika.slavayssiere.fr,"
+    "https://zenika.slavayssiere.fr"
+)
+cors_origins = cors_origins_str.split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -112,7 +145,7 @@ async def proxy_mcp(path: str, request: Request):
 
     body = await request.body()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
             res = await client.request(
                 request.method,
@@ -132,67 +165,9 @@ app.include_router(protected_router)  # /spec MUST be registered before /{key} w
 app.include_router(router.router, prefix="", tags=["prompts"])
 
 
-async def get_service_token_fallback() -> str:
-    import logging
-    import os
-
-    import httpx
-    logging.getLogger(__name__)
-    dev_token = os.getenv("DEV_SERVICE_TOKEN")
-    if dev_token:
-        return dev_token
-
-    try:
-        users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
-        async with httpx.AsyncClient() as client:
-            res_meta = await client.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/"
-                "service-accounts/default/identity?audience=users_api",
-                headers={"Metadata-Flavor": "Google"},
-                timeout=2.0
-            )
-            if res_meta.status_code == 200:
-                id_token = res_meta.text
-                res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
-                if res.status_code == 200:
-                    from shared.schemas.auth import TokenResponse
-                    data = TokenResponse.model_validate(res.json())
-                    return data.access_token
-    except Exception:
-        raise
-    return ""
-
-
-async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception:
-        raise
-
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(
-                f"{prompts_api_url}/errors/report",
-                json={
-                    "service_name": service_name,
-                    "error_message": error_msg,
-                    "context": trace_context[-2000:] if len(trace_context) > 2000 else trace_context
-                },
-                headers=headers
-            )
-        except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
-
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    from fastapi.exceptions import RequestValidationError
-    from starlette.exceptions import HTTPException as StarletteHTTPException
-
+    # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
     if isinstance(exc, StarletteHTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     if isinstance(exc, RequestValidationError):
@@ -201,19 +176,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-
-    try:
-        if not token:
-            token = await get_service_token_fallback()
-
-        if token:
-            await report_exception_to_prompts_api("prompts_api", error_msg, trace_context, token)
-
-    except Exception as fallback_e:
-        logging.error(f"Failed to process exception reporting: {fallback_e}")
-
+    # NOTE : prompts_api ne se reporte PAS à elle-même pour éviter une boucle récursive.
+    # Le logging local suffit pour l'observabilité.
     logging.error(
-        f"[prompts_api] Unhandled exception on {request.method} {request.url.path}: {error_msg}\n{trace_context}")
+        "[prompts_api] Unhandled exception on %s %s: %s\n%s",
+        request.method, request.url.path, error_msg, trace_context
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})

@@ -10,7 +10,7 @@ from typing import Any, Optional
 import httpx
 from fastapi import HTTPException
 from opentelemetry.propagate import inject as _inject
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import delete as sa_delete, update as sa_update
 from sqlalchemy.future import select
 
 from src.cvs.models import CVProfile
@@ -254,20 +254,33 @@ class CVStorageService:
 
     @staticmethod
     async def bg_process_competencies_and_missions(
-            bg_user_id: int, bg_structured_cv: dict, bg_headers: dict, bg_url: str):
-        bg_errors = []
+            bg_user_id: int, bg_structured_cv: dict, bg_headers: dict, bg_url: str) -> list[str]:
+        """Résout et assigne les compétences + missions d'un CV en arrière-plan.
+
+        Retourne la liste d'erreurs (vide = succès total).
+        C'est l'APPELANT qui est responsable du PATCH Drive final,
+        garantissant un seul PATCH avec le statut définitif (IMPORTED_CV ou ERROR).
+        """
+        bg_errors: list[str] = []
         async with httpx.AsyncClient(timeout=120.0) as bg_http_client:
             try:
                 existing_comps = set()
                 try:
-                    res = await bg_http_client.get(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}", headers=bg_headers, timeout=5.0)
+                    res = await bg_http_client.get(
+                        f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}",
+                        headers=bg_headers, timeout=5.0
+                    )
                     if res.status_code == 200:
-                        existing_comps = {c["id"] for c in res.json()}
+                        body = res.json()
+                        # /user/{id} retourne PaginationResponse — items est la liste
+                        items_list = body.get("items", body) if isinstance(body, dict) else body
+                        existing_comps = {c["id"] for c in items_list if isinstance(c, dict)}
                 except Exception as e:
                     logger.warning(
-                        f"Impossible de récupérer les compétences existantes: {e}")
+                        "[import] Impossible de récupérer les compétences existantes: %s", e)
 
-                sem = asyncio.Semaphore(3)
+                # sem=8 : parallélisme accru pour la résolution (était 3)
+                sem = asyncio.Semaphore(8)
 
                 def normalize_comp(text):
                     if not text:
@@ -317,14 +330,16 @@ class CVStorageService:
                             if parent:
                                 p_id = await resolve_comp_id(parent)
                                 if not p_id:
-                                    p_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json={"name": parent, "description": "Auto-identified from CV"}, headers=bg_headers)
+                                    p_res = await bg_http_client.post(
+                                        f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                                        json={"name": parent, "description": "Auto-identified from CV"},
+                                        headers=bg_headers
+                                    )
                                     if p_res.status_code < 400:
                                         p_id = p_res.json()["id"]
 
                             aliases_str = ", ".join(
-                                comp.get(
-                                    "aliases",
-                                    [])) if comp.get("aliases") else None
+                                comp.get("aliases", [])) if comp.get("aliases") else None
                             leaf_data = {
                                 "name": name,
                                 "description": "Candidate CV Skill",
@@ -334,34 +349,104 @@ class CVStorageService:
 
                             c_id = await resolve_comp_id(name)
                             if not c_id:
-                                c_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/", json=leaf_data, headers=bg_headers)
+                                c_res = await bg_http_client.post(
+                                    f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                                    json=leaf_data, headers=bg_headers
+                                )
                                 if c_res.status_code < 400:
                                     c_id = c_res.json()["id"]
 
-                        if c_id:
-                            if c_id not in existing_comps:
-                                assign_res = await bg_http_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/{c_id}", headers=bg_headers)
-                                if assign_res.status_code >= 400:
-                                    return f"Échec d'assignation de '{name}'"
-                            return True
+                        return c_id
                     except Exception as e:
-                        return f"Erreur inattendue sur '{name}': {e}"
-                    return f"Impossible de résoudre '{name}'"
+                        logger.warning(
+                            "[import] Résolution compétence '%s' échouée: %s", name, e)
+                        return None
 
-                comp_tasks = [
-                    process_competency(c) for c in bg_structured_cv.get(
-                        "competencies", [])]
-                comp_results = await asyncio.gather(*comp_tasks, return_exceptions=True)
-                for res in comp_results:
-                    if res is not True:
-                        bg_errors.append(str(res))
+                # ── Phase 1 : résolution parallèle de TOUS les IDs ─────────────────
+                competencies_list = bg_structured_cv.get("competencies", [])
+                resolve_tasks = [process_competency(c) for c in competencies_list]
+                resolved_ids = await asyncio.gather(*resolve_tasks, return_exceptions=True)
+
+                ids_to_assign = [
+                    cid for cid in resolved_ids
+                    if isinstance(cid, int) and cid not in existing_comps
+                ]
+                failed_count = sum(
+                    1 for cid in resolved_ids
+                    if cid is None or isinstance(cid, Exception)
+                )
+                if failed_count:
+                    bg_errors.append(
+                        f"{failed_count} compétence(s) non résolue(s) dans competencies_api"
+                    )
+
+                # ── Phase 2 : UN seul appel bulk assign (atomique, idempotent) ──────
+                # POST /user/{id}/assign/bulk → ON CONFLICT DO NOTHING en base.
+                # Garantit que soit TOUTES les compétences sont assignées en un
+                # appel DB, soit on a une erreur claire. Élimine l'état partiel
+                # (ex: "4 sur 20") causé par les timeouts de la boucle individuelle.
+                #
+                # Retry sur 429/5xx : competencies_api retourne 429 quand son pool DB
+                # est saturé (ASSIGN_BULK_SEMAPHORE plein). La saturation est transitoire
+                # (quelques ms à quelques secondes). Sans retry, chaque 429/500 générait
+                # un processing_error permanent — la vraie cause du 99% d'erreurs en prod.
+                if ids_to_assign:
+                    assign_url = (
+                        f"{COMPETENCIES_API_URL.rstrip('/')}/user/{bg_user_id}/assign/bulk"
+                    )
+                    assign_payload = {"competency_ids": ids_to_assign}
+                    bulk_res: Optional[httpx.Response] = None
+                    for attempt in range(4):
+                        try:
+                            bulk_res = await bg_http_client.post(
+                                assign_url,
+                                json=assign_payload,
+                                headers=bg_headers,
+                                timeout=30.0,
+                            )
+                            if bulk_res.status_code not in (429, 500, 502, 503, 504):
+                                break
+                            wait = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                            logger.warning(
+                                "[import] assign/bulk user_id=%s → HTTP %s, retry %d/4 dans %.1fs",
+                                bg_user_id, bulk_res.status_code, attempt + 1, wait,
+                            )
+                        except httpx.TimeoutException as exc:
+                            wait = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                            logger.warning(
+                                "[import] assign/bulk user_id=%s → %s, retry %d/4 dans %.1fs",
+                                bg_user_id, type(exc).__name__, attempt + 1, wait,
+                            )
+                            bulk_res = None
+                        if attempt < 3:
+                            await asyncio.sleep(wait)
+
+                    if bulk_res is None or bulk_res.status_code >= 400:
+                        status = bulk_res.status_code if bulk_res is not None else "timeout"
+                        bg_errors.append(
+                            f"Bulk assign échoué après 4 tentatives (HTTP {status}): "
+                            f"{bulk_res.text[:200] if bulk_res is not None else 'timeout'}"
+                        )
+                    else:
+                        result = bulk_res.json()
+                        logger.info(
+                            "[import] Bulk assign user_id=%s : %d assignées, %d invalides",
+                            bg_user_id,
+                            result.get("assigned", 0),
+                            result.get("skipped", 0),
+                        )
             except Exception as e:
                 bg_errors.append(f"Crash compétences: {e}")
 
             try:
                 missions_list = bg_structured_cv.get("missions", [])
                 cat_res = await bg_http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=bg_headers)
-                categories = cat_res.json() if cat_res.status_code == 200 else []
+                if cat_res.status_code == 200:
+                    cat_data = cat_res.json()
+                    # /categories retourne {"items": [...], "total": N} (paginé) ou une liste directe
+                    categories = cat_data.get("items", cat_data) if isinstance(cat_data, dict) else cat_data
+                else:
+                    categories = []
 
                 def find_cat_id(name):
                     for c in categories:
@@ -399,25 +484,56 @@ class CVStorageService:
                 bg_errors.append(f"Crash missions: {e}")
 
         if bg_errors:
-            try:
-                drive_api_url = os.getenv(
-                    "DRIVE_API_URL", "http://drive_api:8006")
-                doc_id_match = re.search(r"/d/([a-zA-Z0-9_-]+)", bg_url)
-                if doc_id_match:
-                    async with httpx.AsyncClient(timeout=10.0) as webhook_client:
-                        await webhook_client.patch(f"{drive_api_url.rstrip('/')}/files/{doc_id_match.group(1)}", json={"status": "ERROR", "error_message": " | ".join(list(dict.fromkeys(bg_errors)))}, headers=bg_headers)
-            except Exception as e:
-                logger.warning(
-                    "[import] Drive webhook PATCH failed (non-blocking): %s", e)
+            logger.warning(
+                "[import] %d erreur(s) de post-traitement pour user_id=%s : %s",
+                len(bg_errors), bg_user_id, " | ".join(bg_errors)
+            )
 
+        # ── Persistance en base (TOUJOURS, même si pas d'erreur) ────────────────
+        # Une compétence non assignée = consultant invisible à la recherche = critique
         try:
-            async with httpx.AsyncClient(timeout=5.0) as _score_client:
+            from database import SessionLocal
+            async with SessionLocal() as db_bg:
+                async with db_bg.begin():
+                    await db_bg.execute(
+                        sa_update(CVProfile)
+                        .where(CVProfile.source_url == bg_url)
+                        .values(processing_errors=bg_errors)
+                    )
+        except Exception as e:
+            logger.error(
+                "[import] Impossible de persister processing_errors pour url=%s : %s",
+                bg_url, e
+            )
+
+        # ── NOTE : le PATCH Drive est délégué à l'appelant (pubsub_service) ────
+        # bg_process retourne bg_errors ; c'est pubsub_service._run_cv_pipeline_bg
+        # qui émet UN SEUL PATCH final (IMPORTED_CV ou ERROR), évitant toute
+        # race condition entre les deux statuts.
+
+        # ── Déclenchement du scoring IA (non-bloquant, timeout généreux) ────────
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as _score_client:
                 _score_headers = dict(bg_headers)
                 _inject(_score_headers)
-                await _score_client.post(f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{bg_user_id}/ai-score-all?only_missing=true", headers=_score_headers, timeout=5.0)
+                score_res = await _score_client.post(
+                    f"{COMPETENCIES_API_URL.rstrip('/')}/evaluations/user/{bg_user_id}/ai-score-all"
+                    "?only_missing=true",
+                    headers=_score_headers,
+                    timeout=30.0
+                )
+                if score_res.status_code >= 400:
+                    logger.warning(
+                        "[import] AI scoring user_id=%s : HTTP %s — score différé",
+                        bg_user_id, score_res.status_code
+                    )
         except Exception as e:
             logger.warning(
-                f"Erreur globale lors du déclenchement du scoring IA: {e}")
+                "[import] Déclenchement scoring IA user_id=%s échoué (non-bloquant): %s",
+                bg_user_id, e
+            )
+
+        return bg_errors
 
     @staticmethod
     async def upsert_cv_profile(
@@ -430,6 +546,9 @@ class CVStorageService:
             c.get("name") for c in structured_cv.get(
                 "competencies",
                 []) if c.get("name")]
+
+        # R1 — Enregistre le modèle d'embedding utilisé pour ce profil
+        current_embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL")
 
         cv_record = CVProfile(
             user_id=user_id,
@@ -444,6 +563,7 @@ class CVStorageService:
             educations=structured_cv.get("educations", []),
             raw_content=raw_text,
             semantic_embedding=vector_data,
+            embedding_model=current_embedding_model if vector_data else None,
             extraction_reliability_score=extraction_reliability_score,
             imported_by_id=importer_id
         )

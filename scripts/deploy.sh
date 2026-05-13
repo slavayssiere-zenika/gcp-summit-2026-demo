@@ -490,6 +490,7 @@ run_service_tests() {
   _TMPFILES+=("$TMP_OUTPUT")
 
   local PYTEST_EXIT=0
+  echo -e "${GREY}   (Exécution des tests en cours...)${RESET}"
   OTEL_TRACES_EXPORTER=none \
   OTEL_METRICS_EXPORTER=none \
   OTEL_LOGS_EXPORTER=none \
@@ -498,7 +499,7 @@ run_service_tests() {
   "$TEST_RUNNER" "./${SERVICE}" -x \
     --ignore=test_env \
     --cov="./${SERVICE}" --cov-report=term-missing:skip-covered \
-    2>&1 > "$TMP_OUTPUT" || PYTEST_EXIT=$?
+    2>&1 | tee "$TMP_OUTPUT" | grep --line-buffered -E "(test_.*\.py|\[[ 0-9]+%\]|===.*===|^FAILED|^ERROR)" | awk '{print "   " $0; fflush()}' || PYTEST_EXIT=${PIPESTATUS[0]}
 
   # Écriture dans le log persistant (jamais cat direct — évite la verbosité terminal)
   local LOG_FILE="${LOG_DIR}/${SERVICE}_tests.log"
@@ -676,7 +677,7 @@ build_and_push_standard() {
   docker push "${IMAGE_NAME}:${TAG}"
   docker push "${IMAGE_NAME}:latest"
   
-  if [ "$SKIP_CLOUDRUN" = true ]; then
+    if [ "$SKIP_CLOUDRUN" = true ]; then
     echo "--- Skipping update_cloudrun/jobs for $SERVICE ---"
     DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
   else
@@ -684,6 +685,28 @@ build_and_push_standard() {
       if update_cloudrun "$SERVICE" "$TAG"; then
         DEPLOYS_SUCCESS+=("$SERVICE")
         save_service_hash "$SERVICE"  # P1/R6 — indentation corrigée
+
+        # ── R3 — Évaluation RAG post-déploiement (optionnelle) ──────────────
+        # Activée via : RAG_EVAL_ENABLED=true ./scripts/deploy.sh cv_api
+        # Non bloquante : un échec RAG ajoute un warning dans le summary mais
+        # ne rollback pas le déploiement.
+        if [ "$SERVICE" = "cv_api" ] && [ "${RAG_EVAL_ENABLED:-false}" = "true" ] && [ "$SKIP_TESTS" = false ]; then
+          echo -e "\n${GREY}--- 🔍 [R3] Évaluation qualité RAG post-déploiement (30s) ---${RESET}"
+          RAG_EVAL_EXIT=0
+          RAG_EVAL_DRY_RUN="${RAG_EVAL_DRY_RUN:-false}" \
+          PROJECT_ID="$PROJECT_ID" \
+          bash scripts/run_rag_eval.sh --env dev || RAG_EVAL_EXIT=$?
+          if [ "$RAG_EVAL_EXIT" -ne 0 ]; then
+            echo -e "${RED}⚠️  [R3] Régression RAG détectée — vérifiez GEMINI_EMBEDDING_MODEL ou VECTOR_DISTANCE_THRESHOLD${RESET}"
+            echo -e "${GREY}   → Requalifier les cas golden : RAG_EVAL_DRY_RUN=true ./scripts/run_rag_eval.sh${RESET}"
+            # On n'ajoute pas dans DEPLOYS_FAILED — le déploiement est réussi,
+            # la régression RAG est un warning qualité.
+          else
+            echo -e "${GREEN}✅ [R3] Qualité RAG validée post-déploiement${RESET}"
+          fi
+        fi
+        # ────────────────────────────────────────────────────────────────────
+
       else
         DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
       fi

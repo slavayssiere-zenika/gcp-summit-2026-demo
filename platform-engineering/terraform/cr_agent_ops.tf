@@ -256,16 +256,9 @@ resource "google_compute_region_backend_service" "agent_ops_internal_backend" {
   }
 }
 
-# Backend service externe (LB global HTTPS — exposé via /agent-ops-api/ dans lb.tf)
-resource "google_compute_backend_service" "agent_ops_backend" {
-  name                  = "backend-agent-ops-${terraform.workspace}"
-  protocol              = "HTTPS"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  security_policy       = google_compute_security_policy.waf.id
-  backend {
-    group = google_compute_region_network_endpoint_group.agent_ops_neg.id
-  }
-}
+# NOTE: Le backend service externe (agent_ops_backend) a été supprimé.
+# Les sous-agents sont uniquement accessibles via le LB interne (agent_ops_internal_backend).
+# Le trafic public passe exclusivement par agent_router_api → /api/ catch-all.
 
 resource "google_secret_manager_secret_iam_member" "agent_ops_gemini_access" {
   project   = data.google_secret_manager_secret.gemini_api_key.project

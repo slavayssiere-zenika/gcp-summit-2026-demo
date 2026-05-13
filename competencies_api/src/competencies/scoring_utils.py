@@ -29,10 +29,13 @@ VERTEX_BATCH_MODEL: str = os.getenv(
     "VERTEX_BATCH_MODEL", os.getenv("GEMINI_MODEL_STABLE")
 )
 
-# Concurrence de préchargement des missions (1 appel HTTP par user)
-MISSIONS_FETCH_SEMAPHORE: int = int(os.getenv("SCORING_MISSIONS_FETCH_SEMAPHORE", "20"))
-# Concurrence d'écriture DB en phase apply
-SCORING_APPLY_SEMAPHORE: int = int(os.getenv("SCORING_APPLY_SEMAPHORE", "10"))
+# Concurrence de préchargement des missions (1 appel HTTP par user).
+# Valeur conservatrice : evite la saturation du pool AlloyDB (pool_size=10, max_overflow=20).
+# Peut etre augmentée via env var si le pool est agrandi (DB_POOL_SIZE / DB_MAX_OVERFLOW).
+MISSIONS_FETCH_SEMAPHORE: int = int(os.getenv("SCORING_MISSIONS_FETCH_SEMAPHORE", "5"))
+# Concurrence d'écriture DB en phase apply.
+# Màj conservatrice : max 3 connexions simultanées pour l'apply (laisse de la marge au pool).
+SCORING_APPLY_SEMAPHORE: int = int(os.getenv("SCORING_APPLY_SEMAPHORE", "3"))
 
 # ── Paramètres de pondération scoring v2 (dupliqués depuis router.py) ─────────
 COMPETENCY_DECAY_LAMBDA: float = float(os.getenv("COMPETENCY_DECAY_LAMBDA", "0.1"))

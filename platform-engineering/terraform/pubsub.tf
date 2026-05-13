@@ -288,6 +288,7 @@ resource "google_pubsub_schema" "data_quality_schema" {
       { name = "current_role_pct", type = "float" },
       { name = "competency_assignment_pct", type = "float" },
       { name = "ai_scoring_pct", type = "float" },
+      { name = "processing_errors_pct", type = "float", default = 1.0 },
       { name = "issues_count", type = "int" },
       { name = "trigger", type = "string" }
     ]

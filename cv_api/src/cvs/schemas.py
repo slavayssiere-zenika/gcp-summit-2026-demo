@@ -71,6 +71,7 @@ class CVResponse(BaseModel):
     user_id: int
     competencies_assigned: int
     extracted_info: Optional[dict] = None
+    structured_cv: Optional[dict] = None  # Données LLM brutes — utilisées par pubsub pour bg_process
     steps: List[CVImportStep] = []
     warnings: List[str] = []
 
@@ -90,6 +91,8 @@ class SearchCandidateResponse(BaseModel):
     email: Optional[str] = None
     username: Optional[str] = None
     is_active: Optional[bool] = None
+    source_url: Optional[str] = None       # R5 — URL Drive du CV source
+    embedding_model: Optional[str] = None  # R1 — Modèle d'embedding utilisé
 
 
 class CVProfileResponse(BaseModel):
@@ -102,6 +105,7 @@ class CVProfileResponse(BaseModel):
     full_name: Optional[str] = None
     email: Optional[str] = None
     username: Optional[str] = None
+    processing_errors: List[str] = []
 
 
 class CVFullProfileResponse(BaseModel):
@@ -115,6 +119,7 @@ class CVFullProfileResponse(BaseModel):
     educations: List[ExtractedEducation] = []
     is_anonymous: bool = False
     is_archived: bool = False
+    processing_errors: List[str] = []
 
 
 class UserMergeRequest(BaseModel):

@@ -229,54 +229,7 @@
         </div>
       </div>
 
-      <!-- Action Requise / Errors List -->
-      <div class="errors-section">
-        <div class="section-header-flex">
-          <h3 class="danger-title"><AlertCircle class="icon-sm inline-icon" /> Actions Requises (Erreurs)</h3>
-          <div class="btn-group">
-            <!-- Bouton Force Flush : visible quand des fichiers sont bloqués en QUEUED ou PROCESSING -->
-            <button
-              v-if="(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0) > 0"
-              class="btn-warning btn-sm"
-              @click="forceFlushZombies"
-              :disabled="isFlushingZombies || !isAdmin()"
-              :title="!isAdmin() ? 'Réservé aux administrateurs' : `Reset immédiat des ${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)} fichier(s) bloqués (QUEUED + PROCESSING) → PENDING`"
-              aria-label="Forcer le déblocage des fichiers zombies bloqués en QUEUED ou PROCESSING"
-            >
-              <Zap class="icon-sm" :class="{ 'spinning': isFlushingZombies }" />
-              {{ isFlushingZombies ? 'Déblocage...' : `Forcer Déblocage (${(syncStatus?.queued ?? 0) + (syncStatus?.processing ?? 0)})` }}
-            </button>
-            <button v-if="errorFiles.length > 0" class="btn-secondary btn-sm" @click="retryErrors" :disabled="isRetrying || !isAdmin()" :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Réessayer Tout'">
-              <RefreshCcw class="icon-sm" :class="{ 'spinning': isRetrying }" />
-              Réessayer Tout
-            </button>
-            <button v-if="errorFiles.length > 0" class="btn-danger btn-sm" @click="clearErrors" :disabled="isClearing || !isAdmin()" :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Purger toutes les erreurs'">
-              <Trash2 class="icon-sm" />
-              Purger Erreurs
-            </button>
-          </div>
-        </div>
 
-        <div v-if="errorFiles.length > 0" class="error-list">
-          <div v-for="file in errorFiles" :key="file.google_file_id" class="error-card">
-            <div class="error-card-header">
-              <div class="file-identity">
-                <strong>{{ file.file_name || file.google_file_id }}</strong>
-                <span class="file-path">{{ file.parent_folder_name || 'Racine' }}</span>
-              </div>
-              <span class="tag-badge">{{ getFolderTag(file.folder_id) }}</span>
-            </div>
-            <div class="error-log">
-              <pre>{{ file.error_message || 'Erreur inconnue. Aucun détail fourni par le backend.' }}</pre>
-            </div>
-          </div>
-        </div>
-        <div v-else class="card empty-state success-state">
-          <CheckCircle2 class="empty-icon success-icon" />
-          <p>Aucune erreur en attente.</p>
-        </div>
-      </div>
-      
       <!-- ── Graphe Drive Ingestion ── -->
       <DriveTreeGraph />
     </div>
@@ -288,7 +241,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import DriveTreeGraph from './DriveTreeGraph.vue'
 import {
-  UploadCloud, Loader2, Clock, CheckCircle2, FileX, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Radio, Zap, FileText, Edit2, X, Check
+  Loader2, CheckCircle2, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Zap, FileText, Edit2, X, Check
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
@@ -296,18 +249,15 @@ const authHeader = () => ({ Authorization: `Bearer ${authService.state.token}` }
 const isAdmin = () => authService.state.user?.role === 'admin'
 
 const folders = ref<any[]>([])
-const errorFiles = ref<any[]>([])
 const syncStatus = ref<any>(null)
 const isSyncing = ref(false)
 const isAdding = ref(false)
-const isRetrying = ref(false)
-const isClearing = ref(false)
-const isFlushingZombies = ref(false)
 const newFolder = ref({ google_folder_id: '', tag: '', excluded_folders_str: '' })
 const showAddFolder = ref(false)
 const editingFolderId = ref<number | null>(null)
 const editFolderData = ref({ tag: '', excluded_folders_str: '' })
 const isSaving = ref(false)
+const isFlushingZombies = ref(false)
 
 const flushResult = ref<{zombies_reset: number, errors_reset: number} | null>(null)
 const actionError = ref('')  // Message d'erreur visible dans l'UI
@@ -404,15 +354,6 @@ const fetchStatus = async () => {
   }
 }
 
-const fetchErrors = async () => {
-  try {
-    const res = await axios.get('/api/drive/files?status=ERROR&limit=200')
-    errorFiles.value = res.data.files || (Array.isArray(res.data) ? res.data : [])
-  } catch (error) {
-    console.error("Failed to load error files", error)
-  }
-}
-
 const isFetchingDlq = ref(false)
 const dlqLastFetchedAt = ref<Date | null>(null)
 
@@ -438,40 +379,6 @@ const getFolderTag = (folderId: number) => {
 const percent = (value: number, total: number) => {
   if (!total) return '0%';
   return `${Math.round((value / total) * 100)}%`;
-}
-
-const retryErrors = async () => {
-  if (isRetrying.value) return
-  isRetrying.value = true
-  try {
-    await axios.post('/api/drive/retry-errors', {}, { headers: authHeader() })
-    await fetchStatus()
-    await fetchFolders()
-    await fetchErrors()
-    triggerSync()
-  } catch (err) {
-    console.error('Failed to retry errors', err)
-  } finally {
-    isRetrying.value = false
-  }
-}
-
-const clearErrors = async () => {
-  if (!confirm('Voulez-vous vraiment purger toutes les erreurs ? Les fichiers concernés seront marqués comme ignorés.')) return
-  if (isClearing.value) return
-  isClearing.value = true
-  try {
-    await axios.delete('/api/drive/errors', { headers: authHeader() })
-    await fetchStatus()
-    await fetchFolders()
-    await fetchErrors()
-  } catch (err: any) {
-    const detail = err.response?.data?.detail || err.message || 'Erreur inconnue'
-    actionError.value = `Purge des erreurs échouée : ${detail}`
-    console.error('Failed to clear errors', err)
-  } finally {
-    isClearing.value = false
-  }
 }
 
 const deleteDlqMessage = async (googleFileId: string, pubsubMessageId = '', ackId = '') => {
@@ -607,16 +514,11 @@ const triggerSync = async () => {
 onMounted(() => {
   fetchFolders()
   fetchStatus()
-  fetchErrors()
   fetchDlqStatus()  // chargement unique au mount
   pollInterval = setInterval(() => {
     fetchStatus()
     fetchFolders()
-    if (syncStatus.value?.errors > 0 || errorFiles.value.length > 0) {
-      fetchErrors()
-    }
-    // DLQ : refresh silencieux toutes les 60s pour renouveler les ack_ids (expire à 600s)
-    // NE PAS mettre dans le polling 5s — cela provoque des oscillations du compteur Pub/Sub
+    // DLQ : refresh silencieux toutes les 60s
     const now = Date.now()
     const lastFetch = dlqLastFetchedAt.value?.getTime() ?? 0
     if (now - lastFetch > 60_000) {

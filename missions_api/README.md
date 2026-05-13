@@ -9,8 +9,8 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 231 | ✅ |
-| `mcp_server.py` | 328 | ✅ |
+| `main.py` | 223 | ✅ |
+| `mcp_server.py` | 341 | ✅ |
 | `conftest.py` | 39 | ✅ |
 | `metrics.py` | 3 | ✅ |
 | `src/missions/analysis_router.py` | 196 | ✅ |
@@ -22,7 +22,7 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 | Var | Type | Valeur dev |
 |---|---|---|
 | `PYTHONPATH` | Comportement | `/app` |
-| `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `GEMINI_EMBEDDING_MODEL` | Comportement | `gemini-embedding-001` |
 | `PORT` | Infra | `8009` |
 | `MCP_SIDECAR_URL` | Infra | `http://missions_mcp:8000` |

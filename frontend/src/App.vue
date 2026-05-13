@@ -222,19 +222,19 @@ onUnmounted(() => {
 
               <div class="dropdown-section-label" v-if="isAdmin()">API Swagger</div>
               <template v-if="isAdmin()">
-                <a href="/users_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Users API">
+                <a href="/api/users/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Users API">
                   <ExternalLink size="13" /> Users API
                 </a>
-                <a href="/cv_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger CV API">
+                <a href="/api/cv/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger CV API">
                   <ExternalLink size="13" /> CV API
                 </a>
-                <a href="/comp_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Competencies API">
+                <a href="/api/competencies/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Competencies API">
                   <ExternalLink size="13" /> Competencies API
                 </a>
-                <a href="/drive_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Drive API">
+                <a href="/api/drive/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Drive API">
                   <ExternalLink size="13" /> Drive API
                 </a>
-                <a href="/prompts_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Prompts API">
+                <a href="/api/prompts/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Prompts API">
                   <ExternalLink size="13" /> Prompts API
                 </a>
                 <a href="/api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Agent Router API">
@@ -243,7 +243,7 @@ onUnmounted(() => {
                 <a href="/api/missions/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Missions API">
                   <ExternalLink size="13" /> Missions API
                 </a>
-                <a href="/items_api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Items API">
+                <a href="/api/items/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Items API">
                   <ExternalLink size="13" /> Items API
                 </a>
               </template>
