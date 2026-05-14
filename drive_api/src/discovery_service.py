@@ -18,6 +18,7 @@ _SUPPORTED_CV_MIME_TYPES: dict[str, str] = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
 }
 
+
 class DiscoveryService:
     def __init__(self, db: AsyncSession, drive, redis):
         self.db = db
@@ -98,11 +99,11 @@ class DiscoveryService:
 
             while True:
                 results = await self.drive_api.list_files(
-                    q=q, 
+                    q=q,
                     page_token=page_token,
                     fields="nextPageToken, files(id, name, mimeType, modifiedTime, version)"
                 )
-                
+
                 if not results:
                     break
 
@@ -171,6 +172,28 @@ class DiscoveryService:
                                             else_=DriveSyncState.__table__.c.status,
                                         ),
                                         last_processed_at=datetime.now(timezone.utc),
+                                        # Auto-unblacklist si le fichier a été modifié
+                                        extraction_blacklisted=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(False),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.extraction_blacklisted,
+                                        ),
+                                        extraction_attempt_count=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(0),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.extraction_attempt_count,
+                                        ),
+                                        extraction_blacklisted_at=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(None),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.extraction_blacklisted_at,
+                                        ),
                                     ),
                                 )
                             )
@@ -294,6 +317,28 @@ class DiscoveryService:
                                             else_=DriveSyncState.__table__.c.status,
                                         ),
                                         last_processed_at=datetime.now(timezone.utc),
+                                        # Auto-unblacklist si le fichier a été modifié
+                                        extraction_blacklisted=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(False),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.extraction_blacklisted,
+                                        ),
+                                        extraction_attempt_count=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(0),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.extraction_attempt_count,
+                                        ),
+                                        extraction_blacklisted_at=case(
+                                            (
+                                                DriveSyncState.__table__.c.revision_id != version,
+                                                literal(None),
+                                            ),
+                                            else_=DriveSyncState.__table__.c.extraction_blacklisted_at,
+                                        ),
                                     ),
                                 )
                             )

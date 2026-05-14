@@ -19,6 +19,12 @@ Actions CV:
   reindex         Ré-indexe les embeddings globaux
   reindex-chunks  Ré-indexe les chunks de missions RAG
   reindex-chunks --force  Force la re-création complète des chunks
+  fix-low-quality Identifie les CVs sous le seuil d'extraction et les réimporte
+  fix-low-quality --threshold 60   Seuil personnalisé (défaut: 75)
+  fix-low-quality --yes            Sans confirmation interactive
+  fix-low-quality --skip-scoring   Ne pas déclencher le scoring delta (étape 8)
+  fix-low-quality --max-attempts N Limite de réessais avant exclusion (défaut: 3)
+  fix-low-quality --reset-excluded Réintègre les CVs exclus par le circuit-breaker
   taxonomy-status Statut du pipeline taxonomie
   taxonomy-start  Lance le batch taxonomie (map→reduce→sweep)
   taxonomy-step <step>    Lance une étape manuelle (map/reduce/sweep/deduplicate)
@@ -326,6 +332,118 @@ def cmd_cv(args, token: str, base: str) -> None:
                     pct = cs.get("percent", 0)
                     print(f"     {progress_bar(pct, 20)}")
 
+    elif action == "fix-low-quality":
+        threshold = getattr(args, "threshold", 75)
+        auto_yes = getattr(args, "yes", False)
+        banner(f"🩺 CV — Correction qualité d'extraction (seuil < {threshold})")
+
+        # ── 1. Blacklistés en base (drive_api) ───────────────────────────────
+        bl = api_get(base, "/api/drive/files/blacklisted?limit=100", token)
+        bl_items = (bl or {}).get("items", [])
+        if bl_items:
+            section(f"⛔  {len(bl_items)} fichier(s) blacklisté(s) — structurellement illisibles")
+            print()
+            print(f"  {'Score':>4}  {'Essais':>6}  {'Nom':<28}  Depuis")
+            print(f"  {'─'*4}  {'─'*6}  {'─'*28}  {'─'*10}")
+            for f in bl_items:
+                attempts = f.get("extraction_attempt_count", "?")
+                name = (f.get("parent_folder_name") or f.get("file_name") or "Inconnu")[:28]
+                since = (f.get("extraction_blacklisted_at") or "?")[:10]
+                print(f"  {RED}⛔{RESET}    {str(attempts):>5}  {name:<28}  {since}")
+            print()
+            warn("Ces fichiers ne seront plus re-importés depuis Drive jusqu'à mise à jour par le consultant.")
+            print(f"  {GREY}  Déblacklister manuellement : python3 scripts/admin.py drive unblacklist --file-id {{id}}{RESET}")
+            print()
+
+        # ── 2. CVs avec score < seuil (cv_api) ───────────────────────────────
+        low_cvs, skip, limit = [], 0, 100
+        while True:
+            page = api_get(
+                base,
+                f"/api/cv/extraction-scores?sort_desc=false&status=calculated&limit={limit}&skip={skip}",
+                token,
+            )
+            if not page:
+                err("Impossible de contacter /extraction-scores")
+                break
+            items = page.get("items", [])
+            total_pages = page.get("total", 0)
+            for cv in items:
+                score = cv.get("extraction_reliability_score")
+                if score is not None and score < threshold:
+                    low_cvs.append(cv)
+            if len(items) < limit or skip + limit >= total_pages:
+                break
+            skip += limit
+
+        if not low_cvs:
+            ok(f"Aucun CV sous le seuil {threshold} — qualité d'extraction satisfaisante.")
+            return
+
+        # ── 3. Affichage des CVs à ré-analyser ───────────────────────────────
+        section(f"{len(low_cvs)} CV(s) à ré-analyser via Vertex AI Batch")
+        print()
+        print(f"  {'Score':>6}  {'Nom':<28}  {'Rôle':<25}  Agence")
+        print(f"  {'─'*6}  {'─'*28}  {'─'*25}  {'─'*12}")
+        cv_ids = []
+        for cv in low_cvs:
+            score = cv.get('extraction_reliability_score', '?')
+            name = (cv.get('full_name') or 'Inconnu')[:28]
+            role = (cv.get('current_role') or '?')[:25]
+            tag = (cv.get('source_tag') or '?')[:12]
+            cv_id = cv.get('id')
+            if cv_id:
+                cv_ids.append(cv_id)
+            flag = f"{RED}⚠️ {RESET}" if isinstance(score, int) and score < 50 else "   "
+            print(f"  {flag}{str(score):>4}  {name:<28}  {role:<25}  {tag}")
+
+        print()
+        info("Après ré-analyse : si le score reste < seuil, le fichier Drive sera blacklisté automatiquement.")
+        warn(f"Ces {len(cv_ids)} CVs seront soumis à Vertex AI Batch (coût x0.5).")
+
+        # ── 4. Confirmation ───────────────────────────────────────────────────
+        if not auto_yes:
+            try:
+                answer = input(f"\n  Lancer la ré-analyse de {len(cv_ids)} CV(s) ? [o/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = "n"
+            if answer not in ("o", "oui", "y", "yes"):
+                warn("Annulé. Relancez avec --yes pour ignorer cette confirmation.")
+                return
+
+        # ── 5. Lancement Vertex AI Batch ──────────────────────────────────────
+        body = {"cv_ids": cv_ids}
+        data = api_post(base, "/api/cv/bulk-reanalyse/start", token, body)
+        if data:
+            ok(data.get("message", f"{len(cv_ids)} CVs soumis au pipeline Vertex."))
+            print_kv("total_cvs", data.get("total_cvs"))
+            print_kv("cv_ids_filter", str(data.get("cv_ids_filter", cv_ids))[:80])
+            print_kv("status", data.get("status"))
+            info("Suivre via : python3 scripts/admin.py cv status")
+
+        # ── 6. Scoring delta ──────────────────────────────────────────────────
+        skip_scoring = getattr(args, "skip_scoring", False)
+        if not skip_scoring:
+            print()
+            section("Scoring IA delta — compétences manquantes")
+            info("Déclenchement du scoring delta pour les consultants sans score suffisant…")
+            score_data = api_post(
+                base,
+                "/api/competencies/evaluations/bulk-scoring-all",
+                token,
+                params={"delta_only": "true", "force": "false"},
+            )
+            if score_data:
+                ok(score_data.get("message", "Scoring delta démarré."))
+                print_kv("triggered", score_data.get("triggered"))
+                print_kv("total_users", score_data.get("total_users"))
+                info("Suivre via : python3 scripts/admin.py scoring status")
+            else:
+                warn(
+                    "Scoring delta non déclenché (pipeline peut-être déjà en cours). "
+                    "Relancez manuellement : python3 scripts/admin.py scoring start"
+                )
+
     elif action == "remediate":
         banner("🔧 Admin — Remédiation Legacy Errors")
         data = api_post(base, "/api/cv/admin/remediate-legacy", token)
@@ -473,6 +591,38 @@ def cmd_drive(args, token: str, base: str) -> None:
             if unknowns:
                 warn(f"{unknowns} payload(s) illisible(s) dans la DLQ.")
 
+    elif action == "blacklisted":
+        banner("⛔ Drive — Fichiers blacklistés (qualité extraction)")
+        data = api_get(base, "/api/drive/files/blacklisted?limit=200", token)
+        items = (data or {}).get("items", [])
+        total = (data or {}).get("total", 0)
+        if not items:
+            ok("Aucun fichier blacklisté — tous les CVs sont extractibles.")
+            return
+        section(f"{total} fichier(s) blacklisté(s)")
+        print()
+        print(f"  {'Essais':>6}  {'Depuis':>10}  {'Nom':<28}  Google File ID")
+        print(f"  {'─'*6}  {'─'*10}  {'─'*28}  {'─'*20}")
+        for f in items:
+            attempts = f.get("extraction_attempt_count", "?")
+            name = (f.get("parent_folder_name") or f.get("file_name") or "Inconnu")[:28]
+            since = (f.get("extraction_blacklisted_at") or "?")[:10]
+            fid = f.get("google_file_id", "?")
+            print(f"  {RED}{str(attempts):>6}{RESET}  {since:>10}  {name:<28}  {fid}")
+        print()
+        info("Pour déblacklister : python3 scripts/admin.py drive unblacklist --file-id <GOOGLE_FILE_ID>")
+
+    elif action == "unblacklist":
+        file_id = getattr(args, "file_id", None)
+        if not file_id:
+            err("--file-id requis. Exemple : python3 scripts/admin.py drive unblacklist --file-id 1AbC...")
+            return
+        banner(f"🔓 Drive — Déblacklist {file_id}")
+        data = api_delete(base, f"/api/drive/files/{file_id}/blacklist", token)
+        if data:
+            ok(data.get("message", f"Fichier {file_id} déblaclisté."))
+            info("Le fichier sera réingéré au prochain /sync.")
+
     elif action == "dlq-replay":
         banner("▶️  Drive — Replay DLQ")
         warn("Tous les messages DLQ seront remis en PENDING.")
@@ -514,7 +664,8 @@ def main() -> None:
     p_cv = sub.add_parser("cv", help="Actions pipeline CV")
     p_cv.add_argument("action", choices=[
         "status", "start", "cancel", "reset", "retry-apply",
-        "reindex", "reindex-chunks", "taxonomy-status", "taxonomy-start",
+        "reindex", "reindex-chunks", "fix-low-quality",
+        "taxonomy-status", "taxonomy-start",
         "taxonomy-step", "taxonomy-check", "taxonomy-cancel", "taxonomy-recover",
         "taxonomy-reset", "taxonomy-list", "remediate",
     ])
@@ -525,6 +676,18 @@ def main() -> None:
     p_cv.add_argument("--step", default=None, help="Étape taxonomy: map/reduce/sweep/deduplicate")
     p_cv.add_argument("--target-pillar", default=None)
     p_cv.add_argument("--resume", action="store_true")
+    p_cv.add_argument(
+        "--threshold", type=int, default=75,
+        help="Seuil score extraction pour fix-low-quality (défaut: 75)"
+    )
+    p_cv.add_argument(
+        "--yes", action="store_true",
+        help="Confirme automatiquement sans prompt interactif"
+    )
+    p_cv.add_argument(
+        "--skip-scoring", action="store_true",
+        help="fix-low-quality : ne pas déclencher le scoring delta"
+    )
 
     # scoring
     p_sc = sub.add_parser("scoring", help="Actions pipeline Scoring IA")
@@ -537,8 +700,11 @@ def main() -> None:
     p_dr.add_argument("action", choices=[
         "status", "ingestion", "history", "retry",
         "purge-errors", "quality-gate", "dlq-status", "dlq-replay", "sync",
+        "blacklisted", "unblacklist",
     ])
     p_dr.add_argument("--force", action="store_true")
+    p_dr.add_argument("--file-id", dest="file_id", default=None,
+                      help="unblacklist : Google File ID du fichier à déblacklister")
 
     # help
     sub.add_parser("help", help="Affiche l'aide complète")

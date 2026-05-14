@@ -110,6 +110,131 @@ async def list_files(
     }
 
 
+@router.get("/files/blacklisted")
+async def list_blacklisted_files(
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Liste paginée des fichiers Drive blacklistés pour qualité d'extraction insuffisante.
+    Un fichier est blacklisté après N tentatives consécutives avec score < seuil.
+    Il sera automatiquement déblaclisté si le consultant met à jour son CV sur Drive.
+    """
+    count_stmt = select(func.count(DriveSyncState.google_file_id)).where(
+        DriveSyncState.extraction_blacklisted.is_(True)
+    )
+    total = (await db.execute(count_stmt)).scalar_one() or 0
+
+    stmt = (
+        select(DriveSyncState)
+        .where(DriveSyncState.extraction_blacklisted.is_(True))
+        .order_by(DriveSyncState.extraction_blacklisted_at.desc().nullslast())
+        .offset(skip)
+        .limit(limit)
+    )
+    files = (await db.execute(stmt)).scalars().all()
+    return {
+        "items": [
+            {
+                "google_file_id": f.google_file_id,
+                "file_name": f.file_name,
+                "parent_folder_name": f.parent_folder_name,
+                "user_id": f.user_id,
+                "extraction_attempt_count": f.extraction_attempt_count,
+                "extraction_blacklisted_at": (
+                    f.extraction_blacklisted_at.isoformat() if f.extraction_blacklisted_at else None
+                ),
+                "modified_time": f.modified_time.isoformat() if f.modified_time else None,
+                "status": f.status.value if hasattr(f.status, "value") else str(f.status),
+            }
+            for f in files
+        ],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+
+@router.post("/files/{google_file_id}/blacklist-attempt")
+async def record_blacklist_attempt(google_file_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Appelé par cv_api après une extraction avec score < EXTRACTION_RELIABILITY_THRESHOLD.
+    Incrémente extraction_attempt_count. Si count >= EXTRACTION_MAX_ATTEMPTS → blacklist automatique.
+    Le fichier passe en EXTRACTION_BLACKLISTED et ne sera plus re-ingéré depuis Drive
+    jusqu'à ce que le consultant mette à jour son CV (revision_id change → auto-unblacklist).
+    """
+    max_attempts = int(_os.getenv("EXTRACTION_MAX_ATTEMPTS", "3"))
+    state = (
+        await db.execute(select(DriveSyncState).filter(DriveSyncState.google_file_id == google_file_id))
+    ).scalars().first()
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Fichier Drive '{google_file_id}' inconnu.")
+
+    state.extraction_attempt_count = (state.extraction_attempt_count or 0) + 1
+    now_blacklisted = state.extraction_attempt_count >= max_attempts
+
+    if now_blacklisted and not state.extraction_blacklisted:
+        state.extraction_blacklisted = True
+        state.extraction_blacklisted_at = datetime.now(timezone.utc)
+        state.status = DriveSyncStatus.EXTRACTION_BLACKLISTED
+        logger.warning(
+            "[EXTRACTION_BLACKLIST] Fichier '%s' (%s) blacklisté après %d tentatives d'extraction échouées.",
+            state.file_name, google_file_id, state.extraction_attempt_count,
+            extra={"google_file_id": google_file_id, "attempts": state.extraction_attempt_count},
+        )
+
+    await db.commit()
+    return {
+        "success": True,
+        "google_file_id": google_file_id,
+        "file_name": state.file_name,
+        "extraction_attempt_count": state.extraction_attempt_count,
+        "blacklisted": state.extraction_blacklisted,
+        "max_attempts": max_attempts,
+    }
+
+
+@router.delete("/files/{google_file_id}/blacklist")
+async def unblacklist_file(
+    google_file_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin),
+):
+    """
+    Réinitialise manuellement le blacklist d'un fichier (admin uniquement).
+    Remet status → PENDING : le fichier sera re-ingéré au prochain /sync.
+    Cas d'usage : après qu'un consultant a fourni une version lisible de son CV.
+    """
+    state = (
+        await db.execute(select(DriveSyncState).filter(DriveSyncState.google_file_id == google_file_id))
+    ).scalars().first()
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Fichier Drive '{google_file_id}' inconnu.")
+
+    state.extraction_blacklisted = False
+    state.extraction_attempt_count = 0
+    state.extraction_blacklisted_at = None
+    state.status = DriveSyncStatus.PENDING
+    state.error_message = "Blacklist réinitialisé manuellement par un administrateur"
+
+    try:
+        get_redis().delete(f"drive:file:known:{google_file_id}")
+        logger.info("[Cache] drive:file:known:%s invalidé (unblacklist admin).", google_file_id)
+    except Exception as e_redis:
+        logger.warning("[Cache] Impossible d'invalider drive:file:known:%s : %s", google_file_id, e_redis)
+
+    await db.commit()
+    logger.info("[EXTRACTION_UNBLACKLIST] Fichier '%s' (%s) déblaclisté manuellement.", state.file_name, google_file_id)
+    return {
+        "success": True,
+        "google_file_id": google_file_id,
+        "file_name": state.file_name,
+        "status": "PENDING",
+        "message": f"Fichier '{state.file_name}' déblaclisté — sera réingéré au prochain /sync.",
+    }
+
+
 @router.get("/files/{google_file_id}", response_model=FileStateResponse)
 async def get_file_state(google_file_id: str, db: AsyncSession = Depends(get_db)):
     """

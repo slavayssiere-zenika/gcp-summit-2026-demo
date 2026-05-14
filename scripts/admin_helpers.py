@@ -21,7 +21,7 @@ if _antigravity_env.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 GCLOUD_BIN = os.getenv("GCLOUD_BIN", "gcloud")
-TOKEN_TTL = 3300  # 55 min
+TOKEN_TTL = 900  # 15 min
 
 # Couleurs ANSI
 RESET = "\033[0m"
@@ -136,9 +136,11 @@ def get_jwt(env: str = "prd", no_cache: bool = False) -> tuple[str, str]:
 
     if not no_cache and token_cache.exists():
         try:
-            data = json.loads(token_cache.read_text())
-            if time.time() < data.get("expires_at", 0):
-                return data["token"], base_url
+            json.loads(token_cache.read_text())
+            # On laisse le check par sécurité, mais on force no_cache=True par défaut plus tard
+            # ou on désactive juste la lecture du cache.
+            # L'utilisateur a demandé "reforge le token a chaque fois que je lance le script".
+            pass  # Ignorer le cache en lecture pour forcer un nouveau login à chaque exécution
         except Exception:
             pass
 

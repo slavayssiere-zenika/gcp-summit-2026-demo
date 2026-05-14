@@ -1,9 +1,11 @@
 import logging
 import math
 import os
+import re
 import time
 from typing import List, Optional
 
+import httpx
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.cvs.schemas import CVImportStep, CVResponse
@@ -15,6 +17,42 @@ from src.services.utils import _build_distilled_content
 from metrics import CV_PROCESSING_TOTAL
 
 logger = logging.getLogger(__name__)
+
+EXTRACTION_RELIABILITY_THRESHOLD = int(os.getenv("EXTRACTION_RELIABILITY_THRESHOLD", "75"))
+_GDOC_ID_RE = re.compile(r"/document/d/([a-zA-Z0-9_-]+)")
+
+
+async def _notify_blacklist_attempt(source_url: str, headers: dict) -> None:
+    """
+    Notifie drive_api d'une tentative d'extraction échouée (score < seuil).
+    Best-effort : ne bloque jamais le pipeline CV si drive_api est indisponible.
+    Ignore silencieusement les CVs sans URL Google Drive (imports manuels).
+    """
+    m = _GDOC_ID_RE.search(source_url or "")
+    if not m:
+        return
+    google_file_id = m.group(1)
+    drive_api_url = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{drive_api_url.rstrip('/')}/files/{google_file_id}/blacklist-attempt",
+                headers={k: v for k, v in headers.items() if k.lower() == "authorization"},
+            )
+        if resp.status_code not in (200, 201, 404):
+            logger.warning(
+                "[BLACKLIST_NOTIFY] drive_api HTTP %d pour le fichier %s",
+                resp.status_code, google_file_id,
+            )
+        else:
+            result = resp.json()
+            if result.get("blacklisted"):
+                logger.warning(
+                    "[EXTRACTION_BLACKLISTED] Fichier %s blacklisté après %d tentatives (score < %d).",
+                    google_file_id, result.get("extraction_attempt_count", "?"), EXTRACTION_RELIABILITY_THRESHOLD,
+                )
+    except Exception as e:
+        logger.warning("[BLACKLIST_NOTIFY] Erreur best-effort lors de la notification drive_api : %s", e)
 
 
 async def process_cv_core(
@@ -203,6 +241,9 @@ async def process_cv_core(
             "embedding", "Génération des embeddings vectoriels", dur,
             f"{len(vector_data)} dimensions, Score Fiabilité: {extraction_reliability_score}%"
         )
+        # Notifier drive_api si le score est sous le seuil (best-effort, ne bloque pas)
+        if extraction_reliability_score is not None and extraction_reliability_score < EXTRACTION_RELIABILITY_THRESHOLD:
+            await _notify_blacklist_attempt(url, headers)
     except Exception as e:
         dur = int((time.monotonic() - t0) * 1000)
         _step_warn("embedding", "Génération des embeddings vectoriels", dur, f"Embedding échoué : {e}")

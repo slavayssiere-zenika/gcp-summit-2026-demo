@@ -15,15 +15,16 @@ os.environ['SECRET_KEY'] = 'testsecret'
 os.environ["CV_API_URL"] = "http://test-cv"
 
 
-
 # ── Overrides ──────────────────────────────────────────────────────────────────
 
 async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test-admin", "role": "admin"}
+
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_jwt] = override_verify_jwt
@@ -275,8 +276,10 @@ class TestBulkReanalyseEndpoints:
         sec_orig = app.dependency_overrides.pop(security, None)
         r = client.get("/bulk-reanalyse/status")
         assert r.status_code == 401
-        if jwt_orig: app.dependency_overrides[verify_jwt] = jwt_orig
-        if sec_orig: app.dependency_overrides[security] = sec_orig
+        if jwt_orig:
+            app.dependency_overrides[verify_jwt] = jwt_orig
+        if sec_orig:
+            app.dependency_overrides[security] = sec_orig
 
     def test_start_returns_202_when_idle(self, mocker):
         """POST /bulk-reanalyse/start doit retourner 202 si aucun job en cours."""
@@ -343,7 +346,7 @@ class TestBulkReanalyseEndpoints:
         mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.get_status",
                      new=AsyncMock(return_value=state))
         cancel_mock = mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.cancel_soft",
-                                  new=AsyncMock(return_value={"dest_uri": "gs://..."}))
+                                   new=AsyncMock(return_value={"dest_uri": "gs://..."}))
         mock_httpx = mocker.patch("src.cvs.routers.bulk_router.httpx.AsyncClient")
         ci = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = ci
@@ -425,7 +428,7 @@ class TestBulkReanalyseMcpTools:
         resp.raise_for_status = MagicMock()
         ci.post.return_value = resp
         mcp_auth_header_var.set("Bearer token")
-        result = await call_tool(name="cancel_bulk_cv_reanalyse", arguments={})
+        result = await call_tool(name="cancel_bulk_cv_reanalyse", arguments={})  # noqa: F841
         assert "/bulk-reanalyse/cancel" in str(ci.post.call_args)
 
     @pytest.mark.asyncio
@@ -436,7 +439,7 @@ class TestBulkReanalyseMcpTools:
         mock_httpx.return_value.__aenter__.return_value = ci
         ci.post.side_effect = Exception("Connection refused")
         mcp_auth_header_var.set("Bearer token")
-        result = await call_tool(name="cancel_bulk_cv_reanalyse", arguments={})
+        result = await call_tool(name="cancel_bulk_cv_reanalyse", arguments={})  # noqa: F841
         payload = json.loads(result[0].text)
         assert payload["success"] is False
         assert "Connection refused" in payload["error"]

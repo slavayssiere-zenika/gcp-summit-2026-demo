@@ -42,6 +42,7 @@
 3d26abbc6dad731f5e044190494cdc8062e9cc8a  ./frontend/src/views/InfraMap.vue
 3e26ef37457fcfbaa5d00c58337ac575fcab24fa  ./frontend/package.json
 3e6d67da50877ac51be055130b91267e97c11ba0  ./frontend/coverage/block-navigation.js
+41a45f1f50f8e6f23c2287a4b1773751a55fc046  ./frontend/vitest.log
 45a21bb52516240a835ae500752cb4500ecb1f1e  ./frontend/coverage/src/index.html
 48415ed1a9ff0b83041cefd8904d080d40149882  ./frontend/coverage/src/components/ui/BaseButton.vue.html
 4adaba38425cc2d2d11f638b64f1144ea21d110e  ./frontend/src/views/ExtractionQualityList.vue
@@ -94,7 +95,6 @@
 80bde06ae9bb857c4a0d6d3b0258f7fa850ac6f6  ./frontend/coverage/src/components/agent/FinopsBadge.vue.html
 826b5611ba0cc7754f207a21f3b098a607be81a0  ./frontend/coverage/coverage-final.json
 84470b29579f3a859a511d161fd3c1d61b823713  ./frontend/coverage/src/stores/chatStore.ts.html
-855c35446e7a0a0883c396b576a2dfc201044136  ./frontend/vitest.log
 8666fe21bbb1ad9c05e884485d1ddb11d24d34bd  ./frontend/coverage/src/views/Docs.vue.html
 877e79ca5a1d1b502c290e8ce41fcc170569608e  ./frontend/src/views/DataQuality.vue
 884b9218d2984dabee9b80ae611a628d456db80e  ./frontend/coverage/src/components/StarRating.vue.html

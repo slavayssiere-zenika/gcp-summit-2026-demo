@@ -11,15 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 # IMPORTANT: patcher history_routes.SECRET_KEY AVANT l'import de main
 import history_routes
-import pytest
 from fastapi.testclient import TestClient
 from main import app
 
-os.environ.setdefault("SECRET_KEY", "testsecret")
+os.environ.setdefault("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 
-history_routes.SECRET_KEY = "testsecret"
+history_routes.SECRET_KEY = "testsecret_must_be_32_characters_long_for_sha256"
 history_routes.ALGORITHM = "HS256"
 
 

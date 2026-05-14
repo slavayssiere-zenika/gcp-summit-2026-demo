@@ -2,7 +2,6 @@
 0232a48df5283008c9b550ebfa6fee2efb7b7ca4  ./missions_api/metrics.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 15ae69de38ed95bbbba87dafd7031b8b63ddcce9  ./missions_api/src/missions/models.py
-16a7764dda58548351dff2ec435fdd9e19d60af4  ./missions_api/mcp_server.py
 1711ff67eb98c8e0f51ba7d23b2f54da33d8f601  ./missions_api/exemples/E.txt
 2291786360a41d670ff4550106616f94513d5a94  ./missions_api/conftest.py
 26fdf39a22dab108a59f278c7855a665a48c3c0a  ./missions_api/tests/test_helpers.py
@@ -11,6 +10,7 @@
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 3c9518f82b1af6dd165ff91740cf52d18410295f  ./missions_api/logger.py
+3ca23b82dfc9e2b116a7cba900dddc19af0ae6bb  ./missions_api/mcp_app.py
 407e87b2530c4847aaa96ab9d4702b36f795860a  ./missions_api/cv_api.extract_cv_info.txt
 42e837d86d24ae1aca0af9b3b0b3151ae4808a99  ./missions_api/tests/test_mcp_app.py
 42f1237108195403d134fe941e9c558c91a78221  ./missions_api/cv_api.generate_taxonomy_tree.txt
@@ -27,6 +27,7 @@
 78eec5b5d8dfd79acfb3ceae4e9721ea356fc8bb  ./missions_api/my_pytest.log
 7ab1f2b30939f1a906fc4f659296130337d76355  ./missions_api/tests/test_security_upload.py
 85a0aae2034a2286aa61c1bc94e58ee3bb0e7e7f  ./missions_api/Dockerfile
+866fef442412ccf43b27526e25c4010860dc00f5  ./missions_api/mcp_server.py
 875c539efa57b1c50fa5138842ca71dc291fdb98  ./missions_api/staffing_heuristics.txt
 8954fb7ba83eb500c8d5fd5a6d0fc557286882dc  ./missions_api/src/missions/task_state.py
 8b069c2c1fde3083af9d31c39f6e1ae328fe999f  ./missions_api/tests/test_outbound_propagation.py
@@ -57,6 +58,5 @@ e3384e0cbb40145c2a05176d488fa18439fc4c93  ./missions_api/src/missions/crud_route
 ed8f40785c4218376ad0a89cba85782341ea835b  ./missions_api/src/missions/helpers.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f6092574453ec14c44c7839a2d40336585d8944f  ./missions_api/src/auth.py
-f73ed35c2d7d768f0e45ba6609d0a4bb8de91434  ./missions_api/mcp_app.py
 fa8e6ee48dcfde63fa4d361a4b5166cbe8eeef67  ./missions_api/database.py
 fba9136767eebfe583eb0c82ae2d38066c9cbcd4  ./missions_api/main.py

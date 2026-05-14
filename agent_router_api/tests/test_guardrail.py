@@ -75,7 +75,7 @@ async def test_prompt_injection_no_secret_leak(mocker, client):
 
     assert resp.status_code == 200
     body = resp.json()
-    assert "testsecret" not in body.get("response", "")
+    assert "testsecret_must_be_32_characters_long_for_sha256" not in body.get("response", "")
     assert "SECRET_KEY" not in body.get("response", "")
 
 

@@ -1,3 +1,110 @@
+## Mise à jour automatique - 2026-05-14 08:15:38
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1895  | 458  |  76% |
+| agent_hr_api     | 1547  | 222  |  86% |
+| agent_missions_api | 1380  | 252  |  82% |
+| agent_ops_api    | 1386  | 212  |  85% |
+| agent_router_api | 2628  | 464  |  82% |
+| analytics_mcp    | 1138  | 198  |  83% |
+| competencies_api | 4855  | 1168 |  76% |
+| cv_api           | 9417  | 1680 |  82% |
+| drive_api        | 3821  | 529  |  86% |
+| items_api        | 2320  | 239  |  90% |
+| missions_api     | 2275  | 311  |  86% |
+| monitoring_mcp   | 1377  | 175  |  87% |
+| platform-engineering | 1452  | 1177 |  19% |
+| prompts_api      | 1378  | 330  |  76% |
+| shared           | 149   | 10   |  93% |
+| tests            | 78    | 3    |  96% |
+| users_api        | 2220  | 419  |  81% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/agent.py` (M)
+- `agent_hr_api/conftest.py` (M)
+- `agent_hr_api/mcp_client.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_hr_api/tests/test_create_agent_jwt.py` (M)
+- `agent_hr_api/tests/test_history_routes.py` (M)
+- `agent_hr_api/tests/test_zero_trust.py` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/tests/test_create_agent_jwt.py` (M)
+- `agent_missions_api/tests/test_guardrail.py` (M)
+- `agent_missions_api/tests/test_runner_propagation.py` (M)
+- `agent_missions_api/tests/test_zero_trust.py` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/conftest.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/tests/test_create_agent_jwt.py` (M)
+- `agent_ops_api/tests/test_runner_propagation.py` (M)
+- `agent_ops_api/tests/test_zero_trust.py` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/conftest.py` (M)
+- `agent_router_api/spec.md` (M)
+- `agent_router_api/tests/conftest.py` (M)
+- `agent_router_api/tests/test_guardrail.py` (M)
+- `agent_router_api/tests/test_mcp.py` (M)
+- `agent_router_api/tests/test_zero_trust.py` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/analytics_router.py` (M)
+- `cv_api/src/services/cv_import_service.py` (M)
+- `cv_api/src/services/data_quality_service.py` (M)
+- `cv_api/tests/test_bulk_reanalyse.py` (M)
+- `cv_api/tests/test_data_quality_service.py` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/drive/changelog.yaml` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/discovery_service.py` (M)
+- `drive_api/src/models.py` (M)
+- `drive_api/src/routers/files_router.py` (M)
+- `drive_api/tests/integration/test_pubsub_integration.py` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/spec.md` (M)
+- `scripts/admin.py` (M)
+- `scripts/admin_helpers.py` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+
+---
+
 ## Mise à jour automatique - 2026-05-13 16:55:02
 
 ### Couverture de Code

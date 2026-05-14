@@ -1,11 +1,10 @@
-02be645a023cd41352460bdebcfdf2547640041a  ./items_api/tests/test_admin_router.py
 08c470b99663e4f14ad9b1d93f3447bbff451691  ./items_api/tools/items.py
 096210d5754be9dc1830273d4f073103b16b9f6d  ./items_api/src/items/routers/categories_router.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 13adc7a0923da043739d79bba831480ebb384623  ./items_api/tests/test_outbound_propagation.py
 24961439ba260f0848c22316a9973d7dc1f5551d  ./items_api/tests/test_integration.py
+24b585455337ec01f4d113eb2371bfa3c599948b  ./items_api/tests/test_admin_router.py
 2544844face66ab4e1c9fe75b31772115520b52d  ./items_api/src/items/schemas.py
-2d5b93e06577d0c372d4ed649a7baa69f3cfa4d7  ./items_api/mcp_server.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
 2fa142f8cf8f2c389e6d36e6a692bbc278746491  ./items_api/tests/test_search_router.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
@@ -24,8 +23,8 @@
 699a8d6a007837185ef34013d3c15e6d885762c5  ./items_api/src/items/models.py
 6d1aedb8aafc75b80208a4f07e08fc14a990b70b  ./items_api/cache.py
 7704f248da7786bd66d92ee8e6421b7ae776c4ac  ./items_api/requirements.txt
-77f0efdcf1b1a718f39a0e5b50923c0f331a0fd1  ./items_api/mcp_app.py
 78b0c2ba884eaf6c2851c10d9751130090a943f4  ./items_api/tests/test_crud_router_bulk.py
+7f70bd12fe2801bd66be17b775193ec3a37e7479  ./items_api/mcp_app.py
 88b207ba0236ad2cae23df2523d0dc60d6bb4ee7  ./items_api/tests/integration/conftest.py
 8df0d1b70fad4f57f316126b44c90fec188f69fd  ./shared/tests/__init__.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
@@ -36,6 +35,7 @@ a5cb30e3cc32d7fa90e7fae047bab7034ae464a7  ./items_api/logger.py
 a9068bdfc12053ceb9d6e7ff9fefab778cc83636  ./items_api/tests/test_crud_router_basic.py
 ac188d18c1e4338f8234cfbabd7052794efd3dc7  ./items_api/src/items/router.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
+b935899b0cdf6d2a9274b97a41633f31bc2f3b8d  ./items_api/mcp_server.py
 bd7d3f8d04978be66abf9a8189b94bf016d5a8de  ./items_api/tests/test_main.py
 c2e5dd3880c2ae491cd9006da9486eefc7fb3b9a  ./items_api/Dockerfile
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py

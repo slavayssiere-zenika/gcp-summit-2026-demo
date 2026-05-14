@@ -27,7 +27,6 @@
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9c39f85ba36682f1fe6897fbc2324f25854df0dd  ./users_api/tests/test_zero_trust.py
 9cc1c21eab14f8078966c755c2bfa3c929ba83d0  ./users_api/Dockerfile
-a96f22c7cd6a78da6f2fcee9252913fa598b3242  ./users_api/mcp_server.py
 b275958d3de27cb325f40bf7f479c1fc798a823c  ./users_api/tests/integration/test_pg_integration.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b9b8b4b30829e84a760b2f3a05673258cedd66f0  ./users_api/src/mcp_tools/tools_registry.py
@@ -45,6 +44,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/tests/integration/__init__
 e02109286f7bc1739bdd84a588505d6c7ba55556  ./users_api/tests/test_jwt.py
 e0befc8b965428f10216f5c58b82092a64505bf0  ./users_api/cache.py
 e1175990711b70be7e0701f484ad16cea440f1a0  ./users_api/database.py
-ef883b92488c6fc68337c16af84d8e88f21b783d  ./users_api/mcp_app.py
 f03c59f2f054261c17f04b8f31849d349985530c  ./users_api/src/mcp_tools/tools_handlers.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
+f4e6c40b198b4569d1726b017f6e6105836df1bc  ./users_api/mcp_app.py
+fe6408c1409e0f4ed01821f3d67947d4832bdb5e  ./users_api/mcp_server.py

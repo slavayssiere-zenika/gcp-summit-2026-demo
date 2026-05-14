@@ -15,6 +15,7 @@ class DriveSyncStatus(enum.Enum):
     OUT_OF_SCOPE = "OUT_OF_SCOPE"  # Fichier supprimé ou déplacé dans un dossier ignoré
     DELETED_OK = "DELETED_OK"      # Archivage validé par la cv_api
     ERROR = "ERROR"
+    EXTRACTION_BLACKLISTED = "EXTRACTION_BLACKLISTED"  # Score extraction < seuil après N tentatives
 
 
 class DriveFolder(Base):
@@ -50,3 +51,10 @@ class DriveSyncState(Base):
     processing_duration_ms = Column(Integer, nullable=True)  # Durée de traitement LLM mesurée par cv_api (ms)
     file_type = Column(String, nullable=True, default="google_doc")
     # Valeurs : "google_doc" (Google Docs natif) | "docx" (fichier Word .docx)
+    # ── Blacklist extraction — circuit-breaker qualité ────────────────────────
+    # Incrémenté par cv_api après chaque extraction avec score < EXTRACTION_RELIABILITY_THRESHOLD.
+    # Après EXTRACTION_MAX_ATTEMPTS (défaut: 3) tentatives, extraction_blacklisted=True.
+    # Levée automatique par discovery_service si revision_id change (nouveau fichier Drive).
+    extraction_attempt_count = Column(Integer, nullable=False, default=0)
+    extraction_blacklisted = Column(Boolean, nullable=False, default=False)
+    extraction_blacklisted_at = Column(DateTime(timezone=True), nullable=True)

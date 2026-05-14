@@ -60,8 +60,8 @@ def _seed_drive_state(postgres_container_drive, google_file_id: str, status: str
         ), {"fid": "folder-001", "tag": "zenika-paris", "name": "Test Consultant"})
         conn.execute(text(
             "INSERT INTO drive_sync_state "
-            "(google_file_id, folder_id, file_name, status, modified_time, retry_count) "
-            "VALUES (:gfid, 1, :fname, :status, NOW(), 0)"
+            "(google_file_id, folder_id, file_name, status, modified_time, retry_count, extraction_attempt_count, extraction_blacklisted) "
+            "VALUES (:gfid, 1, :fname, :status, NOW(), 0, 0, FALSE)"
         ), {"gfid": google_file_id, "fname": "cv_test.pdf", "status": status})
         conn.commit()
     engine.dispose()

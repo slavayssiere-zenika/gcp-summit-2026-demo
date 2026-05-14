@@ -25,10 +25,11 @@ PUBLIC_WHITELIST = {
     "/health/agents"
 }
 
+
 def test_all_routes_are_secured_by_jwt():
     """
     Test de sécurité systémique (Zero-Trust)
-    Vérifie par introspection stricte que toutes les routes exposées dans l'API 
+    Vérifie par introspection stricte que toutes les routes exposées dans l'API
     possèdent bien le paramètre `Depends(verify_jwt)`, à l'exception
     de la liste blanche stricte.
     Si une route est exposée publiquement sans authentification, le CI échouera.
@@ -36,7 +37,7 @@ def test_all_routes_are_secured_by_jwt():
     try:
         import os
         if "SECRET_KEY" not in os.environ:
-            os.environ["SECRET_KEY"] = "dummy-for-test"
+            os.environ["SECRET_KEY"] = "dummy-for-test_must_be_32_chars_for_sha256"
         from main import app
     except ImportError:
         # Tente l'import depuis un sous-dossier src.main ou autre si nécessaire
@@ -49,7 +50,7 @@ def test_all_routes_are_secured_by_jwt():
             path = getattr(route, "path", "")
             if path.startswith("/mcp") or path.startswith("//mcp"):
                 continue
-            
+
             # Vérification de la liste blanche
             is_public = False
             for w in PUBLIC_WHITELIST:
@@ -58,9 +59,9 @@ def test_all_routes_are_secured_by_jwt():
                     break
             if is_public:
                 continue
-            
+
             has_jwt = False
-            
+
             # Recherche de la dépendance JWT
             if route.dependencies:
                 for dep in route.dependencies:
@@ -68,7 +69,7 @@ def test_all_routes_are_secured_by_jwt():
                     if dep.dependency and hasattr(dep.dependency, "__name__") and "verify_jwt" in dep.dependency.__name__:
                         has_jwt = True
                         break
-            
+
             # Gestion des dépendances passées localement via paramètre _ : dict = Depends(verify_jwt)
             if not has_jwt:
                 for param in route.dependant.dependencies:

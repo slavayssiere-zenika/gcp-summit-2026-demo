@@ -12,7 +12,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 | `main.py` | 271 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 283 | ✅ |
+| `agent.py` | 285 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

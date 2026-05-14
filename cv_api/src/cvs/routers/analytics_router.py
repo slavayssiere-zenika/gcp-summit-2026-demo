@@ -139,8 +139,21 @@ async def get_extraction_scores(
                 CVProfile.current_role.ilike(f"%{search}%")
             )
 
-    # Calculate total
-    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
+    # Calculate total — count direct (subquery asyncpg incompatible)
+    if status == "uncalculated":
+        count_where = CVProfile.extraction_reliability_score.is_(None)
+    else:
+        count_where = CVProfile.extraction_reliability_score.isnot(None)
+    count_stmt = select(func.count(CVProfile.id)).where(count_where)
+    if search:
+        if search.isdigit():
+            count_stmt = count_stmt.where(CVProfile.user_id == int(search))
+        else:
+            count_stmt = count_stmt.where(
+                CVProfile.source_tag.ilike(f"%{search}%")
+                | CVProfile.current_role.ilike(f"%{search}%")
+            )
+    total = (await db.execute(count_stmt)).scalar_one() or 0
 
     if sort_desc:
         stmt = stmt.order_by(CVProfile.extraction_reliability_score.desc())

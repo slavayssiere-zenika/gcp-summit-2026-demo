@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Variables d'environnement minimales pour les tests
 os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_API_KEY", "test-key")
 os.environ["GEMINI_MODEL"] = os.environ.get("GEMINI_ROUTER_MODEL", "gemini-3.1-flash-lite-preview")
-os.environ["SECRET_KEY"] = "testsecret"  # Clé fixe — aligne make_jwt() avec verify_jwt() dans main.py
+os.environ["SECRET_KEY"] = "testsecret_must_be_32_characters_long_for_sha256"  # Clé fixe (≥32 chars) — aligne make_jwt() avec verify_jwt() dans main.py
 os.environ["REDIS_URL"] = os.environ.get("REDIS_URL", "redis://redis:6379/1")
 os.environ["SEMANTIC_CACHE_ENABLED"] = "true"
 os.environ["SEMANTIC_CACHE_THRESHOLD"] = "0.95"
@@ -30,6 +30,7 @@ os.environ["GEMINI_EMBEDDING_MODEL"] = os.environ.get("GEMINI_EMBEDDING_MODEL", 
 # ce qui corrompt l'état de l'app et provoque un 401 sur /query.
 # ---------------------------------------------------------------------------
 _fake_redis_client = fakeredis.FakeAsyncRedis(decode_responses=False)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_redis_for_semantic_cache():

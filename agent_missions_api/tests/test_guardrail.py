@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.dirname(__file__))
 
 
-os.environ["SECRET_KEY"] = os.getenv("SECRET_KEY", "testsecret")
+os.environ["SECRET_KEY"] = os.getenv("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
 SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 

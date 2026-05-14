@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 LONG_RUNNING_TOOLS = {
     "analyze_cv",
     "search_best_candidates",
+    "search_candidates_multi_criteria",  # N embeddings RETRIEVAL_QUERY + SQL pondéré
+    "match_mission_to_candidates",       # appel missions_api + cosine distance
+    "get_rag_snippet",                   # chunking distillé + re-ranking cosine
     "reanalyze_mission",
     "global_reanalyze_cvs",
     "recalculate_competencies_tree",

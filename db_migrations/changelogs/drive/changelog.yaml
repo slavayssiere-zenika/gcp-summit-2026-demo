@@ -353,3 +353,39 @@ databaseChangeLog:
         - dropColumn:
             tableName: "drive_sync_state"
             columnName: "retry_count"
+
+  - changeSet:
+      id: "16"
+      author: "antigravity"
+      comment: "Blacklist extraction CV — circuit-breaker côté drive_api. Après N re-analyses avec score < seuil, le fichier est blacklisté jusqu'à mise à jour par le consultant sur Drive."
+      changes:
+        - addColumn:
+            tableName: "drive_sync_state"
+            columns:
+              - column:
+                  name: "extraction_attempt_count"
+                  type: "integer"
+                  defaultValueNumeric: "0"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "extraction_blacklisted"
+                  type: "boolean"
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: "extraction_blacklisted_at"
+                  type: "timestamptz"
+                  constraints:
+                    nullable: true
+      rollback:
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "extraction_attempt_count"
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "extraction_blacklisted"
+        - dropColumn:
+            tableName: "drive_sync_state"
+            columnName: "extraction_blacklisted_at"

@@ -13,7 +13,7 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 | `mcp_server.py` | 407 | ⚠️ |
 | `conftest.py` | 71 | ✅ |
 | `src/routers/dlq_router.py` | 400 | ✅ |
-| `src/routers/files_router.py` | 421 | ✅ |
+| `src/routers/files_router.py` | 546 | ⚠️ |
 | `src/routers/folders_router.py` | 106 | ✅ |
 | `src/routers/ingestion_router.py` | 125 | ✅ |
 
@@ -45,6 +45,9 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 - `POST /dlq/replay`
 - `GET /status`
 - `GET /files`
+- `GET /files/blacklisted`
+- `POST /files/{google_file_id}/blacklist-attempt`
+- `DELETE /files/{google_file_id}/blacklist`
 - `GET /files/{google_file_id}`
 - `GET /consultant/search`
 - `POST /retry-errors`
@@ -57,9 +60,6 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 - `POST /folders/reset-sync`
 - `POST /folders/rebuild-tree`
 - `POST /folders/invalidate-cache`
-- `DELETE /folders/{folder_id}`
-- `GET /ingestion/stats`
-- `GET /ingestion/folder-kpis`
 
 ## MCP tools exposés
 - `add_drive_folder`, `delete_dlq_message`, `delete_drive_folder`, `get_dlq_status`, `get_drive_file_state`, `get_drive_status`, `get_folder_ingestion_kpis`, `get_ingestion_kpis`, `list_drive_files`, `list_drive_folders`, `replay_dlq`, `reset_drive_folder_sync`, `retry_drive_errors`, `run_quality_gate_batch`, `trigger_drive_sync`, `update_drive_file`

@@ -304,8 +304,8 @@ async def test_report_structure_complete():
 @pytest.mark.asyncio
 async def test_report_issues_populated_when_metrics_below_threshold():
     """Quand des métriques sont < 90%, des issues doivent être générées."""
-    db = _make_mock_db(total_cvs=10, missions_ok=3, embedding_ok=2,
-                       competencies_ok=1, summary_ok=4, current_role_ok=5)
+    db = _make_mock_db(total_cvs=100, missions_ok=30, embedding_ok=20,
+                       competencies_ok=10, summary_ok=40, current_role_ok=50)
 
     mock_hc = AsyncMock()
     mock_hc.__aenter__ = AsyncMock(return_value=mock_hc)
@@ -313,7 +313,7 @@ async def test_report_issues_populated_when_metrics_below_threshold():
 
     comp_resp = MagicMock()
     comp_resp.status_code = 200
-    comp_resp.json.return_value = {"users_with_competencies": 1, "total_users": 10}
+    comp_resp.json.return_value = {"users_with_competencies": 10, "total_users": 100}
 
     scoring_resp = MagicMock()
     scoring_resp.status_code = 200
@@ -333,8 +333,8 @@ async def test_report_issues_populated_when_metrics_below_threshold():
 @pytest.mark.asyncio
 async def test_report_no_issues_when_all_ok():
     """Toutes les métriques à 100% → aucune issue et recommendation positive."""
-    db = _make_mock_db(total_cvs=10, missions_ok=10, embedding_ok=10,
-                       competencies_ok=10, summary_ok=10, current_role_ok=10)
+    db = _make_mock_db(total_cvs=100, missions_ok=100, embedding_ok=100,
+                       competencies_ok=100, summary_ok=100, current_role_ok=100)
 
     mock_hc = AsyncMock()
     mock_hc.__aenter__ = AsyncMock(return_value=mock_hc)
@@ -342,11 +342,11 @@ async def test_report_no_issues_when_all_ok():
 
     comp_resp = MagicMock()
     comp_resp.status_code = 200
-    comp_resp.json.return_value = {"users_with_competencies": 10, "total_users": 10}
+    comp_resp.json.return_value = {"users_with_competencies": 100, "total_users": 100}
 
     scoring_resp = MagicMock()
     scoring_resp.status_code = 200
-    scoring_resp.json.return_value = {"users_with_min_scored": 10, "avg_scored_per_user": 15.0}
+    scoring_resp.json.return_value = {"users_with_min_scored": 100, "avg_scored_per_user": 15.0}
 
     mock_hc.get.side_effect = [comp_resp, scoring_resp]
 

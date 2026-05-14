@@ -5,7 +5,7 @@ vers le contexte asyncio interne (auth_header_var) dans le sous-agent.
 
 from agent_commons.mcp_client import auth_header_var
 from agent import run_agent_query
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 import pytest
 import os
 import sys
@@ -28,7 +28,9 @@ async def test_run_agent_query_sets_auth_header_var():
 
         # On mock create_agent pour bypasser prompts_api
         with patch("agent.create_agent", new_callable=AsyncMock) as mock_create_agent:
-            mock_create_agent.return_value.model = "test-model"
+            mock_agent = MagicMock()
+            mock_agent.model = "test-model"
+            mock_create_agent.return_value = mock_agent
 
             # On mock run_agent_and_collect pour inspecter l'état du contexte à l'instant T
             captured_auth = []

@@ -46,6 +46,8 @@ CANDIDATE_SEARCH_TOOLS: set[str] = {
     "find_similar_consultants",
     "search_candidates_multi_criteria",
     "match_mission_to_candidates",
+    # Sprint B — RAG snippet : résultat vide = profil sans contenu structuré → pas d'hallucination
+    "get_rag_snippet",
 }
 
 # ---------------------------------------------------------------------------

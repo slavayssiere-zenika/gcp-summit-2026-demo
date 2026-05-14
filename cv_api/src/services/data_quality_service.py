@@ -242,21 +242,26 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         "avg_scored_per_user": ai_scoring_avg,
     }
     # extraction_reliability : dénominateur = CVs avec score renseigné uniquement.
-    # Si aucun CV évalué (ex: post bulk-apply sans scoring), status=ok par défaut
-    # pour ne pas pénaliser un pipeline en cours d'exécution.
-    if extraction_denominator is None:
-        ext_pct = 100  # aucun CV évalué = pas d'erreur détectable
+    # Seuil minimal d'échantillon : < 50 CVs scorés = non représentatif
+    # (cas typique post-bulk-reanalyse Vertex où BUG4 fix remet tous les scores à NULL).
+    # Dans ce cas, la métrique est marquée N/A plutôt que de générer un faux warning.
+    MIN_EXTRACTION_SAMPLE = 50
+    if extraction_denominator is None or extraction_scored_count < MIN_EXTRACTION_SAMPLE:
+        ext_pct = 100  # non représentatif = pas d'alerte
         ext_status_override = "ok"
+        ext_na = True   # flag pour affichage N/A dans l'issue
     else:
         ext_pct = _pct(extraction_ok_count, extraction_denominator)
         ext_status_override = None  # calculé normalement
+        ext_na = False
     m_extraction_reliability = {
         "ok": extraction_ok_count,
-        "total": extraction_denominator or 0,  # affiche 0 si non évalué
+        "total": extraction_denominator or 0,  # 0 si non évalué
         "pct": ext_pct,
         "mean": mean_score,
         "median": median_score,
         "scored_count": extraction_scored_count,
+        "na": ext_na,  # True = échantillon insuffisant, metric non représentatif
     }
     m_processing_errors = {
         "ok": processing_errors_ok,
@@ -295,10 +300,13 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         grade = "D"
 
     # ── Gate bloquant — plafonnement à C si un maillon < 80% ─────────────────
-    # Un seul indicateur défaillant invalide le grade A ou B, indépendamment
-    # de la moyenne pondérée. Règle métier : le pipeline est aussi solide que
-    # son maillon le plus faible.
-    failing_metrics = [m for m in all_metrics if m["pct"] < _GATE_THRESHOLD]
+    # extraction_reliability est exclu du gate quand l'échantillon est insuffisant (ext_na=True)
+    # pour ne pas pénaliser un pipeline sain avec un indicateur non représentatif.
+    gate_metrics = [
+        m for m in all_metrics
+        if not (m is m_extraction_reliability and ext_na)
+    ]
+    failing_metrics = [m for m in gate_metrics if m["pct"] < _GATE_THRESHOLD]
     if failing_metrics and grade in ("A", "B"):
         grade = "C"
         score = min(score, 64)  # borne haute de la plage C
@@ -327,7 +335,15 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             f"{users_with_cv - ai_scoring_ok} consultant(s) n'ont pas atteint "
             f"{MIN_SCORED_COUNT} compétences scorées."
         )
-    if m_extraction_reliability["status"] != "ok" and extraction_denominator:
+    if ext_na:
+        # Échantillon insuffisant : metric non représentatif (CVs traités via Vertex Batch)
+        # On affiche une note informative sans bloquer le grade
+        issues.append(
+            f"Fiabilité d'extraction : seulement {extraction_scored_count} CV(s) avec score "
+            f"(seuil min={MIN_EXTRACTION_SAMPLE}). Metric non représentatif — "
+            "les CVs importés via Vertex Batch n'ont pas de score de fiabilité calculable."
+        )
+    elif m_extraction_reliability["status"] != "ok" and extraction_denominator:
         below_threshold = extraction_denominator - extraction_ok_count
         issues.append(
             f"Fiabilité d'extraction IA insuffisante : "

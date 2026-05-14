@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-os.environ.setdefault("SECRET_KEY", "testsecret")
+os.environ.setdefault("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
 os.environ.setdefault("GEMINI_OPS_MODEL", "gemini-stub")
 os.environ.setdefault("PROMPTS_API_URL", "http://prompts_api_test:8000")
 
