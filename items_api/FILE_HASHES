@@ -8,11 +8,11 @@
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
 2fa142f8cf8f2c389e6d36e6a692bbc278746491  ./items_api/tests/test_search_router.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
-34101f636306a3c05c342b815cb9d12200e2cbe7  ./items_api/main.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 37d90862dc99edff266b54b29bc1cca36e821256  ./items_api/tests/test_delete_user_items.py
 3833be4037e076845da36813b03dc463910b8b34  ./items_api/src/items/routers/search_router.py
 3dd3580285b2369bf99b112305d7e0b2706d5670  ./items_api/conftest.py
+427d12f97b47e778a657778e64dbfdc9ec396c31  ./items_api/main.py
 4ab0948ac29ad61a98cb7e06af91c2ce276917cf  ./items_api/pytest.ini
 4c3f8a025ca25f794df1e5da0d3da85d3a4ce589  ./items_api/src/auth.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
@@ -37,6 +37,7 @@ ac188d18c1e4338f8234cfbabd7052794efd3dc7  ./items_api/src/items/router.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b935899b0cdf6d2a9274b97a41633f31bc2f3b8d  ./items_api/mcp_server.py
 bd7d3f8d04978be66abf9a8189b94bf016d5a8de  ./items_api/tests/test_main.py
+beb1f94df51d1ca637bb60b738887bd5b3dec629  ./items_api/src/items/crud_router.py
 c2e5dd3880c2ae491cd9006da9486eefc7fb3b9a  ./items_api/Dockerfile
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./items_api/.dockerignore
@@ -46,7 +47,6 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./items_api/src/items/routers/__init__
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./items_api/tests/integration/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./items_api/tools/__init__.py
 db26155cfbd2e8d5e6710007d924fd5f77a52867  ./items_api/tools/categories.py
-e35e27efdd28d1eae8e34542f3f797846c3b6d8b  ./items_api/src/items/crud_router.py
 f00ebf95d6970709e3115cbef8ffeaf364855a2e  ./items_api/tests/test_contract.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 fe54f0bb45f86bc467f25c6091d0be6515dadc5e  ./items_api/scripts/cleanup_items.py

@@ -10,6 +10,10 @@ FRONTEND_BUCKET="z-gcp-summit-frontend"
 # Docker registry prefix
 DOCKER_REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY}"
 
+# Python Artifact Registry (zenika-shared-schemas wheels)
+PYTHON_REPO="zenika-python"
+PYTHON_REPO_URL="${REGION}-python.pkg.dev/${PROJECT_ID}/${PYTHON_REPO}"
+
 # Colors for Zenika Branding
 RED='\033[0;31m'
 GREY='\033[1;30m'
@@ -53,6 +57,7 @@ show_help() {
   echo "  Utilisez --skip-tests pour bypasser tous les tests (unitaires + intégration) en mode hotfix."
 
   echo "Note: Par défaut, seuls les services ayant changé depuis leur dernier build sont reconstruits."
+  echo "Note: Quand shared/ change, zenika-shared-schemas est automatiquement buildé, versionné et pushé sur Artifact Registry Python."
   echo "Note: sync_prompts est aussi exécuté automatiquement après tout déploiement."
   echo ""
   echo "Exemples:"
@@ -201,58 +206,260 @@ print_summary() {
 
   echo -e "${GREY}============================================================${RESET}\n"
 
-  # ── Génération du fichier prompt Antigravity ─────────────────────────────────────────
+  # ── Génération du fichier prompt Antigravity (enrichi) ──────────────────────
   local PROMPT_FILE="${LOG_DIR}/antigravity_prompt.md"
   local HAS_ERRORS=false
+
+  # Contexte git (non bloquant)
+  local GIT_BRANCH GIT_COMMIT GIT_MSG
+  GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  GIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "unknown")
+
+  # Durée totale du run
+  local RUN_DURATION=$(( SECONDS ))
+  local RUN_MIN=$(( RUN_DURATION / 60 ))
+  local RUN_SEC=$(( RUN_DURATION % 60 ))
+
   {
-    echo "# Rapport de déploiement — $(date '+%Y-%m-%d %H:%M')"
+    set +e  # Désactiver fail-fast dans le bloc rapport — les greps/diffs peuvent retourner 1
+    echo "# 🚀 Rapport de déploiement Antigravity — $(date '+%Y-%m-%d %H:%M')"
     echo ""
-    echo "**Contexte** : résultat de \`./scripts/deploy.sh\` sur le mono-repo Zenika."
-    echo "Voici les erreurs et warnings à analyser :"
+    echo "> **Instructions pour Antigravity** : Ce rapport est généré automatiquement après \`./scripts/deploy.sh\`."
+    echo "> Lis-le intégralement avant de proposer un diagnostic. Les sections sont ordonnées du plus important au moins important."
     echo ""
 
-    # 1. Logs de tests en échec
+    # ── Section 1 : Contexte opérationnel ──────────────────────────────────────
+    echo "## 📋 Contexte opérationnel"
+    echo ""
+    echo "| Champ | Valeur |"
+    echo "|---|---|"
+    echo "| **Date / heure** | $(date '+%Y-%m-%d %H:%M:%S %Z') |"
+    echo "| **Durée totale** | ${RUN_MIN}m ${RUN_SEC}s |"
+    echo "| **Branche git** | \`${GIT_BRANCH}\` |"
+    echo "| **Commit** | \`${GIT_COMMIT}\` — ${GIT_MSG} |"
+    echo "| **Répertoire logs** | \`${LOG_DIR}/\` |"
+    echo "| **Tests bypassés** | ${SKIP_TESTS} |"
+    echo "| **PROJECT_ID** | ${PROJECT_ID} |"
+    echo "| **REGION** | ${REGION} |"
+    echo ""
+
+    if [ "$SKIP_TESTS" = true ]; then
+      echo "> ⚠️ **ATTENTION — HOTFIX** : Les tests unitaires ont été bypassés via \`--skip-tests\`."
+      echo "> Les services déployés n'ont PAS été validés par les tests. Vérifier manuellement avant de clore le ticket."
+      echo ""
+    fi
+
+    # ── Section 2 : Résumé des services ────────────────────────────────────────
+    echo "## 🗂️ Résumé des services"
+    echo ""
+
+    if [ ${#DEPLOYS_SUCCESS[@]} -gt 0 ]; then
+      echo "### ✅ Déployés avec succès"
+      echo ""
+      echo "| Service | Version | Couverture |"
+      echo "|---|---|---|"
+      for svc in "${DEPLOYS_SUCCESS[@]}"; do
+        local svc_key ver cov
+        svc_key=$(echo "$svc" | awk '{print $1}')
+        ver="N/A"
+        [ -f "${svc_key}/VERSION" ] && ver=$(cat "${svc_key}/VERSION")
+        cov="${COVERAGE_RESULTS[$svc_key]:-N/A}"
+        echo "| \`${svc_key}\` | ${ver} | ${cov} |"
+      done
+      echo ""
+    fi
+
+    if [ ${#DEPLOYS_SKIPPED[@]} -gt 0 ]; then
+      echo "### ⏭️ Skippés (aucun changement détecté)"
+      echo ""
+      echo "| Service | Version actuelle |"
+      echo "|---|---|"
+      for svc in "${DEPLOYS_SKIPPED[@]}"; do
+        local svc_key ver
+        svc_key=$(echo "$svc" | awk '{print $1}')
+        ver="N/A"
+        [ -f "${svc_key}/VERSION" ] && ver=$(cat "${svc_key}/VERSION")
+        echo "| \`${svc_key}\` | ${ver} |"
+      done
+      echo ""
+      echo "> ℹ️ Les services skippés utilisent leur **version précédemment déployée**."
+      echo "> Ne pas diagnostiquer leurs comportements sur la base du code local si ce n'est pas la même version."
+      echo ""
+    fi
+
+    if [ ${#DEPLOYS_FAILED[@]} -gt 0 ]; then
+      echo "### ❌ Échecs"
+      echo ""
+      echo "| Service | Raison |"
+      echo "|---|---|"
+      for svc in "${DEPLOYS_FAILED[@]}"; do
+        echo "| \`${svc}\` | Voir section détaillée ci-dessous |"
+      done
+      echo ""
+    fi
+
+    # ── Section 3 : Détail des erreurs de tests ─────────────────────────────────
+    local found_any_test_error=false
     for f in "${LOG_DIR}"/*_tests.log; do
       [ -f "$f" ] || continue
       local svc_name
       svc_name=$(basename "$f" _tests.log)
-      # Extraire uniquement les lignes importantes (ERRORS, FAILED, ERROR, NameError...)
       local errors
-      errors=$(grep -E 'ERROR|FAILED|Error|Exception|NameError|ImportError|assert' "$f" \
-        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info' \
-        | head -30)
+      errors=$(grep -E 'ERROR|FAILED|Error|Exception|NameError|ImportError|assert|XFAIL' "$f" \
+        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info\|warnings.warn\|PytestUnraisable' \
+        | head -50)
       if [ -n "$errors" ]; then
         HAS_ERRORS=true
-        echo "## ❌ Tests : ${svc_name}"
-        echo '```'
+        found_any_test_error=true
+        echo "## ❌ Détail échec tests : \`${svc_name}\`"
+        echo ""
+        echo "### Lignes d'erreur filtrées"
+        echo '```text'
         echo "$errors"
         echo '```'
-        # Lignes de contexte : les 20 dernières lignes du log (résumé pytest)
-        echo "**Résumé (fin du log)** :"
+        echo ""
+        echo "### Résumé pytest (fin du log)"
+        echo '```text'
+        tail -30 "$f"
         echo '```'
-        tail -20 "$f"
-        echo '```'
+        echo ""
+        # Stack trace complet du premier FAILED (jusqu'à 60 lignes)
+        local first_failed_line
+        first_failed_line=$(grep -n "^FAILED\|^_ FAILED\|AssertionError\|raise " "$f" | head -1 | cut -d: -f1)
+        if [ -n "$first_failed_line" ]; then
+          local ctx_start=$(( first_failed_line > 20 ? first_failed_line - 20 : 1 ))
+          echo "### Stack trace (contexte autour de la première erreur)"
+          echo '```text'
+          sed -n "${ctx_start},$((first_failed_line + 40))p" "$f"
+          echo '```'
+          echo ""
+        fi
+        # Commandes MCP pour investiguer en production
+        local cr_name="${svc_name//_/-}-dev"
+        echo "### 🔍 Commandes MCP pour investiguer \`${svc_name}\`"
+        echo ""
+        echo "\`\`\`bash"
+        echo "# Logs Cloud Run récents du service"
+        echo "python3 scripts/mcp_cli.py errors --hours 2 --service ${cr_name}"
+        echo ""
+        echo "# Health check"
+        echo "python3 scripts/mcp_cli.py health"
+        echo ""
+        echo "# Logs complets du run local"
+        echo "cat ${LOG_DIR}/${svc_name}_tests.log | grep -A 20 'FAILED\|AssertionError'"
+        echo "\`\`\`"
+        echo ""
+        echo "---"
         echo ""
       fi
     done
 
-    if [ "$HAS_ERRORS" = false ]; then
-      echo "> ✅ Aucune erreur — tous les services ont passé les tests."
-    else
-      echo "---"
-      echo "> Logs complets disponibles dans : \`${LOG_DIR}/\`"
+    if [ "$found_any_test_error" = false ]; then
+      # Section 3 vide → indiquer succès
+      echo "## ✅ Tests"
+      echo ""
+      echo "Tous les services rebuilds ont passé leurs tests unitaires."
+      echo ""
     fi
-  } > "$PROMPT_FILE"
 
-  # Affichage du chemin (et contenu si erreurs)
+    # ── Section 4 : Table de couverture ────────────────────────────────────────
+    if [ ${#COVERAGE_RESULTS[@]} -gt 0 ]; then
+      echo "## 📊 Couverture de tests"
+      echo ""
+      echo "| Service | Couverture | État |"
+      echo "|---|---|---|"
+      for svc in "${!COVERAGE_RESULTS[@]}"; do
+        local cov="${COVERAGE_RESULTS[$svc]}"
+        local icon="📊"
+        local num
+        num=$(echo "$cov" | tr -d '%❌ SKIPPED NA/A ')
+        if [[ "$cov" == "SKIPPED" ]]; then icon="⏭️"
+        elif [[ "$cov" == "N/A" ]]; then icon="➖"
+        elif [[ "$num" =~ ^[0-9]+$ ]]; then
+          [ "$num" -ge 80 ] && icon="✅" || { [ "$num" -ge 50 ] && icon="⚠️" || icon="❌"; }
+        fi
+        echo "| \`${svc}\` | ${cov} | ${icon} |"
+      done
+      echo ""
+    fi
+
+    # ── Section 5 : Prochaines étapes recommandées ──────────────────────────────
+    echo "## 🎯 Prochaines étapes recommandées pour Antigravity"
+    echo ""
+    if [ "$HAS_ERRORS" = true ]; then
+      echo "1. **Identifier la cause racine** dans les stack traces de la section 3"
+      echo "2. **Chercher en mémoire** : \`mcp_antigravity-memory_search_past_errors(query=\"<service> <type d'erreur>\")\`"
+      echo "3. **Investiguer Cloud Run** si l'erreur est runtime : \`python3 scripts/mcp_cli.py errors --hours 2\`"
+      echo "4. **Proposer un fix** et lister les fichiers à modifier"
+      echo "5. **Mémoriser la solution** après correction : \`mcp_antigravity-memory_log_error_and_solution(...)\`"
+    else
+      echo "1. Le déploiement est un succès — vérifier les services en production si nécessaire"
+      echo "2. \`python3 scripts/mcp_cli.py health\` pour un health check global"
+      echo "3. Si une régression est observée en prod, lire les logs : \`python3 scripts/mcp_cli.py errors --hours 1\`"
+    fi
+    echo ""
+    echo "---"
+    echo "*Rapport généré par \`scripts/deploy.sh\` — $(date '+%Y-%m-%dT%H:%M:%SZ')*"
+  } > "$PROMPT_FILE"
+  set -e  # Réactiver fail-fast après la génération du rapport
+
+  # Affichage terminal
   if [ "$HAS_ERRORS" = true ]; then
-    echo -e "${RED}\n📋 Rapport d'erreurs généré — copiez-collez dans Antigravity :${RESET}"
+    echo -e "${RED}\n📋 Rapport Antigravity généré (avec erreurs) :${RESET}"
     echo -e "${GREY}   Fichier : ${PROMPT_FILE}${RESET}"
     echo -e "${GREY}   Commande : cat ${PROMPT_FILE}${RESET}\n"
-    cat "$PROMPT_FILE"
+    [ -f "$PROMPT_FILE" ] && cat "$PROMPT_FILE"
   else
-    echo -e "${GREEN}\n📝 Rapport généré (tout OK) : ${PROMPT_FILE}${RESET}"
+    echo -e "${GREEN}\n📝 Rapport Antigravity généré (tout OK) : ${PROMPT_FILE}${RESET}"
   fi
+  # ──────────────────────────────────────────────────────────────────────────────
+
+  # ── Génération de last_deploy.json (état courant lisible par Antigravity) ────
+  local LAST_DEPLOY_FILE="./deploy_logs/last_deploy.json"
+  local OVERALL_STATUS="success"
+  [ ${#DEPLOYS_FAILED[@]} -gt 0 ] && OVERALL_STATUS="failure"
+  [ "$HAS_ERRORS" = true ] && OVERALL_STATUS="failure"
+
+  # Sérialise les tableaux bash en JSON array (jq-free)
+  local success_json="["
+  for s in "${DEPLOYS_SUCCESS[@]}"; do
+    # Lire la version si disponible
+    local svc_key
+    svc_key=$(echo "$s" | awk '{print $1}')
+    local ver=""
+    [ -f "${svc_key}/VERSION" ] && ver=$(cat "${svc_key}/VERSION")
+    success_json+="\"${s} ${ver}\","
+  done
+  success_json="${success_json%,}]"
+
+  local failed_json="["
+  for s in "${DEPLOYS_FAILED[@]}"; do failed_json+="\"${s}\","; done
+  failed_json="${failed_json%,}]"
+
+  local skipped_json="["
+  for s in "${DEPLOYS_SKIPPED[@]}"; do
+    local svc_key
+    svc_key=$(echo "$s" | awk '{print $1}')
+    local ver=""
+    [ -f "${svc_key}/VERSION" ] && ver=$(cat "${svc_key}/VERSION")
+    skipped_json+="\"${s} ${ver}\","; done
+  skipped_json="${skipped_json%,}]"
+
+  cat > "$LAST_DEPLOY_FILE" <<JSON
+{
+  "timestamp": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "run_dir": "${LOG_DIR}",
+  "overall_status": "${OVERALL_STATUS}",
+  "skip_tests": ${SKIP_TESTS},
+  "deployed": ${success_json},
+  "failed": ${failed_json},
+  "skipped": ${skipped_json},
+  "antigravity_prompt": "${PROMPT_FILE}",
+  "how_to_read": "cat deploy_logs/last_deploy.json | python3 -m json.tool"
+}
+JSON
+  echo -e "${GREY}📊 État sauvegardé : ${LAST_DEPLOY_FILE}${RESET}"
   # ──────────────────────────────────────────────────────────────────────────────
 
   exit $exit_code
@@ -480,8 +687,9 @@ run_service_tests() {
   # Les agents ajoutent aussi agent_commons
   local PYTHONPATH_VAL=".:${SERVICE}"
   if [[ "$SERVICE" == "agent_"* ]]; then
-    PYTHONPATH_VAL=".:${SERVICE}:./agent_commons"
+    PYTHONPATH_VAL=".:${SERVICE}:./agent_commons:./agent_commons/agent_commons"
   fi
+
 
   # Fichier temporaire pour capturer la sortie pytest (nécessaire pour parser la couverture)
   # Enregistré dans _TMPFILES pour nettoyage garanti même en cas de SIGINT/SIGTERM (P0/R3)
@@ -641,8 +849,18 @@ build_and_push_standard() {
   local IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
 
   # Build pour Cloud Run (nécessite amd64) — contexte = racine du monorepo
-  # (même pattern que les agents) pour inclure shared/ dans le contexte
-  docker build --platform linux/amd64 \
+  # BuildKit requis pour --secret (token AR non visible dans docker history)
+  # Le token est éphémère (1h) et jamais persisté dans l'image
+  local AR_TOKEN
+  AR_TOKEN=$(gcloud auth print-access-token)
+  local AR_TOKEN_FILE
+  AR_TOKEN_FILE=$(mktemp)
+  _TMPFILES+=("$AR_TOKEN_FILE")
+  echo -n "$AR_TOKEN" > "$AR_TOKEN_FILE"
+
+  DOCKER_BUILDKIT=1 docker build --platform linux/amd64 \
+    --secret id=ar_token,src="$AR_TOKEN_FILE" \
+    --build-arg PYTHON_AR_REPO="${PYTHON_REPO_URL}" \
     -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" \
     -f "./${SERVICE}/Dockerfile" .
   
@@ -821,6 +1039,89 @@ build_and_upload_frontend() {
   fi
 }
 
+# ==============================================================================
+# Shared Library Build & Push (zenika-shared-schemas)
+# ==============================================================================
+
+build_and_push_shared_wheel() {
+  local BUMP=${1:-"patch"}
+
+  echo -e "\n${RED}=== Build & Push zenika-shared-schemas ===${RESET}"
+
+  # ── 1. Bump de version dans shared/VERSION ─────────────────────────────────
+  local VERSION_FILE="shared/VERSION"
+  if [ ! -f "$VERSION_FILE" ]; then
+    echo "v1.0.0" > "$VERSION_FILE"
+  fi
+  local CURRENT_VERSION
+  CURRENT_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+  # Strip leading 'v' for PEP 440
+  local SEMVER
+  SEMVER=$(echo "$CURRENT_VERSION" | sed 's/^v//')
+
+  if [[ $SEMVER =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    local MAJOR="${BASH_REMATCH[1]}"
+    local MINOR="${BASH_REMATCH[2]}"
+    local PATCH="${BASH_REMATCH[3]}"
+  else
+    local MAJOR=1; local MINOR=0; local PATCH=0
+  fi
+
+  case $BUMP in
+    major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+    minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+    patch) PATCH=$((PATCH + 1)) ;;
+  esac
+  local NEW_SEMVER="${MAJOR}.${MINOR}.${PATCH}"
+  echo "v${NEW_SEMVER}" > "$VERSION_FILE"
+  echo -e "${GREY}   Version: ${CURRENT_VERSION} → v${NEW_SEMVER}${RESET}"
+
+  # ── 2. Mettre à jour la version dans pyproject.toml ────────────────────────
+  local PYPROJECT="shared/pyproject.toml"
+  if [ ! -f "$PYPROJECT" ]; then
+    echo -e "${RED}❌ shared/pyproject.toml introuvable — annulation.${RESET}"
+    return 1
+  fi
+  # Remplacer la ligne version = "x.y.z" par la nouvelle version
+  sed -i.bak "s/^version = \".*\"/version = \"${NEW_SEMVER}\"/" "$PYPROJECT"
+  rm -f "${PYPROJECT}.bak"
+  echo -e "${GREY}   shared/pyproject.toml mis à jour (version = \"${NEW_SEMVER}\")${RESET}"
+
+  # ── 3. Build du wheel ──────────────────────────────────────────────────────
+  local WHEEL_DIST="shared/dist"
+  rm -rf "$WHEEL_DIST"
+  echo "--- Building wheel zenika-shared-schemas==${NEW_SEMVER} ---"
+  # Utilise le venv test_env qui contient 'build' (scripts/requirements.txt)
+  local PYTHON_BIN="./test_env/bin/python3"
+  if [ ! -f "$PYTHON_BIN" ]; then
+    PYTHON_BIN="python3"  # Fallback si le venv n'est pas inité
+  fi
+  "$PYTHON_BIN" -m build --wheel --outdir "$WHEEL_DIST" ./shared/ 2>&1 | tail -5
+  local WHEEL_FILE
+  WHEEL_FILE=$(ls "${WHEEL_DIST}"/*.whl 2>/dev/null | head -1)
+  if [ -z "$WHEEL_FILE" ]; then
+    echo -e "${RED}❌ Build wheel échoué — aucun .whl trouvé dans ${WHEEL_DIST}${RESET}"
+    return 1
+  fi
+  echo -e "${GREEN}✅ Wheel buildé : ${WHEEL_FILE}${RESET}"
+
+  # ── 4. Push vers Artifact Registry Python ─────────────────────────────────
+  echo "--- Pushing wheel vers Artifact Registry (${PYTHON_REPO_URL}) ---"
+  if "$PYTHON_BIN" -m twine upload \
+    --repository-url "https://${PYTHON_REPO_URL}/" \
+    --username "oauth2accesstoken" \
+    --password "$(gcloud auth print-access-token)" \
+    --non-interactive \
+    "$WHEEL_FILE" 2>&1; then
+
+    echo -e "${GREEN}✅ zenika-shared-schemas==${NEW_SEMVER} publié sur Artifact Registry${RESET}"
+  else
+    echo -e "${YELLOW}⚠️  Push Artifact Registry échoué (non bloquant — wheel local disponible pour les Dockerfiles)${RESET}"
+  fi
+
+  DEPLOYS_SUCCESS+=("shared (zenika-shared-schemas==${NEW_SEMVER})")
+}
+
 sync_system_prompts() {
   echo -e "
 ${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
@@ -916,11 +1217,11 @@ SHARED_CONSUMERS=("competencies_api" "cv_api" "missions_api" "users_api" \
 
 if check_shared_changed; then
   echo -e "${YELLOW}⚠️  shared/ a changé depuis le dernier build — expansion automatique vers tous les consumers${RESET}"
-  
+
   if [ -f "shared/FILE_HASHES" ] && [ -f "/tmp/current_shared_hashes" ]; then
     echo -e "${GREY}   Détails des changements dans shared/ :${RESET}"
     diff "shared/FILE_HASHES" "/tmp/current_shared_hashes" | grep -E '^[<>]' | sed 's/^< /   [-] (Ancien) /; s/^> /   [+] (Nouveau) /' | awk '{print $1, $2, $4}' || true
-    
+
     # Vérification stricte du contrat d'interface (shared/schemas/)
     if diff "shared/FILE_HASHES" "/tmp/current_shared_hashes" | grep -E '^[<>]' | grep -q 'shared/schemas/'; then
       echo -e "${YELLOW}🚨 Modification détectée dans shared/schemas/ (contrat d'interface) !${RESET}"
@@ -934,6 +1235,13 @@ if check_shared_changed; then
     echo -e "${GREY}   (Détails non disponibles ce coup-ci, initialisation du tracking...)${RESET}"
     echo ""
   fi
+
+  # ── Build & Push du wheel zenika-shared-schemas (version bumped) ──────────
+  # Doit se faire AVANT les Docker builds des consumers pour que le wheel
+  # local dans shared/dist/ soit disponible lors du COPY dans les Dockerfiles.
+  CURRENT_DEPLOYING_SERVICE="shared"
+  build_and_push_shared_wheel "$BUMP_TYPE"
+  CURRENT_DEPLOYING_SERVICE=""
 
   EXPANDED=false
   for consumer in "${SHARED_CONSUMERS[@]}"; do

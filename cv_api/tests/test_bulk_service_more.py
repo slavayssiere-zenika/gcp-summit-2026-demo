@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from src.services.bulk_service import _post_missions_bulk, bg_bulk_reanalyse
+from src.services.bulk_helpers import _post_missions_bulk
+from src.services.bulk_service import bg_bulk_reanalyse
 
 @pytest.mark.asyncio
 async def test_post_missions_bulk_success():
@@ -17,7 +18,7 @@ async def test_post_missions_bulk_success():
 async def test_post_missions_bulk_failures():
     mock_hc = AsyncMock()
     mock_hc.post.side_effect = Exception("post err")
-    with patch("src.services.bulk_service.logger") as mock_logger:
+    with patch("src.services.bulk_helpers.logger") as mock_logger:
         missions = [{"company": "Z"}]
         await _post_missions_bulk(mock_hc, 1, missions, {"Auth": "Bearer x"})
         mock_logger.warning.assert_called()

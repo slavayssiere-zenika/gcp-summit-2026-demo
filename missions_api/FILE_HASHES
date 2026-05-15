@@ -17,6 +17,7 @@
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f51a07770851ba1f12acd471e85c2d658449988  ./missions_api/exemples/C.txt
 53f4a08df650f2908ba2ac697f5cd0eb951c884b  ./missions_api/src/missions/analysis_service.py
+5769510d0602649621b9f61d43767a2d956d879f  ./missions_api/mcp_server.py
 59dfd4b5d0b3b1c161ea9ddfc331c09e45796bb3  ./missions_api/tests/test_jwt_propagation.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 642c9eb9dab4868632a6359aa7654a1007f9f31a  ./missions_api/src/gemini_retry.py
@@ -27,7 +28,6 @@
 78eec5b5d8dfd79acfb3ceae4e9721ea356fc8bb  ./missions_api/my_pytest.log
 7ab1f2b30939f1a906fc4f659296130337d76355  ./missions_api/tests/test_security_upload.py
 85a0aae2034a2286aa61c1bc94e58ee3bb0e7e7f  ./missions_api/Dockerfile
-866fef442412ccf43b27526e25c4010860dc00f5  ./missions_api/mcp_server.py
 875c539efa57b1c50fa5138842ca71dc291fdb98  ./missions_api/staffing_heuristics.txt
 8954fb7ba83eb500c8d5fd5a6d0fc557286882dc  ./missions_api/src/missions/task_state.py
 8b069c2c1fde3083af9d31c39f6e1ae328fe999f  ./missions_api/tests/test_outbound_propagation.py

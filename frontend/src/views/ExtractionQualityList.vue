@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import { ShieldCheck, Search, ChevronLeft, ChevronRight, RotateCw, Info } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
+
+const { t } = useI18n()
 
 const isLoading = ref(false)
 const error = ref('')
@@ -101,8 +104,8 @@ onMounted(() => {
 <template>
   <div class="admin-wrapper fade-in">
     <PageHeader
-      title="Qualité d'Extraction CV"
-      subtitle="Surveillez la fiabilité de l'extraction par IA et identifiez les CVs nécessitant une ré-importation."
+      :title="t('extractionquality.title')"
+      :subtitle="t('extractionquality.subtitle')"
       :icon="ShieldCheck"
       :breadcrumb="[
         { label: 'Admin Hub', to: '/admin' },
@@ -111,14 +114,14 @@ onMounted(() => {
     />
 
     <div class="error-panel fade-in-up" v-if="error">
-       <strong>Erreur :</strong> {{ error }}
+       <strong>{{ t('extractionquality.error_prefix') }}</strong> {{ error }}
     </div>
 
     <div class="glass-panel mt-4">
       <div class="info-panel mb-4">
         <Info size="18" class="info-icon" />
         <div class="info-text">
-          <strong>Comment est calculé ce score ?</strong><br/>
+          <strong>{{ t('extractionquality.score_help') }}</strong><br/>
           Il représente la similarité sémantique (Cosinus) entre le texte brut original du CV et les données structurées extraites par l'IA. 
           Un score élevé (≥ 75%) indique que l'IA a fidèlement capturé le contenu original sans perte d'information ni hallucination.
         </div>
@@ -147,7 +150,7 @@ onMounted(() => {
               type="text" 
               v-model="searchQuery" 
               @keyup.enter="triggerSearch" 
-              placeholder="Rechercher (nom, email, agence...)"
+              :placeholder="t('extractionquality.search_placeholder')"
               class="search-input"
             />
           </div>
@@ -167,9 +170,9 @@ onMounted(() => {
         <table class="candidate-table">
           <thead>
             <tr>
-              <th>ID Profil</th>
-              <th>Candidat</th>
-              <th>Agence / Rôle</th>
+              <th>{{ t('extractionquality.col_id') }}</th>
+              <th>{{ t('extractionquality.col_candidate') }}</th>
+              <th>{{ t('extractionquality.col_agency') }}</th>
               <th @click="currentTab === 'calculated' && toggleSort()" :style="{ cursor: currentTab === 'calculated' ? 'pointer' : 'default' }" title="Trier par score">
                 Score Fiabilité 
                 <template v-if="currentTab === 'calculated'">
@@ -180,7 +183,7 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-if="items.length === 0 && !isLoading">
-              <td colspan="4" class="empty-state-cell">Aucun résultat trouvé.</td>
+              <td colspan="4" class="empty-state-cell">{{ t('extractionquality.empty') }}</td>
             </tr>
             <template v-for="c in items" :key="c.id">
               <tr>
@@ -209,7 +212,7 @@ onMounted(() => {
                     </div>
                     <button class="action-btn-secondary btn-sm" @click="triggerReanalyze(c.user_id)" :disabled="reanalyzingId === c.user_id">
                       <RotateCw v-if="reanalyzingId === c.user_id" class="spin" size="14" />
-                      <span v-else>Ré-importer</span>
+                      <span v-else>{{ t('extractionquality.reimport') }}</span>
                     </button>
                   </div>
                 </td>

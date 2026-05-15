@@ -1,5 +1,6 @@
 0137811c86d01d785f0898c12de1f57bf06e02af  ./prompts_api/main.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
+0cefb81184ec86526fb358903d51b6ab8f3b89df  ./prompts_api/mcp_server.py
 11d9dd55d4028a827c19926ac396c47fea1c79a6  ./prompts_api/requirements.txt
 120b80e4168f8f05a6d2c128c1ee0f1869f2534a  ./prompts_api/src/prompts/schemas.py
 1a3e041a74f3d8ac8466cf5d7eb4ac35514c00af  ./prompts_api/Dockerfile
@@ -16,7 +17,6 @@
 4a3aa05197ef67f63fadd99a89666c037bf1711b  ./prompts_api/src/prompts/analyzer.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f88cf4e292a6a55d3b9c4b57d317fc1617c53e0  ./prompts_api/src/prompts/router.py
-587211cadb31cc48be3586624d6f37bf6fdf90e1  ./prompts_api/mcp_server.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 642c9eb9dab4868632a6359aa7654a1007f9f31a  ./prompts_api/src/gemini_retry.py
 8df0d1b70fad4f57f316126b44c90fec188f69fd  ./shared/tests/__init__.py

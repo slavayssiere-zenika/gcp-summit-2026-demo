@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge, Search, Wand2, ShieldCheck } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
+
+const { t } = useI18n()
 
 const isLoading = ref(false)
 const error = ref('')
@@ -308,12 +311,12 @@ onMounted(() => {
   <div class="admin-wrapper fade-in">
 
     <PageHeader
-      title="Déduplication des Profils"
-      subtitle="Fusionnez les comptes dupliqués pour garantir la cohérence des données et des vecteurs RAG."
+      :title="t('admin_dedup.title')"
+      :subtitle="t('admin_dedup.subtitle')"
       :icon="GitMerge"
       :breadcrumb="[
         { label: 'Hub RH', to: '/admin/availability' },
-        { label: 'Déduplication Profils' }
+        { label: t('admin_dedup.title') }
       ]"
     />
 
@@ -321,12 +324,12 @@ onMounted(() => {
     <div class="success-panel fade-in-up" v-if="successResponse">
        <CheckCircle2 size="24" />
        <div>
-         <strong>Opération réussie :</strong> {{ successResponse }}
+         <strong>{{ t('admin_dedup.success_prefix') }}</strong> {{ successResponse }}
        </div>
     </div>
     
     <div class="error-panel fade-in-up" v-if="error">
-       <strong>Erreur :</strong> {{ error }}
+       <strong>{{ t('admin_dedup.error_prefix') }}</strong> {{ error }}
     </div>
 
     <div class="tabs-container">
@@ -352,11 +355,11 @@ onMounted(() => {
 
       <div v-if="duplicates.length === 0 && !isLoading" class="empty-state">
         <CheckCircle2 size="48" color="#10b981" />
-        <p>Aucun doublon potentiel actif trouvé dans la base.</p>
+        <p>{{ t('admin_dedup.no_duplicate') }}</p>
       </div>
 
       <div v-for="(candidate, index) in duplicates" :key="index" class="duplicate-card">
-        <h4 class="dup-title">Candidat trouvés</h4>
+        <h4 class="dup-title">{{ t('admin_dedup.candidates_title') }}</h4>
         <div class="users-grid">
            <div v-for="user in candidate.users" :key="user.id" class="user-item">
               <div class="user-info">
@@ -370,18 +373,18 @@ onMounted(() => {
         
         <div class="merge-controls">
            <div class="control-group">
-              <label>Compte à SUPPRIMER (Source) :</label>
-              <select v-model="candidate.source_id" class="form-select">
-                <option :value="null">-- Choisir --</option>
+               <label>{{ t('admin_dedup.label_source') }}</label>
+               <select v-model="candidate.source_id" class="form-select">
+                 <option :value="null">{{ t('admin_dedup.choose') }}</option>
                 <option v-for="user in candidate.users" :key="'s'+user.id" :value="user.id">
                    {{ user.email }} (ID: {{ user.id }})
                 </option>
               </select>
            </div>
            <div class="control-group">
-              <label>Compte MAÎTRE (Cible) :</label>
-              <select v-model="candidate.target_id" class="form-select">
-                <option :value="null">-- Choisir --</option>
+               <label>{{ t('admin_dedup.label_target') }}</label>
+               <select v-model="candidate.target_id" class="form-select">
+                 <option :value="null">{{ t('admin_dedup.choose') }}</option>
                 <option v-for="user in candidate.users" :key="'t'+user.id" :value="user.id">
                    {{ user.email }} (ID: {{ user.id }})
                 </option>
@@ -407,7 +410,7 @@ onMounted(() => {
 
       <div v-if="anonymousUsers.length === 0 && !isLoadingAnon" class="empty-state">
         <CheckCircle2 size="48" color="#10b981" />
-        <p>Aucun profil anonyme actif trouvé dans la base.</p>
+        <p>{{ t('admin_dedup.no_anon') }}</p>
       </div>
 
       <div v-for="user in anonymousUsers" :key="user.id" class="duplicate-card">
@@ -434,7 +437,7 @@ onMounted(() => {
                 <div class="control-group" style="flex: 2;">
                    <label>1. Chercher un vrai profil existant (Cible) :</label>
                    <div style="display: flex; gap: 10px;">
-                     <input type="text" v-model="anonMergeSearchQuery" placeholder="Nom, email..." class="form-select" @keyup.enter="searchAnonMergeUsers" style="flex:1;">
+                     <input type="text" v-model="anonMergeSearchQuery" :placeholder="t('admin_dedup.anon_search_placeholder')" class="form-select" @keyup.enter="searchAnonMergeUsers" style="flex:1;">
                      <button @click="searchAnonMergeUsers" class="action-btn-secondary" :disabled="isSearchingAnonMerge">
                        <Search size="16" />
                      </button>
@@ -461,9 +464,9 @@ onMounted(() => {
             <div class="control-group">
                <label>Ou transformer ce profil anonyme en nouveau collaborateur complet :</label>
                <div style="display: flex; gap: 10px; align-items: flex-end;">
-                 <div style="flex:1;"><input type="text" v-model="createAnonForm.first_name" placeholder="Prénom" class="form-select" style="width:100%;"></div>
-                 <div style="flex:1;"><input type="text" v-model="createAnonForm.last_name" placeholder="Nom" class="form-select" style="width:100%;"></div>
-                 <div style="flex:1;"><input type="email" v-model="createAnonForm.email" placeholder="Email Zenika" class="form-select" style="width:100%;"></div>
+                  <div style="flex:1;"><input type="text" v-model="createAnonForm.first_name" :placeholder="t('admin_dedup.placeholder_firstname')" class="form-select" style="width:100%;"></div>
+                  <div style="flex:1;"><input type="text" v-model="createAnonForm.last_name" :placeholder="t('admin_dedup.placeholder_lastname')" class="form-select" style="width:100%;"></div>
+                  <div style="flex:1;"><input type="email" v-model="createAnonForm.email" :placeholder="t('admin_dedup.placeholder_email')" class="form-select" style="width:100%;"></div>
                  <button @click="transformAnonToUser(user.id)" class="action-btn validate-btn" 
                          :disabled="!createAnonForm.first_name || !createAnonForm.last_name || !createAnonForm.email || isLoading">
                     Créer Profil
@@ -477,7 +480,7 @@ onMounted(() => {
     <!-- ── Remédiation Auto ──────────────────────────────────────────────────── -->
     <div v-if="activeTab === 'remediation'" class="glass-panel mt-4">
       <div class="panel-header d-flex-between">
-        <h3><Wand2 size="18" style="display:inline;vertical-align:middle;margin-right:8px" /> Remédiation Automatique des Faux-Anonymes</h3>
+        <h3><Wand2 size="18" style="display:inline;vertical-align:middle;margin-right:8px" /> {{ t('admin_dedup.remediation_title') }}</h3>
       </div>
 
       <div class="remediation-explainer">
@@ -494,8 +497,8 @@ onMounted(() => {
       <div class="remediation-step">
         <div class="step-badge">1</div>
         <div class="step-body">
-          <div class="step-title">Analyser (dry-run)</div>
-          <div class="step-desc">Identifie les profils à corriger sans modifier la base.</div>
+          <div class="step-title">{{ t('admin_dedup.step_analyze') }}</div>
+          <div class="step-desc">{{ t('admin_dedup.step_analyze_desc') }}</div>
           <button
             class="action-btn validate-btn"
             @click="runDryRun"
@@ -512,7 +515,7 @@ onMounted(() => {
       <div v-if="remediationCount !== null" class="remediation-result">
         <div v-if="remediationCount === 0" class="result-ok">
           <CheckCircle2 size="20" />
-          <span>Aucun faux-anonyme détecté — la base est propre ✅</span>
+          <span>{{ t('admin_dedup.no_false_anon') }}</span>
         </div>
         <div v-else>
           <div class="result-warning">
@@ -524,9 +527,9 @@ onMounted(() => {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Email</th>
-                  <th>Nom complet</th>
-                  <th>Action</th>
+                   <th>{{ t('admin_dedup.col_email') }}</th>
+                   <th>{{ t('admin_dedup.col_fullname') }}</th>
+                   <th>{{ t('admin_dedup.col_action') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -558,7 +561,7 @@ onMounted(() => {
                             <div class="control-group" style="flex: 2;">
                                <label>1. Chercher un profil maître (Cible) :</label>
                                <div style="display: flex; gap: 10px;">
-                                 <input type="text" v-model="remediationMergeSearchQuery" placeholder="Nom, email..." class="form-select" @keyup.enter="searchRemediationMergeUsers" style="flex:1;">
+                                  <input type="text" v-model="remediationMergeSearchQuery" :placeholder="t('admin_dedup.anon_search_placeholder')" class="form-select" @keyup.enter="searchRemediationMergeUsers" style="flex:1;">
                                  <button @click="searchRemediationMergeUsers" class="action-btn-secondary" :disabled="isSearchingRemediationMerge">
                                    <Search size="16" />
                                  </button>
@@ -567,7 +570,7 @@ onMounted(() => {
                             <div class="control-group" v-if="remediationMergeSearchResults.length > 0" style="flex: 2;">
                                <label>2. Sélectionner le profil maître :</label>
                                <select v-model="selectedRemediationMergeTarget" class="form-select">
-                                 <option :value="null">-- Choisir --</option>
+                                  <option :value="null">{{ t('admin_dedup.choose') }}</option>
                                  <option v-for="res in remediationMergeSearchResults" :key="res.id" :value="res.id">
                                     {{ res.full_name }} ({{ res.email }})
                                  </option>
@@ -594,8 +597,8 @@ onMounted(() => {
           <div class="remediation-step" style="margin-top:1.5rem">
             <div class="step-badge step-badge-red">2</div>
             <div class="step-body">
-              <div class="step-title">Corriger (apply)</div>
-              <div class="step-desc">Lance la correction en arrière-plan (Cloud Run). Consultez les logs pour le suivi.</div>
+              <div class="step-title">{{ t('admin_dedup.step_apply') }}</div>
+              <div class="step-desc">{{ t('admin_dedup.step_apply_desc') }}</div>
               <button
                 class="action-btn validate-btn"
                 @click="runApply"

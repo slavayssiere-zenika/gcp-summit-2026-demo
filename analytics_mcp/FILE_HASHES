@@ -14,12 +14,12 @@
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 78f228cf4dc20543a6ef89d5fef06c68daf959ab  ./analytics_mcp/tests/test_jwt_user_email.py
 80afaba6449526da6bc5ed1da24da1801740c8f4  ./analytics_mcp/tools/rag_quality_tools.py
-8d725afd7b867336f0ca2bc5b84b11fe6cb3cc2e  ./analytics_mcp/conftest.py
 8df0d1b70fad4f57f316126b44c90fec188f69fd  ./shared/tests/__init__.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9c39f85ba36682f1fe6897fbc2324f25854df0dd  ./analytics_mcp/tests/test_zero_trust.py
 ab5bae458d88ea96b4c2cec0b7a137bf4bd9b4b8  ./analytics_mcp/tests/test_main.py
 b19d98c22a8fa7288d43acf5ce8dbfc5a9f788f4  ./analytics_mcp/tests/test_mcp_app.py
+b3be2896adbc76b6d045c9f6e531dbbae271d561  ./analytics_mcp/conftest.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b3f059e80139f4acebb93563a98c3b5b9bc36371  ./analytics_mcp/tests/test_mcp_server_extra.py
 b9895e850ee103d306f0c9cf4581ee1ac7a78413  ./analytics_mcp/auth.py

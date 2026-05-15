@@ -20,6 +20,7 @@ import httpx  # noqa: F401,F811 — re-exported so tests can patch "agent.httpx.
 from a2a_tools import (  # noqa: F401 — backward-compat re-exports for test patching
     ROUTER_TOOLS, A2aRequestInterceptor, A2ASubAgentError, _call_sub_agent,
     ask_hr_agent, ask_missions_agent, ask_ops_agent, a2a_metadata_var)
+from agent_commons.schemas import AgentQueryResponse, AgentStep, TokenUsage
 from google.adk.agents import Agent
 from google.genai import types
 from mcp_client import auth_header_var, user_id_var
@@ -97,7 +98,7 @@ async def _fetch_prompt_cached(cache_key: str, url: str, headers: dict) -> str |
     return None
 
 
-async def create_agent(session_id: str | None = None):
+async def create_agent(session_id: str | None = None, preferred_language: str = "fr"):
     """Construit l'Agent ADK Router avec le prompt système récupéré depuis prompts_api.
 
     Le system prompt global et le prompt utilisateur sont mis en cache in-process
@@ -142,7 +143,17 @@ async def create_agent(session_id: str | None = None):
                     "------------------------------------------------------------"
                 )
 
-    # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
+    # ── Directive de langue (basée sur la préférence interface utilisateur) ────
+    LANGUAGE_DIRECTIVES: dict[str, str] = {
+        "fr": "Réponds TOUJOURS en français, quelle que soit la langue de la demande.",
+        "en": "Always respond in English, regardless of the language of the request.",
+    }
+    lang_directive = LANGUAGE_DIRECTIVES.get(
+        preferred_language[:2].lower(),
+        LANGUAGE_DIRECTIVES["fr"],
+    )
+    instruction_text = f"{lang_directive}\n\n{instruction_text}"
+
     model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"))
 
     return Agent(
@@ -167,6 +178,7 @@ async def run_agent_query(
     session_id: str | None = None,
     auth_token: str | None = None,
     user_id: str = "unknown@zenika.com",
+    preferred_language: str = "fr",
 ) -> dict:
     """Exécute une requête via le Runner ADK et retourne un dict structuré.
 
@@ -189,7 +201,7 @@ async def run_agent_query(
     session_id = session_id or str(uuid.uuid4())
     session_service = get_session_service()
 
-    agent = await create_agent(session_id)
+    agent = await create_agent(session_id, preferred_language=preferred_language)
     runner = Runner(app_name="zenika_assistant", agent=agent, session_service=session_service)
 
     try:
@@ -444,19 +456,19 @@ async def run_agent_query(
         except Exception as e:
             logger.warning(f"[FinOps] Failed to schedule BQ logging task (non-critical): {e}")
 
-    return {
-        "response": "".join(response_parts),
-        "thoughts": "\n".join(thoughts),
-        "data": last_tool_data,
-        "display_type": sub_agent_display_type,  # Hint UI propagé depuis render_ui_widgets sous-agent
-        "steps": steps,
-        "source": "adk_agent",
-        "session_id": session_id,
-        "usage": {
-            "total_input_tokens": total_input_tokens,
-            "total_output_tokens": total_output_tokens,
-            "estimated_cost_usd": round(
+    return AgentQueryResponse(
+        response="".join(response_parts),
+        thoughts="\n".join(thoughts),
+        data=last_tool_data,
+        display_type=sub_agent_display_type,
+        steps=steps,
+        source="adk_agent",
+        session_id=session_id,
+        usage=TokenUsage(
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
+            estimated_cost_usd=round(
                 total_input_tokens * 0.000000075 + total_output_tokens * 0.0000003, 6
             ),
-        },
-    }
+        ),
+    ).model_dump(exclude_none=False)

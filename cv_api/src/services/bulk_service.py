@@ -26,7 +26,6 @@ from src.services.config import (BATCH_GCS_BUCKET,
                                  BULK_APPLY_SEMAPHORE, BULK_EMBED_SEMAPHORE,
                                  BULK_SCALE_MIN_INSTANCES,
                                  COMPETENCIES_API_URL, ITEMS_API_URL,
-                                 ITEMS_DELETE_SEMAPHORE,
                                  client,
                                  vertex_batch_client)
 from src.services.finops import log_finops
@@ -36,21 +35,17 @@ from src.services.bulk_helpers import (  # noqa: F401 — ré-exportation pour r
 )
 from src.services.retry_service import bg_retry_apply  # noqa: F401
 from src.services.search_service import scale_bulk_dependencies
+from src.services.semaphores import _items_delete_sem  # noqa: F401 — partagé avec retry_service
 from src.services.utils import (_CV_RESPONSE_SCHEMA, _build_distilled_content,
                                 _clean_llm_json, _coerce_to_str,
                                 build_taxonomy_context)
 
 logger = logging.getLogger(__name__)
 
-# Sémaphore global de concurrence pour les DELETE /user/{id}/items vers items-api.
-# Partagé entre bg_bulk_reanalyse et bg_retry_apply pour éviter la saturation
-# du pool AlloyDB de items-api-prd pendant les phases apply en parallèle.
-# Valeur : ITEMS_DELETE_SEMAPHORE (défaut 2 — override via env var).
-_items_delete_sem: asyncio.Semaphore = asyncio.Semaphore(ITEMS_DELETE_SEMAPHORE)
-
 
 async def bg_bulk_reanalyse(service_token: str, cv_ids_filter: list[int] | None = None):
     headers = {"Authorization": f"Bearer {service_token}"}
+
     inject(headers)
 
     try:

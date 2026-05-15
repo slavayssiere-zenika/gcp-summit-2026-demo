@@ -20,3 +20,6 @@ python-jose[cryptography]>=3.3.0
 google-cloud-logging>=3.8.0
 python-json-logger>=2.0.7
 tenacity>=8.0.0,<10.0.0
+
+# Shared Pydantic schemas — inter-service contracts (wheel local, buildé par deploy.sh)
+zenika-shared-schemas>=1.0.0

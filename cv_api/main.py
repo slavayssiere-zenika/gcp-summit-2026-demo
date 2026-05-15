@@ -24,6 +24,7 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
 from shared.middlewares import ContentLengthSanitizerASGIMiddleware
+from shared.schemas.auth import TokenResponse
 from src.auth import verify_jwt
 from src.cvs.router import public_router, router
 
@@ -110,7 +111,6 @@ app.include_router(router)
 @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 @app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
-    import httpx
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://cv_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
@@ -142,11 +142,7 @@ app.include_router(protected_router)
 
 
 async def get_service_token_fallback() -> str:
-    import logging
-    import os
-
-    import httpx
-    logging.getLogger(__name__)
+    logger_local = logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token
@@ -162,13 +158,15 @@ async def get_service_token_fallback() -> str:
             )
             if res_meta.status_code == 200:
                 id_token = res_meta.text
-                res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
+                res = await client.post(
+                    f"{users_api_url}/auth/service-account/login", json={"id_token": id_token}
+                )
                 if res.status_code == 200:
-                    from shared.schemas.auth import TokenResponse
                     data = TokenResponse.model_validate(res.json())
                     return data.access_token
     except Exception:
         raise
+    logger_local.debug("[get_service_token_fallback] Aucun token disponible.")
     return ""
 
 

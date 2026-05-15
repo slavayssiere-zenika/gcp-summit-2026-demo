@@ -22,3 +22,6 @@ python-json-logger>=2.0.7
 opentelemetry-exporter-otlp
 google-cloud-logging>=3.8.0
 google-cloud-run>=0.10.0
+
+# Shared Pydantic schemas — inter-service contracts (wheel local, buildé par deploy.sh)
+zenika-shared-schemas>=1.0.0

@@ -92,7 +92,7 @@ async def test_auth_header_var_set_before_run_agent(mocker, client):
 
     captured_header: list = []
 
-    async def capture_run_agent_query(query, session_id, auth_token=None, user_id=None):
+    async def capture_run_agent_query(query, session_id, auth_token=None, user_id=None, **kwargs):
         captured_header.append(auth_token)
         return {"response": "OK", "source": "agent_hr", "data": None, "steps": [], "thoughts": ""}
 
@@ -117,7 +117,7 @@ async def test_different_users_have_different_sessions(mocker, client):
 
     captured_sessions: list = []
 
-    async def capture_sessions(query, session_id, auth_token=None, user_id=None):
+    async def capture_sessions(query, session_id, auth_token=None, user_id=None, **kwargs):
         captured_sessions.append(session_id)
         return {"response": "OK", "source": "agent_hr", "data": None, "steps": [], "thoughts": ""}
 

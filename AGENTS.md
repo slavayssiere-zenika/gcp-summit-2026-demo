@@ -1075,3 +1075,84 @@ SELECT * FROM t WHERE (CAST(:model AS text) IS NULL OR col = CAST(:model AS text
 - [ ] Mix SQLAlchemy ORM + `sa_text()` dans un `where()` évité — utiliser `sa_text()` pur ou ORM pur
 
 > **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu écris une requête `text("""...""")` contenant `::type` ou un paramètre nullable sans cast, tu **DOIS immédiatement corriger** avant de livrer. Ces erreurs passent à la revue de code mais crashent en production (asyncpg mode prepared statement).
+
+---
+
+## 📋 19. LECTURE OBLIGATOIRE DES LOGS DE DÉPLOIEMENT (RÈGLE OBLIGATOIRE)
+
+> **RÈGLE ABSOLUE** : Avant tout diagnostic de bug post-déploiement, l'agent DOIT lire l'état du dernier run de `deploy.sh` et/ou `manage_env.py`.
+
+### Pourquoi c'est critique
+
+Sans lire l'état du déploiement précédent, l'agent travaille potentiellement sur une version de code qui n'a **pas encore été déployée**, ou diagnostique une erreur qui vient d'un **service non rebuilt**.
+
+### Fichiers à lire en priorité (lecture directe, sans effort)
+
+| Fichier | Quand lire | Commande |
+|---|---|---|
+| `deploy_logs/last_deploy.json` | Avant tout debug post-deploy | `cat deploy_logs/last_deploy.json \| python3 -m json.tool` |
+| `deploy_logs/last_deploy.json` → `antigravity_prompt` | Si `overall_status = failure` | `cat <chemin du prompt>` |
+| `deploy_logs/manage_env_<ts>.log` (plus récent) | Avant tout debug post-manage_env | `ls -t deploy_logs/manage_env_*.log \| head -1 \| xargs tail -50` |
+| `platform-engineering/antigravity_sanity_error.md` | Si le fichier existe | `cat platform-engineering/antigravity_sanity_error.md` |
+
+### Procédure obligatoire en début de session de debug
+
+```bash
+# Étape 1 — État du dernier deploy.sh
+cat deploy_logs/last_deploy.json | python3 -m json.tool
+
+# Étape 2 — Si overall_status = failure → lire le rapport d'erreurs
+# (le chemin est dans le champ "antigravity_prompt" du JSON)
+cat <deploy_logs/YYYYMMDD_HHMMSS/antigravity_prompt.md>
+
+# Étape 3 — Dernier log manage_env si une opération Terraform a eu lieu
+ls -t deploy_logs/manage_env_*.log | head -1 | xargs tail -80
+
+# Étape 4 — Rapport d'erreur sanity check manage_env (si présent)
+[ -f platform-engineering/antigravity_sanity_error.md ] && \
+  cat platform-engineering/antigravity_sanity_error.md
+```
+
+### Règles déduites du log
+
+Après lecture de `last_deploy.json` :
+- Si un service est dans `failed` → **ne pas supposer que le code source est la cause** : vérifier d'abord le log de tests (`<run_dir>/<service>_tests.log`)
+- Si un service est dans `skipped` → **sa version déployée est la précédente** : ne pas diagnostiquer sur la base du code local modifié
+- Si `skip_tests = true` → **déploiement hotfix non validé** : prudence maximale, vérifier les tests localement
+
+> **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu t'apprêtes à diagnostiquer un bug de production SANS avoir d'abord lu `deploy_logs/last_deploy.json`, tu **DOIS lire ce fichier en premier**. Diagnostiquer sans connaître l'état du dernier déploiement est une **hypothèse non fondée** qui gaspille du temps.
+
+---
+
+## 🧠 20. LOG-LEARNING DE FIN DE SESSION (RÈGLE OBLIGATOIRE)
+
+> **RÈGLE ABSOLUE** : Chaque session qui produit un savoir réutilisable DOIT se terminer par l'enregistrement de ce savoir en mémoire persistante. Un savoir non mémorisé est perdu à la prochaine session.
+
+### Déclencheur obligatoire — La session DOIT loguer si :
+
+- Un bug a été corrigé (même "simple") → `mcp_antigravity-memory_log_error_and_solution`
+- Une convention de projet a été découverte (pattern, ordre, import) → `mcp_antigravity-memory_log_learning`
+- Un comportement surprenant d'un outil ou service a été compris → `mcp_antigravity-memory_log_learning`
+- Un plan ou refactoring architectural a été validé → `mcp_antigravity-memory_log_learning`
+
+### DoD (Definition of Done) de session — BLOQUANT
+
+Avant d'envoyer le message de clôture "✅ Travail terminé", l'agent DOIT vérifier cette checklist :
+
+```
+[ ] Ai-je corrigé un bug ? → mcp_antigravity-memory_log_error_and_solution appelé
+[ ] Ai-je découvert un pattern ou convention ? → mcp_antigravity-memory_log_learning appelé
+[ ] Les logs mémoire sont-ils autonomes (compréhensibles sans accès au code) ?
+```
+
+### Anti-patterns interdits
+
+| ❌ Interdit | ✅ Attendu |
+|---|---|
+| Créer un artifact `brain/xxx/notes.md` sans appeler les tools MCP mémoire | Appeler `mcp_antigravity-memory_log_learning` directement |
+| Logguer "à la fin de la session" | Logguer **au moment de la découverte** |
+| Logguer avec un `content` vague ("ça marchait pas") | `content` autonome avec fichier, ligne, fix exact |
+| Terminer une session de debug sans `log_error_and_solution` | **Interdit — la session ne peut pas être clôturée** |
+
+> **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu t'apprêtes à envoyer un message de clôture de session (ex: "✅ Terminé", "C'est corrigé") SANS avoir appelé au moins un tool `mcp_antigravity-memory_*` pour mémoriser un apprentissage ou une erreur résolue, tu **DOIS d'abord appeler ces tools**. Une session fermée sans mémoire est une session perdue.
+

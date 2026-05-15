@@ -10,3 +10,6 @@ testcontainers[postgres,redis]>=4.0.0
 # Driver PostgreSQL synchrone pour les fixtures wipe_db() des conftest (DDL setup/teardown)
 # Les services utilisent asyncpg (async) mais SQLAlchemy create_engine() requiert psycopg2
 psycopg2-binary>=2.9.0
+# Build et publication du wheel zenika-shared-schemas (utilisés par deploy.sh)
+build>=1.0.0
+twine>=5.0.0

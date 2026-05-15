@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import { 
   BarChart, 
   TrendingUp, 
@@ -16,6 +17,9 @@ import {
   Cpu,
   Table
 } from 'lucide-vue-next'
+
+const { t } = useI18n()
+
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -235,24 +239,24 @@ const doughnutOptions = {
     <div class="header-section">
       <div class="title-wrapper">
         <BarChart class="icon-title" size="32" />
-        <h2>Observabilité AIOps</h2>
-        <button @click="fetchMetrics(true)" class="refresh-btn" :disabled="loading" title="Rafraîchir le cache">
+        <h2>{{ t('aiops.title') }}</h2>
+        <button @click="fetchMetrics(true)" class="refresh-btn" :disabled="loading" :title="t('aiops.refresh_title')">
           <RefreshCw :class="{ 'spinning': loading }" size="20" />
         </button>
       </div>
-      <p class="subtitle">Suivi de la consommation et des coûts liés à l'Intelligence Artificielle</p>
+      <p class="subtitle">{{ t('aiops.subtitle') }}</p>
     </div>
 
     <div v-if="loading" class="loading-overlay">
       <div class="spinner"></div>
-      <span>Calcul des indicateurs FinOps...</span>
+      <span>{{ t('aiops.loading') }}</span>
     </div>
 
     <div v-else-if="error" class="error-card glass-panel">
       <AlertCircle size="48" color="#E31937" />
-      <h3>Erreur de chargement</h3>
+      <h3>{{ t('aiops.error_title') }}</h3>
       <p>{{ error }}</p>
-      <button @click="fetchMetrics" class="retry-btn">Réessayer</button>
+      <button @click="fetchMetrics" class="retry-btn">{{ t('aiops.retry') }}</button>
     </div>
 
     <div v-else class="dashboard-grid">
@@ -261,7 +265,7 @@ const doughnutOptions = {
         <div class="kpi-card glass-panel">
           <div class="kpi-icon cost"><DollarSign size="20" /></div>
           <div class="kpi-content">
-            <span class="kpi-label">Ce Mois</span>
+            <span class="kpi-label">{{ t('aiops.kpi_month') }}</span>
             <span class="kpi-value">${{ currentMonth.cost.toFixed(2) }}</span>
             <div class="kpi-trend" :class="costTrend > 0 ? 'up' : 'down'">
               <component :is="costTrend > 0 ? ArrowUpRight : ArrowDownRight" size="14" />
@@ -273,16 +277,16 @@ const doughnutOptions = {
         <div class="kpi-card glass-panel">
           <div class="kpi-icon requests"><Database size="20" /></div>
           <div class="kpi-content">
-            <span class="kpi-label">Requêtes (Mois)</span>
+            <span class="kpi-label">{{ t('aiops.kpi_requests') }}</span>
             <span class="kpi-value">{{ currentMonth.requests }}</span>
-            <span class="kpi-subtext">Usage global agent & outils</span>
+            <span class="kpi-subtext">{{ t('aiops.kpi_requests_sub') }}</span>
           </div>
         </div>
 
         <div class="kpi-card glass-panel">
           <div class="kpi-icon history"><Calendar size="20" /></div>
           <div class="kpi-content">
-            <span class="kpi-label">Mois Dernier</span>
+            <span class="kpi-label">{{ t('aiops.kpi_last_month') }}</span>
             <span class="kpi-value">${{ lastMonth.cost.toFixed(2) }}</span>
             <span class="kpi-subtext">{{ lastMonth.requests }} requêtes traitées</span>
           </div>
@@ -292,7 +296,7 @@ const doughnutOptions = {
       <!-- Main Evolution Chart -->
       <div class="chart-card glass-panel main-chart">
         <div class="chart-header">
-          <h3>Évolution Quotidienne (30 jours)</h3>
+          <h3>{{ t('aiops.chart_daily') }}</h3>
           <TrendingUp size="18" class="text-secondary" />
         </div>
         <div class="chart-body">
@@ -304,7 +308,7 @@ const doughnutOptions = {
       <div class="charts-row">
         <div class="chart-card glass-panel flex-1">
           <div class="chart-header">
-            <h3>Top 10 Requéteurs (Volume)</h3>
+            <h3>{{ t('aiops.chart_top_vol') }}</h3>
             <Users size="18" class="text-secondary" />
           </div>
           <div class="chart-body doughnut">
@@ -314,7 +318,7 @@ const doughnutOptions = {
 
         <div class="chart-card glass-panel flex-1">
           <div class="chart-header">
-            <h3>Top 10 Requéteurs (Coût)</h3>
+            <h3>{{ t('aiops.chart_top_cost') }}</h3>
             <DollarSign size="18" class="text-secondary" />
           </div>
           <div class="chart-body doughnut">
@@ -325,16 +329,16 @@ const doughnutOptions = {
 
       <!-- Actions & Models Distribution -->
       <div class="section-divider">
-        <span class="section-label">Répartition par Usage</span>
+        <span class="section-label">{{ t('aiops.section_usage') }}</span>
       </div>
 
       <div class="charts-row">
         <div class="chart-card glass-panel flex-1">
           <div class="chart-header">
-            <h3>Actions LLM (Top 15)</h3>
+            <h3>{{ t('aiops.chart_actions') }}</h3>
             <Zap size="18" class="text-accent" />
           </div>
-          <p class="chart-subtitle">Distribution des outils et actions appelés par les agents</p>
+          <p class="chart-subtitle">{{ t('aiops.chart_actions_sub') }}</p>
           <div class="chart-body doughnut-lg">
             <Doughnut :data="topActionsChartData" :options="doughnutOptionsCompact" />
           </div>
@@ -342,10 +346,10 @@ const doughnutOptions = {
 
         <div class="chart-card glass-panel flex-1">
           <div class="chart-header">
-            <h3>Modèles IA (Top 10)</h3>
+            <h3>{{ t('aiops.chart_models') }}</h3>
             <Cpu size="18" class="text-purple" />
           </div>
-          <p class="chart-subtitle">Répartition des requêtes par modèle Gemini utilisé</p>
+          <p class="chart-subtitle">{{ t('aiops.chart_models_sub') }}</p>
           <div class="chart-body doughnut-lg">
             <Doughnut :data="topModelsChartData" :options="doughnutOptionsCompact" />
           </div>
@@ -354,22 +358,22 @@ const doughnutOptions = {
       
       <!-- Table des Prix (Reference) -->
       <div class="section-divider">
-        <span class="section-label">Référentiel des Coûts</span>
+        <span class="section-label">{{ t('aiops.section_costs') }}</span>
       </div>
       
       <div class="pricing-card glass-panel">
         <div class="chart-header">
-          <h3>Tarification des Modèles</h3>
+          <h3>{{ t('aiops.pricing_title') }}</h3>
           <Table size="18" class="text-secondary" />
         </div>
-        <p class="chart-subtitle" style="margin-top: 8px;">Coûts unitaires par Token (USD) pour les modèles Gemini enregistrés.</p>
+        <p class="chart-subtitle" style="margin-top: 8px;">{{ t('aiops.pricing_sub') }}</p>
         <div class="table-container">
           <table class="pricing-table">
             <thead>
               <tr>
-                <th>Modèle API</th>
-                <th>Coût Entrée (1M Tokens)</th>
-                <th>Coût Sortie (1M Tokens)</th>
+                <th>{{ t('aiops.col_model') }}</th>
+                <th>{{ t('aiops.col_input_cost') }}</th>
+                <th>{{ t('aiops.col_output_cost') }}</th>
               </tr>
             </thead>
             <tbody>

@@ -35,6 +35,15 @@ export interface Usage {
   estimated_cost_usd: number
 }
 
+export interface AgentStep {
+  type: 'call' | 'result' | 'warning' | 'cache'
+  tool?: string
+  args?: Record<string, any>
+  data?: any
+  source?: string
+}
+
+/** @deprecated Use AgentStep instead */
 export interface Step {
   type: string
   tool?: string
@@ -51,7 +60,7 @@ export interface Message {
   typing?: boolean
 
   // Expert Mode & History fields
-  steps?: Step[]
+  steps?: AgentStep[]
   thoughts?: string
   rawResponse?: string
   activeTab?: 'preview' | 'expert'
@@ -67,4 +76,36 @@ export interface Message {
   // Résultats sémantiques extraits des steps (search_candidates_multi_criteria)
   // Permet l'affichage dual : table évaluations + cards consultants
   consultantCards?: any[]
+}
+
+/**
+ * Contrat de réponse du endpoint POST /query.
+ * Miroir TypeScript du schema Pydantic AgentQueryResponse (agent_commons/schemas.py).
+ * Toute modification de ce type est un breaking change — mettre à jour les deux fichiers.
+ *
+ * @see agent_commons/agent_commons/schemas.py#AgentQueryResponse
+ */
+export interface AgentQueryResponse {
+  /** Réponse textuelle de l'agent en langage naturel (Markdown). */
+  response: string
+  /** Chaîne de pensée Gemini (Thinking mode) — vide string si désactivé. */
+  thoughts: string
+  /** Données structurées pour les UI cards (consultants, missions, etc.). Null si texte uniquement. */
+  data: any | null
+  /** Hint UI sémantique (ex: 'consultants', 'missions'). Null = affichage texte. */
+  display_type: string | null
+  /** Trace d'exécution des tools (mode Expert). */
+  steps: AgentStep[]
+  /** Source de la réponse : 'adk_agent' | 'semantic_cache' | 'error'. */
+  source: string
+  /** Session ADK utilisée pour ce tour de conversation. */
+  session_id: string | null
+  /** Consommation tokens FinOps. */
+  usage: Usage
+  /** Score de confiance [0.0–1.0]. Null si mode dégradé. */
+  confidence: number | null
+  /** True si la réponse a été servie depuis le cache sémantique. */
+  semantic_cache_hit: boolean | null
+  /** True si un sous-agent a répondu en mode dégradé (circuit-breaker ouvert). */
+  degraded: boolean | null
 }

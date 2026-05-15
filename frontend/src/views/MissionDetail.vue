@@ -4,6 +4,7 @@ import axios from 'axios'
 import { Briefcase, ChevronLeft, ArrowRight, Loader2, User as UserIcon, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Target, History, ChevronDown, XCircle, Send, Trophy, TrendingDown, Ban, FileText, Trash2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import ConsultantProfile from '@/components/ConsultantProfile.vue'
 import { authService } from '@/services/auth'
 
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const { t } = useI18n()
 const isNew = computed(() => props.id === 'new')
 
 const mission = ref<any>(null)
@@ -262,15 +264,15 @@ const statusText = computed(() => {
       <div class="page-header">
         <Briefcase class="title-icon" size="28" />
         <div>
-          <h1>Analyser une Fiche Mission</h1>
-          <p>Chargez un appel d'offres (Google Doc, PDF, Word) ou collez le texte libre.</p>
+          <h1>{{ t('missions.detail_title') }}</h1>
+          <p>{{ t('missions.detail_subtitle') }}</p>
         </div>
       </div>
 
       <div class="form-card">
         <div class="form-group">
-          <label>Titre de la mission *</label>
-          <input type="text" v-model="draftTitle" placeholder="Ex: Réfère Tech - Projet Cloud Native" />
+          <label>{{ t('missions.field_title') }}</label>
+          <input type="text" v-model="draftTitle" :placeholder="t('missions.field_title_placeholder')" />
         </div>
         
         <div class="source-grid">
@@ -281,18 +283,18 @@ const statusText = computed(() => {
           
           <div class="form-group source-item">
             <label>2. Ou Lien Google Docs / Web</label>
-            <input type="url" v-model="draftUrl" placeholder="https://docs.google.com/document/d/..." />
+            <input type="url" v-model="draftUrl" :placeholder="t('missions.field_url_placeholder')" />
           </div>
         </div>
 
         <div class="form-group">
           <label>3. Ou Texte libre / Compléments</label>
-          <textarea v-model="draftDescription" rows="5" placeholder="Copiez-collez le texte ou ajoutez des instructions spécifiques..."></textarea>
+          <textarea v-model="draftDescription" rows="5" :placeholder="t('missions.field_desc_placeholder')"></textarea>
         </div>
         
         <div class="form-actions">
           <button @click="analyzeMission" :disabled="!draftTitle || loading" class="submit-btn" :class="{ 'loading': loading }">
-            <template v-if="!loading">Lancer l'IA Staffing <ArrowRight size="18" /></template>
+            <template v-if="!loading">{{ t('missions.launch_btn') }} <ArrowRight size="18" /></template>
             <template v-else><Loader2 class="spin" size="18" /> {{ statusText }}</template>
           </button>
         </div>
@@ -334,7 +336,7 @@ const statusText = computed(() => {
               :disabled="updatingStatus"
               aria-label="Modifier le statut"
             >
-              <span v-if="!updatingStatus">Changer le statut <ChevronDown size="14" /></span>
+              <span v-if="!updatingStatus">{{ t('missions.change_status') }} <ChevronDown size="14" /></span>
               <span v-else><Loader2 class="spin" size="14" /> En cours...</span>
             </button>
             <div v-if="showStatusDropdown" class="status-menu">
@@ -355,12 +357,12 @@ const statusText = computed(() => {
       <!-- ── Reason Modal ── -->
       <div v-if="showReasonModal" class="modal-overlay" @click.self="showReasonModal = false">
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Motif du changement de statut">
-          <h3>Confirmer le changement de statut</h3>
-          <p>Nouveau statut : <strong class="status-badge" :class="STATUS_CONFIG[selectedNewStatus]?.cssClass">{{ STATUS_CONFIG[selectedNewStatus]?.label }}</strong></p>
-          <label for="status-reason">Motif (recommandé pour l'audit)</label>
-          <textarea id="status-reason" v-model="statusReason" rows="3" placeholder="Ex: Client hors budgets, compétences non couvertes..."></textarea>
+          <h3>{{ t('missions.confirm_status_title') }}</h3>
+          <p>{{ t('missions.confirm_status_body') }} <strong class="status-badge" :class="STATUS_CONFIG[selectedNewStatus]?.cssClass">{{ STATUS_CONFIG[selectedNewStatus]?.label }}</strong></p>
+          <label for="status-reason">{{ t('missions.reason_label') }}</label>
+          <textarea id="status-reason" v-model="statusReason" rows="3" :placeholder="t('missions.reason_placeholder')"></textarea>
           <div class="modal-actions">
-            <button class="btn-cancel" @click="showReasonModal = false">Annuler</button>
+            <button class="btn-cancel" @click="showReasonModal = false">{{ t('missions.cancel') }}</button>
             <button class="btn-confirm" @click="confirmStatusUpdate" :disabled="updatingStatus">
               <Loader2 v-if="updatingStatus" class="spin" size="14" /> Confirmer
             </button>
@@ -376,7 +378,7 @@ const statusText = computed(() => {
             <button class="btn-close" @click="showHistoryModal = false" aria-label="Fermer">✕</button>
           </div>
           <div class="history-list">
-            <div v-if="statusHistory.length === 0" class="empty-history">Aucun historique disponible.</div>
+            <div v-if="statusHistory.length === 0" class="empty-history">{{ t('missions.no_history') }}</div>
             <div v-for="entry in statusHistory" :key="entry.id" class="history-entry">
               <div class="history-timeline">
                 <div class="history-dot"
@@ -391,7 +393,7 @@ const statusText = computed(() => {
                   <span class="status-badge sm" :class="STATUS_CONFIG[entry.new_status]?.cssClass">{{ STATUS_CONFIG[entry.new_status]?.label || entry.new_status }}</span>
                 </div>
                 <div class="history-meta">
-                  <span>Par <strong>{{ entry.changed_by }}</strong></span>
+                  <span>{{ t('missions.changed_by') }} <strong>{{ entry.changed_by }}</strong></span>
                   <span>{{ new Date(entry.changed_at).toLocaleString('fr-FR') }}</span>
                 </div>
                 <div v-if="entry.reason" class="history-reason">{{ entry.reason }}</div>
@@ -441,8 +443,8 @@ const statusText = computed(() => {
               
               <div v-if="mission.prefiltered_candidates.length === 0" class="empty-state" style="padding: 1.5rem; text-align: center; color: #666; background: #fffbeb; border-radius: 8px; border: 1px dashed #f59e0b;">
                 <AlertTriangle size="28" style="color: #f59e0b; margin-bottom: 0.5rem;" />
-                <p style="font-weight: 500;">Aucun candidat correspondant trouvé.</p>
-                <p style="font-size: 0.85rem; margin-top: 0.25rem;">Même après un Full Scan, la base de connaissance ne contient aucun profil pertinent.</p>
+                <p style="font-weight: 500;">{{ t('missions.no_candidate') }}</p>
+                <p style="font-size: 0.85rem; margin-top: 0.25rem;">{{ t('missions.no_candidate_detail') }}</p>
               </div>
 
               <div v-else class="team-list">
@@ -474,18 +476,18 @@ const statusText = computed(() => {
               <h3><Users size="20" /> Équipe Proposée</h3>
               <div style="display: flex; gap: 12px; align-items: center;">
                  <button @click="reanalyzeMission" :disabled="pollingTask" class="reanalyze-btn">
-                    <template v-if="!pollingTask">Relancer l'IA</template>
+                    <template v-if="!pollingTask">{{ t('missions.relaunch_ia') }}</template>
                     <template v-else><Loader2 class="spin" size="14" style="margin: 0; color: inherit;" /> En cours...</template>
                  </button>
-                 <span class="badge">Staffing IA</span>
+                 <span class="badge">{{ t('missions.staffing_badge') }}</span>
               </div>
             </div>
             <div class="card-body">
               <div v-if="(mission.proposed_team || []).filter((m: any) => m.user_id !== 0).length === 0" class="empty-state" style="padding: 2rem; text-align: center; color: #666;">
                 <AlertTriangle size="32" style="color: #f59e0b; margin-bottom: 1rem;" />
-                <p>Aucun consultant qualifié n'a pu être proposé pour cette mission.</p>
+                <p>{{ t('missions.no_consultant') }}</p>
                 <div v-if="mission.proposed_team && mission.proposed_team.length > 0 && mission.proposed_team[0].justification" style="margin-top: 1rem; padding: 1rem; background: #fff; border-left: 3px solid #f59e0b; border-radius: 6px; text-align: left; font-size: 0.9rem;">
-                  <strong>Justification IA :</strong><br />
+                  <strong>{{ t('missions.ia_justification') }}</strong><br />
                   {{ mission.proposed_team[0].justification }}
                 </div>
               </div>
@@ -523,7 +525,7 @@ const statusText = computed(() => {
 
     <div v-else-if="loading && !isNew" class="loading-state">
       <Loader2 class="spin" size="32" />
-      <p>Chargement de la mission...</p>
+      <p>{{ t('missions.detail_loading') }}</p>
     </div>
   </div>
 </template>

@@ -31,33 +31,83 @@ def elapsed() -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def generate_antigravity_error_report(task_context: str, error_message: str, tags: list = None):
-    """Génère ou met à jour un rapport d'erreur Markdown pour l'Agent Antigravity."""
+def generate_antigravity_error_report(
+        task_context: str, error_message: str,
+        tags: list = None, env: str = None,
+        tf_workspace: str = None):
+    """Génère ou met à jour un rapport d'erreur Markdown enrichi pour l'Agent Antigravity."""
     global SANITY_ERROR_COUNT
     SANITY_ERROR_COUNT += 1
     project_id = CURRENT_PROJECT_ID
     report_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "antigravity_sanity_error.md")
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
-    tags_str = ", ".join(tags) if tags else "sanity-check"
+    tags_list = tags or ["sanity-check"]
+    tags_str = ", ".join(tags_list)
+    elapsed_str = elapsed()
+
+    # Contexte d'invocation
+    argv_str = " ".join(sys.argv)
+    env_str = env or os.environ.get("ENV", "unknown")
+    workspace_str = tf_workspace or env_str
+
+    # Commandes MCP suggérées selon les tags
+    mcp_commands = []
+    mcp_commands.append("python3 scripts/mcp_cli.py health")
+    mcp_commands.append("python3 scripts/mcp_cli.py errors --hours 2")
+    if any(t in ["terraform", "apply", "gcp"] for t in tags_list):
+        mcp_commands.append("python3 scripts/mcp_cli.py errors --hours 1")
+    if any(t in ["frontend", "sync", "rsync", "gcloud"] for t in tags_list):
+        mcp_commands.append(
+            "python3 scripts/mcp_cli.py query 'SELECT * FROM information_schema.tables LIMIT 5'"
+        )
+    if any(t in ["sanity", "login", "api"] for t in tags_list):
+        cmd_analytics = ("python3 scripts/mcp_cli.py call analytics get_finops_report "
+                         "--args '{\"period\":\"daily\"}'")
+        mcp_commands.append(cmd_analytics)
 
     is_new = not os.path.exists(report_file)
     with open(report_file, "a", encoding="utf-8") as f:
         if is_new:
-            f.write("# 🚨 Rapport d'Erreur Sanity Check (pour Antigravity)\n\n")
-            f.write("> **Directives pour l'Agent Antigravity :**\n")
-            f.write("> Analyse ces erreurs, cherche les causes probables et propose une réparation.\n")
-            f.write(
-                f"> 🔎 **IMPORTANT** : Pense à rechercher les logs pertinents directement dans GCP pour le projet `{project_id}` via les outils MCP.\n")
-            f.write("> Une fois résolues, utilise la CLI Antigravity Memory pour logguer la solution.\n\n")
+            f.write("# 🚨 Rapport d'Erreur manage_env.py (pour Antigravity)\n\n")
+            f.write("> **Instructions pour Antigravity** :\n")
+            f.write("> 1. Lis chaque erreur ci-dessous avec son contexte complet.\n")
+            f.write("> 2. Cherche en mémoire : `mcp_antigravity-memory_search_past_errors(query=\"<tags>\")`\n")
+            f.write(f"> 3. Consulte les logs GCP pour le projet `{project_id}` via les outils MCP.\n")
+            f.write("> 4. Propose un fix précis (fichier + ligne) — ne jamais supposer sans avoir vérifié.\n")
+            f.write("> 5. Une fois résolu : `mcp_antigravity-memory_log_error_and_solution(...)`\n\n")
+            f.write("---\n\n")
 
-        f.write(f"## Erreur interceptée à {timestamp}\n\n")
-        f.write(f"- **Contexte** : {task_context}\n")
-        f.write(f"- **Projet GCP** : `{project_id}`\n")
-        f.write(f"- **Tags** : `{tags_str}`\n")
-        f.write("- **Détails de l'erreur** :\n\n")
+        f.write(f"## 🔴 Erreur #{SANITY_ERROR_COUNT} — {timestamp}\n\n")
+
+        f.write("### Contexte opérationnel\n\n")
+        f.write("| Champ | Valeur |\n")
+        f.write("|---|---|\n")
+        f.write(f"| **Contexte** | {task_context} |\n")
+        f.write(f"| **Environnement** | `{env_str}` |\n")
+        f.write(f"| **Workspace Terraform** | `{workspace_str}` |\n")
+        f.write(f"| **Projet GCP** | `{project_id}` |\n")
+        f.write(f"| **Tags** | `{tags_str}` |\n")
+        f.write(f"| **Commande** | `{argv_str}` |\n")
+        f.write(f"| **Temps écoulé** | {elapsed_str} |\n\n")
+
+        f.write("### Message d'erreur\n\n")
         f.write("```text\n")
         f.write(f"{error_message}\n")
         f.write("```\n\n")
+
+        f.write("### 🔍 Commandes MCP suggérées pour investiguer\n\n")
+        f.write("```bash\n")
+        for cmd in mcp_commands:
+            f.write(f"{cmd}\n")
+        f.write("```\n\n")
+
+        f.write("### Prochaines étapes\n\n")
+        f.write(f"1. Chercher en mémoire : "
+                f"`mcp_antigravity-memory_search_past_errors(query=\"{tags_str}\")`\n")
+        f.write("2. Analyser les logs Terraform / Cloud Run via MCP ci-dessus\n")
+        f.write("3. Identifier le fichier source à corriger\n")
+        f.write("4. Mémoriser la solution après fix\n\n")
+
         f.write("---\n\n")
 
     # On utilise print car logger n'est défini que plus bas
@@ -155,6 +205,23 @@ logger.addFilter(_ElapsedFilter())
 # Ajouter le filtre à tous les handlers existants
 for _h in logging.root.handlers:
     _h.addFilter(_ElapsedFilter())
+
+# ── Log fichier persistant (lisible par Antigravity) ──────────────────────────
+# Chemin relatif à la racine du mono-repo (parent du dossier platform-engineering/)
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_LOG_DIR = os.path.join(_REPO_ROOT, "deploy_logs")
+os.makedirs(_LOG_DIR, exist_ok=True)
+_RUN_TS = time.strftime("%Y%m%d_%H%M%S")
+_LOG_FILE = os.path.join(_LOG_DIR, f"manage_env_{_RUN_TS}.log")
+_file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
+_file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s [+%(elapsed)s] [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+_file_handler.addFilter(_ElapsedFilter())
+logging.root.addHandler(_file_handler)
+logger.info("[manage_env] Session démarrée — log : %s", _LOG_FILE)
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 class DeploymentError(Exception):

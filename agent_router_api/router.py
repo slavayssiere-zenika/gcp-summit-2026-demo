@@ -82,7 +82,14 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
                 asyncio.create_task(_log_cache_hit_bq())
                 return cached_response
 
-            result = await run_agent_query(request.query, computed_session_id, auth_token=auth_header, user_id=jwt_user_id)
+            preferred_language = http_request.headers.get("x-preferred-language", "fr")
+            result = await run_agent_query(
+                request.query,
+                computed_session_id,
+                auth_token=auth_header,
+                user_id=jwt_user_id,
+                preferred_language=preferred_language,
+            )
             span.set_attribute("agent.source", result.get("source", "unknown"))
 
             asyncio.create_task(_semantic_cache.set(request.query, result))

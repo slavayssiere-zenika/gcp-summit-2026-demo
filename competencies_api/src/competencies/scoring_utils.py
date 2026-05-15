@@ -212,11 +212,11 @@ def _build_scoring_prompt(competency_name: str, missions: list) -> str:
         f"  - 5.0 : Référence reconnue / Lead sur plusieurs missions à forte valeur ajoutée\n\n"
         f"=== MISSIONS {context_label.upper()} AVEC MÉTA-DONNÉES DE PONDÉRATION ===\n"
         f"{missions_text}\n\n"
-        f"=== CONSIGNE ===\n"
-        f"Réponds UNIQUEMENT en JSON valide avec exactement deux champs :\n"
-        f"- score : float entre 0.0 et 5.0, arrondi au pas de 0.5\n"
-        f"- justification : string factuelle de 50 à 250 caractères en français\n\n"
-        f'Exemple : {{"score": 3.5, "justification": "2 missions récentes (poids>0.9) dont 1 audit."}}'
+        f"=== INSTRUCTION ===\n"
+        f"Reply ONLY with valid JSON with exactly two fields:\n"
+        f"- score : float between 0.0 and 5.0, rounded to nearest 0.5 step\n"
+        f"- justification : factual string, 50-250 characters\n\n"
+        f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit."}}'
     )
 
 

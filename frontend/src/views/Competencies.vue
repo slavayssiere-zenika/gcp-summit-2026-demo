@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 import CompetencyNode from '../components/CompetencyNode.vue'
 import StarRating from '../components/StarRating.vue'
@@ -19,6 +20,8 @@ interface UserInfo {
   role: string
   picture_url?: string
 }
+
+const { t } = useI18n()
 
 // ── State ──────────────────────────────────────────────────────────────────
 const competencies = ref<any[]>([])
@@ -222,21 +225,21 @@ onMounted(() => { fetchCompetencies() })
     <div class="header-section">
       <div class="title-wrapper">
         <Network class="icon-title" size="32" />
-        <h2>Référentiel de Compétences</h2>
+        <h2>{{ t('competencies.title') }}</h2>
       </div>
-      <p class="subtitle">Arborescence globale des expertises · Cliquez sur une feuille pour voir l'état des lieux Zenika.</p>
+      <p class="subtitle">{{ t('competencies.subtitle') }}</p>
     </div>
 
     <div class="tree-card glass-panel">
       <div class="card-header">
-        <h3>Explorateur Stratégique</h3>
+        <h3>{{ t('competencies.panel_title') }}</h3>
         <div class="actions">
           <div class="search-box">
             <Search size="16" class="search-icon" />
-            <input type="text" v-model="searchQuery" placeholder="Rechercher une compétence..." />
+            <input type="text" v-model="searchQuery" :placeholder="t('competencies.search_placeholder')" />
             <X size="14" class="clear-search" v-if="searchQuery" @click="searchQuery = ''" />
           </div>
-          <button class="icon-btn" @click="fetchCompetencies" :disabled="loading" title="Actualiser l'arbre" aria-label="Actualiser l'arbre">
+          <button class="icon-btn" @click="fetchCompetencies" :disabled="loading" :title="t('competencies.refresh_title')" :aria-label="t('competencies.refresh_title')">
             <RefreshCw size="18" :class="{ 'spin': loading }" />
           </button>
         </div>
@@ -244,11 +247,11 @@ onMounted(() => { fetchCompetencies() })
 
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
-        <span>Récupération du graphe de compétences...</span>
+        <span>{{ t('competencies.loading') }}</span>
       </div>
       <div v-else-if="error" class="error-msg">{{ error }}</div>
-      <div v-else-if="competencies.length === 0" class="empty-state">Aucune compétence n'est actuellement définie.</div>
-      <div v-else-if="filteredCompetencies.length === 0" class="empty-state">Aucune compétence ne correspond à "{{ searchQuery }}".</div>
+      <div v-else-if="competencies.length === 0" class="empty-state">{{ t('competencies.empty') }}</div>
+      <div v-else-if="filteredCompetencies.length === 0" class="empty-state">{{ t('competencies.no_match', { query: searchQuery }) }}</div>
       <div v-else class="tree-view">
         <CompetencyNode
           v-for="rootNode in filteredCompetencies"
@@ -280,7 +283,7 @@ onMounted(() => { fetchCompetencies() })
                 <span class="comp-id">#{{ selectedCompetency?.id }}</span>
               </div>
             </div>
-            <button class="close-btn" @click="closeSidepanel" aria-label="Fermer">
+            <button class="close-btn" @click="closeSidepanel" :aria-label="t('competencies.detail_close')">
               <X size="20" />
             </button>
           </div>
@@ -295,12 +298,12 @@ onMounted(() => { fetchCompetencies() })
               </div>
               <div class="stat-chip ai" v-if="avgAiScore !== null">
                 <Brain size="15" />
-                <span>Moy. IA <strong>{{ avgAiScore.toFixed(1) }}</strong>/5</span>
+                <span>{{ t('competencies.avg_ai') }} <strong>{{ avgAiScore.toFixed(1) }}</strong>/5</span>
                 <span class="stat-dot" :style="{ background: scoreColor(avgAiScore) }"></span>
               </div>
               <div class="stat-chip user" v-if="avgUserScore !== null">
                 <UserCheck size="15" />
-                <span>Moy. auto <strong>{{ avgUserScore.toFixed(1) }}</strong>/5</span>
+                <span>{{ t('competencies.avg_user') }} <strong>{{ avgUserScore.toFixed(1) }}</strong>/5</span>
               </div>
             </div>
 
@@ -331,18 +334,18 @@ onMounted(() => { fetchCompetencies() })
             <!-- Loading evals -->
             <div v-if="isLoadingUsers || isLoadingEvals" class="fetching-state">
               <div class="pulse-spinner"></div>
-              <p>Récupération des profils et scores...</p>
+              <p>{{ t('competencies.users_loading') }}</p>
             </div>
 
             <!-- No users -->
             <div v-else-if="associatedUsers.length === 0" class="no-users">
               <User size="32" class="opacity-20" />
-              <p>Aucun utilisateur associé à cette compétence.</p>
+              <p>{{ t('competencies.users_none') }}</p>
             </div>
 
             <!-- Liste des consultants avec leurs scores -->
             <div v-else class="users-list">
-              <p class="list-hint" v-if="totalUserCount > 15">Affichage des 15 premières entrées :</p>
+              <p class="list-hint" v-if="totalUserCount > 15">{{ t('competencies.users_hint') }}</p>
 
               <div v-for="user in associatedUsers" :key="user.id" class="user-card">
                 <div class="user-avatar">
@@ -371,7 +374,7 @@ onMounted(() => { fetchCompetencies() })
                     </div>
                   </div>
                 </div>
-                <RouterLink :to="{ name: 'user-detail', params: { id: user.id } }" class="profile-link" title="Voir le profil" aria-label="Voir le profil">
+                <RouterLink :to="{ name: 'user-detail', params: { id: user.id } }" class="profile-link" :title="t('competencies.view_profile')" :aria-label="t('competencies.view_profile')">
                   <ExternalLink size="14" />
                 </RouterLink>
               </div>

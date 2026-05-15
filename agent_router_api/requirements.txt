@@ -24,3 +24,6 @@ tenacity>=8.0.0,<10.0.0
 numpy>=1.24.0
 # Tests — Redis in-memory (pas de dépendance infra locale)
 fakeredis>=2.0.0
+
+# Shared Pydantic schemas — inter-service contracts (wheel local, buildé par deploy.sh)
+zenika-shared-schemas>=1.0.0

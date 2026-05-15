@@ -48,6 +48,35 @@ resource "google_artifact_registry_repository" "services" {
 }
 
 # =========================================================
+# 2b. Artifact Registry — Python Packages (zenika-shared-schemas)
+# =========================================================
+resource "google_artifact_registry_repository" "python_packages" {
+  location      = var.region
+  repository_id = "zenika-python"
+  description   = "Python wheel repository for shared packages (zenika-shared-schemas)"
+  format        = "PYTHON"
+
+  depends_on = [google_project_service.enabled_services]
+}
+
+# Service Account minimal — lecture seule sur le repo Python (docker build auth)
+# Pas de clé SA générée : l'auth se fait via `gcloud auth print-access-token` au build time
+resource "google_service_account" "docker_builder_sa" {
+  account_id   = "sa-docker-builder"
+  display_name = "Docker Builder SA (Python AR reader)"
+  description  = "Auth for pip to pull zenika-shared-schemas from Artifact Registry during docker build. No key generated — uses gcloud token."
+}
+
+# Rôle minimal : lecture du repo Python uniquement (pas de read all AR)
+resource "google_artifact_registry_repository_iam_member" "python_reader" {
+  project    = var.project_id
+  location   = var.region
+  repository = google_artifact_registry_repository.python_packages.repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.docker_builder_sa.email}"
+}
+
+# =========================================================
 # 3. Secret Manager pour JWT Secret (Enveloppe seule)
 # =========================================================
 resource "google_secret_manager_secret" "jwt_secret" {

@@ -65,6 +65,9 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/spec` : Get Spec
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/bulk-scoring-all/resume` : Resume Bulk Scoring
+- **POST** `/suggestions` : Create Competency Suggestion
+- **GET** `/suggestions` : List Competency Suggestions
+- **PATCH** `/suggestions/{suggestion_id}/review` : Review Competency Suggestion
 - **GET** `/` : List Competencies
 - **POST** `/` : Create Competency
 - **GET** `/search` : Search Competencies
@@ -73,9 +76,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **DELETE** `/{competency_id}` : Delete Competency
 - **GET** `/{competency_id}/users` : List Competency Users
 - **POST** `/stats/counts` : Get Competency Stats
-- **POST** `/suggestions` : Create Competency Suggestion
-- **GET** `/suggestions` : List Competency Suggestions
-- **PATCH** `/suggestions/{suggestion_id}/review` : Review Competency Suggestion
 - **POST** `/bulk_tree` : Bulk Import Tree
 - **POST** `/bulk/cleanup-orphans` : Supprime toutes les compétences feuilles orphelines (sans consultants)
 - **POST** `/evaluations/batch/search` : Search Batch Evaluations

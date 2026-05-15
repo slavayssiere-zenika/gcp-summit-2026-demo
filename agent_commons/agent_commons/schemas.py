@@ -195,6 +195,94 @@ class A2AResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# AgentQueryResponse — Réponse du endpoint POST /query (agent → frontend)
+# ---------------------------------------------------------------------------
+
+
+class AgentQueryResponse(BaseModel):
+    """Réponse retournée par agent_router_api sur POST /query.
+
+    Contrat entre le backend (agent_router_api) et le frontend Vue.js.
+    Toute modification de ce schéma est un breaking change pour le frontend.
+
+    Champs :
+        response     : Texte de la réponse en langage naturel (Markdown).
+        thoughts     : Chaîne de pensée Gemini (Thinking mode) — vide si désactivé.
+        data         : Données structurées pour l'affichage frontend (UI cards).
+        display_type : Hint UI sémantique post 'ui://' (ex: 'consultants', 'missions').
+        steps        : Trace d'exécution des tools (mode Expert).
+        source       : Source de la réponse : 'adk_agent', 'semantic_cache', 'error'.
+        session_id   : Session ADK utilisée pour ce tour.
+        usage        : Consommation tokens FinOps.
+        confidence   : Score de confiance [0.0–1.0] (None si mode dégradé).
+        semantic_cache_hit : True si la réponse vient du cache sémantique.
+        degraded     : True si un ou plusieurs sous-agents ont répondu en mode dégradé.
+    """
+
+    response: str = Field(..., description="Réponse textuelle en langage naturel (Markdown).")
+    thoughts: str = Field("", description="Chaîne de pensée Gemini (vide si Thinking désactivé).")
+    data: Optional[Any] = Field(
+        None,
+        description=(
+            "Données structurées optionnelles pour l'affichage frontend. "
+            "Slug sémantique résolu depuis render_ui_widgets : consultants, missions, "
+            "competencies, evaluations, candidates, items, tree, health, empty."
+        ),
+    )
+    display_type: Optional[str] = Field(
+        None,
+        description=(
+            "Hint UI sémantique (slug après 'ui://'). None = affichage texte uniquement."
+        ),
+    )
+    steps: list[AgentStep] = Field(
+        default_factory=list,
+        description="Trace d'exécution des tools (mode Expert du frontend).",
+    )
+    source: str = Field(
+        "adk_agent",
+        description="Source de la réponse : 'adk_agent', 'semantic_cache', 'error'.",
+    )
+    session_id: Optional[str] = Field(
+        None, description="Session ADK utilisée pour ce tour de conversation."
+    )
+    usage: TokenUsage = Field(
+        default_factory=TokenUsage,
+        description="Consommation de tokens pour le tracking FinOps.",
+    )
+    confidence: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Score de confiance [0.0–1.0]. None si information non disponible.",
+    )
+    semantic_cache_hit: Optional[bool] = Field(
+        None, description="True si la réponse a été servie depuis le cache sémantique."
+    )
+    degraded: Optional[bool] = Field(
+        None, description="True si un sous-agent a répondu en mode dégradé (circuit ouvert)."
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "response": "J'ai trouvé 3 consultants disponibles.",
+                "thoughts": "",
+                "data": {"items": [{"id": 1, "name": "Alice Martin"}]},
+                "display_type": "consultants",
+                "steps": [{"type": "call", "tool": "ask_hr_agent", "args": {}}],
+                "source": "adk_agent",
+                "session_id": "alice@zenika.com",
+                "usage": {"total_input_tokens": 800, "total_output_tokens": 200, "estimated_cost_usd": 0.00012},
+                "confidence": 1.0,
+                "semantic_cache_hit": False,
+                "degraded": False,
+            }
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tool metadata helper (introspection des tools ADK)
 # ---------------------------------------------------------------------------
 

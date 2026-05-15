@@ -251,10 +251,6 @@ def test_review_suggestion_reject_success(mocker):
         pass
 
     mock_db.refresh = mock_refresh
-    mocker.patch(
-        "src.competencies.competencies_router.trigger_taxonomy_cache_invalidation",
-        return_value=None
-    )
 
     async def override_db():
         yield mock_db
@@ -366,10 +362,6 @@ def test_bulk_tree_empty_tree_admin(mocker):
     mocker.patch(
         "src.competencies.competencies_router.check_grammatical_conflict",
         new=AsyncMock(return_value=None)
-    )
-    mocker.patch(
-        "src.competencies.competencies_router.trigger_taxonomy_cache_invalidation",
-        return_value=None
     )
 
     async def override_db():

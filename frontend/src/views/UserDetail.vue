@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { 
   User as UserIcon, 
   Mail, 
@@ -19,6 +20,7 @@ import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.v
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const userId = computed(() => route.params.id as string)
 
@@ -187,21 +189,21 @@ watch(() => route.params.id, (newId, oldId) => {
     
     <div v-if="isLoading" class="loading-state main-loader">
       <div class="spinner"></div>
-      <span>Chargement du profil...</span>
+      <span>{{ t('user.loading') }}</span>
     </div>
 
     <div v-else-if="error" class="empty-state error-main">
       <AlertCircle size="32" />
-      <h2>Erreur</h2>
+      <h2>{{ t('user.error_title') }}</h2>
       <p>{{ error }}</p>
     </div>
 
     <template v-else>
       <header class="profile-header">
         <div class="header-content">
-          <h1>Profil de {{ user?.full_name || user?.username }}</h1>
+          <h1>{{ t('user.title', { name: user?.full_name || user?.username }) }}</h1>
           <p v-if="user?.is_anonymous">Ce profil est actuellement <strong>anonyme</strong> (trigramme).</p>
-          <p v-else>Consultation d'un profil tiers</p>
+          <p v-else>{{ t('user.viewer_subtitle') }}</p>
         </div>
         <div class="badges-row">
            <div v-if="user?.is_anonymous" class="user-badge anonymous">
@@ -223,8 +225,8 @@ watch(() => route.params.id, (newId, oldId) => {
          <div class="alert-content">
             <AlertCircle class="alert-icon" />
             <div>
-               <h3>Action Requise : Profil Anonyme détecté</h3>
-               <p>Ce profil a été importé anonymement. Vous devez le rattacher à un collaborateur réel pour finaliser son intégration.</p>
+               <h3>{{ t('user.merge_title') }}</h3>
+               <p>{{ t('user.merge_desc') }}</p>
             </div>
          </div>
          <button v-if="!isMerging" @click="isMerging = true" class="action-btn-primary">
@@ -237,7 +239,7 @@ watch(() => route.params.id, (newId, oldId) => {
                   type="text" 
                   v-model="mergeSearchQuery" 
                   @input="searchMergeUsers" 
-                  placeholder="Rechercher le collaborateur réel (nom, email...)"
+                  :placeholder="t('user.merge_search_placeholder')"
                   class="search-input"
                />
                <div v-if="isSearchingMerge" class="spinner small"></div>
@@ -260,7 +262,7 @@ watch(() => route.params.id, (newId, oldId) => {
             </div>
             
             <div class="form-actions">
-               <button @click="isMerging = false" class="action-btn-secondary">Annuler</button>
+               <button @click="isMerging = false" class="action-btn-secondary">{{ t('user.merge_cancel') }}</button>
                <button 
                   @click="confirmMerge" 
                   class="action-btn-primary" 
@@ -277,7 +279,7 @@ watch(() => route.params.id, (newId, oldId) => {
         <section class="profile-card info-card">
           <div class="card-header">
             <UserIcon class="icon" />
-            <h2>Informations Personnelles</h2>
+            <h2>{{ t('user.section_personal') }}</h2>
           </div>
           
           <div class="info-list">
@@ -332,15 +334,15 @@ watch(() => route.params.id, (newId, oldId) => {
         <section class="profile-card auth-card">
           <div class="card-header">
             <ShieldCheck class="icon" />
-            <h2>Autorisations Assignées</h2>
+            <h2>{{ t('user.section_permissions') }}</h2>
           </div>
           
           <div class="categories-section">
-            <p class="section-desc">Cet utilisateur a accès aux catégories d'objets suivantes :</p>
+            <p class="section-desc">{{ t('user.permissions_desc') }}</p>
             
             <div v-if="isLoadingCategories" class="loading-state">
               <div class="spinner"></div>
-              <span>Chargement des catégories...</span>
+              <span>{{ t('user.permissions_loading') }}</span>
             </div>
             
             <div v-else-if="user?.allowed_category_ids && user.allowed_category_ids.length > 0" class="category-tags">
@@ -356,7 +358,7 @@ watch(() => route.params.id, (newId, oldId) => {
             
             <div v-else class="empty-state">
               <AlertCircle size="24" />
-              <p>Aucune catégorie spécifique n'est assignée à ce profil.</p>
+              <p>{{ t('user.permissions_none') }}</p>
             </div>
             
             <div v-if="errorCategories" class="error-toast">
@@ -371,13 +373,13 @@ watch(() => route.params.id, (newId, oldId) => {
         <section class="profile-card missions-card">
           <div class="card-header">
             <History class="icon" />
-            <h2>Historique des Missions</h2>
+            <h2>{{ t('user.section_missions') }}</h2>
           </div>
           
           <div class="missions-section">
             <div v-if="isLoadingMissions" class="loading-state">
               <div class="spinner"></div>
-              <span>Reconstitution du parcours professionnel...</span>
+              <span>{{ t('user.missions_loading') }}</span>
             </div>
             
             <div v-else-if="missions && missions.length > 0" class="missions-list">
@@ -399,7 +401,7 @@ watch(() => route.params.id, (newId, oldId) => {
             
             <div v-else class="empty-state">
               <History size="24" />
-              <p>Aucune mission n'a été extraite de ce profil pour le moment.</p>
+              <p>{{ t('user.missions_none') }}</p>
             </div>
           </div>
         </section>
@@ -408,7 +410,7 @@ watch(() => route.params.id, (newId, oldId) => {
         <section class="profile-card education-card" v-if="educations && educations.length > 0">
           <div class="card-header">
             <GraduationCap class="icon" />
-            <h2>Formation & Diplômes</h2>
+            <h2>{{ t('user.section_education') }}</h2>
           </div>
           <div class="education-list">
             <div v-for="(edu, index) in educations" :key="index" class="education-item">
@@ -423,9 +425,9 @@ watch(() => route.params.id, (newId, oldId) => {
         <section class="profile-card eval-card-ro">
           <div class="card-header">
             <Award class="icon" />
-            <h2>Évaluations des Compétences</h2>
+            <h2>{{ t('user.section_evaluations') }}</h2>
           </div>
-          <p class="section-desc">Notes Gemini et auto-évaluations du consultant · Vue lecture seule.</p>
+          <p class="section-desc">{{ t('user.evaluations_desc') }}</p>
           <CompetencyEvaluationPanel :userId="Number(userId)" :readonly="true" />
         </section>
 

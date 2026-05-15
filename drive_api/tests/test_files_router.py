@@ -123,7 +123,7 @@ async def test_clear_all_errors():
     assert response.json()["cleared_count"] == 5
 
 @pytest.mark.asyncio
-@patch('src.routers.files_router._reset_errors_to_pending')
+@patch('src.routers.sync_router._reset_errors_to_pending')
 async def test_scheduled_retry_errors(mock_reset):
     mock_reset.return_value = {"status": "success", "total_reset": 2}
     # No JWT needed for public router
@@ -131,8 +131,9 @@ async def test_scheduled_retry_errors(mock_reset):
     assert response.status_code == 200
     assert response.json()["total_reset"] == 2
 
+
 @pytest.mark.asyncio
-@patch('src.routers.files_router.get_drive_service')
+@patch('src.routers.sync_router.get_drive_service')
 async def test_trigger_sync(mock_get_drive_service):
     mock_drive = MagicMock()
     mock_get_drive_service.return_value = mock_drive

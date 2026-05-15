@@ -17,6 +17,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -24,6 +25,7 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from prometheus_fastapi_instrumentator import Instrumentator
 from shared.middlewares import ContentLengthSanitizerASGIMiddleware
+from shared.schemas.auth import TokenResponse
 from src.auth import verify_jwt
 from src.competencies.router import (analytics_scheduler_router, public_router,
                                      router)
@@ -111,11 +113,7 @@ app.include_router(router)
 
 
 async def get_service_token_fallback() -> str:
-    import logging
-    import os
-
-    import httpx
-    logging.getLogger(__name__)
+    logger_local = logging.getLogger(__name__)
     dev_token = os.getenv("DEV_SERVICE_TOKEN")
     if dev_token:
         return dev_token
@@ -131,24 +129,22 @@ async def get_service_token_fallback() -> str:
             )
             if res_meta.status_code == 200:
                 id_token = res_meta.text
-                res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
+                res = await client.post(
+                    f"{users_api_url}/auth/service-account/login", json={"id_token": id_token}
+                )
                 if res.status_code == 200:
-                    from shared.schemas.auth import TokenResponse
                     data = TokenResponse.model_validate(res.json())
                     return data.access_token
     except Exception:
         raise
+    logger_local.debug("[get_service_token_fallback] Aucun token disponible.")
     return ""
 
 
 async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        from opentelemetry.propagate import inject
-        inject(headers)
-    except Exception:
-        raise
+    inject(headers)
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:

@@ -177,8 +177,9 @@ async def _call_sub_agent(
 
     - Circuit-breaker : si le sous-agent a échoué CB_FAILURE_THRESHOLD fois de suite,
       retour immédiat en mode dégradé sans attente (CB_OPEN_DURATION_S secondes).
-    - Retry sur erreurs réseau et 5xx (max 2 tentatives, backoff 2s).
-    - Pas de retry sur les erreurs 4xx (erreur client → immédiat).
+    - Retry sur erreurs réseau, 5xx ET 429 (max 3 tentatives, backoff exponentiel + jitter).
+    - 429 : header Retry-After respecté en priorité (sinon backoff exponentiel).
+    - Fail-fast sur les erreurs 4xx non-retryables (401, 403, 404, 422).
     - Retourne un dict avec ``degraded: True`` si toutes les tentatives échouent.
     """
     # Circuit-breaker check — fail fast if the agent is already in error state
@@ -207,58 +208,83 @@ async def _call_sub_agent(
     headers: dict = {}
     inject(headers)  # Propagate OTel trace context
 
+    # 4xx codes that are NEVER retried (client error — no point retrying)
+    _NON_RETRYABLE_4XX = frozenset({401, 403, 404, 422})
+    # 429 is retryable — it signals transient server saturation, not a client bug
+    _RETRYABLE_CODES = frozenset({429, 500, 502, 503, 504})
+
     attempt = 0
-
-    async def _do_request() -> dict:
-        nonlocal attempt
-        if attempt > 0:
-            A2A_CALL_RETRIES_TOTAL.labels(agent=agent_name).inc()
-            logger.warning(f"[A2A:{agent_name}] Retry attempt #{attempt}")
-        attempt += 1
-
-        async with httpx.AsyncClient(timeout=timeout, headers=headers, auth=A2aRequestInterceptor()) as client:
-            res = await client.post(f"{url.rstrip('/')}/a2a/query", json={"query": query, "user_id": user_id})
-
-            if 400 <= res.status_code < 500:
-                raise A2ASubAgentError(agent_name, res.status_code, res.text[:200])
-
-            res.raise_for_status()
-            return res.json()
-
     start = time.monotonic()
     last_error: Exception = Exception("Agent call never attempted")
 
-    for i in range(2):
+    for i in range(3):
+        attempt += 1
+        if i > 0:
+            A2A_CALL_RETRIES_TOTAL.labels(agent=agent_name).inc()
+            logger.warning(f"[A2A:{agent_name}] Retry attempt #{attempt}")
+
         try:
-            data = await _do_request()
+            async with httpx.AsyncClient(timeout=timeout, headers=headers, auth=A2aRequestInterceptor()) as client:
+                res = await client.post(f"{url.rstrip('/')}/a2a/query", json={"query": query, "user_id": user_id})
+
+            if res.status_code in _NON_RETRYABLE_4XX:
+                # Fail-fast : erreur client, inutile de retenter
+                raise A2ASubAgentError(agent_name, res.status_code, res.text[:200])
+
+            if res.status_code == 429:
+                # 429 retryable : respecter Retry-After ou backoff exponentiel
+                retry_after_header = res.headers.get("Retry-After", "").strip()
+                if retry_after_header:
+                    try:
+                        wait = min(float(retry_after_header), 60.0)
+                    except ValueError:
+                        wait = min(2.0 * (2 ** i) + __import__("random").uniform(0, 1), 60.0)
+                else:
+                    wait = min(2.0 * (2 ** i) + __import__("random").uniform(0, 1), 60.0)
+                A2A_CALL_ERRORS_TOTAL.labels(agent=agent_name, reason="rate_limited").inc()
+                logger.warning(
+                    "[A2A:%s] 429 Rate-Limited (attempt #%d) — retry dans %.1fs.",
+                    agent_name, attempt, wait,
+                )
+                last_error = A2ASubAgentError(agent_name, 429, "Rate limited")
+                await asyncio.sleep(wait)
+                continue
+
+            if res.status_code in _RETRYABLE_CODES:
+                wait = min(2.0 * (2 ** i) + __import__("random").uniform(0, 1), 30.0)
+                A2A_CALL_ERRORS_TOTAL.labels(agent=agent_name, reason="server_error").inc()
+                logger.warning(
+                    "[A2A:%s] Server error %d (attempt #%d) — retry dans %.1fs.",
+                    agent_name, res.status_code, attempt, wait,
+                )
+                last_error = Exception(f"HTTP {res.status_code}")
+                await asyncio.sleep(wait)
+                continue
+
+            res.raise_for_status()
+            data = res.json()
             duration = time.monotonic() - start
             A2A_CALL_DURATION.labels(agent=agent_name).observe(duration)
             logger.info(f"[A2A:{agent_name}] Success in {duration:.2f}s (attempt #{attempt})")
-            _record_success(agent_name)  # Reset circuit-breaker on success
+            _record_success(agent_name)
             return data
+
         except A2ASubAgentError as e:
             duration = time.monotonic() - start
             A2A_CALL_DURATION.labels(agent=agent_name).observe(duration)
             A2A_CALL_ERRORS_TOTAL.labels(agent=agent_name, reason="client_error").inc()
             logger.error(f"[A2A:{agent_name}] Non-retriable error {e.status_code}: {e.detail}")
             last_error = e
-            break
+            break  # Pas de retry sur les erreurs client non-retryables
+
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            duration = time.monotonic() - start
             A2A_CALL_ERRORS_TOTAL.labels(agent=agent_name, reason="network").inc()
             logger.warning(f"[A2A:{agent_name}] Network error (attempt #{attempt}): {e}")
             last_error = e
-            if i < 1:
-                await asyncio.sleep(2.0)
-        except httpx.HTTPStatusError as e:
-            duration = time.monotonic() - start
-            A2A_CALL_ERRORS_TOTAL.labels(agent=agent_name, reason="server_error").inc()
-            logger.warning(f"[A2A:{agent_name}] Server error {e.response.status_code} (attempt #{attempt})")
-            last_error = e
-            if i < 1:
-                await asyncio.sleep(2.0)
+            if i < 2:
+                await asyncio.sleep(min(2.0 * (2 ** i), 10.0))
+
         except Exception as e:
-            duration = time.monotonic() - start
             A2A_CALL_ERRORS_TOTAL.labels(agent=agent_name, reason="unknown").inc()
             logger.error(f"[A2A:{agent_name}] Unexpected error: {e}")
             last_error = e
@@ -267,7 +293,7 @@ async def _call_sub_agent(
     A2A_CALL_DURATION.labels(agent=agent_name).observe(time.monotonic() - start)
     reason = str(last_error)[:300]
     logger.error(f"[A2A:{agent_name}] All attempts failed. Returning degraded response. Reason: {reason}")
-    _record_failure(agent_name)  # Increment circuit-breaker failure counter
+    _record_failure(agent_name)
     return {
         "response": (
             f"❌ Le sous-agent {agent_name} est temporairement indisponible. "
@@ -284,6 +310,7 @@ async def _call_sub_agent(
         "thoughts": "",
         "usage": {"total_input_tokens": 0, "total_output_tokens": 0, "estimated_cost_usd": 0},
     }
+
 
 
 # ── Outils LLM A2A ───────────────────────────────────────────────────────────

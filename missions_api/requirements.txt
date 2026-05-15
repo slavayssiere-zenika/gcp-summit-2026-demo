@@ -35,3 +35,6 @@ opentelemetry-instrumentation-redis
 
 # Tests d'intégration (Testcontainers — pgvector)
 testcontainers[postgres]>=4.0.0
+
+# Shared Pydantic schemas — inter-service contracts (wheel local, buildé par deploy.sh)
+zenika-shared-schemas>=1.0.0

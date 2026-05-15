@@ -238,11 +238,11 @@ async def _compute_ai_score(
         f"  0.0: Aucune trace | 1.0: Notions | 2.0: Utilisation ponctuelle\n"
         f"  3.0: Maîtrise confirmée | 4.0: Expert | 5.0: Référence reconnue\n\n"
         f"=== MISSIONS {context_label.upper()} ===\n{missions_text}\n\n"
-        f"=== CONSIGNE ===\n"
-        f"Réponds UNIQUEMENT en JSON valide avec exactement deux champs :\n"
-        f"- score : float 0.0-5.0, arrondi au pas de 0.5\n"
-        f"- justification : string 50-250 caractères en français\n\n"
-        f'Exemple : {{"score": 3.5, "justification": "2 missions récentes (poids>0.9) dont 1 audit chez Airbus (bonus +0.5)."}}'  # noqa: E501
+        f"=== INSTRUCTION ===\n"
+        f"Reply ONLY with valid JSON with exactly two fields:\n"
+        f"- score : float 0.0-5.0, rounded to nearest 0.5 step\n"
+        f"- justification : factual string, 50-250 characters\n\n"
+        f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit at Airbus (+0.5 bonus)."}}'  # noqa: E501
     )
 
     # 5. Appel Gemini avec JSON forcé

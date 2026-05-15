@@ -262,7 +262,6 @@ def test_create_competency_success(mocker):
 
     mocker.patch("src.competencies.competencies_router.check_grammatical_conflict", return_value=None)
     mocker.patch("src.competencies.competencies_router._generate_aliases_for_competency", return_value=[])
-    mocker.patch("src.competencies.competencies_router.trigger_taxonomy_cache_invalidation", return_value=None)
     mocker.patch("src.competencies.competencies_router.serialize_competency",
                  return_value={"id": 10, "name": "React", "children": [], "created_at": "2024-01-01T00:00:00", "sub_competencies": []})
 
@@ -305,8 +304,6 @@ def test_delete_competency_success(mocker):
         first_results=[comp, None],
         scalar_values=[None, 0]  # 0 enfants → peut supprimer
     )
-
-    mocker.patch("src.competencies.competencies_router.trigger_taxonomy_cache_invalidation", return_value=None)
 
     async def override_db():
         yield mock_db

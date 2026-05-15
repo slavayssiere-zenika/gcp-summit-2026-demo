@@ -151,6 +151,29 @@ if [ -f "secrets.sh" ]; then
   done
   echo "[+] SÉCURITÉ : Aucun ajout de secret provenant de secrets.sh détecté, le commit est autorisé."
 fi
+
+# ── Vérification spécifique : token AR et wheel shared jamais commités ──────
+echo "=== Vérification : aucun token GCP ni wheel buildé dans le staging ==="
+
+# 1. Wheel zenika-shared-schemas (shared/dist/) ne doit jamais être commité
+if git diff --cached --name-only 2>/dev/null | grep -q "^shared/dist/"; then
+  echo "[!] ERREUR CRITIQUE : shared/dist/ (wheel buildé) est dans le staging. Ajoutez shared/dist/ au .gitignore et faites 'git reset HEAD shared/dist/'"
+  exit 1
+fi
+
+# 2. Fichiers de token AR temporaires
+if git diff --cached --name-only 2>/dev/null | grep -qE "ar_token|\.ar_token$"; then
+  echo "[!] ERREUR CRITIQUE : Un fichier token Artifact Registry est dans le staging. Retirez-le immédiatement."
+  exit 1
+fi
+
+# 3. Patterns de token GCP dans le contenu (ya:// ou oauth2accesstoken:)
+if git diff --cached 2>/dev/null | grep '^+' | grep -v '^+++' | grep -qE "oauth2accesstoken:[A-Za-z0-9_\-\.]{20,}"; then
+  echo "[!] ERREUR CRITIQUE : Un token oauth2accesstoken GCP semble présent dans les fichiers stagés."
+  exit 1
+fi
+
+echo "[+] SÉCURITÉ AR : Aucun token GCP ni wheel buildé détecté — commit autorisé."
 ```
 
 11. **Ajouter les fichiers via git commit**

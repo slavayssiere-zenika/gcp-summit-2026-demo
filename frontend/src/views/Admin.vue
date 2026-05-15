@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import {
   Activity, RefreshCw, BarChart2, CheckCircle2, AlertTriangle,
   XCircle, Clock, Zap, FolderOpen, Users, Loader2,
@@ -10,6 +11,8 @@ import { authService } from '../services/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
 import DriveAdminPanel from '../components/DriveAdminPanel.vue'
 import DriveErrorsPanel from '../components/DriveErrorsPanel.vue'
+
+const { t } = useI18n()
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface KPIMetric { value: number; pct: number; ok: number; total: number; status: string; unit: string }
@@ -193,8 +196,8 @@ const runSync = async () => {
 <template>
   <div class="page-wrapper fade-in">
     <PageHeader
-      title="Supervision Drive Ingestion"
-      subtitle="Supervision complète du pipeline Drive → CV · KPIs · Gestion des Sources"
+      :title="t('admin_drive.title')"
+      :subtitle="t('admin_drive.subtitle')"
       :icon="BarChart2"
     />
 
@@ -206,7 +209,7 @@ const runSync = async () => {
         @click="activeTab = 'overview'"
       >
         <Activity size="15" />
-        Vue d'ensemble
+        {{ t('admin_drive.tab_overview') }}
         <span v-if="stats" class="tab-badge tab-badge-score">{{ stats.score }}/100</span>
       </button>
       <button
@@ -215,7 +218,7 @@ const runSync = async () => {
         @click="activeTab = 'errors'"
       >
         <XCircle size="15" />
-        Erreurs CV
+        {{ t('admin_drive.tab_errors') }}
         <span v-if="errorCount > 0" class="tab-badge tab-badge-error">{{ errorCount }}</span>
         <span v-else class="tab-badge tab-badge-ok">✓</span>
       </button>
@@ -225,7 +228,7 @@ const runSync = async () => {
         @click="activeTab = 'drive'"
       >
         <FolderOpen size="15" />
-        Gestion Drive
+        {{ t('admin_drive.tab_drive') }}
       </button>
     </div>
 
@@ -239,23 +242,23 @@ const runSync = async () => {
         </button>
         <div class="toolbar-actions">
           <button class="btn-action btn-sync" @click="runSync" aria-label="Forcer sync Drive">
-            <Radio size="14" /> Forcer Sync Drive
+            <Radio size="14" /> {{ t('admin_drive.btn_sync') }}
           </button>
           <button class="btn-action btn-sync" @click="runRebuildTree" :disabled="isRebuildingTree || stats?.is_rebuilding_tree" aria-label="Reconstruire l'arbre">
             <Network size="14" :class="{ spin: isRebuildingTree || stats?.is_rebuilding_tree }" />
-            {{ isRebuildingTree || stats?.is_rebuilding_tree ? 'Reconstruction…' : "Reconstruire l'Arbre" }}
+            {{ isRebuildingTree || stats?.is_rebuilding_tree ? t('admin_drive.btn_rebuilding') : t('admin_drive.btn_rebuild') }}
           </button>
           <button class="btn-action btn-gate" @click="runInvalidateCache" :disabled="isInvalidatingCache" aria-label="Invalider Cache">
             <Database size="14" :class="{ spin: isInvalidatingCache }" />
-            {{ isInvalidatingCache ? 'Invalidation…' : 'Invalider Cache' }}
+            {{ isInvalidatingCache ? t('admin_drive.btn_invalidating') : t('admin_drive.btn_invalidate') }}
           </button>
           <button class="btn-action btn-retry" @click="runBatchRetry" :disabled="isRunningBatch" aria-label="Retry erreurs">
             <Zap size="14" :class="{ spin: isRunningBatch }" />
-            {{ isRunningBatch ? 'En cours…' : 'Retry Erreurs' }}
+            {{ isRunningBatch ? t('admin_drive.btn_retrying') : t('admin_drive.btn_retry') }}
           </button>
           <button class="btn-action btn-gate" @click="runQualityGate" :disabled="isRunningGate" aria-label="Quality Gate Batch">
             <ShieldCheck size="14" :class="{ spin: isRunningGate }" />
-            {{ isRunningGate ? 'Analyse…' : 'Quality Gate Batch' }}
+            {{ isRunningGate ? t('admin_drive.btn_gating') : t('admin_drive.btn_gate') }}
           </button>
         </div>
       </div>
@@ -263,7 +266,7 @@ const runSync = async () => {
       <!-- ── Batch result banners ── -->
       <div v-if="stats?.is_rebuilding_tree" class="result-banner banner-warning">
         <Loader2 size="14" class="spin" style="display:inline-block; vertical-align: middle; margin-right: 5px;" />
-        Reconstruction complète de l'arbre en cours sur Google Drive...
+        {{ t('admin_drive.rebuilding_banner') }}
       </div>
       <div v-if="batchResult" class="result-banner" :class="batchResult.error ? 'banner-error' : 'banner-ok'">
         <template v-if="batchResult.error">❌ {{ batchResult.error }}</template>
@@ -283,7 +286,7 @@ const runSync = async () => {
 
       <div v-if="isLoadingStats && !stats" class="loading-state">
         <Loader2 size="32" class="spin" />
-        <p>Calcul des KPIs en cours…</p>
+        <p>{{ t('admin_drive.loading') }}</p>
       </div>
 
       <template v-else-if="stats">
@@ -321,7 +324,7 @@ const runSync = async () => {
 
         <!-- ── KPI Metrics ── -->
         <div class="section-card">
-          <div class="section-header"><Activity size="17" /> Métriques de Data Quality</div>
+          <div class="section-header"><Activity size="17" /> {{ t('admin_drive.section_metrics') }}</div>
           <div class="metrics-grid">
             <div v-for="(metric, label) in stats.metrics" :key="label" class="metric-row">
               <div class="metric-label-row">
@@ -348,7 +351,7 @@ const runSync = async () => {
 
         <!-- ── Folder KPIs ── -->
         <div class="section-card">
-          <div class="section-header"><FolderOpen size="17" /> KPIs par Agence / Dossier</div>
+          <div class="section-header"><FolderOpen size="17" /> {{ t('admin_drive.section_folders') }}</div>
           <div v-if="isLoadingFolders" class="table-loading"><Loader2 size="18" class="spin" /></div>
           <div v-else-if="folderKpis.length === 0" class="table-empty">
             <Users size="24" /> Aucun dossier Drive configuré.
@@ -357,15 +360,15 @@ const runSync = async () => {
             <table class="kpi-table">
               <thead>
                 <tr>
-                  <th>Dossier / Agence</th>
-                  <th class="num">Total</th>
-                  <th class="num">Importés</th>
-                  <th class="num">Erreurs</th>
-                  <th class="num">Taux import</th>
-                  <th class="num">Liaison user</th>
-                  <th class="num">Durée moy.</th>
-                  <th class="num">Dernière import</th>
-                  <th>Statut</th>
+                  <th>{{ t('admin_drive.col_folder') }}</th>
+                  <th class="num">{{ t('admin_drive.col_total') }}</th>
+                  <th class="num">{{ t('admin_drive.col_imported') }}</th>
+                  <th class="num">{{ t('admin_drive.col_errors') }}</th>
+                  <th class="num">{{ t('admin_drive.col_rate') }}</th>
+                  <th class="num">{{ t('admin_drive.col_user_link') }}</th>
+                  <th class="num">{{ t('admin_drive.col_avg_duration') }}</th>
+                  <th class="num">{{ t('admin_drive.col_last_import') }}</th>
+                  <th>{{ t('admin_drive.col_status') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -392,7 +395,7 @@ const runSync = async () => {
                   <td class="num">{{ formatDate(f.last_import_at) }}</td>
                   <td>
                     <span class="status-pill" :class="`pill-${f.status}`">
-                      {{ f.status === 'ok' ? '✓ OK' : f.status === 'warning' ? '⚠ Attention' : '✕ Critique' }}
+                      {{ f.status === 'ok' ? t('admin_drive.status_ok') : f.status === 'warning' ? t('admin_drive.status_warning') : t('admin_drive.status_critical') }}
                     </span>
                   </td>
                 </tr>

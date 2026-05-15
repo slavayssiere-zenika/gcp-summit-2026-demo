@@ -98,6 +98,8 @@ talk/credentials.json
 
 # deploy.sh — logs de run (générés automatiquement)
 deploy_logs/
+# manage_env.py — logs de run + état courant (générés automatiquement)
+platform-engineering/antigravity_sanity_error.md
 talk/token.json
 coverage_output.txt
 coverage.xml
@@ -124,3 +126,14 @@ rapport_audit_*.md
 tools_extracted.json
 template_analysis.json
 scratch/
+
+# =========================
+# Sécurité — Tokens & secrets temporaires
+# =========================
+# Fichiers de token AR temporaires (générés par deploy.sh --secret)
+/tmp/ar_token_*
+ar_token_*.tmp
+*.ar_token
+# Wheels buildés localement — jamais committé (build artifact de deploy.sh)
+shared/dist/
+shared/*.egg-info/

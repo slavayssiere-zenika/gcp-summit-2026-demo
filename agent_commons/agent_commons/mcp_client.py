@@ -22,6 +22,8 @@ from opentelemetry.propagate import inject
 from prometheus_client import Counter
 from pydantic import BaseModel, ValidationError
 
+from agent_commons.circuit_breaker import CircuitOpenError, get_circuit_breaker
+
 
 # ---------------------------------------------------------------------------
 # MCP protocol DTOs — inlined here to keep agent_commons self-contained.
@@ -106,6 +108,12 @@ class MCPHttpClient:
     def __init__(self, url: str) -> None:
         self.url = url
         self._initialized = True  # HTTP is inherently stateless
+        # Circuit-breaker par URL MCP — isole les pannes de chaque service
+        self._cb = get_circuit_breaker(
+            name=url.split("//")[-1].split("/")[0],  # ex: "cv_mcp:8000"
+            failure_threshold=int(os.getenv("CB_FAILURE_THRESHOLD", "5")),
+            recovery_timeout=float(os.getenv("CB_RECOVERY_TIMEOUT_S", "30.0")),
+        )
 
     async def connect(self) -> None:
         """No-op — HTTP is connectionless."""
@@ -123,7 +131,13 @@ class MCPHttpClient:
             return res.json()
 
     async def call_tool(self, tool_name: str, arguments: dict) -> Any:
-        """Invoke *tool_name* with *arguments* on the remote MCP sidecar."""
+        """Invoke *tool_name* with *arguments* on the remote MCP sidecar.
+
+        Protégé par un circuit-breaker : après CB_FAILURE_THRESHOLD échecs
+        consécutifs, les appels suivants sont bloqués pendant CB_RECOVERY_TIMEOUT_S
+        secondes (défaut : 5 échecs / 30s). Une CircuitOpenError est levée si le
+        circuit est OPEN — l'agent doit la capturer et retourner une réponse dégradée.
+        """
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info("[MCP-HTTP] Calling tool '%s' on %s with args: %s", tool_name, self.url, arguments)
         start_time = time.time()
@@ -134,8 +148,8 @@ class MCPHttpClient:
         if auth:
             headers["Authorization"] = auth
 
-        async with httpx.AsyncClient(headers=headers) as client:
-            try:
+        async def _do_call() -> Any:
+            async with httpx.AsyncClient(headers=headers) as client:
                 timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
                 res = await client.post(
                     f"{self.url.rstrip('/')}/mcp/call",
@@ -143,8 +157,6 @@ class MCPHttpClient:
                     timeout=timeout,
                 )
                 res.raise_for_status()
-                # Sidecar returns {"result": [{"text": "...", "type": "text"}]}
-                # McpToolResult.model_validate() échoue si le protocole MCP dérive
                 try:
                     result = McpToolResult.model_validate(res.json())
                     result_data = result.result
@@ -155,11 +167,25 @@ class MCPHttpClient:
                         extra={"error": str(ve), "raw_keys": list(res.json().keys())},
                     )
                     raise RuntimeError(f"Contrat MCP brisé sur '{tool_name}': {ve}") from ve
-                logger.info("[MCP-HTTP] Tool '%s' completed in %.2fs", tool_name, time.time() - start_time)
+                logger.info(
+                    "[MCP-HTTP] Tool '%s' completed in %.2fs", tool_name, time.time() - start_time
+                )
                 return result_data
-            except Exception as e:
-                logger.error("[MCP-HTTP] Tool '%s' FAILED after %.2fs: %s", tool_name, time.time() - start_time, e)
-                raise
+
+        try:
+            return await self._cb.call(_do_call)
+        except CircuitOpenError as coe:
+            logger.warning(
+                "[MCP-HTTP] Circuit OPEN pour '%s' — outil '%s' bloqué. %s",
+                self.url, tool_name, coe,
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                "[MCP-HTTP] Tool '%s' FAILED après %.2fs: %s",
+                tool_name, time.time() - start_time, e,
+            )
+            raise
 
     async def stop(self) -> None:
         """No-op."""

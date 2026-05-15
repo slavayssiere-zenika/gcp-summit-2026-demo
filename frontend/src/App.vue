@@ -5,12 +5,18 @@ import {
   ChevronDown, Settings, BarChart3, Cpu, HardDriveUpload,
   Users, GitMerge, CalendarDays, BrainCircuit, RefreshCw,
   ShieldAlert, ShieldCheck, Briefcase, ExternalLink, Menu, X,
-  AlertTriangle
+  AlertTriangle, HelpCircle
 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { authService } from './services/auth'
 import { useRouter } from 'vue-router'
 import ToastNotification from '@/components/ui/ToastNotification.vue'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
+import OnboardingTour from '@/components/onboarding/OnboardingTour.vue'
+import { useOnboardingStore } from '@/stores/onboardingStore'
 import axios from 'axios'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -28,10 +34,23 @@ const handleLogout = async () => {
 const isAdmin = () => authService.state.user?.role === 'admin'
 const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
 
+const onboardingStore = useOnboardingStore()
+
 const isMobileMenuOpen = ref(false)
 const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value
 }
+
+// Déclenche le tour automatiquement à la première connexion
+watch(
+  () => authService.state.isAuthenticated,
+  (authenticated) => {
+    if (authenticated && !onboardingStore.isDone) {
+      setTimeout(() => onboardingStore.start(), 900)
+    }
+  },
+  { immediate: true }
+)
 
 watch(() => router.currentRoute.value.path, () => {
   isMobileMenuOpen.value = false
@@ -90,6 +109,8 @@ onUnmounted(() => {
 <template>
   <div id="main-app">
     <ToastNotification />
+    <!-- Tour guidé onboarding — Teleport vers body -->
+    <OnboardingTour />
     <div class="header">
       <div class="header-left">
         <div class="logo">ZENIKA</div>
@@ -102,49 +123,41 @@ onUnmounted(() => {
       </button>
 
       <div class="nav-links" :class="{ 'is-open': isMobileMenuOpen }">
-        <div class="header-search">
-          <input 
-            type="text" 
-            v-model="searchQuery" 
-            @keypress.enter="handleSearch"
-            placeholder="🔍 Rechercher un profil..."
-          >
-        </div>
         <div class="nav-pills" v-if="authService.state.isAuthenticated">
 
           <!-- Agent IA -->
-          <RouterLink to="/" class="nav-pill" active-class="active" aria-label="Agent conversationnel">
-            <Bot size="16" /> Agent
+          <RouterLink to="/" class="nav-pill" active-class="active" :aria-label="t('nav.agent')">
+            <Bot size="15" /> {{ t('nav.agent') }}
           </RouterLink>
 
           <!-- Arbre des compétences -->
-          <RouterLink to="/competencies" class="nav-pill" active-class="active" aria-label="Arbre des compétences">
-            <Network size="16" /> Compétences
+          <RouterLink to="/competencies" class="nav-pill" active-class="active" :aria-label="t('nav.competencies')">
+            <Network size="15" /> {{ t('nav.competencies') }}
           </RouterLink>
 
           <!-- Hub RH (consultants, compétences) -->
           <div class="dropdown" v-if="isRh()">
             <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }">
-              <Users size="16" /> Hub RH <ChevronDown size="14" />
+              <Users size="15" /> {{ t('nav.hub_rh') }} <ChevronDown size="13" />
             </button>
             <div class="dropdown-content">
-              <div class="dropdown-section-label">Consultants</div>
-              <RouterLink to="/" class="nav-pill" aria-label="Rechercher un consultant via l'agent">
-                <Bot size="14" /> Recherche par Agent
+              <div class="dropdown-section-label">{{ t('nav.section_consultants') }}</div>
+              <RouterLink to="/" class="nav-pill" :aria-label="t('nav.hr_search_agent')">
+                <Bot size="13" /> {{ t('nav.hr_search_agent') }}
               </RouterLink>
-              <div class="dropdown-section-label">Gestion RH</div>
-              <RouterLink to="/admin/availability" class="nav-pill" active-class="dropdown-active" aria-label="Planning des disponibilités">
-                <CalendarDays size="14" /> Planning Disponibilités
+              <div class="dropdown-section-label">{{ t('nav.section_hr') }}</div>
+              <RouterLink to="/admin/availability" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.hr_planning')">
+                <CalendarDays size="13" /> {{ t('nav.hr_planning') }}
               </RouterLink>
-              <RouterLink to="/admin/deduplication" class="nav-pill" active-class="dropdown-active" aria-label="Déduplication des profils en doublon">
-                <GitMerge size="14" /> Déduplication Profils
+              <RouterLink to="/admin/deduplication" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.hr_dedup')">
+                <GitMerge size="13" /> {{ t('nav.hr_dedup') }}
               </RouterLink>
             </div>
           </div>
 
           <!-- Missions -->
-          <RouterLink to="/missions" class="nav-pill" active-class="active" aria-label="Hub des missions clients">
-            <Briefcase size="16" /> Missions
+          <RouterLink to="/missions" class="nav-pill" active-class="active" :aria-label="t('nav.missions')">
+            <Briefcase size="15" /> {{ t('nav.missions') }}
           </RouterLink>
 
           <!-- Administration (admin only) -->
@@ -152,99 +165,99 @@ onUnmounted(() => {
             <button
               class="nav-pill admin-pill dropdown-btn"
               :class="{ active: router.currentRoute.value.path.startsWith('/admin') }"
-              aria-label="Menu Administration"
+              :aria-label="t('nav.admin')"
             >
-              <Settings size="16" /> Admin <ChevronDown size="14" />
+              <Settings size="15" /> {{ t('nav.admin') }} <ChevronDown size="13" />
             </button>
             <div class="dropdown-content dropdown-wide">
-              <div class="dropdown-section-label">Pipeline de données</div>
-              <RouterLink to="/admin" class="nav-pill" active-class="dropdown-active" aria-label="Gestion du pipeline d'import Drive et supervision CV">
-                <HardDriveUpload size="14" /> Import Drive & Supervision CV
+              <div class="dropdown-section-label">{{ t('nav.section_pipeline') }}</div>
+              <RouterLink to="/admin" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_import_drive')">
+                <HardDriveUpload size="13" /> {{ t('nav.admin_import_drive') }}
               </RouterLink>
-              <RouterLink to="/import-cv" class="nav-pill" active-class="dropdown-active" aria-label="Import manuel d'un CV depuis le poste">
-                <BookOpen size="14" /> Import CV Manuel
+              <RouterLink to="/import-cv" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_import_manual')">
+                <BookOpen size="13" /> {{ t('nav.admin_import_manual') }}
               </RouterLink>
-              <RouterLink to="/admin/extraction-quality" class="nav-pill" active-class="dropdown-active" aria-label="Qualité de l'extraction des CVs">
-                <ShieldCheck size="14" /> Qualité d'Extraction
+              <RouterLink to="/admin/extraction-quality" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_extraction_quality')">
+                <ShieldCheck size="13" /> {{ t('nav.admin_extraction_quality') }}
               </RouterLink>
-              <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" aria-label="Restructuration de la taxonomie par l'IA">
-                <Network size="14" /> Taxonomie & Structure IA
+              <RouterLink to="/admin/reanalysis" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_taxonomy')">
+                <Network size="13" /> {{ t('nav.admin_taxonomy') }}
               </RouterLink>
-              <RouterLink to="/admin/bulk-import" class="nav-pill" active-class="dropdown-active" aria-label="Ré-analyse globale de tous les CVs via Vertex AI Batch">
-                <RefreshCw size="14" /> Ré-analyse Globale Batch
-              </RouterLink>
-
-              <div class="dropdown-section-label">Configuration Agents</div>
-              <RouterLink to="/admin/prompts" class="nav-pill" active-class="dropdown-active" aria-label="Gérer les instructions des agents IA">
-                <BrainCircuit size="14" /> Instructions des Agents IA
+              <RouterLink to="/admin/bulk-import" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_bulk')">
+                <RefreshCw size="13" /> {{ t('nav.admin_bulk') }}
               </RouterLink>
 
-              <div class="dropdown-section-label">Utilisateurs & Sécurité</div>
-              <RouterLink to="/admin/users" class="nav-pill" active-class="dropdown-active" aria-label="Gestion des comptes et rôles">
-                <Users size="14" /> Comptes & Rôles
+              <div class="dropdown-section-label">{{ t('nav.section_agents_config') }}</div>
+              <RouterLink to="/admin/prompts" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_prompts')">
+                <BrainCircuit size="13" /> {{ t('nav.admin_prompts') }}
               </RouterLink>
-              <RouterLink to="/admin/finops" class="nav-pill" active-class="dropdown-active" aria-label="Sécurité, audit et suivi couts IA (FinOps)">
-                <ShieldAlert size="14" /> Sécurité & FinOps IA
+
+              <div class="dropdown-section-label">{{ t('nav.section_users_security') }}</div>
+              <RouterLink to="/admin/users" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_users')">
+                <Users size="13" /> {{ t('nav.admin_users') }}
+              </RouterLink>
+              <RouterLink to="/admin/finops" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.admin_finops')">
+                <ShieldAlert size="13" /> {{ t('nav.admin_finops') }}
               </RouterLink>
             </div>
           </div>
 
           <!-- Outils Techniques / Documentation -->
           <div class="dropdown">
-            <button class="nav-pill dropdown-btn" aria-label="Menu Outils et Documentation">
-              <BookOpen size="16" /> Docs <ChevronDown size="14" />
+            <button class="nav-pill dropdown-btn" :aria-label="t('nav.docs')">
+              <BookOpen size="15" /> {{ t('nav.docs') }} <ChevronDown size="13" />
             </button>
             <div class="dropdown-content dropdown-wide">
-              <div class="dropdown-section-label">Documentation</div>
+              <div class="dropdown-section-label">{{ t('nav.section_doc') }}</div>
               <RouterLink to="/help" class="nav-pill" active-class="dropdown-active">
-                <BookOpen size="14" /> Centre d'Aide
+                <BookOpen size="13" /> {{ t('nav.docs_help') }}
               </RouterLink>
               <RouterLink to="/docs/agents" class="nav-pill" active-class="dropdown-active">
-                <Cpu size="14" /> Documentation Agents
+                <Cpu size="13" /> {{ t('nav.docs_agents') }}
               </RouterLink>
               <RouterLink to="/specs" class="nav-pill" active-class="dropdown-active">
-                <BookOpen size="14" /> Spécifications Techniques
+                <BookOpen size="13" /> {{ t('nav.docs_specs') }}
               </RouterLink>
 
-              <div class="dropdown-section-label">Observabilité</div>
+              <div class="dropdown-section-label">{{ t('nav.section_observability') }}</div>
               <RouterLink to="/infrastructure" class="nav-pill" active-class="dropdown-active">
-                <Network size="14" /> Carte Infrastructure
+                <Network size="13" /> {{ t('nav.docs_infra') }}
               </RouterLink>
               <RouterLink to="/aiops" class="nav-pill" active-class="dropdown-active">
-                <BarChart3 size="14" /> Indicateurs AIOps
+                <BarChart3 size="13" /> {{ t('nav.docs_aiops') }}
               </RouterLink>
               <RouterLink to="/registry" class="nav-pill" active-class="dropdown-active">
-                <ServerCog size="14" /> Serveurs MCP
+                <ServerCog size="13" /> {{ t('nav.docs_mcp') }}
               </RouterLink>
-              <RouterLink to="/data-quality" class="nav-pill" active-class="dropdown-active" aria-label="Dashboard Data Quality des pipelines">
-                <ShieldCheck size="14" /> Data Quality
+              <RouterLink to="/data-quality" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.docs_data_quality')">
+                <ShieldCheck size="13" /> {{ t('nav.docs_data_quality') }}
               </RouterLink>
 
-              <div class="dropdown-section-label" v-if="isAdmin()">API Swagger</div>
+              <div class="dropdown-section-label" v-if="isAdmin()">{{ t('nav.section_swagger') }}</div>
               <template v-if="isAdmin()">
                 <a href="/api/users/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Users API">
-                  <ExternalLink size="13" /> Users API
+                  <ExternalLink size="12" /> Users API
                 </a>
                 <a href="/api/cv/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger CV API">
-                  <ExternalLink size="13" /> CV API
+                  <ExternalLink size="12" /> CV API
                 </a>
                 <a href="/api/competencies/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Competencies API">
-                  <ExternalLink size="13" /> Competencies API
+                  <ExternalLink size="12" /> Competencies API
                 </a>
                 <a href="/api/drive/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Drive API">
-                  <ExternalLink size="13" /> Drive API
+                  <ExternalLink size="12" /> Drive API
                 </a>
                 <a href="/api/prompts/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Prompts API">
-                  <ExternalLink size="13" /> Prompts API
+                  <ExternalLink size="12" /> Prompts API
                 </a>
                 <a href="/api/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Agent Router API">
-                  <ExternalLink size="13" /> Agent Router API
+                  <ExternalLink size="12" /> Agent Router API
                 </a>
                 <a href="/api/missions/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Missions API">
-                  <ExternalLink size="13" /> Missions API
+                  <ExternalLink size="12" /> Missions API
                 </a>
                 <a href="/api/items/docs" target="_blank" class="nav-pill swagger-link" aria-label="Swagger Items API">
-                  <ExternalLink size="13" /> Items API
+                  <ExternalLink size="12" /> Items API
                 </a>
               </template>
             </div>
@@ -254,13 +267,27 @@ onUnmounted(() => {
 
         <div v-if="authService.state.isAuthenticated" class="separator"></div>
 
+        <!-- Sélecteur de langue -->
+        <LanguageSwitcher v-if="authService.state.isAuthenticated" />
+
+        <!-- Bouton "?" — relance le tour guidé à tout moment -->
+        <button
+          v-if="authService.state.isAuthenticated"
+          class="help-tour-btn"
+          @click="onboardingStore.restart()"
+          :title="t('nav.help_tour')"
+          :aria-label="t('nav.help_tour')"
+        >
+          <HelpCircle size="17" />
+        </button>
+
         <div v-if="authService.state.isAuthenticated" class="user-profile">
           <RouterLink to="/profile" class="user-info-link nav-pill user-pill">
-            <UserIcon size="16" />
+            <UserIcon size="15" />
             <span>{{ authService.state.user?.full_name }}</span>
           </RouterLink>
-          <button @click="handleLogout" class="logout-pill" title="Déconnexion">
-            <LogOut size="16" />
+          <button @click="handleLogout" class="logout-pill" :title="t('nav.logout')">
+            <LogOut size="15" />
           </button>
         </div>
       </div>
@@ -268,8 +295,8 @@ onUnmounted(() => {
 
     <div v-if="isDataQualityBad" class="data-quality-banner">
       <AlertTriangle size="18" />
-      <span><strong>Attention :</strong> La qualité des données est actuellement dégradée. Une analyse est en cours...</span>
-      <RouterLink to="/data-quality" class="data-quality-link">Voir le détail</RouterLink>
+      <span><strong>{{ t('nav.dq_warning') }}</strong> {{ t('nav.dq_message') }}</span>
+      <RouterLink to="/data-quality" class="data-quality-link">{{ t('nav.dq_detail') }}</RouterLink>
     </div>
 
     <main class="content">
@@ -330,11 +357,19 @@ body {
   border-left: 1px solid #e0e0e0;
 }
 
+/* Caché en dessous de 1400px pour gagner de la place */
+@media (max-width: 1400px) {
+  .subtitle { display: none; }
+}
+
 .nav-links {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
 }
 
 .nav-pills {
@@ -350,14 +385,15 @@ body {
 .nav-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 6px 10px;
   border-radius: 8px;
   color: var(--text-secondary);
   text-decoration: none;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   transition: all 0.25s ease;
+  white-space: nowrap;
 }
 
 .nav-pill:hover {
@@ -558,6 +594,29 @@ body {
   transform: scale(1.05);
 }
 
+/* ── F7 — Bouton tour guidé "?" ─────────────────────────────── */
+.help-tour-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  color: #94a3b8;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.help-tour-btn:hover {
+  background: rgba(227, 25, 55, 0.07);
+  border-color: rgba(227, 25, 55, 0.25);
+  color: var(--zenika-red);
+  transform: rotate(15deg);
+}
+
 .separator {
   width: 1px;
   height: 24px;
@@ -636,7 +695,8 @@ body {
 }
 
 /* Responsive Styles */
-@media (max-width: 1024px) {
+/* Responsive — hamburger à ≤ 1280px */
+@media (max-width: 1280px) {
   .header {
     padding: 1rem 1.5rem;
   }

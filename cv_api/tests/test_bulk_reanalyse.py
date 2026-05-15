@@ -294,7 +294,7 @@ class TestBulkReanalyseEndpoints:
         mock_db.execute = AsyncMock(return_value=count_result)
         app.dependency_overrides[get_db] = lambda: mock_db
 
-        mock_httpx = mocker.patch("src.cvs.routers.bulk_router.httpx.AsyncClient")
+        mock_httpx = mocker.patch("src.services.bulk_helpers.httpx.AsyncClient")
         ci = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = ci
         svc = MagicMock(status_code=200)
@@ -347,7 +347,7 @@ class TestBulkReanalyseEndpoints:
                      new=AsyncMock(return_value=state))
         cancel_mock = mocker.patch("src.cvs.routers.bulk_router.bulk_reanalyse_manager.cancel_soft",
                                    new=AsyncMock(return_value={"dest_uri": "gs://..."}))
-        mock_httpx = mocker.patch("src.cvs.routers.bulk_router.httpx.AsyncClient")
+        mock_httpx = mocker.patch("src.services.bulk_helpers.httpx.AsyncClient")
         ci = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = ci
         ci.post.return_value = MagicMock(status_code=200)

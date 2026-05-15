@@ -6,8 +6,11 @@ import {
   Clock, Hash, AlertTriangle, CheckCircle2, Loader2, X,
   ArrowLeftRight, FileText, BarChart3, Circle, Trash2
 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { useUxStore } from '@/stores/uxStore'
 import PageHeader from '../components/ui/PageHeader.vue'
+
+const { t } = useI18n()
 
 const uxStore = useUxStore()
 
@@ -220,12 +223,12 @@ onBeforeUnmount(() => {
   <div class="pa-root">
 
     <PageHeader
-      title="Instructions des Agents IA"
-      subtitle="Éditez les directives système Gemini et consultez les correctifs auto-générés par détection d'erreurs."
+      :title="t('admin_prompts.title')"
+      :subtitle="t('admin_prompts.subtitle')"
       :icon="BrainCircuit"
       :breadcrumb="[
         { label: 'Administration', to: '/admin' },
-        { label: 'Instructions des Agents IA' }
+        { label: t('admin_prompts.title') }
       ]"
     />
 
@@ -246,8 +249,8 @@ onBeforeUnmount(() => {
     <!-- ── Empty State ────────────────────────────────────────────────────── -->
     <div v-else-if="prompts.length === 0" class="pa-empty">
       <FileText size="48" class="pa-empty-icon" />
-      <h3>Aucun prompt configuré</h3>
-      <p>Exécutez le seeder backend pour initialiser les instructions.</p>
+      <h3>{{ t('admin_prompts.empty_title') }}</h3>
+      <p>{{ t('admin_prompts.empty_desc') }}</p>
     </div>
 
     <!-- ── Split View ─────────────────────────────────────────────────────── -->
@@ -256,8 +259,8 @@ onBeforeUnmount(() => {
       <!-- Sidebar -->
       <aside class="pa-sidebar">
         <div class="pa-sidebar-tabs">
-          <button class="pa-sidebar-tab" :class="{active: uiTab === 'system'}" @click="uiTab = 'system'; selectedKey = null">Systèmes</button>
-          <button class="pa-sidebar-tab" :class="{active: uiTab === 'errors'}" @click="uiTab = 'errors'; selectedKey = null">Correctifs</button>
+          <button class="pa-sidebar-tab" :class="{active: uiTab === 'system'}" @click="uiTab = 'system'; selectedKey = null">{{ t('admin_prompts.tab_system') }}</button>
+          <button class="pa-sidebar-tab" :class="{active: uiTab === 'errors'}" @click="uiTab = 'errors'; selectedKey = null">{{ t('admin_prompts.tab_errors') }}</button>
         </div>
 
         <div class="pa-search-wrapper">
@@ -266,8 +269,8 @@ onBeforeUnmount(() => {
             v-model="searchQuery"
             type="text"
             class="pa-search-input"
-            placeholder="Rechercher un prompt…"
-            aria-label="Rechercher un prompt"
+            :placeholder="t('admin_prompts.search_placeholder')"
+            :aria-label="t('admin_prompts.search_aria')"
           />
         </div>
 
@@ -275,7 +278,7 @@ onBeforeUnmount(() => {
           {{ filteredPrompts.length }} prompt{{ filteredPrompts.length > 1 ? 's' : '' }}
         </div>
 
-        <nav class="pa-nav" aria-label="Liste des prompts">
+        <nav class="pa-nav" :aria-label="t('admin_prompts.nav_aria')">
           <button
             v-for="p in filteredPrompts"
             :key="p.key"
@@ -290,7 +293,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="pa-nav-meta">
               <span class="pa-nav-chars">{{ p.value?.length ?? 0 }} car.</span>
-              <span v-if="isDirty(p.key)" class="pa-dirty-dot" aria-label="Modifications non sauvegardées"></span>
+              <span v-if="isDirty(p.key)" class="pa-dirty-dot" :aria-label="t('admin_prompts.dirty_aria')"></span>
             </div>
           </button>
 
@@ -373,7 +376,7 @@ onBeforeUnmount(() => {
                 :class="{ danger: charCount > 28000 }"
               ></div>
             </div>
-            <span class="pa-char-limit">/ ~32k max</span>
+            <span class="pa-char-limit">{{ t('admin_prompts.char_limit') }}</span>
           </div>
         </div>
 
@@ -467,7 +470,7 @@ onBeforeUnmount(() => {
           <div v-if="activeModalTab === 'suggestion'" class="pa-modal-body" role="tabpanel">
             <div class="pa-suggestion-info">
               <CheckCircle2 size="16" style="color: #10b981; flex-shrink: 0;" />
-              <p>L'IA a généré un prompt optimisé. Comparez avec le diff avant d'accepter.</p>
+              <p>{{ t('admin_prompts.ai_generated') }}</p>
             </div>
             <textarea
               readonly
@@ -481,9 +484,9 @@ onBeforeUnmount(() => {
           <!-- Tab: Diff -->
           <div v-if="activeModalTab === 'diff'" class="pa-modal-body" role="tabpanel">
             <div class="pa-diff-legend">
-              <span class="diff-legend-item old"><span class="diff-dot"></span> Supprimé</span>
-              <span class="diff-legend-item new"><span class="diff-dot"></span> Ajouté</span>
-              <span class="diff-legend-item same"><span class="diff-dot"></span> Inchangé</span>
+              <span class="diff-legend-item old"><span class="diff-dot"></span> {{ t('admin_prompts.diff_removed') }}</span>
+              <span class="diff-legend-item new"><span class="diff-dot"></span> {{ t('admin_prompts.diff_added') }}</span>
+              <span class="diff-legend-item same"><span class="diff-dot"></span> {{ t('admin_prompts.diff_unchanged') }}</span>
             </div>
             <div class="pa-diff-view">
               <template v-for="(line, i) in diffLines" :key="i">
@@ -510,7 +513,7 @@ onBeforeUnmount(() => {
 
           <!-- Modal Footer -->
           <div class="pa-modal-footer">
-            <button class="pa-btn-ghost" @click="closeModal">Annuler</button>
+            <button class="pa-btn-ghost" @click="closeModal">{{ t('admin_prompts.btn_cancel') }}</button>
             <button class="pa-btn-save" @click="acceptImprovedPrompt">
               <CheckCircle2 size="16" /> Remplacer par la suggestion
             </button>

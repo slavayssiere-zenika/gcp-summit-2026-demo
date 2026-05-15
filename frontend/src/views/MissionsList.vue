@@ -4,8 +4,10 @@ import axios from 'axios'
 import { Briefcase, Plus, Users, Loader2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { t } = useI18n()
 const missions = ref<any[]>([])
 const loading = ref(true)
 const activeFilter = ref<string>('ALL')
@@ -69,29 +71,29 @@ const newMission = () => {
       <div class="title-section">
         <Briefcase class="title-icon" size="28" />
         <div>
-          <h1>Hub Missions (Staffing)</h1>
-          <p>Supervisez les appels d'offres et les propositions d'équipes de l'agent IA.</p>
+          <h1>{{ t('missions.list_title') }}</h1>
+          <p>{{ t('missions.list_subtitle') }}</p>
         </div>
       </div>
       <button @click="newMission" class="action-btn">
-        <Plus size="18" /> Nouvelle Mission
+        <Plus size="18" /> {{ t('missions.detail_title').split(' ')[0] }}
       </button>
     </div>
 
     <div v-if="loading" class="loading-state">
       <Loader2 class="spin" size="32" />
-      <p>Chargement des missions...</p>
+      <p>{{ t('missions.loading') }}</p>
     </div>
 
     <div v-else-if="missions.length === 0" class="empty-state">
       <Briefcase size="48" class="empty-icon" />
-      <h3>Aucune mission</h3>
-      <p>Créez une nouvelle fiche mission pour l'analyser.</p>
+      <h3>{{ t('missions.empty_title') }}</h3>
+      <p>{{ t('missions.empty_subtitle') }}</p>
     </div>
 
     <template v-else>
       <!-- Status Filter Tabs -->
-      <div class="filter-tabs" role="tablist" aria-label="Filtrer par statut">
+      <div class="filter-tabs" role="tablist" :aria-label="t('missions.filter_aria')">
         <button
           v-for="tab in FILTER_TABS"
           :key="tab"
@@ -108,7 +110,7 @@ const newMission = () => {
       </div>
 
       <div v-if="filteredMissions.length === 0" class="empty-filtered">
-        <p>Aucune mission avec ce statut.</p>
+        <p>{{ t('missions.no_status') }}</p>
       </div>
 
       <div v-else class="missions-grid">
@@ -126,7 +128,7 @@ const newMission = () => {
               <span v-if="(mission.extracted_competencies || []).length > 3" class="skill-tag extra">+{{ mission.extracted_competencies.length - 3 }}</span>
             </div>
             <div class="team-summary">
-              <Users size="16" /> {{ (mission.proposed_team || []).filter((m: any) => m.user_id !== 0).length }} consultants proposés
+              <Users size="16" /> {{ (mission.proposed_team || []).filter((m: any) => m.user_id !== 0).length }} {{ t('missions.staffing_badge') }}
             </div>
           </div>
         </div>

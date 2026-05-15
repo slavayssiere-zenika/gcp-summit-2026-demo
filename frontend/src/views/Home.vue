@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import markdownit from 'markdown-it'
 import { 
@@ -72,6 +73,7 @@ const md = markdownit({
   typographer: true
 })
 
+const { t } = useI18n()
 const chatStore = useChatStore()
 const userInput = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
@@ -134,10 +136,18 @@ const getInitials = (name: string) => {
 }
 
 const getPaginatedData = (msg: any) => {
-  if (!msg.parsedData || !msg.pagination) return []
-  const start = (msg.pagination.currentPage - 1) * msg.pagination.itemsPerPage
-  const end = start + msg.pagination.itemsPerPage
-  return msg.parsedData.slice(start, end)
+  if (!msg.parsedData || !msg.pagination) return msg.parsedData || []
+  const end = msg.pagination.currentPage * msg.pagination.itemsPerPage
+  return msg.parsedData.slice(0, end)
+}
+
+const hasMoreItems = (msg: any) => {
+  if (!msg.parsedData || !msg.pagination) return false
+  return msg.pagination.currentPage * msg.pagination.itemsPerPage < msg.parsedData.length
+}
+
+const loadMore = (msg: any) => {
+  if (msg.pagination) msg.pagination.currentPage++
 }
 
 const totalPages = (msg: any) => {
@@ -190,19 +200,17 @@ onUnmounted(() => {
     <!-- History loading banner -->
     <div v-if="chatStore.isLoadingHistory" class="history-loading-banner" aria-live="polite">
       <RefreshCw size="13" class="history-loading-spin" />
-      Chargement de l'historique...
+      {{ t('chat.loading_history') }}
     </div>
 
     <div class="chat-container" ref="chatContainer">
       <!-- Project Introduction -->
       <div class="welcome-section">
-        <h2>Assistant Opérationnel Zenika</h2>
-        <p>
-          L'Assistant Zenika simplifie la recherche et la gestion des données de l'entreprise. En langage naturel, vous pouvez interroger l'agent pour identifier les meilleurs profils, analyser les cartographies de compétences ou gérer le catalogue d'équipements.
-        </p>
+        <h2>{{ t('chat.welcome_title') }}</h2>
+        <p>{{ t('chat.welcome_body') }}</p>
         <div class="quick-tips">
-          <span>💡 Essayez : "Trouve les consultants spécialisés en Java avec plus de 5 ans d'expérience."</span>
-          <span>💡 Essayez : "Recherche les compétences d'Alice et donne-moi un résumé."</span>
+          <span>{{ t('chat.tip_1') }}</span>
+          <span>{{ t('chat.tip_2') }}</span>
         </div>
       </div>
 
@@ -219,13 +227,13 @@ onUnmounted(() => {
               :class="['tab-btn', { active: msg.activeTab === 'preview' }]" 
               @click="msg.activeTab = 'preview'"
             >
-              <Eye size="14" /> Aperçu
+              <Eye size="14" /> {{ t('chat.tab_preview') }}
             </button>
             <button 
               :class="['tab-btn', { active: msg.activeTab === 'expert' }]" 
               @click="msg.activeTab = 'expert'"
             >
-              <Cpu size="14" /> Expert
+              <Cpu size="14" /> {{ t('chat.tab_expert') }}
             </button>
           </div>
 
@@ -241,7 +249,7 @@ onUnmounted(() => {
               <template v-else-if="msg.consultantCards && msg.consultantCards.length > 0">
                 <!-- 1. Cards consultants (résultat sémantique) -->
                 <div class="dual-section-label">
-                  <span class="dual-section-icon">🎯</span> Profils identifiés par recherche sémantique
+                  <span class="dual-section-icon">🎯</span> {{ t('chat.profiles_semantic') }}
                 </div>
                 <div class="consultant-cards-grid">
                   <div
@@ -284,9 +292,9 @@ onUnmounted(() => {
                 </table>
                 <!-- Pagination UI -->
                 <div v-if="totalPages(msg) > 1" class="pagination-controls">
-                  <BaseButton :disabled="msg.pagination!.currentPage === 1" @click="msg.pagination!.currentPage--">Précédent</BaseButton>
-                  <span class="page-info">Page {{ msg.pagination!.currentPage }} sur {{ totalPages(msg) }}</span>
-                  <BaseButton :disabled="msg.pagination!.currentPage === totalPages(msg)" @click="msg.pagination!.currentPage++">Suivant</BaseButton>
+                  <BaseButton :disabled="msg.pagination!.currentPage === 1" @click="msg.pagination!.currentPage--">{{ t('chat.previous') }}</BaseButton>
+                  <span class="page-info">{{ t('chat.page_info', { current: msg.pagination!.currentPage, total: totalPages(msg) }) }}</span>
+                  <BaseButton :disabled="msg.pagination!.currentPage === totalPages(msg)" @click="msg.pagination!.currentPage++">{{ t('chat.next') }}</BaseButton>
                 </div>
               </div>
 
@@ -294,46 +302,74 @@ onUnmounted(() => {
 
               <!-- ui://consultants / ui://consultant -->
               <div v-else-if="(msg.displayType === 'consultants' || msg.displayType === 'consultant') && msg.parsedData && msg.parsedData.length > 0" class="consultant-list">
-                <ConsultantCard v-for="(obj, idx) in msg.parsedData" :key="idx" :consultant="obj" />
+                <ConsultantCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :consultant="obj" />
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">Showing {{ getPaginatedData(msg).length }} of {{ msg.parsedData.length }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
               </div>
 
               <!-- ui://candidates / ui://candidate -->
               <div v-else-if="(msg.displayType === 'candidates' || msg.displayType === 'candidate') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <CandidateProfileCard v-for="(obj, idx) in msg.parsedData" :key="idx" :profile="obj" />
+                <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :profile="obj" />
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
               </div>
 
               <!-- ui://missions / ui://mission -->
               <div v-else-if="(msg.displayType === 'missions' || msg.displayType === 'mission') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <MissionCard v-for="(obj, idx) in msg.parsedData" :key="idx" :mission="obj" />
+                <MissionCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :mission="obj" />
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
               </div>
 
               <!-- ui://availabilities / ui://availability -->
               <div v-else-if="(msg.displayType === 'availabilities' || msg.displayType === 'availability') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <ConsultantAvailabilityCard v-for="(obj, idx) in msg.parsedData" :key="idx" :availability="obj" />
+                <ConsultantAvailabilityCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :availability="obj" />
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
               </div>
 
               <!-- ui://items / ui://item -->
               <div v-else-if="(msg.displayType === 'items' || msg.displayType === 'item') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <ItemCard v-for="(obj, idx) in msg.parsedData" :key="idx" :item="obj" />
+                <ItemCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :item="obj" />
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
               </div>
 
               <!-- ui://competencies / ui://competency -->
               <CompetencyList
                 v-else-if="(msg.displayType === 'competencies' || msg.displayType === 'competency') && msg.parsedData && msg.parsedData.length > 0"
-                :competencies="msg.parsedData"
+                :competencies="getPaginatedData(msg)"
               />
+              <div v-if="(msg.displayType === 'competencies' || msg.displayType === 'competency') && hasMoreItems(msg)" class="show-more-bar">
+                <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+              </div>
 
               <!-- ui://evaluations / ui://evaluation -->
               <EvaluationTable
                 v-else-if="(msg.displayType === 'evaluations' || msg.displayType === 'evaluation') && msg.parsedData && msg.parsedData.length > 0"
-                :evaluations="msg.parsedData"
+                :evaluations="getPaginatedData(msg)"
               />
+              <div v-if="(msg.displayType === 'evaluations' || msg.displayType === 'evaluation') && hasMoreItems(msg)" class="show-more-bar">
+                <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+              </div>
 
               <!-- ui://empty et text_only : rien à afficher (le texte LLM suffit) -->
 
               <div v-else-if="msg.displayType === 'cards' && msg.parsedData && msg.parsedData.length > 0"
                    :class="msg.parsedData.every((o: any) => isUserObj(o)) ? 'consultant-list' : 'generic-grid'">
-                <template v-for="(obj, idx) in msg.parsedData" :key="idx">
+                <template v-for="(obj, idx) in getPaginatedData(msg)" :key="idx">
                   <MissionCard v-if="isMissionObj(obj)" :mission="obj" />
                   <ConsultantCard v-else-if="isUserObj(obj)" :consultant="obj" />
                   <CandidateProfileCard v-else-if="isProfileObj(obj)" :profile="obj" />
@@ -357,13 +393,17 @@ onUnmounted(() => {
                         <span v-if="!Array.isArray(obj[key]) && typeof obj[key] !== 'object'">{{ obj[key] }}</span>
                         <div v-else class="categories-tags" style="display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:2px;">
                           <span v-for="(item, i) in (Array.isArray(obj[key]) ? obj[key] : [obj[key]])" :key="i" class="tag">
-                            {{ (item && typeof item === 'object') ? (item.name || item.id || '[Objet]') : item }}
+                            {{ (item && typeof item === 'object') ? (item.name || item.id || '[Object]') : item }}
                           </span>
                         </div>
                       </div>
                     </div>
                   </div>
                 </template>
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }} results</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
               </div>
 
               <!-- Tree View UI -->
@@ -371,10 +411,10 @@ onUnmounted(() => {
                 <div class="tree-header">
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <Network size="20" class="tree-icon" /> 
-                    <h3>Taxonomie des Compétences</h3>
+                    <h3>{{ t('chat.taxonomy_title') }}</h3>
                   </div>
                   <div v-if="msg.usage?.estimated_cost_usd" class="tree-cost-badge">
-                    Coût du recalcule : ${{ Number(msg.usage.estimated_cost_usd).toFixed(4) }}
+                    {{ t('chat.taxonomy_cost', { cost: Number(msg.usage.estimated_cost_usd).toFixed(4) }) }}
                   </div>
                 </div>
                 <div class="tree-content">
@@ -393,7 +433,7 @@ onUnmounted(() => {
                     :loading="chatStore.isTyping"
                   >
                     <CheckCircle2 v-if="!chatStore.isTyping" size="18" />
-                    Valider et Appliquer la Taxonomie
+                    {{ t('chat.validate_taxonomy') }}
                   </BaseButton>
                 </div>
               </div>
@@ -446,14 +486,14 @@ onUnmounted(() => {
           v-model="userInput" 
           @keydown.enter.exact.prevent="sendQuery()"
           @input="adjustTextareaHeight"
-          placeholder="Posez votre question à l'assistant... (Maj+Entrée pour un saut de ligne)"
+          :placeholder="t('chat.placeholder')"
           autocomplete="off"
           rows="1"
         ></textarea>
-        <BaseButton @click="resetHistory" variant="ghost" title="Réinitialiser l'historique">
+        <BaseButton @click="resetHistory" variant="ghost" :title="t('chat.reset_history')" class="reset-history-btn">
           <Trash2 size="18" />
         </BaseButton>
-        <BaseButton @click="sendQuery()" :loading="chatStore.isTyping">Envoyer</BaseButton>
+        <BaseButton @click="sendQuery()" :loading="chatStore.isTyping">{{ t('chat.send') }}</BaseButton>
       </div>
     </div>
   </div>
@@ -550,6 +590,43 @@ onUnmounted(() => {
 
 .cost-value {
   color: #059669;
+}
+
+/* ── F3 — Show More pagination bar ───────────────────────────────── */
+.show-more-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.25rem 0 0.5rem;
+  width: 100%;
+}
+
+.show-more-count {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.show-more-btn {
+  background: none;
+  border: 1.5px solid #e2e8f0;
+  color: #64748b;
+  padding: 0.4rem 1.2rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.01em;
+}
+
+.show-more-btn:hover {
+  border-color: var(--zenika-red);
+  color: var(--zenika-red);
+  background: rgba(227, 25, 55, 0.04);
+  transform: translateY(1px);
 }
 
 .pagination-controls {

@@ -1,33 +1,38 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
-from src.services.bulk_service import bg_retry_apply, _acquire_service_token, _get_cv_extraction_prompt
+from src.services.bulk_helpers import _acquire_service_token, _get_cv_extraction_prompt
+from src.services.bulk_service import bg_retry_apply
 import os
 import datetime
 
 @pytest.mark.asyncio
 async def test_acquire_service_token_success():
-    with patch("src.services.bulk_service.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    with patch("src.services.bulk_helpers.httpx.AsyncClient") as mock_ac:
+        mock_client = AsyncMock()
+        mock_ac.return_value.__aenter__.return_value = mock_client
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "token123", "token_type": "bearer"}
-        mock_post.return_value = mock_resp
-        
+        mock_client.post.return_value = mock_resp
+
         token = await _acquire_service_token("Bearer old")
         assert token == "token123"
 
 @pytest.mark.asyncio
 async def test_acquire_service_token_fail():
-    with patch("src.services.bulk_service.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    with patch("src.services.bulk_helpers.httpx.AsyncClient") as mock_ac:
+        mock_client = AsyncMock()
+        mock_ac.return_value.__aenter__.return_value = mock_client
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        mock_post.return_value = mock_resp
-        
+        mock_client.post.return_value = mock_resp
+
         token = await _acquire_service_token("Bearer old")
         assert token == "old"
 
 @pytest.mark.asyncio
 async def test_get_cv_extraction_prompt_cache():
-    from src.services.bulk_service import _CV_CACHE
+    from src.services.config import _CV_CACHE
     with patch.dict(_CV_CACHE, {"prompt": {"value": "cached_prompt", "expires": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10)}}):
         prompt = await _get_cv_extraction_prompt()
         assert prompt == "cached_prompt"

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import mermaid from 'mermaid'
 import { Network, RefreshCw, AlertCircle, Info, Timer } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -157,8 +160,8 @@ onMounted(() => {
           <Network size="28" />
         </div>
         <div>
-          <h1>Carte d'Infrastructure Dynamique</h1>
-          <p>Visualisation en temps réel des dépendances via GCP Cloud Trace</p>
+          <h1>{{ t('inframap.title') }}</h1>
+          <p>{{ t('inframap.subtitle') }}</p>
         </div>
       </div>
       
@@ -166,9 +169,9 @@ onMounted(() => {
         <div class="filter-group">
           <Timer size="16" />
           <select v-model="hoursLookback" @change="fetchTopology" class="zen-select">
-            <option :value="1">Dernière heure</option>
-            <option :value="4">4 Dernières heures</option>
-            <option :value="24">Dernières 24 heures</option>
+            <option :value="1">{{ t('inframap.option_1h') }}</option>
+            <option :value="4">{{ t('inframap.option_4h') }}</option>
+            <option :value="24">{{ t('inframap.option_24h') }}</option>
           </select>
         </div>
         <button @click="fetchTopology" class="refresh-btn" :disabled="loading">
@@ -181,24 +184,24 @@ onMounted(() => {
     <div class="content-card">
       <div v-if="loading" class="loading-state">
         <div class="pulse-loader"></div>
-        <p>Analyse des traces GCP en cours...</p>
+        <p>{{ t('inframap.loading') }}</p>
       </div>
 
       <div v-else-if="error" class="error-state">
         <AlertCircle size="48" color="#E31937" />
-        <h3>Oups !</h3>
+        <h3>{{ t('inframap.error_title') }}</h3>
         <p>{{ error }}</p>
         <div class="help-box">
           <Info size="16" />
-          <p>Assurez-vous que le Service Account <strong>sa-analytics</strong> possède bien le rôle <strong>roles/cloudtrace.user</strong>.</p>
+          <p>{{ t('inframap.error_iam') }}</p>
         </div>
-        <button @click="fetchTopology" class="retry-btn">Réessayer</button>
+        <button @click="fetchTopology" class="retry-btn">{{ t('inframap.retry') }}</button>
       </div>
 
       <div v-else class="graph-container">
         <div v-if="topologyData?.links?.length === 0" class="link-hint">
           <Info size="16" />
-          <p>Services détectés, mais aucun lien de communication capturé. (Vérifiez la propagation des traces ou attendez quelques minutes)</p>
+          <p>{{ t('inframap.no_links') }}</p>
         </div>
         
         <div ref="mermaidContainer" class="mermaid-output"></div>

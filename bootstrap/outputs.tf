@@ -22,3 +22,13 @@ output "secret_manager_gemini_id" {
   description = "ID secret manager du secret Gemini API Key"
   value       = google_secret_manager_secret.gemini_api_key.id
 }
+
+output "python_ar_url" {
+  description = "URL du repo Python Artifact Registry (zenika-shared-schemas)"
+  value       = "${var.region}-python.pkg.dev/${var.project_id}/${google_artifact_registry_repository.python_packages.repository_id}"
+}
+
+output "docker_builder_sa_email" {
+  description = "Email du SA docker-builder (lecture AR Python uniquement, sans clé)"
+  value       = google_service_account.docker_builder_sa.email
+}

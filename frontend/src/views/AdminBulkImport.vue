@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/ui/PageHeader.vue'
 import {
   PlayCircle, StopCircle, RefreshCcw, CheckCircle2,
   AlertCircle, Loader2, Upload, Cpu, Layers, Database,
   Coins, Clock, FileText, ChevronDown, ChevronUp, BarChart3, Zap, Trash2
 } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -311,8 +314,8 @@ const lastLog = computed(() => {
 <template>
   <div class="bulk-import-view">
     <PageHeader
-      title="Ré-analyse Globale des CVs"
-      subtitle="Pipeline Vertex AI Batch — Option B (Intégrité Totale)"
+      :title="t('admin_bulk.title')"
+      :subtitle="t('admin_bulk.subtitle')"
     />
 
     <!-- Alertes ── -->
@@ -383,7 +386,7 @@ const lastLog = computed(() => {
       <!-- Post-apply banner : Bulk Scoring requis ── -->
       <div v-if="status.status === 'completed'" class="post-apply-banner">
         <Zap :size="16" />
-        <span>Apply terminé. <strong>Lancez le Bulk Scoring</strong> pour calculer les scores IA des compétences.</span>
+        <span>{{ t('admin_bulk.apply_done_tip') }}</span>
       </div>
 
       <!-- Last log ── -->
@@ -404,22 +407,22 @@ const lastLog = computed(() => {
 
     <!-- FinOps Card ── -->
     <div v-if="totalTokens > 0" class="finops-card">
-      <h3><Coins :size="16" /> FinOps — Consommation Tokens</h3>
+      <h3><Coins :size="16" /> {{ t('admin_bulk.finops_title') }}</h3>
       <div class="finops-grid">
         <div class="finops-item">
-          <span class="finops-label">Tokens Input</span>
+          <span class="finops-label">{{ t('admin_bulk.tokens_input') }}</span>
           <span class="finops-value">{{ formatN(status.total_tokens_input) }}</span>
         </div>
         <div class="finops-item">
-          <span class="finops-label">Tokens Output</span>
+          <span class="finops-label">{{ t('admin_bulk.tokens_output') }}</span>
           <span class="finops-value">{{ formatN(status.total_tokens_output) }}</span>
         </div>
         <div class="finops-item">
-          <span class="finops-label">Total Tokens</span>
+          <span class="finops-label">{{ t('admin_bulk.tokens_total') }}</span>
           <span class="finops-value">{{ formatN(totalTokens) }}</span>
         </div>
         <div class="finops-item highlight">
-          <span class="finops-label">Coût estimé</span>
+          <span class="finops-label">{{ t('admin_bulk.cost_estimated') }}</span>
           <span class="finops-value">~{{ estimatedCostEur }} €</span>
         </div>
       </div>
@@ -457,8 +460,8 @@ const lastLog = computed(() => {
         <div class="step-header">
           <div class="step-num"><CheckCircle2 v-if="status.status === 'completed'" size="16" /><span v-else>1</span></div>
           <div class="step-title-wrap">
-            <h3>Pipeline Vertex AI Batch</h3>
-            <p class="step-desc">Extrait et formate les CV en masse. Purge les données existantes.</p>
+            <h3>{{ t('admin_bulk.pipeline_title') }}</h3>
+            <p class="step-desc">{{ t('admin_bulk.pipeline_desc') }}</p>
           </div>
         </div>
         <div class="step-content">
@@ -507,8 +510,8 @@ const lastLog = computed(() => {
         <div class="step-header">
           <div class="step-num bg-warning"><AlertCircle size="16" /></div>
           <div class="step-title-wrap">
-            <h3 class="text-warning">Rattrapage & Résolution</h3>
-            <p class="step-desc">Le pipeline a été interrompu ou des erreurs d'application sont survenues.</p>
+            <h3 class="text-warning">{{ t('admin_bulk.recovery_title') }}</h3>
+            <p class="step-desc">{{ t('admin_bulk.recovery_desc') }}</p>
           </div>
         </div>
         <div class="step-content">
@@ -523,7 +526,7 @@ const lastLog = computed(() => {
               <Loader2 v-if="isLoading" :size="18" class="spin" />
               <RefreshCcw v-else :size="18" />
               Re-tenter l'application (Depuis GCS)
-              <span v-if="status.status === 'cancelled'" class="badge-gcs">Données Vertex préservées</span>
+              <span v-if="status.status === 'cancelled'" class="badge-gcs">{{ t('admin_bulk.vertex_data_preserved') }}</span>
             </button>
             <button
               v-if="status.status === 'error' || status.status === 'cancelled'"
@@ -549,8 +552,8 @@ const lastLog = computed(() => {
         <div class="step-header">
           <div class="step-num">2</div>
           <div class="step-title-wrap">
-            <h3>Scoring IA des Compétences</h3>
-            <p class="step-desc">Calcule les scores IA pour tous les consultants. Indispensable après l'étape 1.</p>
+            <h3>{{ t('admin_bulk.scoring_title') }}</h3>
+            <p class="step-desc">{{ t('admin_bulk.scoring_desc') }}</p>
           </div>
         </div>
         <div class="step-content">
@@ -582,7 +585,7 @@ const lastLog = computed(() => {
             <!-- Progression du Scoring IA -->
             <div v-if="scoringStatus.status === 'running'" class="scoring-progress-box">
               <div class="progress-header">
-                <span class="progress-title">Scoring en cours...</span>
+                <span class="progress-title">{{ t('admin_bulk.scoring_running') }}</span>
                 <span class="progress-stats">
                   {{ scoringStatus.processed }} / {{ scoringStatus.total_users }} consultants
                 </span>
@@ -600,11 +603,11 @@ const lastLog = computed(() => {
               </div>
             </div>
             <div v-else-if="scoringStatus.status === 'completed'" class="scoring-feedback scoring-ok">
-              <span class="scoring-count">✅ Scoring Terminé</span>
+              <span class="scoring-count">{{ t('admin_bulk.scoring_done') }}</span>
               {{ scoringStatus.success }} succès, {{ scoringStatus.error_count }} erreurs.
             </div>
             <div v-else-if="scoringStatus.status === 'error'" class="scoring-feedback bg-danger">
-              <span class="scoring-count">❌ Erreur Scoring</span>
+              <span class="scoring-count">{{ t('admin_bulk.scoring_error') }}</span>
               {{ scoringStatus.errors?.[0] }}
             </div>
             <div v-else-if="bulkScoringMsg" class="scoring-feedback" :class="{ 'scoring-ok': bulkScoringCount !== null && bulkScoringCount > 0 }">

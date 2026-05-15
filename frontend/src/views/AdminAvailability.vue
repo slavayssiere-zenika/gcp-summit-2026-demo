@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import { Calendar, CalendarDays } from 'lucide-vue-next'
 import PageHeader from '../components/ui/PageHeader.vue'
+
+const { t } = useI18n()
 
 const users = ref<any[]>([])
 const isLoading = ref(true)
@@ -29,24 +32,24 @@ onMounted(() => {
   <div class="admin-availability fade-in">
 
     <PageHeader
-      title="Planning des Disponibilités"
-      subtitle="Aperçu RH des congés, arrêts et staffings chez les clients pour optimiser les affectations de missions."
+      :title="t('admin_availability.title')"
+      :subtitle="t('admin_availability.subtitle')"
       :icon="CalendarDays"
       :breadcrumb="[
         { label: 'Hub RH' },
-        { label: 'Planning Disponibilités' }
+        { label: t('admin_availability.title') }
       ]"
     />
 
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <span>Chargement des agendas...</span>
+      <span>{{ t('admin_availability.loading') }}</span>
     </div>
 
     <div class="card" v-else>
       <table class="data-table">
         <thead>
-          <tr><th>Consultant</th><th>Email</th><th>Indisponibilités</th></tr>
+          <tr><th>{{ t('admin_availability.col_consultant') }}</th><th>{{ t('admin_availability.col_email') }}</th><th>{{ t('admin_availability.col_unavailabilities') }}</th></tr>
         </thead>
         <tbody>
           <tr v-for="user in users" :key="user.id">
@@ -54,14 +57,14 @@ onMounted(() => {
             <td>{{ user.email }}</td>
             <td>
               <div v-for="(p, i) in user.unavailability_periods" :key="i" class="period-badge">
-                <strong>{{ p.start_date }}</strong> au <strong>{{ p.end_date }}</strong>
+                <strong>{{ p.start_date }}</strong> {{ t('admin_availability.period_to') }} <strong>{{ p.end_date }}</strong>
                 <span class="type-tag">{{ p.type }}</span>
                 <span class="reason-tag">[{{ p.reason }}]</span>
               </div>
             </td>
           </tr>
           <tr v-if="users.length === 0">
-            <td colspan="3" class="empty">Aucun événement d'agenda déclaré pour l'instant.</td>
+            <td colspan="3" class="empty">{{ t('admin_availability.empty') }}</td>
           </tr>
         </tbody>
       </table>

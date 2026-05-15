@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { authService } from '../services/auth'
+import { useI18n } from 'vue-i18n'
 import {
   User as UserIcon,
   Mail,
@@ -27,6 +28,8 @@ import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.v
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Category { id: number; name: string; description: string }
+
+const { t } = useI18n()
 
 // ── State ──────────────────────────────────────────────────────────────────
 const activeTab = ref<'identity' | 'competencies' | 'settings'>('identity')
@@ -82,7 +85,7 @@ const fetchCategories = async () => {
     const response = await axios.get('/api/items/categories')
     categories.value = response.data.items || []
   } catch (err) {
-    error.value = "Impossible de récupérer les catégories."
+    error.value = t('profile.error_categories')
   } finally {
     isLoadingCategories.value = false
   }
@@ -189,7 +192,7 @@ const importCv = async () => {
     cvUrl.value = ''
     setTimeout(() => { cvImportSuccess.value = false }, 3000)
   } catch (err: any) {
-    cvImportError.value = err.response?.data?.detail || "Erreur lors de l'importation"
+    cvImportError.value = err.response?.data?.detail || t('profile.error_import')
   } finally {
     isImportingCv.value = false
   }
@@ -287,27 +290,27 @@ onMounted(() => {
         <div class="panel-card">
           <div class="panel-card-header">
             <UserIcon :size="18" class="card-icon" />
-            <h2>Informations</h2>
+            <h2>{{ t('profile.section_info') }}</h2>
           </div>
           <div class="info-list">
             <div class="info-row">
               <div class="info-icon-wrap"><Fingerprint :size="15" /></div>
               <div>
-                <p class="info-label">Identifiant</p>
+                <p class="info-label">{{ t('profile.field_id') }}</p>
                 <p class="info-value">{{ user?.username }}</p>
               </div>
             </div>
             <div class="info-row">
               <div class="info-icon-wrap"><Mail :size="15" /></div>
               <div>
-                <p class="info-label">Email</p>
+                <p class="info-label">{{ t('profile.field_email') }}</p>
                 <p class="info-value">{{ user?.email }}</p>
               </div>
             </div>
             <div class="info-row">
               <div class="info-icon-wrap"><Briefcase :size="15" /></div>
               <div>
-                <p class="info-label">Rôle</p>
+                <p class="info-label">{{ t('profile.field_role') }}</p>
                 <p class="info-value">{{ userRole }}</p>
               </div>
             </div>
@@ -318,11 +321,11 @@ onMounted(() => {
         <div class="panel-card">
           <div class="panel-card-header">
             <ShieldCheck :size="18" class="card-icon" />
-            <h2>Autorisations</h2>
+            <h2>{{ t('profile.section_permissions') }}</h2>
           </div>
-          <p class="card-desc">Catégories d'objets accessibles dans la plateforme.</p>
+          <p class="card-desc">{{ t('profile.permissions_desc') }}</p>
           <div v-if="isLoadingCategories" class="mini-loader">
-            <div class="spinner-sm" /><span>Chargement...</span>
+            <div class="spinner-sm" /><span>{{ t('profile.permissions_loading') }}</span>
           </div>
           <div v-else-if="user?.allowed_category_ids?.length" class="tags-wrap">
             <span v-for="id in user.allowed_category_ids" :key="id" class="access-tag">
@@ -331,7 +334,7 @@ onMounted(() => {
           </div>
           <div v-else class="empty-mini">
             <AlertCircle :size="20" />
-            <p>Aucune catégorie assignée</p>
+            <p>{{ t('profile.permissions_none') }}</p>
           </div>
         </div>
 
@@ -339,20 +342,20 @@ onMounted(() => {
         <div class="panel-card full-width">
           <div class="panel-card-header">
             <FileText :size="18" class="card-icon" />
-            <h2>Mon Curriculum Vitae</h2>
+            <h2>{{ t('profile.section_cv') }}</h2>
           </div>
-          <p class="card-desc">Rattachez votre CV via une URL Google Docs. Cela permettra à l'Agent RH d'extraire vos compétences et missions.</p>
+          <p class="card-desc">{{ t('profile.cv_desc') }}</p>
           
           <div class="add-period-form" style="margin-top: 1rem;">
-            <p class="form-label">Importer depuis Google Docs</p>
+            <p class="form-label">{{ t('profile.cv_label') }}</p>
             <div class="form-row" style="align-items: flex-start;">
               <label class="field" style="flex: 1;">
                 <input 
                   type="url" 
                   v-model="cvUrl" 
                   class="field-input" 
-                  placeholder="https://docs.google.com/document/d/1X..." 
-                  aria-label="URL du Google Doc" 
+                  :placeholder="t('profile.cv_placeholder')" 
+                  :aria-label="t('profile.cv_aria')" 
                 />
               </label>
               <button @click="importCv" :disabled="!cvUrl || isImportingCv" class="btn-primary" style="padding: 9px 18px; margin-top: 0;">
@@ -374,9 +377,9 @@ onMounted(() => {
         <div class="panel-card full-width">
           <div class="panel-card-header">
             <Calendar :size="18" class="card-icon" />
-            <h2>Indisponibilités</h2>
+            <h2>{{ t('profile.section_unavailability') }}</h2>
           </div>
-          <p class="card-desc">Déclarez vos périodes d'absence (congés, mission client, formation).</p>
+          <p class="card-desc">{{ t('profile.unavailability_desc') }}</p>
 
           <!-- Liste existante -->
           <div v-if="unavailabilityPeriods.length" class="periods-list">
@@ -397,35 +400,35 @@ onMounted(() => {
             </div>
           </div>
           <div v-else class="empty-mini" style="margin-bottom: 1.25rem;">
-            <Calendar :size="20" /><p>Aucune indisponibilité déclarée</p>
+            <Calendar :size="20" /><p>{{ t('profile.unavailability_none') }}</p>
           </div>
 
           <!-- Formulaire ajout -->
           <div class="add-period-form">
-            <p class="form-label">Ajouter une période</p>
+            <p class="form-label">{{ t('profile.unavailability_add') }}</p>
             <div class="form-row">
               <label class="field">
-                <span>Début</span>
-                <input type="date" v-model="newPeriod.start_date" class="field-input" aria-label="Date de début" />
+                <span>{{ t('profile.field_start') }}</span>
+                <input type="date" v-model="newPeriod.start_date" class="field-input" :aria-label="t('profile.field_start')" />
               </label>
               <label class="field">
-                <span>Fin</span>
-                <input type="date" v-model="newPeriod.end_date" class="field-input" aria-label="Date de fin" />
+                <span>{{ t('profile.field_end') }}</span>
+                <input type="date" v-model="newPeriod.end_date" class="field-input" :aria-label="t('profile.field_end')" />
               </label>
               <label class="field">
-                <span>Type</span>
-                <select v-model="newPeriod.type" class="field-input" aria-label="Type d'indisponibilité">
-                  <option value="full">Journée complète</option>
-                  <option value="am">Matin</option>
-                  <option value="pm">Après-midi</option>
+                <span>{{ t('profile.field_type') }}</span>
+                <select v-model="newPeriod.type" class="field-input" :aria-label="t('profile.field_type')">
+                  <option value="full">{{ t('profile.type_full') }}</option>
+                  <option value="am">{{ t('profile.type_am') }}</option>
+                  <option value="pm">{{ t('profile.type_pm') }}</option>
                 </select>
               </label>
               <label class="field">
-                <span>Motif</span>
-                <select v-model="newPeriod.reason" class="field-input" aria-label="Motif">
-                  <option value="client">Client</option>
-                  <option value="vacances">Vacances</option>
-                  <option value="formation">Formation</option>
+                <span>{{ t('profile.field_reason') }}</span>
+                <select v-model="newPeriod.reason" class="field-input" :aria-label="t('profile.field_reason')">
+                  <option value="client">{{ t('profile.reason_client') }}</option>
+                  <option value="vacances">{{ t('profile.reason_vacances') }}</option>
+                  <option value="formation">{{ t('profile.reason_formation') }}</option>
                 </select>
               </label>
               <button @click="addAvailability" :disabled="!newPeriod.start_date || !newPeriod.end_date || isSavingAvailability" class="btn-add" aria-label="Ajouter la période">

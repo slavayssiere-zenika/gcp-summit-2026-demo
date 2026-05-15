@@ -20,3 +20,6 @@ opentelemetry-exporter-gcp-trace>=1.6.0
 tenacity>=8.0.0,<10.0.0
 opentelemetry-instrumentation-httpx
 opentelemetry-instrumentation-redis
+
+# Shared Pydantic schemas — inter-service contracts (wheel local, buildé par deploy.sh)
+zenika-shared-schemas>=1.0.0

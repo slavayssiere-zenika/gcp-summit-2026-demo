@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import { ShieldAlert, PlayCircle, Loader2, CheckCircle, Database } from 'lucide-vue-next'
 import PageHeader from '../components/ui/PageHeader.vue'
+
+const { t } = useI18n()
 
 const isAnalyzing = ref(false)
 const results = ref<any>(null)
@@ -33,19 +36,19 @@ const runAnalysis = async () => {
   <div class="finops-admin-page fade-in">
 
     <PageHeader
-      title="Sécurité & FinOps IA"
-      subtitle="Protéction contre l'exfiltration de données et la consommation abusive de tokens (Denial of Wallet)."
+      :title="t('admin_finops.title')"
+      :subtitle="t('admin_finops.subtitle')"
       :icon="ShieldAlert"
       :breadcrumb="[
         { label: 'Administration', to: '/admin' },
-        { label: 'Sécurité & FinOps IA' }
+        { label: t('admin_finops.title') }
       ]"
     />
 
     <div class="action-card">
       <div class="card-info">
-        <h3>Scanner Manuel (Kill-Switch)</h3>
-        <p>Le Job Cloud Scheduler exécute cette analyse automatiquement toutes les 15 minutes. Vous pouvez la lancer manuellement ci-dessous.</p>
+        <h3>{{ t('admin_finops.scanner_title') }}</h3>
+        <p>{{ t('admin_finops.scanner_desc') }}</p>
       </div>
       
       <button class="run-btn" @click="runAnalysis" :disabled="isAnalyzing">
@@ -65,23 +68,23 @@ const runAnalysis = async () => {
     <div v-if="results" class="results-container">
       <div class="summary-stats">
         <div class="stat-box">
-          <span class="label">Seuil Paramétré</span>
+          <span class="label">{{ t('admin_finops.threshold') }}</span>
           <span class="val"><Database size="16" /> {{ results.threshold.toLocaleString() }} tokens / 15m</span>
         </div>
         <div class="stat-box" :class="results.anomalies_detected > 0 ? 'danger' : 'safe'">
-          <span class="label">Anomalies Détectées</span>
+          <span class="label">{{ t('admin_finops.anomalies_count') }}</span>
           <span class="val">{{ results.anomalies_detected }}</span>
         </div>
       </div>
 
       <div class="details-section" v-if="results.details && results.details.length > 0">
-        <h3>Comptes Suspendus</h3>
+        <h3>{{ t('admin_finops.suspended_title') }}</h3>
         <table class="zen-table">
           <thead>
             <tr>
-              <th>Utilisateur (Email)</th>
-              <th>Consommation / 15m</th>
-              <th>Statut d'Intervention</th>
+              <th>{{ t('admin_finops.col_user') }}</th>
+              <th>{{ t('admin_finops.col_consumption') }}</th>
+              <th>{{ t('admin_finops.col_status') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -102,8 +105,8 @@ const runAnalysis = async () => {
       
       <div v-else class="all-clear">
         <CheckCircle size="40" style="color: #10b981; margin-bottom: 1rem;" />
-        <h3>Aucune anomalie détectée sur les 15 dernières minutes.</h3>
-        <p>Vos systèmes sont sécures et l'usage reste dans les clous.</p>
+        <h3>{{ t('admin_finops.no_anomaly_title') }}</h3>
+        <p>{{ t('admin_finops.no_anomaly_desc') }}</p>
       </div>
     </div>
   </div>

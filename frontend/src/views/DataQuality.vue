@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/ui/PageHeader.vue'
 import {
   BarChart3, RefreshCcw, Loader2, CheckCircle2, AlertCircle,
@@ -10,6 +11,7 @@ import {
   Users, Link, Search, Layers
 } from 'lucide-vue-next'
 
+const { t } = useI18n()
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -310,13 +312,13 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
 <template>
   <div class="dq-view fade-in">
     <PageHeader
-      title="Data Quality Dashboard"
-      subtitle="Supervision globale de la qualité des pipelines de données"
+      :title="t('dataquality.title')"
+      :subtitle="t('dataquality.subtitle')"
     />
 
     <!-- Refresh toolbar -->
     <div class="toolbar">
-      <button class="btn btn-refresh" @click="refresh" :disabled="dqLoading || scoringLoading" aria-label="Rafraîchir tous les indicateurs">
+      <button class="btn btn-refresh" @click="refresh" :disabled="dqLoading || scoringLoading" :aria-label="t('dataquality.refresh_aria')">
         <Loader2 v-if="dqLoading || scoringLoading" :size="16" class="spin" />
         <RefreshCcw v-else :size="16" />
         Rafraîchir
@@ -328,7 +330,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       <span v-else-if="dqReport" class="computed-at">
         <Clock :size="13" /> Calculé le {{ fmtDate(dqReport.computed_at) }}
       </span>
-      <span class="auto-refresh-badge">Auto ↻ 30s</span>
+      <span class="auto-refresh-badge">{{ t('dataquality.auto_refresh') }}</span>
     </div>
 
     <!-- Error -->
@@ -338,12 +340,12 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
 
     <!-- ── ONGLES DE NAVIGATION ── -->
     <div class="dq-tabs">
-      <button class="dq-tab-btn" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">Résumé</button>
-      <button class="dq-tab-btn" :class="{ active: activeTab === 'cv' }" @click="activeTab = 'cv'">Pipeline CV</button>
-      <button class="dq-tab-btn" :class="{ active: activeTab === 'scoring' }" @click="activeTab = 'scoring'">Scoring IA</button>
-      <button class="dq-tab-btn" :class="{ active: activeTab === 'drive' }" @click="activeTab = 'drive'">Drive Ingestion</button>
-      <button class="dq-tab-btn" :class="{ active: activeTab === 'taxonomy' }" @click="activeTab = 'taxonomy'">Taxonomie</button>
-      <button class="dq-tab-btn" :class="{ active: activeTab === 'rag' }" @click="activeTab = 'rag'">RAG Sémantique</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">{{ t('dataquality.tab_summary') }}</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'cv' }" @click="activeTab = 'cv'">{{ t('dataquality.tab_cv') }}</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'scoring' }" @click="activeTab = 'scoring'">{{ t('dataquality.tab_scoring') }}</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'drive' }" @click="activeTab = 'drive'">{{ t('dataquality.tab_drive') }}</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'taxonomy' }" @click="activeTab = 'taxonomy'">{{ t('dataquality.tab_taxonomy') }}</button>
+      <button class="dq-tab-btn" :class="{ active: activeTab === 'rag' }" @click="activeTab = 'rag'">{{ t('dataquality.tab_rag') }}</button>
     </div>
 
     <!-- ========================================== -->
@@ -382,7 +384,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       <div class="score-info">
         <div class="score-value">{{ dqReport.score }}<span class="score-max">/100</span></div>
         <div class="score-sub">{{ fmt(dqReport.total_cvs) }} CVs · {{ fmt(dqReport.users_with_cv) }} consultants</div>
-        <div class="score-label">Score Data Quality Global</div>
+        <div class="score-label">{{ t('dataquality.score_label') }}</div>
       </div>
 
       <!-- Status pill -->
@@ -412,13 +414,13 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       <div class="card">
         <div class="card-header">
           <BarChart3 :size="18" class="icon-purple" />
-          <span>Synthèse des Pipelines</span>
+          <span>{{ t('dataquality.section_pipelines') }}</span>
         </div>
         <div class="pipeline-grid">
           <!-- Pipeline CV -->
           <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
             <div class="pc-icon" :class="dqReport ? `pc-icon-grade-${dqReport.grade.toLowerCase()}` : ''"><Database :size="22" /></div>
-            <div class="pc-label">Pipeline CV (Vertex Batch)</div>
+            <div class="pc-label">{{ t('dataquality.pipeline_cv') }}</div>
             <div class="pc-value" v-if="dqReport">{{ fmt(dqReport.total_cvs) }} CVs</div>
             <div class="pc-sub" v-if="dqReport">{{ fmt(dqReport.users_with_cv) }} consultants</div>
             <div class="pc-bar" v-if="dqReport">
@@ -432,7 +434,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <!-- Scoring IA -->
           <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
             <div class="pc-icon" :class="scoringStatus.status === 'completed' ? 'pc-icon-grade-a' : scoringStatus.status === 'error' ? 'pc-icon-grade-d' : 'pc-icon-grade-b'"><Zap :size="22" /></div>
-            <div class="pc-label">Scoring IA Compétences</div>
+            <div class="pc-label">{{ t('dataquality.pipeline_scoring') }}</div>
             <div class="pc-value" v-if="dqReport?.metrics?.ai_scoring">{{ (dqReport.metrics.ai_scoring as any).pct }}%</div>
             <div class="pc-sub" v-if="scoringStatus.status === 'completed'">
               {{ fmt(scoringStatus.success) }} / {{ fmt(scoringStatus.total_users) }}
@@ -448,7 +450,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <!-- Embeddings -->
           <RouterLink to="/admin/bulk-import" class="pipeline-card pipeline-card-link">
             <div class="pc-icon" :class="`pc-icon-grade-${dqReport?.metrics['embedding']?.status === 'ok' ? 'a' : dqReport?.metrics['embedding']?.status === 'warning' ? 'c' : 'd'}`"><Brain :size="22" /></div>
-            <div class="pc-label">Embeddings Sémantiques</div>
+            <div class="pc-label">{{ t('dataquality.pipeline_embeddings') }}</div>
             <div class="pc-value" v-if="dqReport">{{ dqReport.metrics['embedding']?.pct ?? 0 }}%</div>
             <div class="pc-sub" v-if="dqReport">{{ fmt(dqReport.metrics['embedding']?.ok) }} indexés</div>
             <div class="pc-bar" v-if="dqReport">
@@ -462,7 +464,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <!-- Drive -->
           <RouterLink to="/admin/drive-ingestion" class="pipeline-card pipeline-card-link">
             <div class="pc-icon" :class="driveStats ? `pc-icon-grade-${driveStats.grade.toLowerCase()}` : ''"><FolderOpen :size="22" /></div>
-            <div class="pc-label">Drive Ingestion</div>
+            <div class="pc-label">{{ t('dataquality.pipeline_drive') }}</div>
             <div class="pc-value" v-if="driveStats">{{ fmt(driveStats.imported) }} CVs</div>
             <div class="pc-sub" v-if="driveStats">Score {{ driveStats.score }}/100</div>
             <div class="pc-bar" v-if="driveStats">
@@ -477,7 +479,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <!-- RAG Sémantique -->
           <div class="pipeline-card">
             <div class="pc-icon" :class="ragQuality?.status === 'ok' ? 'pc-icon-grade-a' : ragQuality?.status === 'warning' ? 'pc-icon-grade-c' : ragQuality?.status === 'error' ? 'pc-icon-grade-d' : 'pc-icon-grade-b'"><Search :size="22" /></div>
-            <div class="pc-label">RAG Sémantique</div>
+            <div class="pc-label">{{ t('dataquality.pipeline_rag') }}</div>
             <div class="pc-value" v-if="ragQuality?.recall_at_5 != null">{{ Math.round((ragQuality.recall_at_5 ?? 0) * 100) }}%</div>
             <div class="pc-value" v-else>—</div>
             <div class="pc-sub" v-if="ragQuality?.nb_cases != null">{{ ragQuality.nb_cases_ok }}/{{ ragQuality.nb_cases }} cas calibrés</div>
@@ -492,7 +494,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <!-- RAG Chunking (R7) -->
           <div class="pipeline-card">
             <div class="pc-icon" :class="ragChunking?.status === 'ok' ? 'pc-icon-grade-a' : ragChunking?.status === 'partial' ? 'pc-icon-grade-c' : 'pc-icon-grade-b'"><Layers :size="22" /></div>
-            <div class="pc-label">RAG Multi-Vecteur</div>
+            <div class="pc-label">{{ t('dataquality.pipeline_multivec') }}</div>
             <div class="pc-value" v-if="ragChunking?.total_chunks > 0">{{ ragChunking.total_chunks.toLocaleString() }}</div>
             <div class="pc-value" v-else>—</div>
             <div class="pc-sub" v-if="ragChunking?.profiles_indexed > 0">{{ ragChunking.profiles_indexed }} profils · {{ ragChunking.avg_chunks_per_profile }} chunks/profil</div>
@@ -512,7 +514,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
       <div v-if="dqReport" class="card">
       <div class="card-header">
         <Database :size="18" class="icon-blue" />
-        <span>Pipeline CV — Qualité des données extraites</span>
+        <span>{{ t('dataquality.section_cv') }}</span>
       </div>
       <div class="metrics-list">
         <div
@@ -573,11 +575,11 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
     <div class="card">
       <div class="card-header">
         <Zap :size="18" class="icon-amber" />
-        <span>Scoring IA — Couverture des Compétences</span>
+        <span>{{ t('dataquality.section_scoring') }}</span>
       </div>
 
       <!-- SOUS-SECTION : Qualité Data (KPI) -->
-      <div class="scoring-section-label"><BarChart3 :size="12" /> Qualité Data</div>
+      <div class="scoring-section-label"><BarChart3 :size="12" /> {{ t('dataquality.section_data_quality') }}</div>
 
       <!-- Couverture réelle (source: dqReport.metrics.ai_scoring) -->
       <div v-if="dqReport?.metrics?.ai_scoring" class="scoring-coverage">
@@ -613,11 +615,11 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
           <CheckCircle2 :size="14" /> Tous les consultants ont atteint le seuil de qualité IA
         </div>
       </div>
-      <div v-else-if="dqLoading" class="scoring-idle"><Loader2 :size="16" class="spin" /> Calcul en cours…</div>
-      <div v-else class="scoring-idle"><Activity :size="16" /> Données de scoring non disponibles — rafraîchir pour recalculer.</div>
+      <div v-else-if="dqLoading" class="scoring-idle"><Loader2 :size="16" class="spin" /> {{ t('dataquality.scoring_loading') }}</div>
+      <div v-else class="scoring-idle"><Activity :size="16" /> {{ t('dataquality.scoring_unavailable') }}</div>
 
       <!-- SOUS-SECTION : Dernier Run (process monitoring) -->
-      <div class="scoring-section-label" style="border-top: 1px solid rgba(255,255,255,0.06); margin-top: 0;"><Activity :size="12" /> Dernier Run</div>
+      <div class="scoring-section-label" style="border-top: 1px solid rgba(255,255,255,0.06); margin-top: 0;"><Activity :size="12" /> {{ t('dataquality.section_last_run') }}</div>
       <div class="scoring-run-status">
         <div class="run-info">
           <!-- Badge statut -->
@@ -626,19 +628,19 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
             <CheckCircle2 v-else-if="scoringStatus.status === 'completed'" :size="12" />
             <AlertCircle v-else-if="scoringStatus.status === 'error'" :size="12" />
             <Activity v-else :size="12" />
-            <span v-if="scoringStatus.status === 'idle'">En veille</span>
-            <span v-else-if="scoringStatus.status === 'uploading'">📤 Upload JSONL → GCS…</span>
-            <span v-else-if="scoringStatus.status === 'batch_running'">⚡ Job Vertex AI en cours…</span>
-            <span v-else-if="scoringStatus.status === 'applying'">💾 Écriture des scores en DB…</span>
+            <span v-if="scoringStatus.status === 'idle'">{{ t('dataquality.status_idle') }}</span>
+            <span v-else-if="scoringStatus.status === 'uploading'">{{ t('dataquality.status_uploading') }}</span>
+            <span v-else-if="scoringStatus.status === 'batch_running'">{{ t('dataquality.status_batch') }}</span>
+            <span v-else-if="scoringStatus.status === 'applying'">{{ t('dataquality.status_applying') }}</span>
             <span v-else-if="scoringStatus.status === 'running'">{{ fmt(scoringStatus.processed) }}/{{ fmt(scoringStatus.total_users) }} en cours</span>
             <span v-else-if="scoringStatus.status === 'completed'">✅ {{ fmt(scoringStatus.success) }} scores appliqués / {{ fmt(scoringStatus.total_users) }} users</span>
-            <span v-else-if="scoringStatus.status === 'error'">❌ Erreur pipeline</span>
-            <span v-else>En veille</span>
+            <span v-else-if="scoringStatus.status === 'error'">{{ t('dataquality.status_error') }}</span>
+            <span v-else>{{ t('dataquality.status_idle') }}</span>
           </div>
 
           <!-- Batch job ID -->
           <div v-if="scoringStatus.batch_job_id" class="run-job-id">
-            <span class="run-job-label">Job Vertex :</span>
+            <span class="run-job-label">{{ t('dataquality.job_vertex') }}</span>
             <code class="run-job-code">{{ scoringStatus.batch_job_id?.split('/').pop() }}</code>
           </div>
 
@@ -649,7 +651,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
 
           <!-- Logs pipeline (3 dernières étapes) -->
           <div v-if="scoringStatus.logs && scoringStatus.logs.length > 0" class="run-logs">
-            <div class="run-logs-label">Dernières étapes :</div>
+            <div class="run-logs-label">{{ t('dataquality.last_steps') }}</div>
             <div
               v-for="(log, i) in scoringStatus.logs.slice(-4).reverse()"
               :key="i"
@@ -675,7 +677,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
             >
               ⚡ Reprendre depuis GCS
             </button>
-            <span class="run-resume-hint">Poll Vertex + apply si SUCCEEDED</span>
+            <span class="run-resume-hint">{{ t('dataquality.resume_hint') }}</span>
           </div>
         </div>
         <RouterLink to="/admin/reanalysis" class="run-link">
@@ -693,7 +695,7 @@ const fmtDate = (s: string) => new Date(s).toLocaleString('fr-FR')
     <div class="card">
       <div class="card-header">
         <FolderOpen :size="18" class="icon-violet" />
-        <span>Pipeline Drive — Ingestion des CVs</span>
+        <span>{{ t('dataquality.section_drive') }}</span>
         <RouterLink to="/admin/bulk-import" class="header-link">
           Dashboard complet <ArrowRight :size="13" />
         </RouterLink>

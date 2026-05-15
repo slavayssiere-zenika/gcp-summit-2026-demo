@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import { FileDown, RefreshCw, CheckCircle, AlertCircle, Lock, AlertTriangle, ChevronRight } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
@@ -34,6 +35,7 @@ const PIPELINE_STEPS: CVImportStep[] = [
 ]
 
 // ─── State ────────────────────────────────────────────────────────────────────
+const { t } = useI18n()
 const cvUrl = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -211,37 +213,37 @@ const stepStatusIcon = (status: string) => {
     <div class="header-section">
       <div class="title-wrapper">
         <FileDown class="icon-title" size="32" />
-        <h2>Import CV (RAG)</h2>
+        <h2>{{ t('importcv.title') }}</h2>
       </div>
-      <p class="subtitle">Scannez un profil via l'Intelligence Artificielle de Google Gemini</p>
+      <p class="subtitle">{{ t('importcv.subtitle') }}</p>
     </div>
 
     <div class="reader-card glass-panel">
       <div class="card-header">
-        <h3>Analyser un Google Doc</h3>
+        <h3>{{ t('importcv.card_title') }}</h3>
       </div>
 
       <div class="card-body">
         <!-- Form -->
         <form @submit.prevent="submitCV" class="import-form">
           <div class="form-group">
-            <label>Lien Public du Google Doc</label>
+            <label>{{ t('importcv.label_url') }}</label>
             <input
               v-model="cvUrl"
               type="url"
               required
               class="glass-input"
-              placeholder="https://docs.google.com/document/d/.../edit"
+              :placeholder="'https://docs.google.com/document/d/.../edit'"
               :disabled="loading"
               aria-label="URL du Google Doc CV"
             />
-            <small class="hint">Assurez-vous que le lien est réglé sur "Tous les utilisateurs disposant du lien".</small>
+            <small class="hint">{{ t('importcv.hint_url') }}</small>
           </div>
 
           <div class="actions-group">
             <button type="submit" class="submit-btn" :disabled="loading || !cvUrl" aria-label="Scanner le CV en mode public">
               <RefreshCw v-if="loading" size="18" class="spin" />
-              <span v-else>Scanner &amp; Intégrer (Public)</span>
+              <span v-else>{{ t('importcv.btn_scan') }}</span>
             </button>
             <button
               type="button"
@@ -252,7 +254,7 @@ const stepStatusIcon = (status: string) => {
               aria-label="Importer avec authentification Google"
             >
               <Lock size="18" />
-              <span>Importer avec mon compte Google</span>
+              <span>{{ t('importcv.btn_google') }}</span>
             </button>
           </div>
         </form>
@@ -260,10 +262,10 @@ const stepStatusIcon = (status: string) => {
         <!-- ── Pipeline Stepper ──────────────────────────────────────────── -->
         <div class="pipeline-stepper" :class="{ active: loading || successData || error }">
           <div class="stepper-title">
-            <span v-if="loading" class="stepper-label-active pulse-text">Analyse en cours…</span>
-            <span v-else-if="successData" class="stepper-label-done">Pipeline terminé</span>
-            <span v-else-if="error" class="stepper-label-error">Analyse interrompue</span>
-            <span v-else class="stepper-label-idle">Étapes du pipeline IA</span>
+            <span v-if="loading" class="stepper-label-active pulse-text">{{ t('importcv.pipeline_running') }}</span>
+            <span v-else-if="successData" class="stepper-label-done">{{ t('importcv.pipeline_done') }}</span>
+            <span v-else-if="error" class="stepper-label-error">{{ t('importcv.pipeline_error') }}</span>
+            <span v-else class="stepper-label-idle">{{ t('importcv.pipeline_idle') }}</span>
           </div>
 
           <div class="steps-list">
@@ -293,7 +295,7 @@ const stepStatusIcon = (status: string) => {
         <div v-if="successData?.warnings?.length" class="warnings-panel">
           <div class="warnings-header">
             <AlertTriangle size="16" />
-            <span>{{ successData.warnings.length }} avertissement(s) non-bloquant(s)</span>
+            <span>{{ t('importcv.warnings_label', { count: successData.warnings.length }) }}</span>
           </div>
           <ul class="warnings-list">
             <li v-for="(w, i) in successData.warnings" :key="i">{{ w }}</li>
@@ -304,7 +306,7 @@ const stepStatusIcon = (status: string) => {
         <div v-if="error" class="alert-box error fade-in-up">
           <span class="error-icon-emoji">{{ errorIcon }}</span>
           <div class="error-content">
-            <strong>Erreur d'analyse</strong>
+            <strong>{{ t('importcv.error_title') }}</strong>
             <p>{{ error }}</p>
           </div>
         </div>
@@ -313,15 +315,15 @@ const stepStatusIcon = (status: string) => {
         <div v-if="successData" class="alert-box success fade-in-up">
           <CheckCircle size="24" class="success-icon" />
           <div class="success-content">
-            <h4>Analyse Terminée</h4>
+            <h4>{{ t('importcv.success_title') }}</h4>
             <p>{{ successData.message }}</p>
             <div class="badges">
               <span class="badge user">👤 User ID #{{ successData.user_id }}</span>
-              <span class="badge comp">⭐ {{ successData.competencies_assigned }} Compétences Vectorisées</span>
-              <span v-if="successData.extracted_info?.is_anonymous" class="badge anon">🔒 Anonyme</span>
+              <span class="badge comp">⭐ {{ t('importcv.success_competencies', { count: successData.competencies_assigned }) }}</span>
+              <span v-if="successData.extracted_info?.is_anonymous" class="badge anon">🔒 {{ t('importcv.success_anon') }}</span>
             </div>
             <RouterLink :to="{ name: 'user-detail', params: { id: successData.user_id } }" class="view-btn">
-              Voir la fiche du Consultant
+              {{ t('importcv.btn_view') }}
             </RouterLink>
           </div>
         </div>

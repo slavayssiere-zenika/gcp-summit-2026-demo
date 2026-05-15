@@ -2,12 +2,12 @@
   <div class="admin-users-wrapper fade-in">
 
     <PageHeader
-      title="Comptes & Rôles"
-      subtitle="Annuaire global : gérez les rôles, les accès et visualisez la répartition géographique des consultants."
+      :title="$t('admin_users.title')"
+      :subtitle="$t('admin_users.subtitle')"
       :icon="Users"
       :breadcrumb="[
-        { label: 'Administration', to: '/admin' },
-        { label: 'Comptes & Rôles' }
+        { label: $t('admin_users.breadcrumb_admin'), to: '/admin' },
+        { label: $t('admin_users.title') }
       ]"
     />
 
@@ -19,7 +19,7 @@
           <input 
             type="text" 
             v-model="searchQuery" 
-            placeholder="Rechercher par nom, email..." 
+            :placeholder="$t('admin_users.search_placeholder')" 
           />
         </div>
         
@@ -27,7 +27,7 @@
           <div class="filter-group">
             <Filter size="16" class="filter-icon" />
             <select v-model="selectedAgency" class="filter-select">
-              <option value="">Toutes les agences</option>
+              <option value="">{{ $t('admin_users.filter_all_agencies') }}</option>
               <option v-for="agency in availableAgencies" :key="agency" :value="agency">
                 {{ agency }}
               </option>
@@ -37,11 +37,11 @@
           <div class="filter-group">
             <Shield size="16" class="filter-icon" />
             <select v-model="selectedRole" class="filter-select">
-              <option value="">Tous les rôles</option>
-              <option value="admin">Admin</option>
-              <option value="rh">RH</option>
-              <option value="commercial">Commercial</option>
-              <option value="user">Utilisateur</option>
+              <option value="">{{ $t('admin_users.filter_all_roles') }}</option>
+              <option value="admin">{{ $t('admin_users.role_admin') }}</option>
+              <option value="rh">{{ $t('admin_users.role_rh') }}</option>
+              <option value="commercial">{{ $t('admin_users.role_commercial') }}</option>
+              <option value="user">{{ $t('admin_users.role_user') }}</option>
             </select>
           </div>
         </div>
@@ -60,11 +60,11 @@
           <table class="data-table" v-if="paginatedUsers.length > 0">
             <thead>
               <tr>
-                <th>Utilisateur</th>
-                <th>Rôle</th>
-                <th>Statut</th>
-                <th>Agence</th>
-                <th class="actions-col">Actions Rapides</th>
+                <th>{{ $t('admin_users.col_user') }}</th>
+                <th>{{ $t('admin_users.col_role') }}</th>
+                <th>{{ $t('admin_users.col_status') }}</th>
+                <th>{{ $t('admin_users.col_agency') }}</th>
+                <th class="actions-col">{{ $t('admin_users.col_actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -94,14 +94,14 @@
                   <span class="status-badge" :class="user.is_active ? 'active' : 'inactive'">
                     <CheckCircle2 v-if="user.is_active" size="14" />
                     <XCircle v-else size="14" />
-                    {{ user.is_active ? 'Actif' : 'Désactivé' }}
+                    {{ user.is_active ? $t('admin_users.status_active') : $t('admin_users.status_inactive') }}
                   </span>
                 </td>
                 <td>
                   <span class="agency-tag" v-if="getPrimaryAgency(user)">
                     {{ getPrimaryAgency(user) }}
                   </span>
-                  <span class="text-gray text-sm" v-else>Non assignée</span>
+                  <span class="text-gray text-sm" v-else>{{ $t('admin_users.no_agency') }}</span>
                 </td>
                 <td class="actions-col">
                   <div class="quick-actions">
@@ -115,7 +115,7 @@
                       @click="toggleStatus(user)" 
                       class="btn-icon" 
                       :class="user.is_active ? 'btn-danger' : 'btn-success'"
-                      :title="user.is_active ? 'Désactiver le compte' : 'Activer le compte'"
+                      :title="user.is_active ? $t('admin_users.btn_deactivate') : $t('admin_users.btn_activate')"
                       :disabled="isUpdating === user.id"
                     >
                       <UserX v-if="user.is_active" size="16" />
@@ -130,17 +130,17 @@
           <!-- Empty States -->
           <div v-if="users.length > 0 && paginatedUsers.length === 0" class="empty-state">
             <Search class="empty-icon" />
-            <p>Aucun utilisateur ne correspond à vos filtres.</p>
+            <p>{{ $t('admin_users.empty_filter') }}</p>
           </div>
           
           <div v-if="users.length === 0 && !isLoading" class="empty-state">
             <Users class="empty-icon" />
-            <p>Aucun utilisateur trouvé dans la base de données.</p>
+            <p>{{ $t('admin_users.empty_db') }}</p>
           </div>
           
           <div v-if="isLoading && users.length === 0" class="loading-state">
             <Loader2 class="spinner" size="32" />
-            <p>Chargement des {{ totalUsersCount ? totalUsersCount : '' }} utilisateurs...</p>
+            <p>{{ $t('admin_users.loading', { count: totalUsersCount || '' }) }}</p>
           </div>
         </div>
       </div>
@@ -148,11 +148,11 @@
       <!-- Pagination Controls -->
       <div class="pagination" v-if="totalPages > 1">
         <span class="pagination-info">
-          Affichage {{ (currentPage - 1) * itemsPerPage + 1 }} - {{ Math.min(currentPage * itemsPerPage, filteredUsers.length) }} sur {{ filteredUsers.length }}
+          {{ $t('admin_users.pagination_info', { from: (currentPage - 1) * itemsPerPage + 1, to: Math.min(currentPage * itemsPerPage, filteredUsers.length), total: filteredUsers.length }) }}
         </span>
         <div class="pagination-buttons">
           <button @click="currentPage--" :disabled="currentPage === 1" class="page-btn"><ChevronLeft size="16" /></button>
-          <span class="page-current">Page {{ currentPage }} / {{ totalPages }}</span>
+          <span class="page-current">{{ $t('admin_users.page_info', { current: currentPage, total: totalPages }) }}</span>
           <button @click="currentPage++" :disabled="currentPage === totalPages" class="page-btn"><ChevronRight size="16" /></button>
         </div>
       </div>
@@ -164,6 +164,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import {
   Users, RefreshCw, ShieldCheck, Shield, Briefcase,
   User as UserIcon, CheckCircle2, XCircle, UserX, UserCheck, Loader2,
@@ -171,6 +172,7 @@ import {
 } from 'lucide-vue-next'
 import PageHeader from '../components/ui/PageHeader.vue'
 
+const { t: $t } = useI18n()
 const users = ref<any[]>([])
 const isLoading = ref(false)
 const error = ref('')

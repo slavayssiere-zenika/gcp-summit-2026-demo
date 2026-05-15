@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/ui/PageHeader.vue'
 import TaxonomySuggestions from '../components/TaxonomySuggestions.vue'
 import { Server, Settings, CheckCircle, RefreshCcw, Search, Network, X, Trash2 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
+
+const { t } = useI18n()
 
 const isAdmin = () => authService.state.user?.role === 'admin'
 
@@ -287,12 +290,12 @@ onUnmounted(() => {
 <template>
   <div class="reanalysis-wrapper fade-in">
     <PageHeader
-      title="Taxonomie & Structure IA"
-      subtitle="Reconstruisez la taxonomie globale des compétences basée sur le contenu des CVs."
+      :title="t('admin_reanalysis.title')"
+      :subtitle="t('admin_reanalysis.subtitle')"
       :icon="Network"
       :breadcrumb="[
         { label: 'Administration', to: '/admin' },
-        { label: 'Taxonomie & Structure IA' }
+        { label: t('admin_reanalysis.title') }
       ]"
     />
 
@@ -302,10 +305,10 @@ onUnmounted(() => {
       <!-- Section 1: Recalcul de l'Arbre -->
       <div class="glass-panel tree-panel">
         <div class="panel-header">
-          <h3><Network size="20" /> Taxonomie Interactive (Human-in-the-Loop)</h3>
+          <h3><Network size="20" /> {{ t('admin_reanalysis.taxonomy_title') }}</h3>
         </div>
         <div class="panel-content">
-          <p class="section-desc">Ce processus génère une taxonomie en 4 étapes interactives. Vous pouvez valider chaque étape.</p>
+          <p class="section-desc">{{ t('admin_reanalysis.taxonomy_desc') }}</p>
           
           <div class="actions" v-if="['idle', 'error', 'completed', 'cancelled'].includes(treeStatus)">
             <button 
@@ -354,9 +357,9 @@ onUnmounted(() => {
           </div>
           
           <div v-if="treeStatus === 'batch_running'" class="step-box" style="margin-top: 1.5rem; background: rgba(99, 102, 241, 0.1); border: 1px solid #6366f1;">
-              <h4 style="color: #6366f1;">Processus Batch Asynchrone en cours</h4>
-              <p>Un recalcul automatique (Batch) est actuellement en cours par le système GCP. Cette opération peut prendre plusieurs heures (SLA: 24h). L'arbre sera automatiquement mis à jour à la fin du processus.</p>
-              <p v-if="treeArtifacts.batch_job_id"><strong>ID du Job:</strong> {{ treeArtifacts.batch_job_id }}</p>
+              <h4 style="color: #6366f1;">{{ t('admin_reanalysis.batch_running_title') }}</h4>
+              <p>{{ t('admin_reanalysis.batch_running_desc') }}</p>
+              <p v-if="treeArtifacts.batch_job_id"><strong>{{ t('admin_reanalysis.batch_job_id') }}</strong> {{ treeArtifacts.batch_job_id }}</p>
               
               <div v-if="batchProgress && batchProgress.total > 0" class="batch-progress" style="margin-top: 1rem;">
                   <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
@@ -369,8 +372,8 @@ onUnmounted(() => {
                   <p v-if="batchProgress.failed > 0" style="color: #ef4444; font-size: 0.85rem; margin-top: 0.5rem;">⚠️ {{ batchProgress.failed }} requête(s) en échec</p>
               </div>
               <div v-else style="margin-top: 1rem; color: #64748b; font-size: 0.85rem;">
-                  <span v-if="batchProgress?.elapsed">⏱ Temps écoulé : <strong>{{ batchProgress.elapsed }}</strong> — </span>
-                  <span>Vertex AI ne publie pas de compteur pendant l'exécution. Résultat disponible à la fin du job.</span>
+                  <span v-if="batchProgress?.elapsed">{{ t('admin_reanalysis.batch_elapsed') }} <strong>{{ batchProgress.elapsed }}</strong> — </span>
+                  <span>{{ t('admin_reanalysis.batch_no_counter') }}</span>
               </div>
               
               <div style="margin-top: 1.5rem; text-align: right;">
@@ -391,13 +394,13 @@ onUnmounted(() => {
       <!-- Section 2: Historique Batch (Nouveau Dashboard) -->
       <div class="glass-panel batch-panel">
         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-          <h3><Server size="20" /> Historique Jobs Batch GCP</h3>
+          <h3><Server size="20" /> {{ t('admin_reanalysis.history_title') }}</h3>
           <button @click="fetchBatchHistory" class="action-btn secondary-btn" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;" :disabled="isBatchHistoryLoading">
              <RefreshCcw size="14" :class="{ 'spin': isBatchHistoryLoading }" /> Actualiser
           </button>
         </div>
         <div class="panel-content" style="flex: 1; overflow-y: auto; max-height: 400px; padding-right: 0.5rem;">
-          <p v-if="batchHistory.length === 0 && !isBatchHistoryLoading" class="section-desc">Aucun job batch enregistré.</p>
+          <p v-if="batchHistory.length === 0 && !isBatchHistoryLoading" class="section-desc">{{ t('admin_reanalysis.history_empty') }}</p>
           <div v-else class="batch-list" style="display: flex; flex-direction: column; gap: 1rem;">
              <div v-for="job in batchHistory" :key="job.name" class="artifact-card" style="position: relative; overflow: hidden;">
                  <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%;" 
@@ -451,11 +454,11 @@ onUnmounted(() => {
       <!-- Section 3: Logs & Résultats (Full Width) -->
       <div class="glass-panel logs-panel full-width">
         <div class="panel-header">
-          <h3><Search size="20" /> Journal d'Exécution</h3>
-          <div v-if="isLoading" class="active-badge pulse">Opération en cours...</div>
+          <h3><Search size="20" /> {{ t('admin_reanalysis.journal_title') }}</h3>
+          <div v-if="isLoading" class="active-badge pulse">{{ t('admin_reanalysis.operation_running') }}</div>
         </div>
         <div class="logs-container" ref="logContainer">
-          <div v-if="logs.length === 0" class="empty-logs">Aucune opération en cours.</div>
+          <div v-if="logs.length === 0" class="empty-logs">{{ t('admin_reanalysis.operation_empty') }}</div>
           <div v-for="(log, i) in logs" :key="i" class="log-entry" 
                :class="{ 
                  'error-log': log.includes('ERREUR') || log.includes('ÉCHEC'),
