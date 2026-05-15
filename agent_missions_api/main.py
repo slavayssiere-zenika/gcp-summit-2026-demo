@@ -11,7 +11,8 @@ from agent import MISSIONS_TOOLS, run_agent_query
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response  # noqa: F401
-from logger import LoggingMiddleware, setup_logging
+from shared.fastapi_utils import instrument_app
+from shared.observability import setup_logging
 from metrics import QUERY_COUNT, QUERY_LATENCY
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -20,8 +21,6 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
-from prometheus_fastapi_instrumentator import Instrumentator
-from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from pydantic import BaseModel  # noqa: F401
 
 from agent_commons.exception_handler import make_global_exception_handler
@@ -95,7 +94,6 @@ def get_session_service():
 # ── Lifecycle ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    setup_logging()
     logger.info("[MISSIONS] 🚀 Starting agent_missions_api %s", APP_VERSION)
     try:
         from agent import _MISSIONS_CLIENTS_MAP, _MISSIONS_TOOLS_CACHE
@@ -133,14 +131,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(LoggingMiddleware)
+instrument_app(
+    app,
+    service_name="agent-missions-api",
+    skip_otel_fastapi=True,  # setup_tracing() gère FastAPIInstrumentor avec tracer_provider custom
+)
 
 _tracer_provider = setup_tracing(app)
 _tracer = trace.get_tracer("agent_missions_api")
-
-# Prometheus (Golden Rules §5 — obligatoire)
-Instrumentator().instrument(app).expose(app)
-app.add_middleware(ContentLengthSanitizerASGIMiddleware)
+setup_logging()  # Initialisation du logging JSON structuré (hors lifespan pour être actif dès le boot)
 
 # ── Pydantic models — QueryRequest migré dans agent_commons.schemas ──────────
 

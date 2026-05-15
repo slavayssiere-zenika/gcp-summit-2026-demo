@@ -7,13 +7,11 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from logger import LoggingMiddleware, setup_logging
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from shared.fastapi_utils import instrument_app
+from shared.observability import setup_logging
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
-from prometheus_fastapi_instrumentator import Instrumentator
-from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from router import router as api_router
 from telemetry import setup_telemetry
 from tools_registry import router as mcp_router
@@ -42,10 +40,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-app.add_middleware(LoggingMiddleware)
-Instrumentator().instrument(app).expose(app)
-app.add_middleware(ContentLengthSanitizerASGIMiddleware)
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,health/agents,ready,metrics,version")
+instrument_app(
+    app,
+    service_name="agent-router-api",
+    excluded_urls="health,health/agents,ready,metrics,version",
+)
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 

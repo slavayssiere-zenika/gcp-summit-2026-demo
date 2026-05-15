@@ -8,7 +8,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY competencies_api/requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
+    && pip wheel --no-cache-dir --wheel-dir /app/wheels -r /tmp/req_public.txt
 
 # zenika-shared-schemas : pull depuis Artifact Registry via token éphémère (BuildKit secret)
 # Le token n'est JAMAIS persisté dans les layers Docker (--mount=type=secret)

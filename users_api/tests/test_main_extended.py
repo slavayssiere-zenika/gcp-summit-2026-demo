@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 from fastapi.testclient import TestClient
-from main import app, seed_admin, get_service_token_fallback, report_exception_to_prompts_api, proxy_mcp_fallback, global_exception_handler
+from main import app, seed_admin, get_service_token_fallback, report_exception_to_prompts_api, proxy_mcp_fallback
 from unittest.mock import patch, AsyncMock, MagicMock
 import os
 from fastapi import Request
@@ -65,11 +65,18 @@ async def test_report_exception_to_prompts_api():
 
 @pytest.mark.asyncio
 async def test_global_exception_handler():
+    """Le handler global retourne 500 pour toute exception non-HTTP."""
+    # La closure est enregistrée via register_global_exception_handler(app)
+    # On la récupère depuis le registre interne FastAPI
+    handler = app.exception_handlers.get(Exception)
+    assert handler is not None, "global_exception_handler non enregistré sur app"
+
     req = MagicMock(spec=Request)
     req.method = "GET"
     req.url.path = "/test"
     req.headers = {}
-    
-    with patch("main.report_exception_to_prompts_api", new_callable=AsyncMock) as mock_report:
-        resp = await global_exception_handler(req, Exception("Boom"))
+
+    with patch("shared.exception_handler._report_to_prompts_api", new_callable=AsyncMock):
+        resp = await handler(req, Exception("Boom"))
         assert resp.status_code == 500
+

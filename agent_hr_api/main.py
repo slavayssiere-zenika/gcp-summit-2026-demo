@@ -13,21 +13,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 # Routes /history (GET + DELETE) extraites dans history_routes.py (Golden Rule §14)
 from history_routes import history_router as _history_router
 from jose import jwt
-from logger import LoggingMiddleware, setup_logging
 from metrics import AGENT_QUERIES_TOTAL
 from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import extract, inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.trace import SpanKind
-from prometheus_fastapi_instrumentator import Instrumentator
-from shared.middlewares import ContentLengthSanitizerASGIMiddleware
+from shared.fastapi_utils import instrument_app
+from shared.observability import setup_logging
 
 from agent_commons.exception_handler import make_global_exception_handler
 from agent_commons.jwt_middleware import ALGORITHM
@@ -82,10 +74,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
     root_path=os.getenv("ROOT_PATH", "")
 )
-app.add_middleware(LoggingMiddleware)
-Instrumentator().instrument(app).expose(app)
-app.add_middleware(ContentLengthSanitizerASGIMiddleware)
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
+instrument_app(app, service_name="agent-hr-api")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 

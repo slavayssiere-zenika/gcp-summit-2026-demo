@@ -3,7 +3,8 @@ FROM python:3.13-slim AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && rm -rf /var/lib/apt/lists/*
 COPY prompts_api/requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
+    && pip wheel --no-cache-dir --wheel-dir /app/wheels -r /tmp/req_public.txt
 
 # zenika-shared-schemas : pull depuis Artifact Registry via token éphémère (BuildKit secret)
 # Le token n'est JAMAIS persisté dans les layers Docker (--mount=type=secret)

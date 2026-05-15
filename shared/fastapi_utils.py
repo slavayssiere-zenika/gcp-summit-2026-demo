@@ -29,7 +29,12 @@ from shared.observability import LoggingMiddleware
 _EXCLUDED_URLS = "health,ready,metrics,version,api/health"
 
 
-def instrument_app(app: FastAPI, service_name: str | None = None) -> FastAPI:
+def instrument_app(
+    app: FastAPI,
+    service_name: str | None = None,
+    excluded_urls: str | None = None,
+    skip_otel_fastapi: bool = False,
+) -> FastAPI:
     """Configure les instruments communs obligatoires (AGENTS.md checklist §global).
 
     Doit être appelé APRÈS la création de l'app FastAPI et de son lifespan,
@@ -40,17 +45,24 @@ def instrument_app(app: FastAPI, service_name: str | None = None) -> FastAPI:
         app: L'instance FastAPI à instrumenter.
         service_name: Nom du service pour les logs et rapports d'erreur.
                       Défaut : variable d'env SERVICE_NAME, ou "unknown-service".
+        excluded_urls: URLs exclues de l'instrumentation OTEL (défaut: health,ready,metrics,version,api/health).
+                       Permet aux agents d'ajouter leurs URLs spécifiques (ex: "health,health/agents,...").
+        skip_otel_fastapi: Si True, n'applique PAS FastAPIInstrumentor — utile quand l'agent
+                           configure lui-même l'instrumentation avec un tracer_provider custom
+                           (ex: agent_missions_api.setup_tracing()).
 
     Returns:
         L'instance app modifiée (pour le chaînage).
     """
     _service_name = service_name or os.getenv("SERVICE_NAME", "unknown-service")
+    _excluded = excluded_urls or _EXCLUDED_URLS
 
     # 1. Prometheus — expose /metrics
     Instrumentator().instrument(app).expose(app)
 
-    # 2. OTEL FastAPI — trace les requêtes HTTP entrantes
-    FastAPIInstrumentor.instrument_app(app, excluded_urls=_EXCLUDED_URLS)
+    # 2. OTEL FastAPI — trace les requêtes HTTP entrantes (sauf si tracer_provider custom)
+    if not skip_otel_fastapi:
+        FastAPIInstrumentor.instrument_app(app, excluded_urls=_excluded)
 
     # 3. Sanitise les Content-Length vides (curl, proxies)
     app.add_middleware(ContentLengthSanitizerASGIMiddleware)
@@ -59,7 +71,9 @@ def instrument_app(app: FastAPI, service_name: str | None = None) -> FastAPI:
     app.add_middleware(LoggingMiddleware)
 
     # 5. Exception handler global (fail-fast + rapport prompts_api)
-    register_global_exception_handler(app, service_name=_service_name)
+    # NOTE : les agents ne l'utilisent PAS — ils ont leur propre
+    # agent_commons.exception_handler.make_global_exception_handler()
+    # Appeler register_global_exception_handler() séparément si nécessaire.
 
     return app
 
