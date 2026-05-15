@@ -134,7 +134,9 @@ app.add_middleware(
 instrument_app(
     app,
     service_name="agent-missions-api",
-    skip_otel_fastapi=True, register_exception_handler=False,  # setup_tracing() gère FastAPIInstrumentor avec tracer_provider custom
+    # setup_tracing() gère FastAPIInstrumentor avec tracer_provider custom
+    skip_otel_fastapi=True,
+    register_exception_handler=False,
 )
 
 _tracer_provider = setup_tracing(app)
@@ -154,6 +156,98 @@ async def health():
 async def version():
     return {"version": APP_VERSION}
 
+
+@app.get("/.well-known/agent.json", include_in_schema=False)
+async def agent_card():
+    """A2A v2 — Service Discovery endpoint (google-adk 1.33+)."""
+    from agent_commons.a2a_utils import make_agent_card
+    return make_agent_card(
+        name="Missions Agent (Staffing Director)",
+        description=(
+            "Sous-agent spécialisé missions client : listing, staffing IA, "
+            "matching consultants/mission, cycle de vie et recommandations d'équipe. "
+            "NE PAS utiliser pour la gestion des profils RH, l'import de CVs ou les coûts IA."
+        ),
+        url_env_var="AGENT_MISSIONS_API_URL",
+        default_url="http://agent_missions_api:8080",
+        skills=[
+            {
+                "id": "mission_listing",
+                "name": "Listing des missions",
+                "description": (
+                    "Liste et filtre les missions client par statut, compétences requises ou équipe. "
+                    "Retourne le détail d'une mission spécifique si un ID est fourni."
+                ),
+                "tags": ["missions", "liste", "filtre", "statut", "client"],
+                "trigger_keywords": [
+                    "mission", "missions", "projet", "appel d'offres", "client",
+                    "liste des missions", "quelles missions", "quel projet",
+                ],
+            },
+            {
+                "id": "staffing",
+                "name": "Staffing IA",
+                "description": (
+                    "Propose une équipe de consultants qualifiés pour une mission donnée "
+                    "via recherche sémantique RAG. Analyse les compétences requises et "
+                    "retourne les meilleurs profils disponibles avec un score de matching."
+                ),
+                "tags": ["staffing", "matching", "RAG", "équipe", "profils"],
+                "trigger_keywords": [
+                    "staff", "staffing", "propose une équipe", "qui peut faire",
+                    "matching", "consultant pour cette mission", "recommande",
+                    "quelle équipe", "meilleur profil pour",
+                ],
+            },
+            {
+                "id": "mission_lifecycle",
+                "name": "Cycle de vie mission",
+                "description": (
+                    "Gère le cycle de vie d'une mission : changement de statut "
+                    "(DRAFT → WON/NO_GO/CANCELLED), re-lancement de l'analyse IA, "
+                    "clôture et archivage."
+                ),
+                "tags": ["statut", "cycle de vie", "analyse", "WON", "NO_GO"],
+                "trigger_keywords": [
+                    "statut", "changer le statut", "clôturer", "WON", "NO_GO",
+                    "mission gagnée", "mission perdue", "archiver",
+                ],
+            },
+            {
+                "id": "mission_analysis",
+                "name": "Analyse documentaire mission",
+                "description": (
+                    "Analyse les documents d'une mission (appel d'offres, cahier des charges) "
+                    "pour en extraire les compétences requises, les délais et les contraintes."
+                ),
+                "tags": ["analyse", "document", "extraction", "compétences requises"],
+                "trigger_keywords": [
+                    "analyser cette mission", "extraire les compétences", "cahier des charges",
+                    "appel d'offres", "que demande cette mission",
+                ],
+            },
+        ],
+        routing_hints={
+            "do_use_when": [
+                "L'utilisateur parle de missions CLIENT (appels d'offres, projets, contrats)",
+                "L'utilisateur veut stafter une mission ou trouver une équipe pour un projet",
+                "L'utilisateur veut voir la liste ou le détail d'une mission",
+                "L'utilisateur veut changer le statut d'une mission (WON, NO_GO, etc.)",
+            ],
+            "do_not_use_when": [
+                "L'utilisateur cherche un consultant nommé ou son profil RH → utiliser hr_agent",
+                "L'utilisateur parle de CVs, de compétences individuelles → utiliser hr_agent",
+                "L'utilisateur parle de coûts IA ou de santé système → utiliser ops_agent",
+            ],
+        },
+        examples=[
+            {"query": "Liste les missions en cours", "skill": "mission_listing"},
+            {"query": "Propose une équipe pour la mission #42", "skill": "staffing"},
+            {"query": "Marque la mission Alpha comme WON", "skill": "mission_lifecycle"},
+            {"query": "Quelles compétences sont requises pour la mission Société Générale ?",
+             "skill": "mission_analysis"},
+        ],
+    )
 
 # ── Protected router — JWT validé via Depends sur le routeur ────
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
@@ -189,7 +283,7 @@ async def _execute_query(request: QueryRequest, http_request: Request, payload: 
     except Exception as e:
         QUERY_COUNT.labels(agent="missions", status="error").inc()
         logger.error("[MISSIONS] Agent error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal agent error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal agent error: {e}")  # noqa: E501
     finally:
         elapsed = time.time() - start_time
         QUERY_LATENCY.labels(agent="missions").observe(elapsed)

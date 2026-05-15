@@ -12,7 +12,6 @@ from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 # Routes /history (GET + DELETE) extraites dans history_routes.py (Golden Rule §14)
 from history_routes import history_router as _history_router
-from jose import jwt
 from metrics import AGENT_QUERIES_TOTAL
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -87,17 +86,112 @@ RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
 
+@app.get("/.well-known/agent.json", include_in_schema=False)
+async def agent_card():
+    """A2A v2 — Service Discovery endpoint (google-adk 1.33+)."""
+    from agent_commons.a2a_utils import make_agent_card
+    return make_agent_card(
+        name="Ops Agent (Platform & FinOps)",
+        description=(
+            "Sous-agent spécialisé Ops : santé système GCP, FinOps IA, "
+            "logs Grafana/Loki, synchronisation Drive, gestion des system prompts. "
+            "NE PAS utiliser pour les sujets RH (consultants, CVs) ou les missions client."
+        ),
+        url_env_var="AGENT_OPS_API_URL",
+        default_url="http://agent_ops_api:8080",
+        skills=[
+            {
+                "id": "finops",
+                "name": "FinOps & Coûts IA",
+                "description": (
+                    "Analyse la consommation de tokens, les coûts d'inférence et les anomalies FinOps. "
+                    "Retourne des rapports journaliers, hebdomadaires ou mensuels par utilisateur."
+                ),
+                "tags": ["FinOps", "coûts", "tokens", "BigQuery", "budget"],
+                "trigger_keywords": [
+                    "coût", "coûts", "dépense", "token", "budget", "FinOps",
+                    "combien ça coûte", "consommation IA", "facture", "anomalie",
+                ],
+            },
+            {
+                "id": "system_health",
+                "name": "Santé système GCP",
+                "description": (
+                    "Vérifie l'état des services Cloud Run, les métriques de performance "
+                    "et l'infrastructure GCP. Fournit des logs, des alertes et l'état des pods."
+                ),
+                "tags": ["GCP", "Cloud Run", "santé", "infrastructure", "logs", "Loki", "Grafana"],
+                "trigger_keywords": [
+                    "santé", "erreur 500", "logs", "service down", "infrastructure",
+                    "Cloud Run", "GCP", "monitoring", "alerte", "panne",
+                ],
+            },
+            {
+                "id": "drive_management",
+                "name": "Gestion Drive",
+                "description": (
+                    "Configure les dossiers Google Drive synchronisés pour l'ingestion des CVs. "
+                    "Permet d'ajouter, modifier ou supprimer les sources Drive surveillées."
+                ),
+                "tags": ["Drive", "sync", "configuration", "ingestion", "CV"],
+                "trigger_keywords": [
+                    "drive", "dossier", "synchronisation", "ingestion", "source de CVs",
+                ],
+            },
+            {
+                "id": "prompt_management",
+                "name": "Gestion des System Prompts",
+                "description": (
+                    "Crée, modifie et optimise les instructions des agents Gemini. "
+                    "Permet de personnaliser le comportement de chaque agent sans redéploiement."
+                ),
+                "tags": ["prompts", "configuration", "agents", "personnalisation"],
+                "trigger_keywords": [
+                    "prompt", "instruction", "comportement", "personnaliser", "modifier l'agent",
+                    "system prompt", "changer la réponse",
+                ],
+            },
+            {
+                "id": "market_intelligence",
+                "name": "Intelligence marché",
+                "description": (
+                    "Analyse les tendances du marché tech (compétences demandées, volume d'offres). "
+                    "Utile pour le benchmark salarial et l'alignement des compétences Zenika."
+                ),
+                "tags": ["marché", "compétences", "tendances", "benchmark"],
+                "trigger_keywords": [
+                    "marché", "tendance", "demandé", "benchmark", "salaire", "offres d'emploi",
+                ],
+            },
+        ],
+        routing_hints={
+            "do_use_when": [
+                "L'utilisateur demande des informations sur les coûts, tokens ou budget IA",
+                "L'utilisateur parle de la santé du système, des erreurs, des logs ou de l'infrastructure GCP",
+                "L'utilisateur veut configurer Drive ou les system prompts",
+                "L'utilisateur demande des tendances de marché ou un benchmark tech",
+            ],
+            "do_not_use_when": [
+                "L'utilisateur cherche des consultants ou des profils RH → utiliser hr_agent",
+                "L'utilisateur parle de missions client ou de staffing → utiliser missions_agent",
+            ],
+        },
+        examples=[
+            {"query": "Quel est le coût IA cette semaine ?", "skill": "finops"},
+            {"query": "Y a-t-il des erreurs 500 sur cv_api ?", "skill": "system_health"},
+            {"query": "Ajoute le dossier Drive /CVs/Paris à la synchronisation",
+             "skill": "drive_management"},
+            {"query": "Modifie le prompt de l'agent RH pour qu'il réponde en anglais",
+             "skill": "prompt_management"},
+        ],
+    )
+
+
+
 @app.get("/")
 async def root():
     return {"message": "Ops Agent API - Use /a2a/query for interactions"}
 
-
-security = HTTPBearer()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY must be set in environment variables")
-os.environ.pop("SECRET_KEY", None)
 
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
@@ -113,16 +207,14 @@ async def get_spec():
 
 
 @protected_router.post("/query")
-async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+async def query(request: QueryRequest, http_request: Request,
+                auth: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+                payload: dict = Depends(verify_jwt)):
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
 
-    try:
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        computed_session_id = payload.get("sub")
-        if not computed_session_id:
-            raise HTTPException(status_code=401, detail="Token invalide")
-    except Exception:
+    computed_session_id = payload.get("sub")
+    if not computed_session_id:
         raise HTTPException(status_code=401, detail="Token invalide")
 
     ctx = extract(http_request.headers)
@@ -152,19 +244,14 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
 
 
 @protected_router.post("/a2a/query", response_model=A2AResponse)
-async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
-    """Point d'entrée A2A — appelé exclusivement par agent_router_api.
-    Valide le payload entrant (A2ARequest) et la réponse (A2AResponse) via le contrat Pydantic ADR12-4.
-    """
-    # Standard A2A Entrypoint
+async def a2a_query(request: A2ARequest, http_request: Request,
+                    auth: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+                    payload: dict = Depends(verify_jwt)):
+    """Point d'entrée A2A — appelé exclusivement par agent_router_api."""
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
 
-    try:
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        computed_session_id = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token invalide")
+    computed_session_id = payload.get("sub")
 
     # Prb 7: Use the user_id propagated from Router if available, else fall back to JWT sub
     effective_user_id = request.user_id or computed_session_id or "user_1"

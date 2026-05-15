@@ -16,52 +16,17 @@ from fastapi.responses import JSONResponse
 from shared.fastapi_utils import instrument_app
 from shared.observability import setup_logging
 from mcp_server import call_tool, list_tools
-from opentelemetry import trace
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
 from pydantic import BaseModel
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+from shared.mcp_server_utils import setup_mcp_tracer_provider
 
 
-# La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py,
-# importé ci-dessus, ce qui empêche une disparition prématurée de la variable d'env lors des imports.
+# La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py.
 
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "monitoring-mcp",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler,
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(
-        BatchSpanProcessor(
-            OTLPSpanExporter()
-            if os.getenv("TRACE_EXPORTER", "grpc") == "http"
-            else OTLPSpanExporter(insecure=True)
-        )
-    )
-trace.set_tracer_provider(provider)
+tracer = setup_mcp_tracer_provider("monitoring-mcp")
 
-tracer = trace.get_tracer(__name__)
 
 
 app = FastAPI(title="Monitoring MCP Sidecar", root_path=os.getenv("ROOT_PATH", ""))
@@ -163,8 +128,8 @@ async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from mcp_server import mcp_auth_header_var
-        mcp_auth_header_var.set(auth_header)
+        from shared.auth.context import auth_header_var
+        auth_header_var.set(auth_header)
 
     try:
         result = await call_tool(request.name, request.arguments)

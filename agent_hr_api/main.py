@@ -12,18 +12,14 @@ from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 # Routes /history (GET + DELETE) extraites dans history_routes.py (Golden Rule §14)
 from history_routes import history_router as _history_router
-from jose import jwt
 from metrics import AGENT_QUERIES_TOTAL
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.sdk.resources import Resource, ResourceAttributes
 from opentelemetry.trace import SpanKind
-
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import extract, inject
+from shared.mcp_server_utils import setup_mcp_tracer_provider
+
 from shared.fastapi_utils import instrument_app
 from shared.observability import setup_logging
 
@@ -37,32 +33,12 @@ from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 
 
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "agent-hr-api",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    })
-,
-    sampler=sampler
-)
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
-trace.set_tracer_provider(provider)
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter  # noqa: F401
+
 tracer = trace.get_tracer(__name__)
+setup_mcp_tracer_provider("agent-hr-api")
+
 app_logger = logging.getLogger(__name__)
 
 setup_logging()
@@ -85,17 +61,102 @@ RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 
 
+@app.get("/.well-known/agent.json", include_in_schema=False)
+async def agent_card():
+    """A2A v2 — Service Discovery endpoint (google-adk 1.33+)."""
+    from agent_commons.a2a_utils import make_agent_card
+    return make_agent_card(
+        name="HR Agent (Talent & Compétences)",
+        description=(
+            "Sous-agent spécialisé RH : recherche de profils consultants, "
+            "analyse de CVs, compétences, évaluation Gemini, disponibilité. "
+            "NE PAS utiliser pour lister des missions client ou proposer une équipe de staffing."
+        ),
+        url_env_var="AGENT_HR_API_URL",
+        default_url="http://agent_hr_api:8080",
+        skills=[
+            {
+                "id": "consultant_search",
+                "name": "Recherche de consultants",
+                "description": (
+                    "Trouve les consultants correspondant à des critères de compétences "
+                    "ou de disponibilité. Supporte la recherche sémantique (RAG multi-critères)."
+                ),
+                "tags": ["consultant", "profil", "recherche", "RAG", "sémantique"],
+                "trigger_keywords": [
+                    "consultant", "profil", "trouver", "cherche", "disponible",
+                    "qui a la compétence", "expert en", "liste des consultants",
+                ],
+            },
+            {
+                "id": "cv_analysis",
+                "name": "Analyse de CV",
+                "description": (
+                    "Analyse un CV (Google Doc, PDF) et extrait les compétences, "
+                    "missions passées et formations. Utiliser quand l'utilisateur "
+                    "partage un lien Google Drive ou demande l'analyse d'un profil spécifique."
+                ),
+                "tags": ["CV", "extraction", "gemini", "google-doc", "drive"],
+                "trigger_keywords": ["CV", "curriculum", "profil", "analyse", "google doc", "drive"],
+            },
+            {
+                "id": "competency_scoring",
+                "name": "Scoring de compétences",
+                "description": (
+                    "Évalue et score les compétences d'un consultant via l'IA Gemini. "
+                    "Utile pour l'évaluation RH, le coaching CV, ou le scoring d'arbre taxonomique."
+                ),
+                "tags": ["scoring", "compétences", "AI", "taxonomie", "évaluation"],
+                "trigger_keywords": [
+                    "score", "niveau", "évaluer", "compétence", "taxonomie",
+                    "coaching", "arbre de compétences",
+                ],
+            },
+            {
+                "id": "consultant_history",
+                "name": "Historique missions consultant",
+                "description": (
+                    "Récupère l'historique des missions passées d'un consultant nommé. "
+                    "NE PAS utiliser pour lister les missions client — utiliser missions_agent."
+                ),
+                "tags": ["historique", "missions", "consultant", "passé"],
+                "trigger_keywords": ["quelles missions a fait", "historique de", "parcours de"],
+            },
+            {
+                "id": "availability",
+                "name": "Disponibilité consultant",
+                "description": "Consulte les indisponibilités déclarées d'un consultant spécifique.",
+                "tags": ["disponibilité", "planning", "RH", "congé"],
+                "trigger_keywords": ["disponible", "indisponible", "congé", "planning"],
+            },
+        ],
+        routing_hints={
+            "do_use_when": [
+                "L'utilisateur cherche des consultants par compétence ou disponibilité",
+                "L'utilisateur mentionne un CV, un profil ou un lien Google Drive",
+                "L'utilisateur veut connaître les compétences ou l'historique d'un consultant nommé",
+                "L'utilisateur demande une évaluation ou un scoring de compétences",
+            ],
+            "do_not_use_when": [
+                "L'utilisateur parle de missions CLIENT → utiliser missions_agent",
+                "L'utilisateur demande un staffing ou une recommandation d'équipe → utiliser missions_agent",
+                "L'utilisateur parle de la santé du système ou des coûts IA → utiliser ops_agent",
+            ],
+        },
+        examples=[
+            {"query": "Trouve-moi des consultants experts en Kubernetes disponibles en juin",
+             "skill": "consultant_search"},
+            {"query": "Analyse ce CV : https://docs.google.com/...", "skill": "cv_analysis"},
+            {"query": "Quelles missions a faites Jean Dupont ?", "skill": "consultant_history"},
+            {"query": "Quelle est la disponibilité de Marie Martin ?", "skill": "availability"},
+        ],
+    )
+
+
 @app.get("/")
 async def root():
     return {"message": "HR Agent API - Use /a2a/query for interactions"}
 
-
-security = HTTPBearer()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY must be set in environment variables")
-os.environ.pop("SECRET_KEY", None)
 
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
@@ -111,16 +172,14 @@ async def get_spec():
 
 
 @protected_router.post("/query")
-async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+async def query(request: QueryRequest, http_request: Request,
+                auth: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+                payload: dict = Depends(verify_jwt)):
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
 
-    try:
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        computed_session_id = payload.get("sub")
-        if not computed_session_id:
-            raise HTTPException(status_code=401, detail="Token invalide")
-    except Exception:
+    computed_session_id = payload.get("sub")
+    if not computed_session_id:
         raise HTTPException(status_code=401, detail="Token invalide")
 
     ctx = extract(http_request.headers)
@@ -150,19 +209,14 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
 
 
 @protected_router.post("/a2a/query", response_model=A2AResponse)
-async def a2a_query(request: A2ARequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
-    """Point d'entrée A2A — appelé exclusivement par agent_router_api.
-    Valide le payload entrant (A2ARequest) et la réponse (A2AResponse) via le contrat Pydantic ADR12-4.
-    """
-    # Standard A2A Entrypoint
+async def a2a_query(request: A2ARequest, http_request: Request,
+                    auth: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+                    payload: dict = Depends(verify_jwt)):
+    """Point d'entrée A2A — appelé exclusivement par agent_router_api."""
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
 
-    try:
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        computed_session_id = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token invalide")
+    computed_session_id = payload.get("sub")
 
     # Prb 7: Use the user_id propagated from Router if available, else fall back to JWT sub
     effective_user_id = request.user_id or computed_session_id or "user_1"

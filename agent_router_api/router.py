@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import httpx
 from agent import get_session_service, run_agent_query
@@ -14,7 +16,6 @@ from opentelemetry.trace import SpanKind
 from semantic_cache import SemanticCache
 from telemetry import setup_telemetry
 
-from shared.auth.jwt import ALGORITHM
 from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.schemas import QueryRequest
 
@@ -22,27 +23,22 @@ tracer = setup_telemetry()
 _semantic_cache = SemanticCache()
 logger = logging.getLogger(__name__)
 
+from shared.auth.jwt import ALGORITHM, SECRET_KEY, security  # noqa: E402
+
 router = APIRouter(dependencies=[Depends(verify_jwt)])
-security = HTTPBearer()
-SECRET_KEY = os.getenv("SECRET_KEY", "dummy")
-os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
 
 
 @router.post("/query")
-async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
+async def query(request: QueryRequest, http_request: Request,
+                auth: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+                payload: dict = Depends(verify_jwt)):
     auth_header = f"{auth.scheme} {auth.credentials}"
     auth_header_var.set(auth_header)
-    
-    try:
-        from jose import JWTError, jwt
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        body_session_id = request.session_id if request.session_id else None
-        jwt_sub = payload.get("sub")
-        computed_session_id = body_session_id if body_session_id else jwt_sub
-        if not computed_session_id:
-            raise HTTPException(status_code=401, detail="Token invalide")
-    except Exception as e:
-        logger.warning("[query] JWT decode failed: %s", e)
+
+    body_session_id = request.session_id if request.session_id else None
+    jwt_sub = payload.get("sub")
+    computed_session_id = body_session_id if body_session_id else jwt_sub
+    if not computed_session_id:
         raise HTTPException(status_code=401, detail="Token invalide")
 
     ctx = extract(http_request.headers)
@@ -109,17 +105,27 @@ async def query(request: QueryRequest, http_request: Request, auth: HTTPAuthoriz
             return {"response": f"Erreur: {str(e)}", "source": "error"}
 
 @router.get("/history")
-async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
+async def get_history(
+    http_request: Request,
+    auth: HTTPAuthorizationCredentials = Depends(security)
+):
     try:
-        from jose import JWTError, jwt
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        session_id = payload.get("sub")
+        import jwt as _jwt
+        from jwt.exceptions import InvalidTokenError
+        payload = _jwt.decode(
+            auth.credentials, SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"leeway": 300},
+        )
         jwt_user_id = payload.get("sub", "user_1")
-        if not session_id:
-            raise Exception("No user")
-    except Exception as e:
+        if not jwt_user_id:
+            raise InvalidTokenError("No user")
+    except InvalidTokenError as e:
         logger.warning("[history] JWT decode failed: %s", e)
         raise HTTPException(status_code=401, detail="Token invalide")
+
+    # Accepte session_id en query param — fallback sur jwt_user_id (rétrocompatibilité)
+    session_id = http_request.query_params.get("session_id") or jwt_user_id
     session_service = get_session_service()
     session = await session_service.get_session(
         app_name="zenika_assistant", 
@@ -324,20 +330,25 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
 @router.delete("/history")
 async def delete_history(request: Request, auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        from jose import JWTError, jwt
-        payload = jwt.decode(auth.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        import jwt as _jwt
+        from jwt.exceptions import InvalidTokenError
+        payload = _jwt.decode(
+            auth.credentials, SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"leeway": 300},
+        )
         jwt_user_id = payload.get("sub", "user_1")
         if not jwt_user_id:
-            raise Exception("No user")
-    except Exception as e:
+            raise InvalidTokenError("No user")
+    except InvalidTokenError as e:
         logger.warning("[clear-history] JWT decode failed: %s", e)
         raise HTTPException(status_code=401, detail="Token invalide")
 
     session_id = request.query_params.get("session_id") or jwt_user_id
-        
+
     session_service = get_session_service()
     session = await session_service.get_session(
-        app_name="zenika_assistant", 
+        app_name="zenika_assistant",
         user_id=jwt_user_id,
         session_id=session_id
     )
@@ -346,3 +357,245 @@ async def delete_history(request: Request, auth: HTTPAuthorizationCredentials = 
         return {"message": "Historique effacé"}
     else:
         return {"message": "Pas d'historique"}
+
+
+# ---------------------------------------------------------------------------
+# Helpers Redis pour les métadonnées de sessions
+# ---------------------------------------------------------------------------
+
+SESSIONS_TTL = 30 * 24 * 60 * 60  # 1 mois
+SESSIONS_MAX = 10
+
+
+def _get_redis():
+    import redis
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/2")
+    return redis.from_url(redis_url)
+
+
+def _sessions_key(user_id: str) -> str:
+    return f"chat:sessions:{user_id}"
+
+
+def _load_sessions(user_id: str) -> list:
+    """Charge la liste des métadonnées de sessions depuis Redis."""
+    try:
+        r = _get_redis()
+        raw = r.get(_sessions_key(user_id))
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        logger.error("[sessions] Redis load failed: %s", e)
+    return []
+
+
+def _save_sessions(user_id: str, sessions: list):
+    """Persiste la liste des sessions dans Redis avec TTL 1 mois."""
+    try:
+        r = _get_redis()
+        r.set(_sessions_key(user_id), json.dumps(sessions), ex=SESSIONS_TTL)
+    except Exception as e:
+        logger.error("[sessions] Redis save failed: %s", e)
+
+
+def _migrate_legacy_session(user_id: str, sessions: list) -> list:
+    """
+    Migration : si un historique ADK existe sous la clé jwt_sub (ancien format
+    mono-session), on l'importe automatiquement en session nommée 'Défaut'.
+    Appelé uniquement quand la liste des sessions est vide.
+    """
+    try:
+        r = _get_redis()
+        legacy_key = f"adk:sessions:{user_id}"
+        if r.exists(legacy_key):
+            default_session = {
+                "id": user_id,
+                "name": "Défaut",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            sessions = [default_session]
+            logger.info("[sessions] Migrated legacy session for user %s", user_id)
+    except Exception as e:
+        logger.error("[sessions] Legacy migration failed: %s", e)
+    return sessions
+
+
+# ---------------------------------------------------------------------------
+# Routes /sessions
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions")
+async def list_sessions(auth: HTTPAuthorizationCredentials = Depends(security)):
+    """Liste les sessions de travail de l'utilisateur."""
+    try:
+        import jwt as _jwt
+        from jwt.exceptions import InvalidTokenError
+        payload = _jwt.decode(
+            auth.credentials, SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"leeway": 300},
+        )
+        jwt_user_id = payload.get("sub")
+        if not jwt_user_id:
+            raise InvalidTokenError("No user")
+    except InvalidTokenError as e:
+        logger.warning("[sessions] JWT decode failed: %s", e)
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+    sessions = _load_sessions(jwt_user_id)
+
+    if not sessions:
+        sessions = _migrate_legacy_session(jwt_user_id, sessions)
+        if not sessions:
+            # Aucun historique existant — créer la session "Défaut" vierge
+            sessions = [{
+                "id": jwt_user_id,
+                "name": "Défaut",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }]
+        _save_sessions(jwt_user_id, sessions)
+
+    return {"sessions": sessions}
+
+
+@router.post("/sessions")
+async def create_session(
+    request: Request,
+    auth: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Crée une nouvelle session de travail (max 10 par utilisateur)."""
+    try:
+        import jwt as _jwt
+        from jwt.exceptions import InvalidTokenError
+        payload = _jwt.decode(
+            auth.credentials, SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"leeway": 300},
+        )
+        jwt_user_id = payload.get("sub")
+        if not jwt_user_id:
+            raise InvalidTokenError("No user")
+    except InvalidTokenError as e:
+        logger.warning("[sessions] JWT decode failed: %s", e)
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+    body = await request.json()
+    name = body.get("name", "").strip() or "Nouvelle session"
+
+    sessions = _load_sessions(jwt_user_id)
+    if not sessions:
+        sessions = _migrate_legacy_session(jwt_user_id, sessions)
+
+    if len(sessions) >= SESSIONS_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Limite de {SESSIONS_MAX} sessions atteinte. Supprimez une session pour continuer."
+        )
+
+    new_session = {
+        "id": f"{jwt_user_id}:{uuid4().hex[:8]}",
+        "name": name,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    sessions.append(new_session)
+    _save_sessions(jwt_user_id, sessions)
+
+    return new_session
+
+
+@router.patch("/sessions/{session_id:path}")
+async def rename_session(
+    session_id: str,
+    request: Request,
+    auth: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Renomme une session de travail existante."""
+    try:
+        import jwt as _jwt
+        from jwt.exceptions import InvalidTokenError
+        payload = _jwt.decode(
+            auth.credentials, SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"leeway": 300},
+        )
+        jwt_user_id = payload.get("sub")
+        if not jwt_user_id:
+            raise InvalidTokenError("No user")
+    except InvalidTokenError as e:
+        logger.warning("[sessions] JWT decode failed: %s", e)
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+    body = await request.json()
+    new_name = body.get("name", "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Le nom de session ne peut pas être vide.")
+
+    sessions = _load_sessions(jwt_user_id)
+    updated = False
+    for s in sessions:
+        if s["id"] == session_id:
+            s["name"] = new_name
+            updated = True
+            break
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Session introuvable.")
+
+    _save_sessions(jwt_user_id, sessions)
+    return {"success": True, "id": session_id, "name": new_name}
+
+
+@router.delete("/sessions/{session_id:path}")
+async def delete_session(
+    session_id: str,
+    auth: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Supprime une session et son historique ADK associé."""
+    try:
+        import jwt as _jwt
+        from jwt.exceptions import InvalidTokenError
+        payload = _jwt.decode(
+            auth.credentials, SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"leeway": 300},
+        )
+        jwt_user_id = payload.get("sub")
+        if not jwt_user_id:
+            raise InvalidTokenError("No user")
+    except InvalidTokenError as e:
+        logger.warning("[sessions] JWT decode failed: %s", e)
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+    sessions = _load_sessions(jwt_user_id)
+    if len(sessions) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Impossible de supprimer la dernière session."
+        )
+
+    original_len = len(sessions)
+    sessions = [s for s in sessions if s["id"] != session_id]
+    if len(sessions) == original_len:
+        raise HTTPException(status_code=404, detail="Session introuvable.")
+
+    _save_sessions(jwt_user_id, sessions)
+
+    # Supprimer l'historique ADK
+    session_service = get_session_service()
+    try:
+        session = await session_service.get_session(
+            app_name="zenika_assistant",
+            user_id=jwt_user_id,
+            session_id=session_id
+        )
+        if session:
+            session_service._delete_session_impl(
+                app_name="zenika_assistant",
+                user_id=jwt_user_id,
+                session_id=session_id
+            )
+    except Exception as e:
+        logger.warning("[sessions] Could not delete ADK session %s: %s", session_id, e)
+
+    return {"success": True, "deleted_id": session_id}
