@@ -84,7 +84,7 @@ FORCE_ALL=false        # Rebuild tout, même si aucun changement détecté
 declare -A COVERAGE_RESULTS   # service -> "75%" | "N/A" | "SKIPPED"
 
 # Répertoire de logs par run — conservé après exécution pour debug
-LOG_DIR="./deploy_logs/$(date +%Y%m%d_%H%M%S)"
+LOG_DIR="$(pwd)/deploy_logs/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOG_DIR"
 
 # Tableau global des fichiers temporaires — nettoyé par le trap EXIT/INT/TERM (P0/R3)
@@ -465,7 +465,7 @@ JSON
   exit $exit_code
 }
 
-trap print_summary EXIT
+trap 'print_summary; _cleanup_tmpfiles' EXIT
 
 echo -e "${RED}=== Préparation de l'environnement GCP ===${RESET}"
 gcloud config set project "$PROJECT_ID"
@@ -885,7 +885,7 @@ build_and_push_standard() {
   if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
     echo -e "${RED}❌ [SMOKE TEST] L'image Docker a crashé au démarrage (Missing Module, Syntax Error, etc) !${RESET}"
     echo -e "${RED}   Logs du crash :${RESET}"
-    docker logs "$SMOKE_CONTAINER" 2>&1 | tee "${LOG_DIR}/${SERVICE}_smoke_tests.log" | tail -n 20
+    docker logs "$SMOKE_CONTAINER" 2>&1 | tee -a "${LOG_DIR}/${SERVICE}_tests.log"
     docker rm -f "$SMOKE_CONTAINER" >/dev/null
     DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
     CURRENT_DEPLOYING_SERVICE=""
