@@ -13,10 +13,10 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
                      HTTPException, Request, Response)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from logger import LoggingMiddleware, setup_logging
+from shared.fastapi_utils import instrument_app
+from shared.observability import setup_logging
 from mcp_server import call_tool, list_tools
 from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
@@ -25,7 +25,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
@@ -64,15 +63,10 @@ trace.set_tracer_provider(provider)
 
 tracer = trace.get_tracer(__name__)
 
-setup_logging()
 
 app = FastAPI(title="Monitoring MCP Sidecar", root_path=os.getenv("ROOT_PATH", ""))
-app.add_middleware(LoggingMiddleware)
-
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
-RedisInstrumentor().instrument()
+instrument_app(app, service_name="monitoring-mcp")
 HTTPXClientInstrumentor().instrument()
-Instrumentator().instrument(app).expose(app)
 
 cors_origins = os.getenv(
     "CORS_ORIGINS",
@@ -227,10 +221,8 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             logging.error("Failed to report error to prompts_api: %s", e)
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    from fastapi.exceptions import RequestValidationError
-    from starlette.exceptions import HTTPException as StarletteHTTPException
+# Exception handler global enregistré par instrument_app() via shared.exception_handler
+# (register_global_exception_handler(app, service_name="monitoring-mcp"))
 
     # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
     if isinstance(exc, StarletteHTTPException):

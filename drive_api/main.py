@@ -6,13 +6,11 @@ from contextlib import asynccontextmanager
 import database
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from logger import LoggingMiddleware, setup_logging
+from shared.fastapi_utils import instrument_app
+from shared.observability import setup_logging
 from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
@@ -20,8 +18,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-from prometheus_fastapi_instrumentator import Instrumentator
-from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from src.auth import verify_jwt
 from src.router import public_router, router
 
@@ -51,7 +47,6 @@ else:
         "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 
-setup_logging()
 
 
 @asynccontextmanager
@@ -62,11 +57,7 @@ async def lifespan(app: FastAPI):
     await database.close_db_connector()
 
 app = FastAPI(lifespan=lifespan, title="Drive Synchronization API", root_path=os.getenv("ROOT_PATH", ""))
-app.add_middleware(LoggingMiddleware)
-Instrumentator().instrument(app).expose(app)
-app.add_middleware(ContentLengthSanitizerASGIMiddleware)
-# Rule §5 (AGENTS.md): OTel auto-instrumentation
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
+instrument_app(app, service_name="drive-api")
 
 
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80,http://localhost:8080").split(",")
@@ -206,12 +197,8 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
             raise e
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    if isinstance(exc, StarletteHTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    if isinstance(exc, RequestValidationError):
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+# Exception handler global enregistré par instrument_app() via shared.exception_handler
+# (register_global_exception_handler(app, service_name="drive-api"))
 
     error_msg = str(exc)
     trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))

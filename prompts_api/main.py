@@ -1,17 +1,14 @@
 import logging
 import os
-import traceback
 from contextlib import asynccontextmanager
 
 import database
 import httpx  # noqa: F401 — kept for potential use by routers
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from logger import LoggingMiddleware, setup_logging
+from shared.fastapi_utils import instrument_app
+from shared.observability import setup_logging
 from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -21,11 +18,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-from prometheus_fastapi_instrumentator import Instrumentator
-from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from src.prompts import router
 from src.prompts.router import verify_jwt
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
@@ -57,7 +51,6 @@ trace.set_tracer_provider(provider)
 # 1. Setup DB Schema
 # Deferring schema creation to async startup event to speed up uvicorn boot
 
-setup_logging()
 
 
 @asynccontextmanager
@@ -68,7 +61,7 @@ async def lifespan(app: FastAPI):
     await database.close_db_connector()
 
 app = FastAPI(lifespan=lifespan, title="Prompts API", version="1.0.0", root_path=os.getenv("ROOT_PATH", ""))
-app.add_middleware(LoggingMiddleware)
+instrument_app(app, service_name="prompts-api")
 
 # 3. Setup CORS
 cors_origins_str = os.getenv(
@@ -87,14 +80,8 @@ app.add_middleware(
 )
 
 
-FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready,metrics,version")
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
-
-
-# 5. Prometheus Instrumentator
-Instrumentator().instrument(app).expose(app)
-app.add_middleware(ContentLengthSanitizerASGIMiddleware)
 
 # 6. Include Router
 
@@ -164,22 +151,7 @@ async def proxy_mcp(path: str, request: Request):
 app.include_router(protected_router)  # /spec MUST be registered before /{key} wildcard
 app.include_router(router.router, prefix="", tags=["prompts"])
 
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
-    if isinstance(exc, StarletteHTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    if isinstance(exc, RequestValidationError):
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
-
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-
-    # NOTE : prompts_api ne se reporte PAS à elle-même pour éviter une boucle récursive.
-    # Le logging local suffit pour l'observabilité.
-    logging.error(
-        "[prompts_api] Unhandled exception on %s %s: %s\n%s",
-        request.method, request.url.path, error_msg, trace_context
-    )
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+# Exception handler global enregistré par instrument_app() via shared.exception_handler
+# (register_global_exception_handler(app, service_name="prompts-api"))
+# Note: prompts_api ne se reporte PAS à elle-même pour éviter une boucle récursive.
+# Le handler shared gère cela via get_service_token_fallback (timeout court).
