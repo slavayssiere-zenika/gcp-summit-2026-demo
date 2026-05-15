@@ -1,12 +1,12 @@
 import uuid
 
-import database
+import shared.database as database
 from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
                      HTTPException, Request, UploadFile)
 from opentelemetry.propagate import inject
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 
 # Import du service coeur pour l'analyse des missions
 from .analysis_service import process_mission_core

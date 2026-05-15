@@ -5,8 +5,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from main import app
-from database import get_db
-from src.auth import verify_jwt
+from shared.database import get_db
+from shared.auth.jwt import verify_jwt
 from src.routers.folders_router import _require_admin
 
 client = TestClient(app, raise_server_exceptions=False)

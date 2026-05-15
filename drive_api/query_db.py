@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 
-from database import get_db
+from shared.database import get_db
 from models import DriveFolder, DriveSyncState
 from sqlalchemy.future import select
 

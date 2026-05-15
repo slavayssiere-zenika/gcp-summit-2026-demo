@@ -14,10 +14,11 @@ RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
 # zenika-shared-schemas : pull depuis Artifact Registry via token éphémère (BuildKit secret)
 # Le token n'est JAMAIS persisté dans les layers Docker (--mount=type=secret)
 ARG PYTHON_AR_REPO
+ENV PYTHON_AR_REPO=${PYTHON_AR_REPO}
+ARG SHARED_VERSION
+ENV SHARED_VERSION=${SHARED_VERSION}
 RUN --mount=type=secret,id=ar_token \
-    pip wheel --no-cache-dir --wheel-dir /app/wheels \
-      --index-url "https://oauth2accesstoken:$(cat /run/secrets/ar_token)@${PYTHON_AR_REPO}/simple/" \
-      "zenika-shared-schemas"
+    sh -c 'PIP_EXTRA_INDEX_URL="https://oauth2accesstoken:$(cat /run/secrets/ar_token)@${PYTHON_AR_REPO}/simple/" pip wheel --no-cache-dir --wheel-dir /app/wheels "zenika-shared-schemas${SHARED_VERSION:+==$SHARED_VERSION}"'
 
 # ---- Runtime Stage ----
 FROM python:3.13-slim

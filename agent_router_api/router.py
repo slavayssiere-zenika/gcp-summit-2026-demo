@@ -14,8 +14,8 @@ from opentelemetry.trace import SpanKind
 from semantic_cache import SemanticCache
 from telemetry import setup_telemetry
 
-from agent_commons.jwt_middleware import ALGORITHM
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
+from shared.auth.jwt import ALGORITHM
+from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.schemas import QueryRequest
 
 tracer = setup_telemetry()

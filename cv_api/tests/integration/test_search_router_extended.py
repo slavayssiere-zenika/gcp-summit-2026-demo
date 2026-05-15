@@ -4,7 +4,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from src.cvs.models import CVProfile
 import os
 from main import app
-from database import get_db
+from shared.database import get_db
 
 async def override_get_db():
     db = AsyncMock()

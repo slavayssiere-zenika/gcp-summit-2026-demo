@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 
-from database import get_db, init_db_connector
+from shared.database import get_db, init_db_connector
 from sqlalchemy.future import select
 from src.competencies.models import Competency
 

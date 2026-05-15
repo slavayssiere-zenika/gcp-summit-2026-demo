@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
+from shared.database import get_db
 from src.auth import verify_admin
 
 logger = logging.getLogger(__name__)

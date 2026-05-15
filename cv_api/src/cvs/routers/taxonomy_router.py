@@ -4,7 +4,7 @@ import logging
 
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Request)
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.cvs.routers._shared import (GCP_PROJECT_ID, VERTEX_LOCATION,
                                      RecalculateStepRequest)
 from src.cvs.task_state import tree_task_manager

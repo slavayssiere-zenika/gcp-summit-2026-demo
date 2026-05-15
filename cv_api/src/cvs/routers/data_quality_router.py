@@ -12,7 +12,7 @@ la validation OIDC du SA cv_sa qui est le seul à appeler cet endpoint.
 import logging
 import os
 
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token

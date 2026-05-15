@@ -17,7 +17,7 @@ import logging
 import os
 from typing import Any, Optional
 
-import database
+import shared.database as database
 import httpx
 from opentelemetry.propagate import inject
 from pydantic import ValidationError

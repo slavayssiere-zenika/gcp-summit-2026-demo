@@ -1,8 +1,8 @@
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from main import app
-from src.auth import verify_jwt
-from database import get_db
+from shared.auth.jwt import verify_jwt
+from shared.database import get_db
 
 AUTH = {"Authorization": "Bearer testtoken"}
 

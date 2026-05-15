@@ -5,12 +5,12 @@ import os as _os
 from datetime import datetime, timezone
 
 import google.auth
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.google_auth import get_google_access_token
 from src.models import DriveSyncState, DriveSyncStatus
 from src.redis_client import get_redis

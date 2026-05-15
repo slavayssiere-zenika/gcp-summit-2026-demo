@@ -15,7 +15,7 @@ os.environ["SECRET_KEY"] = "testsecret"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     import database
-    from database import engine, get_db
+    from shared.database import engine, get_db
     from main import app
     from src.prompts.models import Base
 
@@ -394,44 +394,7 @@ def test_delete_prompt_not_found():
     assert resp.status_code == 404
 
 
-# ── Global Exception Handler ───────────────────────────────────────────────────
 
-@pytest.mark.asyncio
-async def test_global_exception_handler_500():
-    """Vérifie que le global exception handler intercepte une exception inattendue et la logge.
-
-    prompts_api ne se reporte PAS à elle-même (anti-boucle récursive).
-    Le handler logue en local et retourne 500.
-    """
-    from main import global_exception_handler
-    mock_request = MagicMock()
-    mock_request.method = "GET"
-    mock_request.url.path = "/"
-    mock_request.headers = {}
-
-    exc = ValueError("Simulated violent crash")
-
-    with patch("main.logging.error") as mock_log:
-        resp = await global_exception_handler(mock_request, exc)
-        assert resp.status_code == 500
-        import json
-        assert json.loads(resp.body)["detail"] == "Internal Server Error"
-        mock_log.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_global_exception_handler_422():
-    """Vérifie que la RequestValidationError retourne 422 sans déclencher de log d'erreur non gérée."""
-    from main import global_exception_handler
-    from fastapi.exceptions import RequestValidationError
-
-    mock_request = MagicMock()
-    exc = RequestValidationError(errors=[])
-
-    with patch("main.logging.error") as mock_log:
-        resp = await global_exception_handler(mock_request, exc)
-        assert resp.status_code == 422
-        mock_log.assert_not_called()
 
 # ── Main.py Endpoints ──────────────────────────────────────────────────────────
 

@@ -24,8 +24,8 @@ from opentelemetry.trace import SpanKind
 from pydantic import BaseModel  # noqa: F401
 
 from agent_commons.exception_handler import make_global_exception_handler
-from agent_commons.jwt_middleware import ALGORITHM  # noqa: F401
-from agent_commons.jwt_middleware import verify_jwt_request as verify_jwt
+from shared.auth.jwt import ALGORITHM  # noqa: F401
+from shared.auth.jwt import verify_jwt_request as verify_jwt
 from agent_commons.mcp_client import auth_header_var  # noqa: F401
 from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest)  # noqa: F401

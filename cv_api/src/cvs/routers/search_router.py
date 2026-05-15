@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import httpx
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
-from database import get_db
+from shared.database import get_db
 from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
                      Response)
 from fastapi.security import HTTPAuthorizationCredentials
@@ -15,7 +15,7 @@ from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import security, verify_jwt
+from shared.auth.jwt import security, verify_jwt
 from src.cvs.models import CVProfile
 from src.cvs.routers._shared import (MISSIONS_API_URL, USERS_API_URL,
                                      MultiCriteriaSearchRequest)

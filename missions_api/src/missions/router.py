@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 
 from .analysis_router import router as analysis_router
 from .crud_router import router as crud_router

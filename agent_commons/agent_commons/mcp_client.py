@@ -69,9 +69,7 @@ except ValueError:
 # ---------------------------------------------------------------------------
 # Context variable — propagates Authorization header across async boundaries.
 # ---------------------------------------------------------------------------
-auth_header_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "auth_header", default=None
-)
+from shared.auth.context import auth_header_var
 
 logger = logging.getLogger(__name__)
 

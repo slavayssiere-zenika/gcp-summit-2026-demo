@@ -1,57 +1,19 @@
 import asyncio
-import contextvars
 import json
+import logging
 import os
 
 import httpx
-from mcp.server import Server
+from mcp.server import InitializationOptions, Server
+from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-from opentelemetry import propagate, trace
-from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.trace.propagation.tracecontext import \
-    TraceContextTextMapPropagator
+from shared.mcp_server_utils import get_mcp_trace_headers, setup_mcp_tracer_provider
 
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
-propagate.set_global_textmap(TraceContextTextMapPropagator())
+logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', handlers=[logging.NullHandler()])
 
 API_BASE_URL = os.getenv("MISSIONS_API_URL", "http://localhost:8009")
 
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "missions-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(
-        BatchSpanProcessor(
-            OTLPSpanExporter() if os.getenv(
-                "TRACE_EXPORTER",
-                "grpc") == "http" else OTLPSpanExporter(
-                insecure=True)))
-trace.set_tracer_provider(provider)
-tracer = trace.get_tracer(__name__)
-
+tracer = setup_mcp_tracer_provider("missions-api-mcp")
 server = Server("missions-api")
 
 
@@ -201,11 +163,7 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
-        auth_header = mcp_auth_header_var.get()
-        headers = {}
-        if auth_header:
-            headers["Authorization"] = auth_header
-        inject(headers)
+        headers = get_mcp_trace_headers()
 
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             if name == "create_mission":
@@ -327,8 +285,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 
 async def main():
-    from mcp.server import InitializationOptions
-    from mcp.server.stdio import stdio_server
     options = InitializationOptions(
         server_name="missions-api",
         server_version="1.0.0",
@@ -336,6 +292,7 @@ async def main():
     )
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, options)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

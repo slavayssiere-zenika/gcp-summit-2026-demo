@@ -16,13 +16,13 @@ from typing import List, Optional
 
 import httpx
 from cache import get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, Query, Request
 from opentelemetry.propagate import inject
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.competencies.analytics_queries import compute_taxonomy_quality
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from src.competencies.schemas import (

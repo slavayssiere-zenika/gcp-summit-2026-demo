@@ -12,7 +12,7 @@ os.environ["GCP_PROJECT_ID"] = "test-project"
 os.environ["VERTEX_LOCATION"] = "europe-west1"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import get_db
+    from shared.database import get_db
     from main import app
     from src.prompts.router import verify_jwt
 

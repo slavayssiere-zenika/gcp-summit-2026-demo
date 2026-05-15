@@ -13,7 +13,7 @@ RÈGLE : ne JAMAIS ajouter de logique métier ici — créer un nouveau sous-rou
 """
 import httpx  # noqa: F401  # Re-exporté pour compat mocks tests (src.cvs.router.httpx)
 from fastapi import APIRouter, Depends
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.cvs.routers.analytics_router import router as analytics_router
 from src.cvs.routers.bulk_router import router as bulk_router
 from src.cvs.routers.data_quality_router import \

@@ -18,9 +18,9 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
     mock_redis.get.return_value = None
     mock_redis.set.return_value = True
     with patch("redis.asyncio.from_url", return_value=mock_redis):
-        from database import get_db
+        from shared.database import get_db
         from main import app
-        from src.auth import verify_jwt
+        from shared.auth.jwt import verify_jwt
 
 
 AUTH = {"Authorization": "Bearer testtoken"}

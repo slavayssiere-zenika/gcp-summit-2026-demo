@@ -14,12 +14,12 @@ def override_verify_jwt():
 def override_verify_scheduler_oidc():
     return None
 
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 
 app.dependency_overrides[verify_jwt] = override_verify_jwt
 app.dependency_overrides[verify_scheduler_oidc] = override_verify_scheduler_oidc
 
-from database import get_db
+from shared.database import get_db
 
 # --- /evaluations/bulk-scoring-all ---
 

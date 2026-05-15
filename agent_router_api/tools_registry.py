@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from opentelemetry.propagate import inject
 
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
+from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.schemas import get_tool_metadata
 
 router = APIRouter(dependencies=[Depends(verify_jwt)])

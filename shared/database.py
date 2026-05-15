@@ -8,8 +8,7 @@ from google.cloud.alloydb.connector import AsyncConnector, IPTypes
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -31,24 +30,23 @@ connector = None
 engine = None
 SessionLocal = None
 
+
 async def init_db_connector():
     global connector, engine, SessionLocal
-    
-    pool_size = int(os.getenv("DB_POOL_SIZE", "50"))
-    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "100"))
 
     pool_params = {
         "pool_pre_ping": True,
         "pool_recycle": 1800,
-        "pool_size": pool_size,
-        "max_overflow": max_overflow,
+        "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
     }
 
     if USE_IAM_AUTH and ALLOYDB_INSTANCE_URI:
         logger.info(f"[DB] Initializing Python AlloyDB Connector via asyncpg for {ALLOYDB_INSTANCE_URI}")
         connector = AsyncConnector()
-        
+
         import asyncpg
+
         @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(5), reraise=True)
         async def getconn():
             logger.debug(f"[DB] Attempting IAM connection to {ALLOYDB_INSTANCE_URI} as user '{DB_USER}'")
@@ -63,9 +61,10 @@ async def init_db_connector():
                 )
                 return conn
             except asyncpg.exceptions.InvalidAuthorizationSpecificationError as e:
-                logger.error(f"[DB] IAM Authentication failed. Propagation delay detected. Ensure the service account has 'roles/alloydb.client' and wait. Details: {e}")
+                # noqa: E501
+                logger.error(f"[DB] IAM Authentication failed. Propagation delay detected. Wait. Details: {e}")
                 raise
-        
+
         engine = create_async_engine("postgresql+asyncpg://", async_creator=getconn, **pool_params)
     else:
         target_url = DATABASE_URL
@@ -78,22 +77,22 @@ async def init_db_connector():
         autocommit=False, autoflush=False
     )
 
+
 async def close_db_connector():
-    global connector, engine
     if engine:
         await engine.dispose()
     if connector:
         await connector.close()
-        
+
+
 async def check_db_connection() -> bool:
     """Vérifie la connectivité DB avec un timeout court (5s).
 
     Utilise asyncio.wait_for pour éviter de bloquer le /ready endpoint
-    quand le pool de connexions est saturé (ex: pendant un batch Vertex AI).
+    quand le pool de connexions est saturé (ex: pendant un bulk pipeline).
     En cas de TimeoutError (saturation temporaire), retourne True de façon
     optimiste — le 503 ne se déclenche que si la DB est réellement inaccessible.
     """
-    global engine
     if not engine:
         return False
     try:
@@ -110,11 +109,10 @@ async def check_db_connection() -> bool:
         logger.error(f"[DB] Database connection test failed: {e}")
         return False
 
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as db:
         try:
             yield db
         finally:
             await db.close()
-
-# For imports requiring Base or other items directly

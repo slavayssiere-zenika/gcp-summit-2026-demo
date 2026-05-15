@@ -5,7 +5,7 @@ import os
 import re
 import traceback
 
-import database
+import shared.database as database
 import httpx
 from google import genai
 from google.genai import types

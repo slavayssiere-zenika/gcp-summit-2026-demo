@@ -14,7 +14,7 @@ import os
 
 import httpx
 
-import database
+import shared.database as database
 from google.cloud import storage as gcs_storage
 from opentelemetry.propagate import inject
 from sqlalchemy import update as sa_update

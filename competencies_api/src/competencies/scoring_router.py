@@ -16,7 +16,7 @@ import os
 import google.auth.transport.requests
 import google.oauth2.id_token
 import httpx
-from database import get_db
+from shared.database import get_db
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -30,7 +30,7 @@ from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.competencies.ai_scoring import _bulk_scoring_all_bg
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.models import CompetencyEvaluation, user_competency

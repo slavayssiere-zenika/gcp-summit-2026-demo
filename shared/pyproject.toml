@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zenika-shared-schemas"
-version = "1.0.3"
+version = "1.0.9"
 description = "Shared Pydantic DTOs and ASGI middlewares for Zenika inter-service API contracts"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,12 +17,13 @@ dependencies = [
     "prometheus-fastapi-instrumentator>=6.0.0",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["shared*"]
+[tool.setuptools]
+packages = ["shared", "shared.schemas", "shared.auth", "shared.tests"]
+
+[tool.setuptools.package-dir]
+"shared" = "."
 
 [project.optional-dependencies]
-# Optionnel : OTEL exporters (grpc/http/gcp) restent dans les requirements.txt des services
 exporters = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",

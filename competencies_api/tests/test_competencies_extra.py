@@ -26,9 +26,9 @@ _fake_redis = fakeredis.FakeRedis(decode_responses=True)
 
 with patch("redis.from_url", return_value=_fake_redis), \
      patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
 
 AUTH = {"Authorization": "Bearer testtoken"}

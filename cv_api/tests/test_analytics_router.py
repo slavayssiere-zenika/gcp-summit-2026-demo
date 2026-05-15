@@ -2,10 +2,10 @@ import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from database import get_db
+from shared.database import get_db
 from fastapi.testclient import TestClient
 from main import app
-from src.auth import security, verify_jwt
+from shared.auth.jwt import security, verify_jwt
 from src.cvs.schemas import CVImportStep, CVResponse
 from src.cvs.models import CVProfile
 

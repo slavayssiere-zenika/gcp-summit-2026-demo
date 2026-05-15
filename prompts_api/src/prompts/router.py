@@ -1,7 +1,7 @@
 import json
 
 from cache import delete_cache, get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select

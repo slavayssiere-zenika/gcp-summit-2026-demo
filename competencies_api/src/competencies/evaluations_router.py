@@ -17,12 +17,12 @@ from datetime import datetime, timezone
 
 import httpx
 from cache import delete_cache_pattern
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from opentelemetry.propagate import inject
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.competencies.ai_scoring import (
     _compute_ai_score,
     _get_or_create_evaluation,
@@ -308,7 +308,7 @@ async def trigger_ai_score_single(
     de la lecture initiale, relâchée avant l'appel IA (potentiellement long : 5-15s),
     puis réacquise pour la seule écriture du résultat.
     """
-    from database import SessionLocal
+    from shared.database import SessionLocal
 
     # Phase 1 : lecture courte — vérifier que la compétence existe
     async with SessionLocal() as db:

@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from database import get_db
+from shared.database import get_db
 from fastapi.testclient import TestClient
 from main import app
 from mcp_server import call_tool, mcp_auth_header_var
-from src.auth import security, verify_jwt
+from shared.auth.jwt import security, verify_jwt
 
 os.environ['SECRET_KEY'] = 'testsecret'
 os.environ["CV_API_URL"] = "http://test-cv"

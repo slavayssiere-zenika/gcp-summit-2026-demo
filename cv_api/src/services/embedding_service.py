@@ -16,7 +16,7 @@ import math
 import os
 from typing import Optional
 
-import database
+import shared.database as database
 from opentelemetry.propagate import inject
 from sqlalchemy import delete
 from sqlalchemy.future import select

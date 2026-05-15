@@ -191,14 +191,14 @@ def test_get_user_from_api_not_found(client):
 
 def test_bulk_import_tree_unauthorized(client):
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
     with patch.dict(app.dependency_overrides, {verify_jwt: lambda: {"sub": "1", "allowed_category_ids": [1]}}):
         response = client.post("/bulk_tree", json={"tree": {"Root": {}}})
         assert response.status_code == 403
 
 def test_bulk_import_tree_authorized(client):
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
     with patch.dict(app.dependency_overrides, {verify_jwt: lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}}):
         payload = {
             "tree": {
@@ -216,7 +216,7 @@ def test_bulk_import_tree_authorized(client):
 
 def test_bulk_import_tree_list_format(client):
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
     with patch.dict(app.dependency_overrides, {verify_jwt: lambda: {"sub": "1", "role": "admin", "allowed_category_ids": []}}):
         payload = {
             "tree": [

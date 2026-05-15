@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 import httpx
 from cache import delete_cache, delete_cache_pattern
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests

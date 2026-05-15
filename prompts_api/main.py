@@ -2,7 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-import database
+import shared.database as database
 import httpx  # noqa: F401 — kept for potential use by routers
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware

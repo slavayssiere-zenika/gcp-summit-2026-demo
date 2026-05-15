@@ -2,11 +2,11 @@
 Shared imports for drive_api sub-routers."""
 import logging
 
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.drive_service import DriveService
 from src.services.ingestion_kpi_service import IngestionKpiService
 
@@ -68,7 +68,7 @@ async def ingestion_batch_retry(
     result = await service.batch_retry(force=force)
 
     async def run_sync_after_retry():
-        from database import SessionLocal
+        from shared.database import SessionLocal
         async with SessionLocal() as session:
             try:
                 d_service = DriveService(session)
@@ -100,7 +100,7 @@ async def quality_gate_batch(
     total_queued = result["total_queued"]
 
     async def run_sync_after_gate():
-        from database import SessionLocal
+        from shared.database import SessionLocal
         async with SessionLocal() as session:
             try:
                 d_service = DriveService(session)

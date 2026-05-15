@@ -4,7 +4,7 @@ import unicodedata
 from typing import List
 
 from cache import delete_cache_pattern, get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession

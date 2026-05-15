@@ -15,7 +15,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-import database
+import shared.database as database
 import httpx
 from cache import delete_cache_pattern
 from google import genai

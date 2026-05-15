@@ -3,7 +3,7 @@ import uuid
 from typing import List, Optional, Annotated
 
 from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path, Body
 from metrics import USER_CREATIONS_TOTAL
 from pydantic import BaseModel, Field

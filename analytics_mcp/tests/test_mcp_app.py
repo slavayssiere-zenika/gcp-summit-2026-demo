@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock, mock_open
 from fastapi.testclient import TestClient
-from mcp_app import app, report_exception_to_prompts_api
+from mcp_app import app
 import json
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -43,24 +43,7 @@ def test_get_spec():
         response = client.get("/spec")
         assert response.status_code == 200
 
-@pytest.mark.asyncio
-@patch('httpx.AsyncClient.post')
-async def test_report_exception_to_prompts_api(mock_post):
-    mock_post.return_value = MagicMock(status_code=200)
-    await report_exception_to_prompts_api("test_service", "error", "trace", "token")
-    mock_post.assert_called_once()
 
-@pytest.mark.asyncio
-async def test_global_exception_handler():
-    # Trigger global exception handler by hitting a route that raises Exception
-    @app.get("/trigger_error")
-    def trigger_error():
-        raise ValueError("test error")
-        
-    with patch('mcp_app.report_exception_to_prompts_api', new_callable=AsyncMock) as mock_report:
-        response = client.get("/trigger_error", headers={"Authorization": "Bearer token"})
-        assert response.status_code == 500
-        mock_report.assert_called_once()
 
 def test_get_tools(override_verify_jwt):
     with patch('mcp_app.list_tools', new_callable=AsyncMock) as mock_list_tools:

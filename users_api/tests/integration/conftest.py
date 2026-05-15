@@ -101,7 +101,7 @@ def client(postgres_container, integration_env):
         async with async_session() as session:
             yield session
 
-    from database import get_db
+    from shared.database import get_db
     from main import app
     from src.auth import verify_jwt
 

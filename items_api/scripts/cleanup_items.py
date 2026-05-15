@@ -4,7 +4,7 @@ import json
 import os
 import sys
 
-from database import get_db, init_db_connector
+from shared.database import get_db, init_db_connector
 from sqlalchemy import text
 
 # Add current directory to path to import database

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from database import Base
+from shared.database import Base
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
                         Text)

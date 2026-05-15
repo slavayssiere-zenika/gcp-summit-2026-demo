@@ -16,9 +16,9 @@ os.environ["SECRET_KEY"] = "testsecret"
 os.environ["REDIS_URL"] = "redis://localhost:6379/8"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
 
 def override_verify_jwt():

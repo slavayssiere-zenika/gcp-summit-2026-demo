@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import httpx
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access  # noqa: F401, E501
-from database import get_db
+from shared.database import get_db
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      Request)
 from opentelemetry.propagate import inject
@@ -15,7 +15,7 @@ from sqlalchemy import text as sa_text
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.cvs.models import CVProfile
 from src.cvs.routers._shared import COMPETENCIES_API_URL
 from src.cvs.routers._shared import (DRIVE_API_URL, USERS_API_URL)

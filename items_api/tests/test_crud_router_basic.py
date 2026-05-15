@@ -5,8 +5,8 @@ from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
 from main import app
-from src.auth import verify_jwt
-from database import get_db
+from shared.auth.jwt import verify_jwt
+from shared.database import get_db
 from src.items.schemas import ItemResponse
 
 client = TestClient(app, raise_server_exceptions=False)

@@ -11,7 +11,7 @@ import os
 import time
 import traceback
 
-import database
+import shared.database as database
 import httpx
 from google.cloud import storage as gcs_storage
 from opentelemetry.propagate import inject

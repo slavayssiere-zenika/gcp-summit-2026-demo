@@ -137,3 +137,4 @@ ar_token_*.tmp
 # Wheels buildés localement — jamais committé (build artifact de deploy.sh)
 shared/dist/
 shared/*.egg-info/
+shared/build/

@@ -10,7 +10,7 @@ import logging
 import time
 from datetime import datetime, timezone
 
-import database
+import shared.database as database
 import httpx
 from google.cloud import storage as gcs_storage
 from pydantic import ValidationError

@@ -15,9 +15,9 @@ os.environ["SECRET_KEY"] = "testsecret"
 os.environ["USERS_API_URL"] = "http://users-api:8000"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
@@ -31,7 +31,7 @@ TestSessionLocal = sessionmaker(
 
 @pytest_asyncio.fixture(autouse=True)
 async def create_test_db():
-    from database import Base
+    from shared.database import Base
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)

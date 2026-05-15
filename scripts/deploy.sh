@@ -307,7 +307,7 @@ print_summary() {
       svc_name=$(basename "$f" _tests.log)
       local errors
       errors=$(grep -E 'ERROR|FAILED|Error|Exception|NameError|ImportError|assert|XFAIL' "$f" \
-        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info\|warnings.warn\|PytestUnraisable' \
+        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info\|warnings.warn\|PytestUnraisable\|ConnectionError' \
         | head -50)
       if [ -n "$errors" ]; then
         HAS_ERRORS=true
@@ -548,8 +548,9 @@ compute_service_hash() {
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
-    ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
+    ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
+    ! -path "*/*.egg-info/*" \
     -exec shasum {} + | sort > "/tmp/hash_${SERVICE}"
   shasum "/tmp/hash_${SERVICE}" | awk '{print $1}'
 }
@@ -571,7 +572,7 @@ save_shared_hash() {
       ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
       ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
       ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
-      ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
+      ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
       ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
       ! -path "*/*.egg-info/*" \
       -exec shasum {} + | sort > "shared/FILE_HASHES"
@@ -593,7 +594,7 @@ check_shared_changed() {
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
-    ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
+    ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     ! -path "*/*.egg-info/*" \
     -exec shasum {} + | sort > "/tmp/current_shared_hashes"

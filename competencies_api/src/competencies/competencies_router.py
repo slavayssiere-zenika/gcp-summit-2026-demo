@@ -24,7 +24,7 @@ import logging
 from typing import List
 
 from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -38,7 +38,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
 from sqlalchemy.orm import aliased
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.competencies.helpers import (
     _generate_aliases_for_competency,
     check_grammatical_conflict,

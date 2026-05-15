@@ -13,12 +13,12 @@ import logging
 from datetime import datetime, timezone
 
 from cache import delete_cache_pattern
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.competencies.helpers import _generate_aliases_for_competency, trigger_taxonomy_cache_invalidation
 from src.competencies.models import Competency, CompetencySuggestion
 from src.competencies.schemas import (

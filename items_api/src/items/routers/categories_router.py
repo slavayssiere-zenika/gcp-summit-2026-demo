@@ -2,11 +2,11 @@
 import os
 
 from cache import get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.items.models import Category, Item
 from src.items.schemas import (CategoryCreate, CategoryResponse,
                                ItemStatsResponse, PaginationResponse)

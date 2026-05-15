@@ -15,7 +15,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy import update
@@ -153,7 +153,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
 
     async def run_sync():
         # Get a new DB session since the one in dependency might close
-        from database import SessionLocal
+        from shared.database import SessionLocal
         async with SessionLocal() as session:
             try:
                 service = DriveService(session)

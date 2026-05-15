@@ -492,7 +492,7 @@ class CVStorageService:
         # ── Persistance en base (TOUJOURS, même si pas d'erreur) ────────────────
         # Une compétence non assignée = consultant invisible à la recherche = critique
         try:
-            from database import SessionLocal
+            from shared.database import SessionLocal
             async with SessionLocal() as db_bg:
                 async with db_bg.begin():
                     await db_bg.execute(

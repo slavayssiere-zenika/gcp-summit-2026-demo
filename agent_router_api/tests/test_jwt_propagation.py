@@ -20,7 +20,7 @@ def make_token(sub: str = "user@zenika.com", role: str = "user", expired: bool =
     from jose import jwt
     from router import SECRET_KEY
 
-    from agent_commons.jwt_middleware import ALGORITHM
+    from shared.auth.jwt import ALGORITHM
     payload: dict = {"role": role}
     if not omit_sub:
         payload["sub"] = sub

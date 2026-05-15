@@ -14,9 +14,9 @@ from jose.exceptions import JWTError
 from opentelemetry.propagate import inject
 from sqlalchemy.future import select
 
-import database
+import shared.database as database
 import src.services.config as _svc_config
-from src.auth import SECRET_KEY as _AUTH_SECRET_KEY
+import os as _os; _AUTH_SECRET_KEY = _os.getenv('SECRET_KEY', '')
 from src.cvs.models import CVProfile
 from src.services.cv_import_service import process_cv_core
 

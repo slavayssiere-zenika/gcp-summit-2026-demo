@@ -17,9 +17,9 @@ os.environ.setdefault("GCP_PROJECT_ID", "test-project")
 os.environ.setdefault("DLQ_SUBSCRIPTION_ID", "drive-dlq-sub")
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
 
 AUTH = {"Authorization": "Bearer testtoken"}

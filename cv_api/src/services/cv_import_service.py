@@ -171,7 +171,7 @@ async def process_cv_core(
     # ── Étape 3, 4 et 5 : Résolution, Création utilisateur et missions ───────
     t0 = time.monotonic()
     try:
-        from database import SessionLocal
+        from shared.database import SessionLocal
         if db is None:
             async with SessionLocal() as local_db:
                 result = await CVStorageService.resolve_identity_and_user(
@@ -252,7 +252,7 @@ async def process_cv_core(
     # ── Étape 7 : Sauvegarde en base de données ───────────────────────────────
     t0 = time.monotonic()
     try:
-        from database import SessionLocal
+        from shared.database import SessionLocal
         if db is None:
             async with SessionLocal() as local_db:
                 await CVStorageService.upsert_cv_profile(

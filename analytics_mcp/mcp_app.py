@@ -300,43 +300,8 @@ async def get_spec():
         return Response(content="# Analytics MCP — Spécification introuvable", media_type="text/markdown")
 
 
-async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    headers = {"Authorization": f"Bearer {token}"}
-    inject(headers)
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(
-                f"{prompts_api_url}/errors/report",
-                json={
-                    "service_name": service_name,
-                    "error_message": error_msg,
-                    "context": trace_context[:2000]
-                },
-                headers=headers
-            )
-        except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            # Ne pas re-raise : cette fonction est best-effort.
-
-
 # Exception handler global enregistré par instrument_app() via shared.exception_handler
 # (register_global_exception_handler(app, service_name="analytics-mcp"))
-
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-
-    if token:
-        await report_exception_to_prompts_api("analytics_mcp", error_msg, trace_context, token)
-
-    logging.error(
-        "[analytics_mcp] Unhandled exception on %s %s: %s\n%s",
-        request.method, request.url.path, error_msg, trace_context
-    )
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))

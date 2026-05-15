@@ -113,9 +113,9 @@ def client(pgvector_container, integration_env_cv):
     def override_verify_jwt():
         return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
 
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
     # Sauvegarder les overrides existants (conftest racine) pour les restaurer après
     _prev_get_db = app.dependency_overrides.get(get_db)

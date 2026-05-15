@@ -17,57 +17,18 @@ from tools.profile_tools import (
     handle_analyze_cv, handle_get_cv_status_bulk, handle_get_user_cv,
     handle_get_user_missions, handle_get_candidate_rag_context
 )
-import contextvars
 import json
 import os
 
 import httpx
 from mcp.server import Server
 from mcp.types import TextContent, Tool
-from opentelemetry import propagate, trace
-from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.trace.propagation.tracecontext import \
-    TraceContextTextMapPropagator
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
-propagate.set_global_textmap(TraceContextTextMapPropagator())
 
 API_BASE_URL = os.getenv("CV_API_URL", "http://localhost:8004")
 
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "cv-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
-        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
-trace.set_tracer_provider(provider)
-tracer = trace.get_tracer(__name__)
+tracer = setup_mcp_tracer_provider("cv-api-mcp")
 
 server = Server("cv-api")
-
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -537,7 +498,6 @@ async def list_tools() -> list[Tool]:
         ),
     ]
 
-
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
@@ -605,7 +565,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Error executing {name}: {str(e)}"}))]
 
-
 async def main():
     """Main entry point for the MCP server when run as a script."""
     from mcp.server.stdio import stdio_server
@@ -619,5 +578,6 @@ async def main():
         await server.run(read_stream, write_stream, options)
 
 if __name__ == "__main__":
-    import asyncio
+    from shared.mcp_server_utils import get_mcp_trace_headers, setup_mcp_tracer_provider
+import asyncio
     asyncio.run(main())

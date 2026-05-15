@@ -35,8 +35,8 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
            return_value=MagicMock()):
     with patch("redis.asyncio.from_url", return_value=_mock_redis):
         from main import app  # noqa: E402
-        from database import get_db  # noqa: E402
-    from src.auth import verify_jwt  # noqa: E402
+        from shared.database import get_db  # noqa: E402
+    from shared.auth.jwt import verify_jwt  # noqa: E402
 
 
 # ── Overrides globaux ──────────────────────────────────────────────────────────

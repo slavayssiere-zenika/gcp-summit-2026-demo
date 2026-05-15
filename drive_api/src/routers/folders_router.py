@@ -2,11 +2,11 @@
 Shared imports for drive_api sub-routers."""
 
 import logging
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.drive_service import DriveService
 from src.models import DriveSyncStatus
 from src.schemas import FolderCreate, FolderResponse, FolderStats, FolderUpdate, PaginatedFoldersResponse
@@ -79,7 +79,7 @@ async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSessio
     SANS repasser les statuts en PENDING pour les fichiers déjà importés et non modifiés.
     """
     async def run_rebuild():
-        from database import SessionLocal
+        from shared.database import SessionLocal
         redis = get_redis()
         try:
             redis.set("drive:sync:rebuild_running", "1", ex=1800) # 30 min max

@@ -10,9 +10,9 @@ os.environ["SECRET_KEY"] = "testsecret"
 os.environ["USERS_API_URL"] = "http://users-api:8000"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
 client = TestClient(app)
 

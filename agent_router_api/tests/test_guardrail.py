@@ -18,7 +18,7 @@ def get_auth_token(sub: str = "user_test@zenika.com", role: str = "user") -> str
     from jose import jwt
     from router import SECRET_KEY
 
-    from agent_commons.jwt_middleware import ALGORITHM
+    from shared.auth.jwt import ALGORITHM
     return jwt.encode({"sub": sub, "role": role}, SECRET_KEY, algorithm=ALGORITHM)
 
 

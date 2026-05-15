@@ -6,14 +6,14 @@ import json as _json
 import logging
 from datetime import datetime, timezone
 
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from google.api_core.exceptions import DeadlineExceeded
 from google.cloud import pubsub_v1
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.models import DriveSyncState, DriveSyncStatus
 from src.routers.files_router import _get_dlq_subscription_path
 

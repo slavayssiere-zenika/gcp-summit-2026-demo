@@ -113,9 +113,9 @@ def client(postgres_container, integration_env):
         async with async_session() as session:
             yield session
 
-    from database import get_db
+    from shared.database import get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
 
     # Sauvegarder les overrides existants pour les restaurer après
     _prev_get_db = app.dependency_overrides.get(get_db)

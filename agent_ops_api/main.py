@@ -29,8 +29,8 @@ from shared.fastapi_utils import instrument_app
 from shared.observability import setup_logging
 
 from agent_commons.exception_handler import make_global_exception_handler
-from agent_commons.jwt_middleware import ALGORITHM
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
+from shared.auth.jwt import ALGORITHM
+from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.mcp_client import auth_header_var
 from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
                                    get_tool_metadata)

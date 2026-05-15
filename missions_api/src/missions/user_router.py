@@ -1,8 +1,8 @@
-import database
+import shared.database as database
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 
 from .models import Mission
 

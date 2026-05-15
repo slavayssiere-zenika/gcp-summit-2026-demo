@@ -18,8 +18,8 @@ from tools.evaluation_tools import (
     handle_set_user_competency_score, handle_trigger_ai_scoring, handle_get_user_competency_evaluations,
     handle_clear_user_evaluations, handle_find_skill_gaps
 )
+from shared.mcp_server_utils import get_mcp_trace_headers, setup_mcp_tracer_provider
 import asyncio
-import contextvars
 import json
 import logging
 import os
@@ -28,30 +28,6 @@ import httpx
 from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-from opentelemetry import propagate, trace
-from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
-from opentelemetry.trace.propagation.tracecontext import \
-    TraceContextTextMapPropagator
-
-mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
-
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-propagate.set_global_textmap(TraceContextTextMapPropagator())
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', handlers=[logging.NullHandler()])
 
@@ -76,7 +52,6 @@ trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
 server = Server("competencies-api")
-
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -545,12 +520,10 @@ async def list_tools() -> list[Tool]:
         )
     ]
 
-
 def get_trace_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
-
 
 def get_trace_context() -> dict:
     env_headers = {}
@@ -558,7 +531,6 @@ def get_trace_context() -> dict:
         if key.lower() in ['traceparent', 'tracestate', 'baggage']:
             env_headers[key] = os.environ[key]
     return env_headers
-
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -637,7 +609,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
             except Exception as e:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
-
 
 async def main():
     """Main entry point for the MCP server when run as a script."""

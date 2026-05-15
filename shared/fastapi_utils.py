@@ -34,6 +34,7 @@ def instrument_app(
     service_name: str | None = None,
     excluded_urls: str | None = None,
     skip_otel_fastapi: bool = False,
+    register_exception_handler: bool = True,
 ) -> FastAPI:
     """Configure les instruments communs obligatoires (AGENTS.md checklist §global).
 
@@ -50,6 +51,9 @@ def instrument_app(
         skip_otel_fastapi: Si True, n'applique PAS FastAPIInstrumentor — utile quand l'agent
                            configure lui-même l'instrumentation avec un tracer_provider custom
                            (ex: agent_missions_api.setup_tracing()).
+        register_exception_handler: Si True (défaut), enregistre le global exception handler
+                                    (fail-fast + rapport prompts_api). Passer False uniquement
+                                    pour les agents qui ont leur propre handler (agent_commons).
 
     Returns:
         L'instance app modifiée (pour le chaînage).
@@ -71,9 +75,9 @@ def instrument_app(
     app.add_middleware(LoggingMiddleware)
 
     # 5. Exception handler global (fail-fast + rapport prompts_api)
-    # NOTE : les agents ne l'utilisent PAS — ils ont leur propre
-    # agent_commons.exception_handler.make_global_exception_handler()
-    # Appeler register_global_exception_handler() séparément si nécessaire.
+    # Les agents passent register_exception_handler=False — ils ont agent_commons.
+    if register_exception_handler:
+        register_global_exception_handler(app, _service_name)
 
     return app
 

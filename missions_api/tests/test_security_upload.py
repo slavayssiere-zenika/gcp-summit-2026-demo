@@ -13,10 +13,10 @@ import os
 from unittest.mock import AsyncMock
 
 import pytest
-from database import get_db
+from shared.database import get_db
 from fastapi.testclient import TestClient
 from main import app
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 
 os.environ['SECRET_KEY'] = 'testsecret'
 

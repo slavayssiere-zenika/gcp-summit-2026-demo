@@ -10,7 +10,7 @@ os.environ["SECRET_KEY"] = "testsecret"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     import src.prompts.router as prompts_router
-    from database import get_db
+    from shared.database import get_db
     from main import app
 
 def override_verify_jwt():

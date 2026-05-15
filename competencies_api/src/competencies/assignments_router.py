@@ -10,14 +10,14 @@ import os
 from datetime import datetime, timezone
 
 from cache import delete_cache_pattern, get_cache, set_cache
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import delete, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.competencies.helpers import get_user_from_api, serialize_competency
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from src.competencies.schemas import CompetencyResponse, PaginationResponse

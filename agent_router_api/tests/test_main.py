@@ -13,7 +13,7 @@ def get_auth_token(sub="user_1"):
     from jose import jwt
     from router import SECRET_KEY
 
-    from agent_commons.jwt_middleware import ALGORITHM
+    from shared.auth.jwt import ALGORITHM
     payload = {"sub": sub, "role": "admin"}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 

@@ -3,7 +3,7 @@ import os
 import traceback
 from contextlib import asynccontextmanager
 
-import database
+import shared.database as database
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.router import public_router, router
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":

@@ -3,7 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-import database
+import shared.database as database
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware

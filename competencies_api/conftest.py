@@ -25,9 +25,9 @@ _fake_redis_client = fakeredis.FakeRedis(server=_fake_redis_server, decode_respo
 
 # Mock OTel AVANT l'import de main
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    from database import engine, get_db
+    from shared.database import engine, get_db
     from main import app
-    from src.auth import verify_jwt
+    from shared.auth.jwt import verify_jwt
     from src.competencies.models import Base
 
 # Injecte le client fakeredis dans le module cache (lazy init)

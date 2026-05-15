@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt
 
-from agent_commons.jwt_middleware import ALGORITHM
-from agent_commons.jwt_middleware import verify_jwt_bearer as verify_jwt
+from shared.auth.jwt import ALGORITHM
+from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.metadata import extract_metadata_from_session
 
 logger = logging.getLogger(__name__)

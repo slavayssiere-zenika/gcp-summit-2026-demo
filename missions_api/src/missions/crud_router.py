@@ -1,8 +1,8 @@
-import database
+import shared.database as database
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 
 from .models import (ALLOWED_TRANSITIONS, STATUS_UPDATE_ROLES, Mission,
                      MissionStatus, MissionStatusHistory)

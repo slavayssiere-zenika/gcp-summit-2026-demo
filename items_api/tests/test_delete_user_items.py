@@ -115,7 +115,7 @@ class TestDeleteUserItemsEndpoint:
 
     def test_delete_user_items_returns_204(self, mocker):
         """DELETE /user/{id}/items doit retourner 204 No Content."""
-        from database import get_db
+        from shared.database import get_db
         from main import app
         try:
             from src.auth import security, verify_jwt

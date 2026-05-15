@@ -3,12 +3,12 @@ import json
 import logging
 
 from cache import delete_cache_pattern
-from database import get_db
+from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Path
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth import verify_jwt
+from shared.auth.jwt import verify_jwt
 from src.items.models import Item, item_category
 
 logger = logging.getLogger(__name__)
