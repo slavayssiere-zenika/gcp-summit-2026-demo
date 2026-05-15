@@ -33,8 +33,8 @@ def assert_zero_trust(app, public_whitelist: set) -> None:
 
         path = getattr(route, "path", "")
 
-        # Bypass des routes MCP proxy (sidecar interne)
-        if path.startswith("/mcp") or path.startswith("//mcp"):
+        # Bypass des routes MCP proxy (sidecar interne) — correspondance exacte ou sous-chemin
+        if path == "/mcp" or path.startswith("/mcp/") or path.startswith("//mcp/"):
             continue
 
         # Vérification de la liste blanche

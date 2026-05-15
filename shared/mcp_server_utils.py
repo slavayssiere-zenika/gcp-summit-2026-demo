@@ -23,7 +23,8 @@ def setup_mcp_tracer_provider(service_name: str) -> trace.Tracer:
     else:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-    sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+    # Clamp sampling_rate to [0.0, 1.0] — TraceIdRatioBased lève ValueError sinon
+    sampling_rate = max(0.0, min(1.0, float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))))
     sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
     provider = TracerProvider(
         resource=Resource.create({
