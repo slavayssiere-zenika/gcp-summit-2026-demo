@@ -15,6 +15,12 @@ from history_routes import history_router as _history_router
 from jose import jwt
 from metrics import AGENT_QUERIES_TOTAL
 from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry.sdk.resources import Resource, ResourceAttributes
+from opentelemetry.trace import SpanKind
+
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import extract, inject
@@ -74,7 +80,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
     root_path=os.getenv("ROOT_PATH", "")
 )
-instrument_app(app, service_name="agent-hr-api")
+instrument_app(app, service_name="agent-hr-api", register_exception_handler=False)
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 

@@ -134,7 +134,7 @@ app.add_middleware(
 instrument_app(
     app,
     service_name="agent-missions-api",
-    skip_otel_fastapi=True,  # setup_tracing() gère FastAPIInstrumentor avec tracer_provider custom
+    skip_otel_fastapi=True, register_exception_handler=False,  # setup_tracing() gère FastAPIInstrumentor avec tracer_provider custom
 )
 
 _tracer_provider = setup_tracing(app)

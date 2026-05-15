@@ -566,13 +566,14 @@ save_shared_hash() {
   # à l'ancienne valeur → le prochain run re-déclenchera le rebuild complet.
   if [ -d "./shared" ]; then
     find "./shared" -type f \
-      ! -name "HASH" ! -name "FILE_HASHES" \
+      ! -name "HASH" ! -name "FILE_HASHES" ! -name "VERSION" \
       ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
       ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
       ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
       ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
       ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
       ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
+      ! -path "*/*.egg-info/*" \
       -exec shasum {} + | sort > "shared/FILE_HASHES"
     shasum "shared/FILE_HASHES" | awk '{print $1}' > "shared/HASH"
   fi
@@ -587,13 +588,14 @@ check_shared_changed() {
   SAVED=$(cat "$SHARED_HASH_FILE")
   local CURRENT
   find "./shared" -type f \
-    ! -name "HASH" ! -name "FILE_HASHES" \
+    ! -name "HASH" ! -name "FILE_HASHES" ! -name "VERSION" \
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
+    ! -path "*/*.egg-info/*" \
     -exec shasum {} + | sort > "/tmp/current_shared_hashes"
   CURRENT=$(shasum "/tmp/current_shared_hashes" | awk '{print $1}')
   
@@ -858,9 +860,13 @@ build_and_push_standard() {
   _TMPFILES+=("$AR_TOKEN_FILE")
   echo -n "$AR_TOKEN" > "$AR_TOKEN_FILE"
 
+  local SHARED_VERSION_RAW=$(cat shared/VERSION 2>/dev/null || echo "latest")
+  local SHARED_VERSION="${SHARED_VERSION_RAW#v}"
+
   DOCKER_BUILDKIT=1 docker build --platform linux/amd64 \
     --secret id=ar_token,src="$AR_TOKEN_FILE" \
     --build-arg PYTHON_AR_REPO="${PYTHON_REPO_URL}" \
+    --build-arg SHARED_VERSION="${SHARED_VERSION}" \
     -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" \
     -f "./${SERVICE}/Dockerfile" .
   
@@ -879,7 +885,7 @@ build_and_push_standard() {
   if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
     echo -e "${RED}❌ [SMOKE TEST] L'image Docker a crashé au démarrage (Missing Module, Syntax Error, etc) !${RESET}"
     echo -e "${RED}   Logs du crash :${RESET}"
-    docker logs "$SMOKE_CONTAINER" 2>&1 | tail -n 20
+    docker logs "$SMOKE_CONTAINER" 2>&1 | tee "${LOG_DIR}/${SERVICE}_smoke_tests.log" | tail -n 20
     docker rm -f "$SMOKE_CONTAINER" >/dev/null
     DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
     CURRENT_DEPLOYING_SERVICE=""

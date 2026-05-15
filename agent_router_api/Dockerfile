@@ -8,7 +8,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY agent_router_api/requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
+    && pip wheel --no-cache-dir --wheel-dir /app/wheels -r /tmp/req_public.txt
+
 
 # 2. Shared package agent_commons (built as a wheel for clean installation)
 COPY agent_commons/ /agent_commons/
@@ -32,6 +34,8 @@ RUN apt-get update \
 
 COPY --from=builder /app/wheels /wheels
 COPY agent_router_api/requirements.txt .
+RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
+    && pip wheel --no-cache-dir --wheel-dir /app/wheels -r /tmp/req_public.txt
 
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt agent_commons zenika-shared-schemas \
     && rm -rf /wheels
