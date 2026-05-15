@@ -1,3 +1,81 @@
+## Mise à jour automatique - 2026-05-15 15:48:36
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 1895  | 458  |  76% |
+| agent_hr_api     | 1546  | 222  |  86% |
+| agent_missions_api | 1380  | 252  |  82% |
+| agent_ops_api    | 1386  | 212  |  85% |
+| agent_router_api | 2628  | 464  |  82% |
+| analytics_mcp    | 1138  | 198  |  83% |
+| competencies_api | 4899  | 1258 |  74% |
+| cv_api           | 9417  | 1680 |  82% |
+| drive_api        | 3833  | 538  |  86% |
+| items_api        | 2332  | 238  |  90% |
+| missions_api     | 2275  | 311  |  86% |
+| monitoring_mcp   | 1377  | 175  |  87% |
+| platform-engineering | 1452  | 1177 |  19% |
+| prompts_api      | 1378  | 330  |  76% |
+| shared           | 149   | 10   |  93% |
+| tests            | 78    | 3    |  96% |
+| users_api        | 2220  | 419  |  81% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/mcp_client.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_hr_api/tests/test_history_routes.py` (M)
+- `agent_missions_api/mcp_client.py` (M)
+- `agent_ops_api/mcp_client.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/mcp_client.py` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/conftest.py` (M)
+- `competencies_api/main.py` (M)
+- `competencies_api/mcp_app.py` (M)
+- `competencies_api/spec.md` (M)
+- `competencies_api/src/competencies/analytics_router.py` (M)
+- `competencies_api/src/competencies/competencies_router.py` (M)
+- `competencies_api/src/competencies/router.py` (M)
+- `competencies_api/src/competencies/scoring_pipeline.py` (M)
+- `cv_api/main.py` (M)
+- `cv_api/mcp_app.py` (M)
+- `cv_api/src/services/bulk_service.py` (M)
+- `drive_api/main.py` (M)
+- `drive_api/mcp_server.py` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/google_auth.py` (M)
+- `drive_api/src/router.py` (M)
+- `drive_api/src/routers/files_router.py` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/App.vue` (M)
+- `frontend/vitest.log` (M)
+- `items_api/main.py` (M)
+- `items_api/src/items/crud_router.py` (M)
+- `missions_api/mcp_server.py` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/conftest.py` (M)
+- `monitoring_mcp/tools/pipeline_tools.py` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/mcp_server.py` (M)
+- `prompts_api/spec.md` (M)
+- `competencies_api/src/competencies/analytics_queries.py` (??)
+- `competencies_api/src/competencies/suggestions_router.py` (??)
+- `competencies_api/src/competencies/tree_router.py` (??)
+- `cv_api/src/services/bulk_helpers.py` (??)
+- `cv_api/src/services/retry_service.py` (??)
+- `drive_api/src/routers/sync_router.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-14 08:15:38
 
 ### Couverture de Code

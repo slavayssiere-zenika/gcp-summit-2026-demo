@@ -1,4 +1,5 @@
 """crud_router.py — Items CRUD (list, get, create, bulk, update, delete)."""
+import asyncio
 import os
 from typing import List
 
@@ -18,6 +19,19 @@ from src.items.schemas import (BulkItemCreate, CategoryResponse,
                                PaginationResponse, UserInfo)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
+
+# Guard 429 — protège le pool AlloyDB contre les appels bulk massifs (post-mortem 2026-05-13)
+# Valeur configurable via BULK_ENDPOINT_SEMAPHORE sans redéploiement.
+_BULK_SEM: asyncio.Semaphore | None = None
+
+
+def _get_bulk_sem() -> asyncio.Semaphore:
+    global _BULK_SEM
+    if _BULK_SEM is None:
+        _BULK_SEM = asyncio.Semaphore(int(os.getenv("BULK_ENDPOINT_SEMAPHORE", "5")))
+    return _BULK_SEM
+
+
 CACHE_TTL = 60
 
 
@@ -84,7 +98,8 @@ async def list_items(
         return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
 
     from sqlalchemy import func
-    base_query = select(Item).options(selectinload(Item.categories)).join(Item.categories).filter(Category.id.in_(allowed_ids)).distinct()
+    base_query = select(Item).options(selectinload(Item.categories)).join(
+        Item.categories).filter(Category.id.in_(allowed_ids)).distinct()
 
     total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar()
     items = (await db.execute(base_query.offset(skip).limit(limit))).scalars().all()
@@ -111,7 +126,7 @@ async def get_item(
     if cached:
         return ItemResponse(**cached)
 
-    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()
+    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()  # noqa: E501
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -156,7 +171,8 @@ async def create_item(
 
     if existing:
         import logging as _log
-        _log.getLogger(__name__).info(f"[create_item] Item '{item.name}' (user_id={item.user_id}) déjà existant — retour idempotent.")
+        _log.getLogger(__name__).info(
+            f"[create_item] Item '{item.name}' (user_id={item.user_id}) déjà existant — retour idempotent.")
         return await enrich_item(existing, request)
 
     db_item = Item(
@@ -183,7 +199,7 @@ async def create_item(
     delete_cache_pattern("items:list:*")
     delete_cache_pattern("items:search:*")
 
-    db_item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == db_item.id))).scalars().first()
+    db_item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == db_item.id))).scalars().first()  # noqa: E501
     return await enrich_item(db_item, request)
 
 
@@ -193,6 +209,22 @@ async def create_items_bulk(
     payload: BulkItemCreate,
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
+):
+    sem = _get_bulk_sem()
+    if sem.locked():
+        raise HTTPException(
+            status_code=429,
+            detail="Service sous charge — réessayer dans quelques secondes."
+        )
+    async with sem:
+        return await _create_items_bulk_inner(request, payload, db, auth_payload)
+
+
+async def _create_items_bulk_inner(
+    request: Request,
+    payload: BulkItemCreate,
+    db: AsyncSession,
+    auth_payload: dict,
 ):
     user_role = auth_payload.get("role", "")
     allowed_ids = auth_payload.get("allowed_category_ids", [])
@@ -256,7 +288,8 @@ async def create_items_bulk(
         except IntegrityError as e:
             await db.rollback()
             import logging as _log
-            _log.getLogger(__name__).warning(f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
+            _log.getLogger(__name__).warning(
+                f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
 
             result_item_ids = []
             for item in payload.items:
@@ -293,7 +326,7 @@ async def create_items_bulk(
             await db.rollback()
             raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création en masse")
 
-    final_items = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id.in_(result_item_ids)))).scalars().all()
+    final_items = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id.in_(result_item_ids)))).scalars().all()  # noqa: E501
     return [await enrich_item(db_item, request) for db_item in final_items]
 
 
@@ -305,7 +338,7 @@ async def update_item(
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
-    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()
+    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()  # noqa: E501
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -335,7 +368,7 @@ async def update_item(
     delete_cache_pattern("items:search:*")
     delete_cache_pattern("items:user:*")
 
-    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()
+    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()  # noqa: E501
     return await enrich_item(item, request)
 
 
@@ -345,7 +378,7 @@ async def delete_item(
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
-    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()
+    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()  # noqa: E501
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 

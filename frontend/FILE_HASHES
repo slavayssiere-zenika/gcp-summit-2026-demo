@@ -21,6 +21,7 @@
 1e35829dcb689f2c2a0d7d958ed5ec301766adeb  ./frontend/src/views/Specs.vue
 1f644f3dce01d62d1bcd14e400b9ac6d60554502  ./frontend/src/components/agent/FinopsBadge.vue
 21c02c8a0d9af00dc74568919a2e7a61ad4f9542  ./frontend/coverage/src/components/agent/CandidateProfileCard.vue.html
+21f6ef52ac243059955777af00dc92c0c7c02223  ./frontend/src/App.vue
 22d8074cbd77d52afb7ca279fb643cce7758e111  ./frontend/coverage/src/components/agent/index.html
 24a31d44cfd70e8f428d1ecfee4a2a221645111e  ./frontend/src/components/agent/MissionCard.vue
 26d50273cca5500e0bb78e272069fafc05ec501e  ./frontend/src/views/FinopsAdmin.vue
@@ -42,7 +43,6 @@
 3d26abbc6dad731f5e044190494cdc8062e9cc8a  ./frontend/src/views/InfraMap.vue
 3e26ef37457fcfbaa5d00c58337ac575fcab24fa  ./frontend/package.json
 3e6d67da50877ac51be055130b91267e97c11ba0  ./frontend/coverage/block-navigation.js
-41a45f1f50f8e6f23c2287a4b1773751a55fc046  ./frontend/vitest.log
 45a21bb52516240a835ae500752cb4500ecb1f1e  ./frontend/coverage/src/index.html
 48415ed1a9ff0b83041cefd8904d080d40149882  ./frontend/coverage/src/components/ui/BaseButton.vue.html
 4adaba38425cc2d2d11f638b64f1144ea21d110e  ./frontend/src/views/ExtractionQualityList.vue
@@ -70,7 +70,6 @@
 628e602160d666d7a860eb9fd1431c3f344317a9  ./frontend/coverage/src/views/FinopsAdmin.vue.html
 62c50abbf6d626016ea56b9f6a4cf6e4bdf6ad5c  ./frontend/coverage/src/components/agent/ConsultantCard.vue.html
 6398a5d15b02dc4c0d2d4560b6639dc6678b9b78  ./frontend/coverage/src/router/index.ts.html
-64bdb72f85e204aaa542ef3c9da253d212c3c381  ./frontend/src/App.vue
 65893a82995cee39923390df7cefb56430148cbc  ./frontend/coverage/src/components/agent/SystemHealthCard.vue.html
 65f2b499f59c1298428823959fd9ec8bab733eef  ./frontend/coverage/src/components/CVImportMonitor.vue.html
 68380a0f0ca5994eedb89bd1d386d3c893948199  ./frontend/src/components/__tests__/CVImportMonitor.spec.ts
@@ -142,6 +141,7 @@ c3823f79edde0d9ed3ef746e02da4dc62baff84b  ./frontend/src/utils/__tests__/apiCont
 c42aabafe063e40ef3bb5a3704ca3aed84336616  ./frontend/src/components/ui/PageHeader.vue
 c52a73715f179ba1c37de92ec4bc00c207bce0a9  ./frontend/coverage/src/views/AdminReanalysis.vue.html
 c5da667a2551890ac47513d4f160f478d2f565f0  ./frontend/coverage/prettify.js
+c6e116745c20b3b864a84e46e3f550998efaa377  ./frontend/vitest.log
 c7e494f41b6e058047b3da07ac3e9bb3ab9be85b  ./frontend/coverage/src/views/MissionsList.vue.html
 c913ae292c2060519657a2ce6d8366a09e71004b  ./frontend/coverage/prettify.css
 c971aa829c2297e4a42435263e5e86c0d3b214aa  ./frontend/coverage/src/data/docs.ts.html

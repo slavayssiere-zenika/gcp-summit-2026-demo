@@ -72,15 +72,15 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "google_folder_id": {
                         "type": "string",
-                        "description": "L'ID unique Google Drive du dossier (ou son URL complète — l'ID sera extrait automatiquement)"
+                        "description": "L'ID unique Google Drive du dossier (ou son URL complète — l'ID sera extrait automatiquement)"  # noqa: E501
                     },
                     "tag": {
                         "type": "string",
-                        "description": "Tag métier logique à appliquer à tous les CVs trouvés (ex: 'Paris', 'Nantes', 'Data')"
+                        "description": "Tag métier logique à appliquer à tous les CVs trouvés (ex: 'Paris', 'Nantes', 'Data')"  # noqa: E501
                     },
                     "folder_name": {
                         "type": "string",
-                        "description": "Optionnel — Nom du dossier (nomenclature 'Prénom Nom'). Si absent, récupéré automatiquement via l'API Drive."
+                        "description": "Optionnel — Nom du dossier (nomenclature 'Prénom Nom'). Si absent, récupéré automatiquement via l'API Drive."  # noqa: E501
                     }
                 },
                 "required": ["google_folder_id", "tag"]
@@ -123,12 +123,12 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="retry_drive_errors",
-            description="Flip all files stuck in ERROR state back to PENDING so the next batch ingestion will retry processing them.",
+            description="Flip all files stuck in ERROR state back to PENDING so the next batch ingestion will retry processing them.",  # noqa: E501
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
             name="trigger_drive_sync",
-            description="Manually trigger a deep sync delta discovery across all tracked Drive folders to find new or updated CVs.",
+            description="Manually trigger a deep sync delta discovery across all tracked Drive folders to find new or updated CVs.",  # noqa: E501
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
@@ -154,14 +154,14 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Remet tous les fichiers d'un dossier Drive (ou de tous les dossiers si tag absent) "
                 "en statut PENDING pour forcer une re-synchronisation complète. "
-                "Utiliser quand des fichiers sont bloqués dans un état incohérent ou après un changement de configuration."
+                "Utiliser quand des fichiers sont bloqués dans un état incohérent ou après un changement de configuration."  # noqa: E501
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "tag": {
                         "type": "string",
-                        "description": "Optionnel — tag du dossier à réinitialiser. Si absent, réinitialise tous les dossiers."
+                        "description": "Optionnel — tag du dossier à réinitialiser. Si absent, réinitialise tous les dossiers."  # noqa: E501
                     }
                 }
             }
@@ -196,7 +196,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "ack_id": {
                         "type": "string",
-                        "description": "L'identifiant Pub/Sub ack_id du message à supprimer (retourné par get_dlq_status)"
+                        "description": "L'identifiant Pub/Sub ack_id du message à supprimer (retourné par get_dlq_status)"  # noqa: E501
                     },
                     "google_file_id": {
                         "type": "string",
@@ -300,7 +300,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 elif name == "list_drive_folders":
                     skip = arguments.get("skip", 0)
                     limit = arguments.get("limit", 50)
-                    res = await client.get(f"{API_BASE_URL}/folders", params={"skip": skip, "limit": limit}, headers=headers, timeout=10.0)
+                    res = await client.get(f"{API_BASE_URL}/folders", params={"skip": skip, "limit": limit}, headers=headers, timeout=10.0)  # noqa: E501
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 
@@ -344,13 +344,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     params = {}
                     if arguments.get("tag"):
                         params["tag"] = arguments["tag"]
-                    res = await client.post(f"{API_BASE_URL}/folders/reset-sync", params=params, headers=headers, timeout=30.0)
+                    res = await client.post(f"{API_BASE_URL}/folders/reset-sync", params=params, headers=headers, timeout=30.0)  # noqa: E501
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 
                 elif name == "get_dlq_status":
                     limit = arguments.get("limit", 10)
-                    res = await client.get(f"{API_BASE_URL}/dlq/status", params={"limit": limit}, headers=headers, timeout=30.0)
+                    res = await client.get(f"{API_BASE_URL}/dlq/status", params={"limit": limit}, headers=headers, timeout=30.0)  # noqa: E501
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 
@@ -363,7 +363,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if not params:
                         return [TextContent(type="text", text=json.dumps(
                             {"success": False, "error": "Fournir 'ack_id' ou 'google_file_id'."}))]
-                    res = await client.delete(f"{API_BASE_URL}/dlq/message", params=params, headers=headers, timeout=20.0)
+                    res = await client.delete(f"{API_BASE_URL}/dlq/message", params=params, headers=headers, timeout=20.0)  # noqa: E501
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(
                         {"success": True, "message": "Message DLQ supprimé."}))]
@@ -379,7 +379,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         return [TextContent(type="text", text=json.dumps(
                             {"success": False, "error": "Paramètre 'file_id' manquant."}))]
                     body = {k: v for k, v in arguments.items() if k != "file_id" and v is not None}
-                    res = await client.patch(f"{API_BASE_URL}/files/{file_id}", json=body, headers=headers, timeout=10.0)
+                    res = await client.patch(f"{API_BASE_URL}/files/{file_id}", json=body, headers=headers, timeout=10.0)  # noqa: E501
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 
@@ -394,7 +394,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 
                 elif name == "run_quality_gate_batch":
-                    res = await client.post(f"{API_BASE_URL}/ingestion/quality-gate-batch", headers=headers, timeout=60.0)
+                    res = await client.post(f"{API_BASE_URL}/ingestion/quality-gate-batch", headers=headers, timeout=60.0)  # noqa: E501
                     res.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(res.json(), indent=2))]
 

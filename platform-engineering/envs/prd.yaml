@@ -34,7 +34,7 @@ monitoring_mcp_version:     "v0.0.88"
 db_migrations_version:      "v0.0.43"
 db_init_version:            "v0.1.1"
 missions_api_version:       "v0.0.94"
-frontend_version:           "v0.0.241"
+frontend_version:           "v0.0.242"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 0

@@ -49,10 +49,10 @@ const checkDataQuality = async () => {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
     const data = res.data
-    // Afficher le bandeau si le grade n'est pas A (score < 85) OU s'il y a des issues
-    isDataQualityBad.value = !!(
-      data && (data.score < 85 || (data.issues && data.issues.length > 0))
-    )
+    // Afficher le bandeau uniquement si le score global est dégradé (grade < A, soit score < 85).
+    // Les anomalies mineures ont leur propre section dans le dashboard — elles ne dégradent
+    // pas le score global et ne doivent pas déclencher le bandeau d'alerte.
+    isDataQualityBad.value = !!(data && data.score < 85)
   } catch (e) {
     console.error('Data quality check failed', e)
     // En cas d'erreur réseau : ne pas modifier l'état courant

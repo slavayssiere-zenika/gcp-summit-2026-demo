@@ -45,7 +45,7 @@ class MCPHttpClient:
         auth = auth_header_var.get(None)
         if auth:
             headers["Authorization"] = auth
-        async with httpx.AsyncClient(headers=headers) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
             res = await client.get(f"{self.url.rstrip('/')}/mcp/tools")
             res.raise_for_status()
             return res.json()
@@ -163,7 +163,8 @@ _mcp_lock = threading.Lock()
 
 
 def init_mcp_clients():
-    global users_mcp_client, items_mcp_client, competencies_mcp_client, cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client
+    global users_mcp_client, items_mcp_client, competencies_mcp_client  # noqa: E501
+    global cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client
     import os
 
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))

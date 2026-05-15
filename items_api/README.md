@@ -9,11 +9,11 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 224 | ✅ |
+| `main.py` | 223 | ✅ |
 | `mcp_server.py` | 123 | ✅ |
 | `conftest.py` | 79 | ✅ |
 | `src/items/admin_router.py` | 125 | ✅ |
-| `src/items/crud_router.py` | 365 | ✅ |
+| `src/items/crud_router.py` | 398 | ✅ |
 | `src/items/router.py` | 26 | ✅ |
 | `src/items/routers/categories_router.py` | 61 | ✅ |
 | `src/items/routers/search_router.py` | 128 | ✅ |

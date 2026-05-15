@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from main import app
 
 os.environ.setdefault("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
 
 history_routes.SECRET_KEY = "testsecret_must_be_32_characters_long_for_sha256"

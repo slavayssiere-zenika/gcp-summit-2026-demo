@@ -32,7 +32,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 240 | ✅ |
+| `main.py` | 239 | ✅ |
 | `mcp_server.py` | 623 | ⚠️ |
 | `conftest.py` | 89 | ✅ |
 | `metrics.py` | 19 | ✅ |

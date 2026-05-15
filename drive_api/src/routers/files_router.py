@@ -1,24 +1,25 @@
 """files_router.py — Statut des fichiers, sync, retry, tokens, consultant search.
 Shared imports for drive_api sub-routers."""
-import asyncio
 import logging
 import os as _os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import google.auth
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import verify_jwt
-from src.drive_service import DriveService
-from src.google_auth import get_drive_service, get_google_access_token
+from src.google_auth import get_google_access_token
 from src.models import DriveSyncState, DriveSyncStatus
 from src.redis_client import get_redis
 from src.schemas import (FileStateResponse, FileUpdate, PaginatedFilesResponse,
                          StatusResponse)
+
+from src.routers.sync_router import (  # noqa: F401 — ré-export pour rétrocompatibilité
+    _reset_errors_to_pending, public_router,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,6 @@ def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
 
 
 router = APIRouter(prefix="", tags=["Drive Files"], dependencies=[Depends(verify_jwt)])
-public_router = APIRouter(prefix="", tags=["Drive_Public"])
 
 
 @router.get("/status", response_model=StatusResponse)
@@ -316,156 +316,6 @@ async def clear_all_errors(db: AsyncSession = Depends(get_db), _: dict = Depends
     return {"status": "success", "cleared_count": result.rowcount}
 
 
-async def _reset_errors_to_pending(db: AsyncSession, force: bool = False) -> dict:
-    """
-    Logique métier partagée : remet en PENDING les fichiers bloqués.
-
-    Cas traités :
-    1. STATUS = ERROR : fichiers pour lesquels cv_api a retourné une erreur définitive
-       (ou Pub/Sub a épuisé ses 5 retries et envoyé en DLQ).
-    2. STATUS = QUEUED/PROCESSING depuis plus de 10 minutes : zombies Pub/Sub
-       (message perdu, instance cv_api redémarrée, timeout non géré).
-    3. Si force=True : réinitialise immédiatement TOUS les QUEUED/PROCESSING
-       sans attendre le seuil de 30 min. Utile après une réanalyse massive
-       où des fichiers sont bloqués suite à un JWT expiré (pré-fix #4).
-
-    Après reset → status = PENDING → le prochain tour de /sync les republiera
-    dans Pub/Sub automatiquement.
-    """
-    zombie_threshold = datetime.now(timezone.utc) - timedelta(minutes=30)
-
-    # Reset des ERROR
-    # Circuit breaker: on abandonne après 3 échecs (passage en IGNORED_NOT_CV)
-    stmt_failed = (
-        update(DriveSyncState)
-        .where(DriveSyncState.status == DriveSyncStatus.ERROR)
-        .where(DriveSyncState.retry_count >= 3)
-        .values(
-            status=DriveSyncStatus.IGNORED_NOT_CV,
-            error_message="Circuit breaker: Echec définitif après 3 tentatives d'import"
-        )
-    )
-    await db.execute(stmt_failed)
-
-    # Pour ceux qui n'ont pas encore atteint la limite, on incrémente le retry_count et on remet en PENDING
-    stmt_errors = (
-        update(DriveSyncState)
-        .where(DriveSyncState.status == DriveSyncStatus.ERROR)
-        .where(DriveSyncState.retry_count < 3)
-        .values(
-            status=DriveSyncStatus.PENDING,
-            error_message=None,
-            last_processed_at=datetime.now(timezone.utc),
-            retry_count=DriveSyncState.retry_count + 1
-        )
-        .returning(DriveSyncState.google_file_id)
-    )
-    result_errors = await db.execute(stmt_errors)
-    error_ids = [r[0] for r in result_errors.fetchall()]
-
-    # Reset des zombies QUEUED/PROCESSING — avec ou sans filtre temporel
-    stmt_zombies = (
-        update(DriveSyncState)
-        .where(DriveSyncState.status.in_([DriveSyncStatus.QUEUED, DriveSyncStatus.PROCESSING]))
-    )
-    if not force:
-        stmt_zombies = stmt_zombies.where(DriveSyncState.last_processed_at < zombie_threshold)
-    stmt_zombies = (
-        stmt_zombies
-        .values(
-            status=DriveSyncStatus.PENDING,
-            error_message="Réinitialisé automatiquement (zombie > 30min)" if not force else "Réinitialisé manuellement (force flush)",
-            last_processed_at=datetime.now(timezone.utc)  # réinitialise le timer affiché dans l'UI
-        )
-        .returning(DriveSyncState.google_file_id)
-    )
-    result_zombies = await db.execute(stmt_zombies)
-    zombie_ids = [r[0] for r in result_zombies.fetchall()]
-
-    await db.commit()
-
-    total = len(error_ids) + len(zombie_ids)
-    logger.info(
-        f"[retry-errors] Reset terminé — {len(error_ids)} erreurs + {len(zombie_ids)} zombies → PENDING. Total: {total}",
-        extra={"errors_reset": len(error_ids), "zombies_reset": len(zombie_ids)}
-    )
-    return {
-        "status": "success",
-        "errors_reset": len(error_ids),
-        "zombies_reset": len(zombie_ids),
-        "total_reset": total,
-    }
-
-
-# NOTE SÉCURITÉ: Cette route est intentionnellement exclue du routeur protégé par verify_jwt.
-# La sécurité est assurée par IAM Cloud Run : seul le Service Account `drive_sa`
-# (roles/run.invoker) peut appeler cet endpoint via le Cloud Scheduler (oidc_token).
-# Un JWT applicatif ne peut pas être utilisé ici car le Scheduler émet un token OIDC Google.
-public_router = APIRouter(prefix="", tags=["Drive Sync - IAM Protected"])
-
-
-@public_router.post("/scheduled/retry-errors")
-async def scheduled_retry_errors(force: bool = False, db: AsyncSession = Depends(get_db)):
-    """
-    Drain automatique de la DLQ — appelé par Cloud Scheduler toutes les heures.
-    Accepte aussi force=true pour forcer le déblocage immédiat depuis un outil externe.
-    """
-    result = await _reset_errors_to_pending(db, force=force)
-    logger.info(f"[Scheduler] DLQ drain automatique : {result['total_reset']} fichiers remis en queue.")
-    return result
-
-
-@public_router.post("/sync")
-async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
-    """
-    Called by GCP Cloud Scheduler every X minutes.
-    Performs discovery and then processes a batch.
-    Protected by Cloud Run IAM (OIDC token from Scheduler SA), NOT by JWT.
-    """
-    logger.info("Début de la synchronisation avec Google Drive.")
-
-    # 1. Verification synchrone des droits d'accès
-    try:
-        drive = get_drive_service()
-        # Fast API call to verify the OAuth binding hasn't been lost or deleted
-        await asyncio.to_thread(lambda: drive.about().get(fields="user").execute())
-    except Exception as e:
-        logger.error(f"[DRIVE_API_AUTH_LOSS] Le Service Account a perdu l'accès au Drive: {e}")
-        return JSONResponse(
-            status_code=403,
-            content={"status": "error", "message": "SERVICE_ACCOUNT_ACCESS_LOSS", "details": str(e)}
-        )
-
-    async def run_sync():
-        # Get a new DB session since the one in dependency might close
-        from database import SessionLocal
-        async with SessionLocal() as session:
-            try:
-                service = DriveService(session)
-
-                try:
-                    await service.discover_files()
-                except Exception as discover_err:
-                    logger.error(
-                        f"Erreur durant la découverte Drive (discover_files), on continue l'ingestion: {discover_err}")
-
-                total_processed = 0
-                while True:
-                    processed = await service.ingest_batch()
-                    if processed == 0:
-                        break
-                    total_processed += processed
-
-                logger.info(f"Fin de la synchronisation avec Google Drive. (CV traités: {total_processed})")
-            except Exception as e:
-                logger.error(f"Erreur durant la synchronisation Google Drive: {e}")
-                import traceback
-                traceback.print_exc()
-
-    background_tasks.add_task(run_sync)
-    return {"status": "started"}
-
-
 @router.get("/tokens/google")
 async def get_google_token(_: dict = Depends(_require_admin)):
     """
@@ -509,7 +359,8 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
         file_state.status = update_data.status
         # Fix #3 : invalider le cache Redis quand un fichier repasse en PENDING
         # pour que discover_files() ne le skippe pas lors du prochain /sync.
-        if update_data.status == DriveSyncStatus.PENDING or str(update_data.status) == DriveSyncStatus.PENDING.value:
+        pending_val = DriveSyncStatus.PENDING
+        if update_data.status == pending_val or str(update_data.status) == pending_val.value:
             try:
                 get_redis().delete(f"drive:file:known:{file_id}")
                 logger.info(f"[Cache] drive:file:known:{file_id} invalidé (status → PENDING).")
@@ -520,7 +371,7 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
     if update_data.processing_duration_ms is not None:
         file_state.processing_duration_ms = update_data.processing_duration_ms
 
-    if str(update_data.status) == DriveSyncStatus.IMPORTED_CV.value or update_data.status == DriveSyncStatus.IMPORTED_CV:
+    if str(update_data.status) == DriveSyncStatus.IMPORTED_CV.value or update_data.status == DriveSyncStatus.IMPORTED_CV:  # noqa: E501
         file_state.imported_at = datetime.now(timezone.utc)
 
     await db.commit()

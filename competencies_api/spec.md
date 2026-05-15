@@ -68,16 +68,16 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/` : List Competencies
 - **POST** `/` : Create Competency
 - **GET** `/search` : Search Competencies
-- **POST** `/suggestions` : Create Competency Suggestion
-- **GET** `/suggestions` : List Competency Suggestions
-- **PATCH** `/suggestions/{suggestion_id}/review` : Review Competency Suggestion
 - **GET** `/{competency_id}` : Get Competency
 - **PUT** `/{competency_id}` : Update Competency
 - **DELETE** `/{competency_id}` : Delete Competency
 - **GET** `/{competency_id}/users` : List Competency Users
+- **POST** `/stats/counts` : Get Competency Stats
+- **POST** `/suggestions` : Create Competency Suggestion
+- **GET** `/suggestions` : List Competency Suggestions
+- **PATCH** `/suggestions/{suggestion_id}/review` : Review Competency Suggestion
 - **POST** `/bulk_tree` : Bulk Import Tree
 - **POST** `/bulk/cleanup-orphans` : Supprime toutes les compétences feuilles orphelines (sans consultants)
-- **POST** `/stats/counts` : Get Competency Stats
 - **POST** `/evaluations/batch/search` : Search Batch Evaluations
 - **POST** `/evaluations/batch/users` : Search Batch Users Evaluations
 - **GET** `/evaluations/user/{user_id}` : List User Evaluations

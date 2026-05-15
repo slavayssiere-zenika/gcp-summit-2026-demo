@@ -76,7 +76,7 @@ async def list_tools() -> list[Tool]:
             name="get_prompt",
             description=(
                 "Récupère le contenu d'un system prompt par sa clé unique. "
-                "Les clés correspondent aux identifiants des agents (ex: 'agent_hr', 'agent_ops', 'agent_router', 'agent_missions'). "
+                "Les clés correspondent aux identifiants des agents (ex: 'agent_hr', 'agent_ops', 'agent_router', 'agent_missions'). "  # noqa: E501
                 "Utiliser cet outil pour lire le prompt actif d'un agent spécifique."
             ),
             inputSchema={
@@ -103,7 +103,7 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Crée un nouveau system prompt ou met à jour un prompt existant avec la même clé (upsert). "
                 "Action réservée aux administrateurs. "
-                "ATTENTION : La modification d'un prompt actif affecte immédiatement le comportement de l'agent concerné."
+                "ATTENTION : La modification d'un prompt actif affecte immédiatement le comportement de l'agent concerné."  # noqa: E501
             ),
             inputSchema={
                 "type": "object",

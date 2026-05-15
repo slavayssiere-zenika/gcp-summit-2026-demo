@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 # CRITICAL: Set environment variables BEFORE imports
 os.environ["SECRET_KEY"] = "testsecret"
-os.environ["REDIS_URL"] = "redis://localhost:6379/0"
+os.environ["REDIS_URL"] = "redis://localhost:6379/14"
 os.environ["GCP_PROJECT_ID"] = "test-project"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
@@ -14,10 +14,13 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
         from auth import verify_jwt
         from mcp_app import app
 
+
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
 
+
 app.dependency_overrides[verify_jwt] = override_verify_jwt
+
 
 @pytest.fixture(scope="module")
 def client():

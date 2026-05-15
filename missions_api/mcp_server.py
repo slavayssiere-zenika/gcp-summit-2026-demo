@@ -72,19 +72,19 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_missions",
-            description="Récupère les missions enregistrées avec pagination. Par défaut retourne les 50 premières. Utiliser skip/limit pour parcourir toutes les missions si total > limit.",
+            description="Récupère les missions enregistrées avec pagination. Par défaut retourne les 50 premières. Utiliser skip/limit pour parcourir toutes les missions si total > limit.",  # noqa: E501
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "skip": {"type": "integer", "default": 0, "description": "Nombre de missions à sauter (pagination)"},
-                    "limit": {"type": "integer", "default": 50, "description": "Nombre max de missions à retourner (max 500)"}
+                    "skip": {"type": "integer", "default": 0, "description": "Nombre de missions à sauter (pagination)"},  # noqa: E501
+                    "limit": {"type": "integer", "default": 50, "description": "Nombre max de missions à retourner (max 500)"}  # noqa: E501
                 }
             },
             meta={"ui": {"resourceUri": "ui://missions"}}
         ),
         Tool(
             name="reanalyze_mission",
-            description="Relancer l'analyse complète (RAG et Staffing) d'une mission existante. Utile pour proposer une nouvelle équipe.",
+            description="Relancer l'analyse complète (RAG et Staffing) d'une mission existante. Utile pour proposer une nouvelle équipe.",  # noqa: E501
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -95,7 +95,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_mission",
-            description="Récupère le détail complet d'une mission par son ID : titre, description, statut, compétences requises et consultants staffés. Appeler après list_missions pour obtenir un mission_id.",
+            description="Récupère le détail complet d'une mission par son ID : titre, description, statut, compétences requises et consultants staffés. Appeler après list_missions pour obtenir un mission_id.",  # noqa: E501
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -106,7 +106,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_mission_candidates",
-            description="Retourne la liste des consultants actuellement staffés sur une mission donnée, avec leurs IDs utilisateurs. Utiliser pour répondre à 'Qui est staffé sur la mission X ?'",
+            description="Retourne la liste des consultants actuellement staffés sur une mission donnée, avec leurs IDs utilisateurs. Utiliser pour répondre à 'Qui est staffé sur la mission X ?'",  # noqa: E501
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -123,7 +123,7 @@ async def list_tools() -> list[Tool]:
                 "Transitions autorisées : "
                 "STAFFED→NO_GO, STAFFED→SUBMITTED_TO_CLIENT, STAFFED→CANCELLED, "
                 "SUBMITTED_TO_CLIENT→WON, SUBMITTED_TO_CLIENT→LOST, SUBMITTED_TO_CLIENT→CANCELLED. "
-                "Utiliser quand l'utilisateur dit 'marquer la mission X comme No-Go', 'on a gagné l\'appel d\'offres Y', 'envoyer la proposition au client', etc. "
+                "Utiliser quand l'utilisateur dit 'marquer la mission X comme No-Go', 'on a gagné l\'appel d\'offres Y', 'envoyer la proposition au client', etc. "  # noqa: E501
                 "Toujours préciser un reason (motif) pour l'audit."
             ),
             inputSchema={
@@ -135,14 +135,14 @@ async def list_tools() -> list[Tool]:
                         "enum": ["NO_GO", "SUBMITTED_TO_CLIENT", "WON", "LOST", "CANCELLED"],
                         "description": "Le nouveau statut à appliquer"
                     },
-                    "reason": {"type": "string", "description": "Motif du changement de statut (obligatoire pour l'audit)"}
+                    "reason": {"type": "string", "description": "Motif du changement de statut (obligatoire pour l'audit)"}  # noqa: E501
                 },
                 "required": ["mission_id", "status"]
             }
         ),
         Tool(
             name="get_mission_status_history",
-            description="Retourne l'historique complet des changements de statut d'une mission (audit trail). Utiliser pour répondre à 'quel est l\'historique de la mission X ?', 'qui a changé le statut ?' etc.",
+            description="Retourne l'historique complet des changements de statut d'une mission (audit trail). Utiliser pour répondre à 'quel est l\'historique de la mission X ?', 'qui a changé le statut ?' etc.",  # noqa: E501
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -178,7 +178,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {"type": "string", "description": "L'ID de la tâche retourné par create_mission ou reanalyze_mission"}
+                    "task_id": {"type": "string", "description": "L'ID de la tâche retourné par create_mission ou reanalyze_mission"}  # noqa: E501
                 },
                 "required": ["task_id"]
             }
@@ -214,7 +214,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "description": arguments.get("description")
                 }
                 try:
-                    response = await client.post(f"{API_BASE_URL}/missions", json=payload, headers=headers, timeout=60.0)
+                    response = await client.post(f"{API_BASE_URL}/missions", json=payload, headers=headers, timeout=60.0)  # noqa: E501
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
@@ -246,7 +246,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "reanalyze_mission":
                 mission_id = arguments.get("mission_id")
                 try:
-                    response = await client.post(f"{API_BASE_URL}/missions/{mission_id}/reanalyze", headers=headers, timeout=60.0)
+                    response = await client.post(f"{API_BASE_URL}/missions/{mission_id}/reanalyze", headers=headers, timeout=60.0)  # noqa: E501
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
@@ -264,7 +264,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "get_mission_candidates":
                 mission_id = arguments.get("mission_id")
                 try:
-                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/candidates", headers=headers, timeout=20.0)
+                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/candidates", headers=headers, timeout=20.0)  # noqa: E501
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
@@ -287,7 +287,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elif name == "get_mission_status_history":
                 mission_id = arguments.get("mission_id")
                 try:
-                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/status/history", headers=headers, timeout=20.0)
+                    response = await client.get(f"{API_BASE_URL}/missions/{mission_id}/status/history", headers=headers, timeout=20.0)  # noqa: E501
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
@@ -298,7 +298,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=json.dumps(
                         {"success": False, "error": "Paramètre 'user_id' manquant."}))]
                 try:
-                    response = await client.get(f"{API_BASE_URL}/missions/user/{user_id}/active", headers=headers, timeout=20.0)
+                    response = await client.get(f"{API_BASE_URL}/missions/user/{user_id}/active", headers=headers, timeout=20.0)  # noqa: E501
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:
@@ -309,7 +309,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     return [TextContent(type="text", text=json.dumps(
                         {"success": False, "error": "Paramètre 'task_id' manquant."}))]
                 try:
-                    response = await client.get(f"{API_BASE_URL}/missions/task/{task_id}", headers=headers, timeout=20.0)
+                    response = await client.get(f"{API_BASE_URL}/missions/task/{task_id}", headers=headers, timeout=20.0)  # noqa: E501
                     response.raise_for_status()
                     return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
                 except Exception as e:

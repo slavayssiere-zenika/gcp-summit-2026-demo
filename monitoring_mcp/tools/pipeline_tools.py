@@ -69,7 +69,7 @@ async def check_component_health_internal(component_name: str) -> dict:
         # 1. Redis Check
         if "redis" in component_name.lower():
             import redis as redis_lib
-            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/13")
             try:
                 r = redis_lib.from_url(redis_url, socket_timeout=2.0)
                 if r.ping():
@@ -101,7 +101,7 @@ async def check_component_health_internal(component_name: str) -> dict:
                     if res.status_code == 200:
                         return {"status": "healthy", "component": component_name, "url": url, "code": 200}
                     else:
-                        return {"status": "unhealthy", "component": component_name, "url": url, "code": res.status_code, "detail": res.text[:200]}
+                        return {"status": "unhealthy", "component": component_name, "url": url, "code": res.status_code, "detail": res.text[:200]}  # noqa: E501
             except Exception as he:
                 return {"status": "unreachable", "component": component_name, "url": url, "error": str(he)}
 
@@ -109,7 +109,7 @@ async def check_component_health_internal(component_name: str) -> dict:
         from .infra_tools import list_gcp_services_internal
         services = await list_gcp_services_internal()
         if any(s["name"] == component_name for s in services if isinstance(s, dict)):
-            return {"status": "unknown", "component": component_name, "message": "Service exists in GCP but ILB mapping is missing."}
+            return {"status": "unknown", "component": component_name, "message": "Service exists in GCP but ILB mapping is missing."}  # noqa: E501
 
         return {"status": "not_found", "component": component_name}
     except Exception as e:
@@ -194,7 +194,7 @@ async def get_ingestion_pipeline_status_internal() -> dict:
         if processing > 0:
             recommendations.append(f"🔄 {processing} CV(s) en cours de traitement par cv_api.")
         if pending > 0 and queued == 0 and processing == 0:
-            recommendations.append(f"⏸️ {pending} CV(s) en attente sans traitement actif. Sync Drive (/sync) nécessaire ?")
+            recommendations.append(f"⏸️ {pending} CV(s) en attente sans traitement actif. Sync Drive (/sync) nécessaire ?")  # noqa: E501
         if not recommendations:
             recommendations.append(f"✅ Pipeline saine — {imported}/{total} CVs importés, aucune erreur.")
 

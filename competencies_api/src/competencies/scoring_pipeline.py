@@ -45,10 +45,22 @@ async def _fetch_missions_for_user(
             async with httpx.AsyncClient(timeout=15.0) as hc:
                 skip, limit = 0, 100
                 while True:
-                    res = await hc.get(
-                        f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions?skip={skip}&limit={limit}",
-                        headers=headers,
+                    url = (
+                        f"{CV_API_URL.rstrip('/')}/user/{user_id}/missions"
+                        f"?skip={skip}&limit={limit}"
                     )
+                    # Retry sur codes HTTP transitoires (429, 502, 503, 504)
+                    res = None
+                    for attempt in range(3):
+                        res = await hc.get(url, headers=headers)
+                        if res.status_code not in (429, 502, 503, 504):
+                            break
+                        wait = min(2 ** attempt + 0.5, 10.0)
+                        logger.warning(
+                            "[scoring_pipeline] missions user=%d HTTP %d → retry %d/3 dans %.1fs",
+                            user_id, res.status_code, attempt + 1, wait,
+                        )
+                        await asyncio.sleep(wait)
                     if res.status_code == 200:
                         try:
                             data = MissionsResponse.model_validate(res.json())
@@ -138,7 +150,7 @@ async def _apply_scoring_results(
                     )
                     errors += 1
 
-    chunks = [results[i : i + chunk_size] for i in range(0, len(results), chunk_size)]
+    chunks = [results[i : i + chunk_size] for i in range(0, len(results), chunk_size)]  # noqa: E203
     sem = asyncio.Semaphore(SCORING_APPLY_SEMAPHORE)
 
     async def _sem_worker(chunk: list):
