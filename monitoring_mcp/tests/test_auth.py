@@ -1,9 +1,11 @@
 import pytest
 from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+import jwt
+from jwt.exceptions import InvalidTokenError
 
-from auth import verify_jwt, _SECRET_KEY
+from shared.auth.jwt import SECRET_KEY as _SECRET_KEY, verify_jwt
+
 
 @pytest.fixture
 def mock_request():
@@ -45,7 +47,7 @@ def test_verify_jwt_invalid_token(mock_request, monkeypatch):
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="invalid_token")
     
     def mock_decode(*args, **kwargs):
-        raise JWTError("Invalid token")
+        raise InvalidTokenError("Invalid token")
         
     monkeypatch.setattr("auth.jwt.decode", mock_decode)
     

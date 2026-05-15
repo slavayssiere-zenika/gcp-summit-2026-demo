@@ -1,9 +1,10 @@
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
-from jose import jwt
+import jwt
 
-from auth import verify_jwt, _SECRET_KEY
+from shared.auth.jwt import SECRET_KEY as _SECRET_KEY, verify_jwt
+
 
 
 @pytest.fixture

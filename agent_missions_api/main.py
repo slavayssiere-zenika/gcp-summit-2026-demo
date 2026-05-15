@@ -37,11 +37,7 @@ ROOT_PATH = os.getenv("ROOT_PATH", "")
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "agent-missions-api")
 TRACE_EXPORTER = os.getenv("TRACE_EXPORTER", "none")
 
-# JWT — AGENTS.md §4 : l'absence de SECRET_KEY doit bloquer le démarrage du service
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("[MISSIONS] FATAL: SECRET_KEY env var is not set. Service cannot start.")
-os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage — anti prompt-injection (AGENTS.md §2)
+# JWT — validation de SECRET_KEY déléguée à shared.auth.jwt (fail-fast à l'import)
 
 
 # ── OTel Tracing — 3 modes : http (Tempo), gcp (Cloud Trace), none ────────────
