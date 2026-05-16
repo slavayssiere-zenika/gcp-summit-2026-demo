@@ -1,9 +1,9 @@
 Metadata-Version: 2.4
 Name: agent_commons
-Version: 1.0.0
+Version: 1.1.0
 Summary: Shared ADK agent utilities for Zenika multi-agent platform
 Requires-Python: >=3.11
-Requires-Dist: google-adk>=1.28.1
+Requires-Dist: google-adk>=1.31.1
 Requires-Dist: google-genai>=1.0.0
 Requires-Dist: httpx>=0.25.0
 Requires-Dist: opentelemetry-api>=1.36.0

@@ -10,7 +10,9 @@ client = TestClient(app)
 
 def get_auth_token(sub="user_1"):
     import jwt
-    from main import ALGORITHM, SECRET_KEY
+    import os
+    SECRET_KEY = os.environ.get("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
+    ALGORITHM = "HS256"
     payload = {"sub": sub, "role": "admin"}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 

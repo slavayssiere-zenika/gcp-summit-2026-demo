@@ -5,11 +5,11 @@
 0af3abc983848cfb585da536c6b7cbcbfd7ec10e  ./missions_api/tests/test_zero_trust.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
 0ef20bc643318962139d0938ec7cc7ca208125ee  ./missions_api/tests/test_analysis.py
-0fb43582f8d09ec611f126f7a6c2a758a7d90162  ./missions_api/requirements.txt
 11f97146d8c4a145e50a24052d0df2233c30abb3  ./missions_api/tests/test_security_upload.py
 1711ff67eb98c8e0f51ba7d23b2f54da33d8f601  ./missions_api/exemples/E.txt
+1717a995a1c39df11ec33a3af520be0c434853e3  ./shared/pyproject.toml
 19ca37cf46a9a7f05a090d6d6c654c0ada4d84f3  ./shared/tests/test_edge_cases.py
-23c7957c68c372d57765c0ea572e0c4c7fbfe206  ./missions_api/main.py
+25868914107e2c1ac286f7cbc363b58a287cbabc  ./shared/tests/zero_trust.py
 25a73734485c33a9f1ceca62ae03dddeee4059e3  ./missions_api/src/missions/analysis_service.py
 26fdf39a22dab108a59f278c7855a665a48c3c0a  ./missions_api/tests/test_helpers.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
@@ -18,8 +18,10 @@
 3da3388e037135bbc2d026fa4803fc022b9e63b0  ./missions_api/mcp_server.py
 407e87b2530c4847aaa96ab9d4702b36f795860a  ./missions_api/cv_api.extract_cv_info.txt
 40e8de3ced505af7b0d907f6ad4794dfb8d661f7  ./shared/tests/test_fastapi_utils.py
+42351b1caccc5adf020dcdc63612c572ddc221fe  ./missions_api/pyproject.toml
 42e837d86d24ae1aca0af9b3b0b3151ae4808a99  ./missions_api/tests/test_mcp_app.py
 42f1237108195403d134fe941e9c558c91a78221  ./missions_api/cv_api.generate_taxonomy_tree.txt
+46b98973b66e64b50cc9c42858c7dfe864647ae2  ./missions_api/main.py
 4e6818299475eadd0c23030f1ce008fad2904e45  ./missions_api/mcp_app.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f51a07770851ba1f12acd471e85c2d658449988  ./missions_api/exemples/C.txt
@@ -36,7 +38,6 @@
 6f86f8a4a225654a8fe8dbe941f606b320a38b35  ./missions_api/tests/test_task_state.py
 70cbeabbea882039df91f8524cdee5f3b8e06169  ./missions_api/tests/test_crud.py
 78eec5b5d8dfd79acfb3ceae4e9721ea356fc8bb  ./missions_api/my_pytest.log
-81747b3f427d17c002c82afe4941a20e736b9b2c  ./shared/pyproject.toml
 852f0bf680529944523bee9d09720e6ef9ad75ed  ./missions_api/src/missions/user_router.py
 8738bf4bf3bd8937c3677f11f438636cb777ea52  ./shared/exception_handler.py
 875c539efa57b1c50fa5138842ca71dc291fdb98  ./missions_api/staffing_heuristics.txt
@@ -46,8 +47,8 @@
 99db07f3413749b498631ce9e80ae0ba2a850b9d  ./missions_api/src/missions/document_extractor.py
 9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 a0925fe8e9c7b1cbf5183f4b499952550a3cd9bd  ./missions_api/tests/test_edge_cases.py
-a156f9ad6dfc4e3c76f3c729dfb79e9e0085a625  ./missions_api/Dockerfile
 aa390b320caaa317866a638033f554682cc94a5f  ./missions_api/extract_mission_info.txt
+abcff4d0453d071ce3b20ad8851d5c7b2942ff9a  ./missions_api/Dockerfile
 b29442319a24f7321c583ddabff757e7e613ddb2  ./missions_api/tests/test_mcp_tools.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b7c483212a41f3539c6e70d2e4ae28b02dbbb76c  ./missions_api/exemples/B.txt
@@ -62,7 +63,6 @@ ca816a7fa08598ca17111c766bda6f25db8af6e2  ./shared/fastapi_utils.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb5ce18c9817c235912c25eb9e2060a08f046b6e  ./missions_api/src/missions/cache.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./missions_api/.dockerignore
-d433f3a3ffa7d484d7b90859c1cde1f9e2b6aa5e  ./shared/tests/zero_trust.py
 d9f425debe9d18ca1f861a3fef77651ec6fd0394  ./missions_api/src/missions/crud_router.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./missions_api/src/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./missions_api/src/missions/__init__.py
@@ -78,3 +78,4 @@ ed8f40785c4218376ad0a89cba85782341ea835b  ./missions_api/src/missions/helpers.py
 edcf5620bde72d788301a0e26ec3edd0f179458b  ./missions_api/conftest.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
+fe394777397f8a669a3c61aeb54cfd32912fffc2  ./missions_api/uv.lock

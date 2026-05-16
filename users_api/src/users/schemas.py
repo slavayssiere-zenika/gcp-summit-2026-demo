@@ -31,12 +31,12 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, pattern=r"^[^\x00]*$")
+    password: str = Field(min_length=8, max_length=72, pattern=r"^[^\x00]*$")
 
 
 class LoginRequest(BaseModel):
     email: str
-    password: str = Field(pattern=r"^[^\x00]*$")
+    password: str = Field(max_length=72, pattern=r"^[^\x00]*$")
 
 
 class ServiceAccountLoginRequest(BaseModel):

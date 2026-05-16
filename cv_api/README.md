@@ -48,6 +48,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
 | `GEMINI_PRO_MODEL` | Comportement | `gemini-2.5-pro` |

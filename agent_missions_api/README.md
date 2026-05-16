@@ -19,6 +19,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `PORT` | Infra | `8080` |
@@ -45,14 +46,26 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 **DB 12** — namespace `session:missions:*`
 
 ## Endpoints clés
-- `GET /version`
-- `GET /.well-known/agent.json`
-- `POST /query`
 - `POST /a2a/query`
-- `GET /history`
-- `DELETE /history`
-- `GET /spec`
-- `GET /mcp/registry`
+- `GET /users/`
+- `GET /items/`
+- `PUT /items/{item_id}`
+- `POST /items/`
+- `DELETE /items/{item_id}`
+- `PATCH /items/`
+- `POST /send-notification/{email}`
+- `POST /files/`
+- `POST /uploadfile/`
+- `GET /items/{item_id}`
+- `GET /users/me/items/`
+- `GET /users/me`
+- `POST /login`
+- `GET /version`
+- `GET /list-apps`
+- `GET /apps/{app_name}/app-info`
+- `GET /debug/trace/{event_id}`
+- `GET /dev/build_graph/{app_name}`
+- `GET /debug/trace/session/{session_id}`
 
 ## MCP APIs consommées
 - `COMPETENCIES_MCP_URL`

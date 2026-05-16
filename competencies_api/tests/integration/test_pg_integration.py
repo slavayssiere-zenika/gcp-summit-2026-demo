@@ -1,3 +1,4 @@
+from unittest.mock import patch
 """
 Tests d'intégration competencies_api — nécessitent Docker.
 
@@ -101,6 +102,7 @@ def test_isolation_between_tests_no_state_leak(client):
 
 def test_cleanup_orphans_real_postgres(client, postgres_container):
     """Valide que /bulk/cleanup-orphans supprime correctement les évaluations liées aux orphelins."""
+    from unittest.mock import patch
     # 1. Créer une compétence parente
     resp = client.post("/", json={"name": "Parent", "category": "Tech"})
     parent_id = resp.json()["id"]
@@ -119,7 +121,7 @@ def test_cleanup_orphans_real_postgres(client, postgres_container):
 
     # 5. Créer une orpheline vraie SANS aucune liaison (doit être supprimée)
     resp = client.post("/", json={"name": "Orpheline_Vraie"})
-    resp.json()["id"]
+    zero_id = resp.json()["id"]
 
     # Insérer les évaluations manuellement (pour by-pass l'A2A)
     from sqlalchemy import create_engine, text
@@ -143,8 +145,21 @@ def test_cleanup_orphans_real_postgres(client, postgres_container):
     engine.dispose()
 
     # Exécuter le endpoint (doit retourner un 200 et non un 500)
-    resp = client.post("/bulk/cleanup-orphans")
-    assert resp.status_code == 200, f"Erreur nettoyage: {resp.json()}"
+    from main import app
+    from shared.auth.jwt import VerifyJwtOrOidc
+    overrides = {}
+    for route in app.routes:
+        if hasattr(route, "dependencies"):
+            for dep in route.dependencies:
+                if isinstance(dep.dependency, VerifyJwtOrOidc):
+                    overrides[dep.dependency] = lambda: {"sub": "1", "role": "admin"}
+        if hasattr(route, "dependant"):
+            for dep in route.dependant.dependencies:
+                if isinstance(dep.call, VerifyJwtOrOidc):
+                    overrides[dep.call] = lambda: {"sub": "1", "role": "admin"}
+    with patch.dict(app.dependency_overrides, overrides):
+        resp = client.post("/bulk/cleanup-orphans")
+        assert resp.status_code == 200, f"Erreur nettoyage: {resp.json()}"
 
     # Explication du count de 4:
     # - Orpheline_Zero : a un score 0, donc considérée orpheline -> supprimée
@@ -189,11 +204,24 @@ def test_bulk_tree_drops_real_postgres(client, postgres_container):
     engine.dispose()
 
     # Exécuter le bulk_tree avec "drops"
-    resp = client.post("/bulk_tree", json={
-        "tree": {"Tech": {"sub": {"Enfant_A_Garder": {}}}},
-        "drops": ["A_Supprimer"]
-    })
-    assert resp.status_code == 200, f"Erreur bulk_tree: {resp.json()}"
+    from main import app
+    from shared.auth.jwt import VerifyJwtOrOidc
+    overrides = {}
+    for route in app.routes:
+        if hasattr(route, "dependencies"):
+            for dep in route.dependencies:
+                if isinstance(dep.dependency, VerifyJwtOrOidc):
+                    overrides[dep.dependency] = lambda: {"sub": "1", "role": "admin"}
+        if hasattr(route, "dependant"):
+            for dep in route.dependant.dependencies:
+                if isinstance(dep.call, VerifyJwtOrOidc):
+                    overrides[dep.call] = lambda: {"sub": "1", "role": "admin"}
+    with patch.dict(app.dependency_overrides, overrides):
+        resp = client.post("/bulk_tree", json={
+            "tree": {"Tech": {"sub": {"Enfant_A_Garder": {}}}},
+            "drops": ["A_Supprimer"]
+        })
+        assert resp.status_code == 200, f"Erreur bulk_tree: {resp.json()}"
 
     remaining = client.get("/").json()["items"]
 

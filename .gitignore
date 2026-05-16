@@ -138,3 +138,8 @@ ar_token_*.tmp
 shared/dist/
 shared/*.egg-info/
 shared/build/
+
+# =========================
+# Locust Load Testing
+# =========================
+locust/results/

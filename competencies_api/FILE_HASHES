@@ -49,7 +49,6 @@
 029d7850d271a8bb651a87b78baa75bfa07a4fc2  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy_utils/types/country.py
 02b1efb683703bc3a079d799a262a9f8a7c76f3b  ./competencies_api/venv/lib/python3.13/site-packages/rsa/prime.py
 02c385c1ded168bb9aa0c235d59583c653352723  ./competencies_api/venv/lib/python3.13/site-packages/mcp/shared/version.py
-02c7e4ee7d60ccd0499836c7823f0a6935df8b9f  ./competencies_api/Dockerfile
 03016016eca67443379392d9caaa096385df13d2  ./competencies_api/venv/lib/python3.13/site-packages/asyncpg-0.31.0.dist-info/top_level.txt
 030f73dd72c7d3da26a6ff0297fd62bc997515cc  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy_utils/query_chain.py
 031344f2373dac5cc7de63e38c89cc56ed332533  ./competencies_api/venv/lib/python3.13/site-packages/anyio-4.13.0.dist-info/RECORD
@@ -83,6 +82,7 @@
 04b6c255eea8de2f34da4a7110ba03ff4e7963a0  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry_resourcedetector_gcp-1.11.0a0.dist-info/top_level.txt
 04e81a79742ffbda0899345f5e86228e0132abec  ./competencies_api/venv/lib/python3.13/site-packages/fakeredis/_helpers.py
 04ebb492a95ffcca0ed512a65d4e604f93a51e28  ./competencies_api/venv/lib/python3.13/site-packages/asyncpg/protocol/prepared_stmt.pxd
+04f5c9cc78aad5dacd219fda4cd8b4aedd8218af  ./competencies_api/tests/test_competencies_extra.py
 04fb14ef7bf7f108b330c45fafb1a511451c4623  ./competencies_api/venv/lib/python3.13/site-packages/redis/commands/search/field.py
 05035fbe6bba555fd44bf32f30ec4cd545e5e10a  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/orm/base.py
 0524aa120a8cc4c74015399bc3baf95d0cf25c21  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/smv.py
@@ -100,7 +100,6 @@
 05c8f4903e8b2ad9a7664d7908ef7321c18c9993  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/_incubating/metrics/rpc_metrics.py
 05ccca93e65a9a2ea3951e69f047be1f6e1f6a2e  ./competencies_api/venv/lib/python3.13/site-packages/charset_normalizer/legacy.py
 05f19d4dd2fb8b16c1228561b74e76ff38d3b723  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/cachecontrol/serialize.py
-06230f96b2301fd76ad3cf4d47cafce45be7d914  ./competencies_api/tests/test_integration.py
 0628f2618034526e316c518855d644090ece8d81  ./competencies_api/venv/lib/python3.13/site-packages/anyio/abc/_resources.py
 062b0afba68baada2d2fe98cdc607f7cb8b04225  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/_incubating/metrics/cpu_metrics.py
 06348803f7f10b7269c36e075876659c9653fd25  ./competencies_api/venv/lib/python3.13/site-packages/google/api_core/gapic_v1/client_info.py
@@ -422,6 +421,7 @@
 16e2a8b6f269463f850fc78f61bf05a3d064cac2  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/util/__init__.py
 16eba9ead34b847e4671161ff33eeb3d7b140086  ./competencies_api/venv/lib/python3.13/site-packages/google/api/endpoint_pb2.py
 16ff91fe0fccef9b8b9fd7fa11772db798e584b9  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/cyextension/util.cpython-313-darwin.so
+1717a995a1c39df11ec33a3af520be0c434853e3  ./shared/pyproject.toml
 1729435eab0e6f5e69b8c800bef57dff85ebbe94  ./competencies_api/venv/lib/python3.13/site-packages/google/cloud/trace_v2/services/trace_service/transports/rest.py
 174a37849725cdeb8e946c1b4cc997db52d5bb0c  ./competencies_api/venv/lib/python3.13/site-packages/redis/http/http_client.py
 174dad97b365870a00274375e16efd29ff8330bf  ./competencies_api/venv/lib/python3.13/site-packages/google_api_core-2.30.2.dist-info/METADATA
@@ -475,6 +475,7 @@
 1a4838b714727538cd84e07d5a6bff952372005d  ./competencies_api/venv/lib/python3.13/site-packages/grpc/experimental/aio/__init__.py
 1a49ddb7ca5db0b1e8767d91d03fe2a779f7f1b5  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/dialects/sqlite/dml.py
 1a51c14370129ae10d2cc1b3b0fe3038f7e30d7b  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/rich/_null_file.py
+1a6cc7c85fde687ca705c901ca8c19a8679ee739  ./competencies_api/tests/test_integration.py
 1a77b8fed3ca2916627c32aab3510b5e774b8718  ./competencies_api/venv/lib/python3.13/site-packages/mcp/client/auth/extensions/client_credentials.py
 1a7a7c0806e23c29f7134080040536666579103f  ./competencies_api/venv/lib/python3.13/site-packages/grpc/aio/__init__.py
 1a7da0d6ab4eeb07de23dadc8da2e1a41e5dad1e  ./competencies_api/venv/lib/python3.13/site-packages/mcp/server/experimental/session_features.py
@@ -661,6 +662,7 @@
 2569cbee899d52481d20cc2aca288a77ae9f57b2  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/meson.py
 2570a07e3b46cdfd8e928e1eb59df3f2f5e40242  ./competencies_api/venv/bin/opentelemetry-bootstrap
 257b1134cad783e8fddae8801364f040cc782b45  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/proto/trace/v1/trace_pb2.py
+25868914107e2c1ac286f7cbc363b58a287cbabc  ./shared/tests/zero_trust.py
 2588add9e0f3cd5b0be8a70a2cf9b5694d21ff1f  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/packaging/__init__.py
 25d070672a42df9372b27ad7fa59aa53b531d1c8  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/_incubating/attributes/device_attributes.py
 25d28df84a5f75aa7ca295e50073199711d38fdc  ./competencies_api/venv/lib/python3.13/site-packages/urllib3/poolmanager.py
@@ -786,6 +788,7 @@
 2bc9e1527c0bc99b484983c7c5edd641db734062  ./competencies_api/venv/lib/python3.13/site-packages/proto/_file_info.py
 2bcf1c19045c2c853709076c834c737dcc47538a  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/metrics/http_metrics.py
 2bd6a53dffca7343bed3edd9bdf49e92b495c248  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/_sourcemod_builtins.py
+2be4dc56e0af0a4919ca05f9bb5a3ee31baf4373  ./competencies_api/pyproject.toml
 2befb12e58fa18d073b8455915902ba9278cc1af  ./competencies_api/venv/lib/python3.13/site-packages/proto_plus-1.27.2.dist-info/top_level.txt
 2c10592d2bc9d3505d96a56f8f18c1c1be79383b  ./competencies_api/venv/lib/python3.13/site-packages/google/api_core/client_options.py
 2c20b7d739a304f3715aea6b90eed634c2217c5f  ./competencies_api/venv/lib/python3.13/site-packages/pip/_internal/utils/_log.py
@@ -1289,6 +1292,7 @@
 4aecd225a113f4fe68cc0fe3c4ecdb6d2e07bf73  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy_utils/models.py
 4af5a786e9ccb4a19f9d1cccaaa09ea78ecf6ff2  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/cachecontrol/heuristics.py
 4b1a295b5fdb7cf1a9679cc791b2213aab5e3a0f  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/util/_py_collections.py
+4b239dc7db2d85b13bbe59d9fb23dda04c33af8c  ./competencies_api/main.py
 4b2d6b5ad3e63ec5b2380fb75ec38e62186d8909  ./competencies_api/venv/lib/python3.13/site-packages/google/auth/_refresh_worker.py
 4b3482a045083c1762820517c0ef00813c684d80  ./competencies_api/venv/lib/python3.13/site-packages/jsonschema/protocols.py
 4b3bea3e4cb9f50ef3852344c7df7759a4d8eb1a  ./competencies_api/venv/lib/python3.13/site-packages/fastapi/sse.py
@@ -1832,6 +1836,7 @@
 6cb466145a5c245b64628087952f04dc2bb6c486  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry_api-1.41.0.dist-info/entry_points.txt
 6cbd9d2972e8fa7a09431acb30d0a324d019e71f  ./competencies_api/venv/lib/python3.13/site-packages/click/utils.py
 6cc85ef982b2938b6ba9d1b14f52b76ff480116b  ./competencies_api/venv/lib/python3.13/site-packages/google/api_core/future/__init__.py
+6cdc2c2f85ffa7bd64b86995ca668ce1d7c80190  ./competencies_api/tests/test_scoring_router.py
 6ceb66a30bb8951b24961c8bba6c34ee060aaf65  ./competencies_api/venv/lib/python3.13/site-packages/jsonschema_specifications/schemas/draft201909/vocabularies/validation
 6d1423decb3f8bdc1f463d2490a017c2b100bf34  ./competencies_api/venv/lib/python3.13/site-packages/pydantic/v1/error_wrappers.py
 6d2e137c666e5498262d2d5111e3170c28faa6b1  ./competencies_api/venv/lib/python3.13/site-packages/pip/_internal/__init__.py
@@ -1931,6 +1936,7 @@
 72f2c469f77428d593dfc1ed9607ad2c79229a85  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/instrumentation/httpx/package.py
 730b7e2414e583848f40d716a168d413a11ee768  ./competencies_api/venv/lib/python3.13/site-packages/google/cloud/alloydb_v1alpha/services/alloy_db_admin/client.py
 73150dc81fed5485ccafb478f407ae433c6e53b2  ./competencies_api/venv/lib/python3.13/site-packages/dns/rdtypes/ANY/WALLET.py
+731f3ee547c4422d47c36c6beaf1852393c01350  ./competencies_api/mcp_server.py
 7323aeb438ea7ca619718730ad4c7f8270aae665  ./competencies_api/venv/lib/python3.13/site-packages/rpds_py-0.30.0.dist-info/RECORD
 733d1f4c8d3eeaaddacb78a33ae7f82dfd9ccb71  ./competencies_api/venv/lib/python3.13/site-packages/google/api/backend.proto
 733faa11767059e16d2774f0c3401891dde816bc  ./competencies_api/venv/lib/python3.13/site-packages/google/cloud/alloydb_v1beta/services/alloy_db_admin/transports/grpc_asyncio.py
@@ -1960,6 +1966,7 @@
 74821a6e9605d3f1caa5d077f3354f53bd9ef346  ./competencies_api/venv/lib/python3.13/site-packages/redis/asyncio/multidb/event.py
 748b63480656883ca8ca35f42f061d989f7c5c7f  ./competencies_api/venv/lib/python3.13/site-packages/pygments/styles/native.py
 74988864f02611c20d8c8dcf524c6ae882e0de6f  ./competencies_api/venv/lib/python3.13/site-packages/pyasn1_modules/rfc3852.py
+74b24280bb1a5e54896a6cb7f5dbe5635612c883  ./competencies_api/src/competencies/tree_router.py
 74b484743b89dff48a22add14b11212b76fc6349  ./competencies_api/venv/lib/python3.13/site-packages/google/api_core/retry/retry_streaming.py
 74b4946488e415a1140c2da252ccfad4a1394c9d  ./competencies_api/venv/lib/python3.13/site-packages/mcp/server/fastmcp/resources/base.py
 74bb7e4f39326f3325083662a8966884d0355948  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/_incubating/attributes/error_attributes.py
@@ -2182,7 +2189,6 @@
 8153c010cc1e5b15f32fb043cdb8e70b9c0bbafd  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/_stan_builtins.py
 8163061afd283e5f73bdd4feb05a7dd0d4259c88  ./competencies_api/venv/lib/python3.13/site-packages/google/cloud/alloydb_v1alpha/types/gemini.py
 816f3085807d1880f69abc5d16c8490b8b1dc8e8  ./competencies_api/venv/lib/python3.13/site-packages/greenlet/platform/switch_x32_unix.h
-81747b3f427d17c002c82afe4941a20e736b9b2c  ./shared/pyproject.toml
 81851f5deacd4a38c95a42c872dba2fbc2273c3a  ./competencies_api/venv/lib/python3.13/site-packages/pydantic/plugin/__init__.py
 818a9490b354942b7c3b43cfad9c4a62468fa472  ./competencies_api/venv/lib/python3.13/site-packages/redis/asyncio/cluster.py
 8197dd632ae84df69f700fdfcba8566a43e59960  ./competencies_api/venv/lib/python3.13/site-packages/pyasn1_modules/rfc8398.py
@@ -2343,7 +2349,6 @@
 8938d43ad8e14954cac9a1270db70145222edb41  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/dialects/mysql/asyncmy.py
 894e6b47bb8448fd019805efa77ac03b4e3e6650  ./competencies_api/venv/lib/python3.13/site-packages/81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so
 89543c78338df11f4560e280f4457b79936fe35a  ./competencies_api/venv/lib/python3.13/site-packages/google/oauth2/sts.py
-8959b99afaf7c5aba8fd51e4f1c0ee9d4d4ca327  ./competencies_api/tests/test_scoring_router.py
 8975100599733c1d1385fad86b9275a98cd82e2a  ./competencies_api/venv/lib/python3.13/site-packages/google/api/service_pb2.pyi
 897ef579b9ebde09f81429d94301d24b8dcbb37e  ./competencies_api/venv/lib/python3.13/site-packages/starlette/requests.py
 898a52100c3516602159c80bdd72d40419c7b201  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/environment_variables/__init__.py
@@ -2520,7 +2525,6 @@
 932430538ca7de5ae7d22131e500236a6c305f36  ./competencies_api/venv/lib/python3.13/site-packages/jsonschema_specifications/schemas/draft201909/vocabularies/format
 9329a577e05e08afe602c961f6caa6a67084e1a9  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy_utils/types/enriched_datetime/pendulum_datetime.py
 9330ce2708f83b515e6066c3c206df59bc6a888e  ./competencies_api/venv/lib/python3.13/site-packages/fakeredis/_server.py
-93381fcd6d9dfb75d3bcd0eeaad6cb1252372462  ./competencies_api/tests/test_competencies_extra.py
 93396d07083e0e48520957b0f519395fdbdc3983  ./competencies_api/venv/lib/python3.13/site-packages/greenlet/tests/_test_extension.c
 934c8b289fe1547154d819f940717492c18377a7  ./competencies_api/venv/lib/python3.13/site-packages/asyncpg/pgproto/pgproto.pyx
 936bd454f9ec8c7e1ca2d4ea867deeeb17d761ab  ./competencies_api/venv/lib/python3.13/site-packages/pyasn1_modules/rfc2437.py
@@ -2604,7 +2608,6 @@
 97bdd0dcd044f8f894fd6a2cc9c0cdbfe6ae7e94  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/gsql.py
 97c88df65dc14a303a8e7e9a3dc1574e309fb263  ./competencies_api/venv/lib/python3.13/site-packages/pydantic/utils.py
 97d986de9165a54fc5a9e0ca37bfe34a496fd7bc  ./competencies_api/venv/lib/python3.13/site-packages/pydantic/deprecated/tools.py
-97fa60488175841dba9e65065c2714199aa97fa8  ./competencies_api/tests/test_scoring_pipeline.py
 9801ff556d25c7d3510fd4960c44b3dec8a0eb37  ./competencies_api/venv/lib/python3.13/site-packages/google/api/config_change_pb2.pyi
 98130e4bceb2c844987ddd626a1a60f4bc84f3d1  ./competencies_api/venv/lib/python3.13/site-packages/google/cloud/trace_v2/types/tracing.py
 98156e405583e4b56d7aa6c109673d5dec0cf2da  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry_instrumentation_redis-0.62b0.dist-info/METADATA
@@ -2850,6 +2853,7 @@ a62303f1a35084c96afa7e840effb5ac062a6957  ./competencies_api/venv/lib/python3.13
 a631adb58a5ca4812fcc4be1b6464c07506f6dd1  ./competencies_api/venv/lib/python3.13/site-packages/jose/jwk.py
 a6361675f868d45a2bec6785e9aa85669e3e8c75  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/sdk/trace/_tracer_metrics.py
 a63b6fcb3a742f2be599bcdad2f39a4c8fb29fd5  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/dsls.py
+a65e8f265adc36a024d4b90840924220d5bdb11a  ./competencies_api/tests/integration/test_pg_integration.py
 a6650831d9ea7dde666f91de266733bbfaf1ac61  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/testing/fixtures/orm.py
 a6699f8bf0b432900d309d2560ccdf252b3aa94f  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/requests/compat.py
 a66c3d839901ddf275d65cc4749b9aa6601cccc0  ./competencies_api/venv/lib/python3.13/site-packages/google/api_core/client_logging.py
@@ -3474,6 +3478,7 @@ ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca1eb6b12f1bfc62cc7a373161d6068d89d25e3e  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/cddl.py
 ca46eca9b6592e518beeb9be405ca287da014316  ./competencies_api/venv/lib/python3.13/site-packages/google/longrunning/operations_grpc.py
 ca4d9c527c7c698f1c2951cd615c2e50233d4947  ./competencies_api/venv/lib/python3.13/site-packages/cryptography/hazmat/primitives/asymmetric/utils.py
+ca5844137768816e7d99f68c545ffc9689bbf8f9  ./competencies_api/uv.lock
 ca71a93fa630c090ab64d0ac7c3b9bbf0a8993e7  ./competencies_api/venv/lib/python3.13/site-packages/pip/_internal/metadata/importlib/_compat.py
 ca773a511dc5a9c52bf16966b841580e4c4261c1  ./competencies_api/venv/lib/python3.13/site-packages/_pytest/warning_types.py
 ca7b483afade5dbb4bf30a48ae69f0ceed8443e4  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/ldap.py
@@ -3509,7 +3514,6 @@ cc785b461d93a38116b3357589301ba20e9c8452  ./competencies_api/venv/lib/python3.13
 cca4e03a5f309c5bec1288c08207eef481c4fa11  ./competencies_api/venv/lib/python3.13/site-packages/mcp/shared/tool_name_validation.py
 ccbd3bb99701ff40c7edf5d0877cf580e513860b  ./competencies_api/venv/lib/python3.13/site-packages/uvicorn/middleware/message_logger.py
 ccc137da24f2c41f87ac62ecceeb4905602aa167  ./competencies_api/venv/lib/python3.13/site-packages/google/auth/aio/transport/aiohttp.py
-ccd2ec6f538a7ba1ab4391f2aaa3195d7496bfd5  ./competencies_api/src/competencies/tree_router.py
 ccf5b71b173fe27ae9504b3b232ef6ea5adf068f  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/dialects/mysql/mariadbconnector.py
 cd0ab7bef7ec936c3477832056e4092c8290e441  ./competencies_api/venv/lib/python3.13/site-packages/python_jose-3.5.0.dist-info/licenses/LICENSE
 cd3f1ab3127fd7d50909d21f62fd39b42aa5fca0  ./competencies_api/venv/lib/python3.13/site-packages/pyasn1_modules/rfc6955.py
@@ -3615,11 +3619,9 @@ d334090330e31154eaf8c8b6bbd238169decbfdf  ./competencies_api/venv/lib/python3.13
 d3767816e258b4afa09ebce7ecd150b5a5d151fa  ./competencies_api/venv/lib/python3.13/site-packages/jose/jws.py
 d3b0e391b68d463783fa992456e5a1c4850c6a22  ./competencies_api/venv/lib/python3.13/site-packages/google/longrunning/operations_proto.py
 d3c8d16f54aec6c1b3ba3b34995bca3d89cc4580  ./competencies_api/venv/lib/python3.13/site-packages/google_cloud_alloydb-0.9.0.dist-info/RECORD
-d3dc37c2e0c6cc999ad5c8e4a8efa13fa09c130b  ./competencies_api/tests/integration/test_pg_integration.py
 d3ded3db5d3d7c1af013c8ad08bc61d507673723  ./competencies_api/venv/lib/python3.13/site-packages/wrapt/__init__.pyi
 d3e164ea6ce9f3112a02c04e7e59e49e025e8bd4  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/rich/padding.py
 d3f593e357dc72db60805e9b3aedfe54e51a6245  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy_utils/types/enriched_datetime/enriched_datetime_type.py
-d433f3a3ffa7d484d7b90859c1cde1f9e2b6aa5e  ./shared/tests/zero_trust.py
 d45cc5c3e7741143aa181d2dc33c0b2fbf58a23c  ./competencies_api/venv/lib/python3.13/site-packages/pip/_internal/metadata/base.py
 d46c1dc1328f472b14e23494d076798ad5b70a6a  ./competencies_api/venv/lib/python3.13/site-packages/pip/_internal/commands/help.py
 d47ca34b5110baaed6377ce2e88cc4eb6b1f8b6c  ./competencies_api/venv/lib/python3.13/site-packages/mcp/shared/progress.py
@@ -4095,6 +4097,7 @@ df8645b397f237dde1330d321254703ab973750c  ./competencies_api/venv/lib/python3.13
 dfa39223ff24ac3319738da0fb6b664ebfc2632c  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/types.py
 dfa65a499039a4d0fc62f81ce2b41a981c5e0b3e  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/urllib3/fields.py
 dfa95b4d53569c62de52aa2964b69bc397a8d333  ./competencies_api/venv/lib/python3.13/site-packages/pyasn1_modules/rfc2315.py
+dfba805920889cb681b9b08cbad4d71d7cd260a2  ./competencies_api/tests/test_scoring_pipeline.py
 dfe26d4b9efb49039de4c08b9ef0878010d7932e  ./competencies_api/venv/lib/python3.13/site-packages/pydantic_settings/sources/providers/env.py
 dff9443b6a936527648b06b1406aa31853485529  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/_incubating/metrics/process_metrics.py
 dffff7d47714d6503ea3587e5edfad082ef2a8a2  ./competencies_api/venv/lib/python3.13/site-packages/redis/observability/registry.py
@@ -4117,7 +4120,6 @@ e0e87fa7ab78a9e77e49edaf9c5de3fe53073efd  ./competencies_api/venv/lib/python3.13
 e0f17cf7bc2acd2725ce79f4a75b36632bf2d8d8  ./competencies_api/venv/lib/python3.13/site-packages/greenlet/platform/setup_switch_x64_masm.cmd
 e0f1e0ed40afdbbd4ed1deba84a7eab6b7af173b  ./competencies_api/venv/lib/python3.13/site-packages/dns/rdtypes/euibase.py
 e0fc4a8c5354a4eb32ffc517db07fba0fd018f40  ./competencies_api/venv/lib/python3.13/site-packages/prometheus_client/exposition.py
-e10883f0aa3fb53c62d318b1c2e7abfab72c9a85  ./competencies_api/tests/test_scoring_utils.py
 e122b5e00a1ce597458e96c4f12e23c949f31a94  ./competencies_api/venv/lib/python3.13/site-packages/google/rpc/context/audit_context.proto
 e1284846e681469fcfa7c4b25e5d95ea91f10a57  ./competencies_api/venv/lib/python3.13/site-packages/google/cloud/alloydb_v1/services/alloy_dbcsql_admin/transports/rest_base.py
 e12f642cbea14e35974b27eba9efec4c37a94bdc  ./competencies_api/venv/lib/python3.13/site-packages/pydantic/json.py
@@ -4304,7 +4306,6 @@ eaacc0fc4a0517ad4e4854594d3e15a343fd1c30  ./competencies_api/venv/lib/python3.13
 eac0f192f80c8871789df2143296c4f69c315cda  ./competencies_api/venv/lib/python3.13/site-packages/google/type/calendar_period_pb2.py
 eac4e34cb9e8708d2c5803b0ac20706b2f77b944  ./competencies_api/venv/lib/python3.13/site-packages/_pytest/freeze_support.py
 eac5f5699c458e2782a1dc309c588799af51b11a  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/util/http/__init__.py
-ead0d4302d40d9cf4102d829ce5e485e52cbe0ef  ./competencies_api/main.py
 eaf20ca2d61afe74237664220d97df8589671685  ./competencies_api/venv/lib/python3.13/site-packages/dns/rdtypes/ANY/CSYNC.py
 eb11d682849a914430c24588efa5d49bca7cd4ca  ./competencies_api/venv/lib/python3.13/site-packages/pydantic/tools.py
 eb145b16201d7538fc2d42b3eee25c846bc814a5  ./competencies_api/venv/lib/python3.13/site-packages/mcp/client/stdio/__init__.py
@@ -4453,7 +4454,6 @@ f240117fb33d385ed310fe2c6ad75353c8a37f72  ./competencies_api/venv/lib/python3.13
 f240473c9c89f4efb431efc480cbd5b4223b10a5  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/tomli_w/__init__.py
 f2603cd0d86ffb5f54667b213a6ad9ab8f48d491  ./competencies_api/venv/bin/email_validator
 f2709c7f25699fd8ba06be399cc1daada4272cc7  ./competencies_api/venv/lib/python3.13/site-packages/requests/_internal_utils.py
-f27e603f0b464b9f5af3c86f590482ca241f971c  ./competencies_api/mcp_server.py
 f2970525a7a89257243b8647917f8d03537a32c8  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/proto/collector/metrics/v1/metrics_service_pb2_grpc.py
 f2990bfa33a830f670faadc62dcfad7d7593163b  ./competencies_api/venv/lib/python3.13/site-packages/google/auth/__init__.py
 f2ba537a939513a531c6f46ae11a7ec6a94083bb  ./competencies_api/venv/lib/python3.13/site-packages/sqlalchemy/orm/bulk_persistence.py
@@ -4528,6 +4528,7 @@ f57193e4741a7c2871fcbdf763142a866fd852cc  ./competencies_api/venv/lib/python3.13
 f5748401e92593525092fe117cd6fc850142f9f5  ./competencies_api/venv/lib/python3.13/site-packages/prometheus_client-0.24.1.dist-info/METADATA
 f58f6337d1513542f137b1335bfba2ccf30b622e  ./competencies_api/venv/lib/python3.13/site-packages/sortedcontainers/__init__.py
 f593d623e7fab0f6550e3b2b484df2ae5f8d19da  ./competencies_api/venv/lib/python3.13/site-packages/pygments/lexers/ambient.py
+f5a26f4f6eba3f08d1216596eade4105aaf23d3c  ./competencies_api/tests/test_scoring_utils.py
 f5a3f992178c1022ec367c474552ac1bc832cf80  ./competencies_api/venv/lib/python3.13/site-packages/_pytest/assertion/util.py
 f5ba1ac29ec932e289a51f5e19b6019d2cb0e30d  ./competencies_api/venv/lib/python3.13/site-packages/dns/e164.py
 f5cbebf6b57c7ef8b437197cfdc929fb6ecb1af9  ./competencies_api/venv/lib/python3.13/site-packages/packaging/_musllinux.py
@@ -4628,6 +4629,7 @@ fbec462f6ff9285defc1ad744c8caa82652733a2  ./competencies_api/venv/lib/python3.13
 fbf933c7123504588ddfeb4437b9cb3dab6a197b  ./competencies_api/venv/lib/python3.13/site-packages/cryptography/hazmat/primitives/twofactor/__init__.py
 fbfa6e9acaa312d68cbe89d37c72194ad6b75383  ./competencies_api/venv/lib/python3.13/site-packages/_pytest/stash.py
 fc1096b517776ccbfb7b34eb418954f5b1b21396  ./competencies_api/venv/lib/python3.13/site-packages/google/auth/transport/_requests_base.py
+fc38603fcbd7820ef8bb8253a6992dd5fae57774  ./competencies_api/Dockerfile
 fc5442cdf9528326be0a21a066a75f7c6ae59f27  ./competencies_api/venv/lib/python3.13/site-packages/opentelemetry/semconv/_incubating/metrics/cicd_metrics.py
 fc583123d664d0d6da447a27bbce05148135adbc  ./competencies_api/venv/lib/python3.13/site-packages/starlette/middleware/cors.py
 fc6fe651470ae65f5305a83c4cfb1daca36097cc  ./competencies_api/venv/lib/python3.13/site-packages/pip/_vendor/tomli_w/_writer.py

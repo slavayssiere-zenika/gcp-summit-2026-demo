@@ -17,10 +17,11 @@ Gestion et versioning des system prompts des agents IA. Centralise les instructi
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
-| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `NPM_CONFIG_PREFIX` | Comportement | `/opt/promptfoo-env` |
 | `PATH` | Comportement | `"/opt/promptfoo-env/bin:${PATH}"` |
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8000` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
@@ -45,16 +46,16 @@ Gestion et versioning des system prompts des agents IA. Centralise les instructi
 - `POST /errors/report`
 - `GET /{key}/compiled`
 - `DELETE /{key}`
-- `GET /version`
-- `GET /spec`
-- `GET /mcp/tools`
-- `POST /mcp/call`
 - `GET /users/`
 - `GET /items/`
 - `PUT /items/{item_id}`
 - `POST /items/`
 - `DELETE /items/{item_id}`
 - `PATCH /items/`
+- `POST /send-notification/{email}`
+- `POST /files/`
+- `POST /uploadfile/`
+- `GET /items/{item_id}`
 
 ## MCP tools exposés
 - `analyze_prompt`, `create_prompt`, `get_my_prompt`, `get_prompt`, `health_check_prompts`, `list_prompts`, `report_service_error_for_prompt`, `update_my_prompt`, `update_prompt`

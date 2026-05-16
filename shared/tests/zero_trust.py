@@ -50,24 +50,22 @@ def assert_zero_trust(app, public_whitelist: set) -> None:
         # Recherche via les dépendances du routeur
         if route.dependencies:
             for dep in route.dependencies:
-                if (
-                    dep.dependency
-                    and hasattr(dep.dependency, "__name__")
-                    and "verify_jwt" in dep.dependency.__name__
-                ):
-                    has_jwt = True
-                    break
+                dep_obj = dep.dependency
+                if dep_obj:
+                    name = getattr(dep_obj, "__name__", getattr(dep_obj.__class__, "__name__", ""))
+                    if "verify_jwt" in name or "VerifyJwtOrOidc" in name:
+                        has_jwt = True
+                        break
 
         # Recherche via les dépendances inline (paramètre `_ = Depends(verify_jwt)`)
         if not has_jwt:
             for param in route.dependant.dependencies:
-                if (
-                    param.call
-                    and hasattr(param.call, "__name__")
-                    and "verify_jwt" in param.call.__name__
-                ):
-                    has_jwt = True
-                    break
+                dep_obj = param.call
+                if dep_obj:
+                    name = getattr(dep_obj, "__name__", getattr(dep_obj.__class__, "__name__", ""))
+                    if "verify_jwt" in name or "VerifyJwtOrOidc" in name:
+                        has_jwt = True
+                        break
 
         if not has_jwt:
             unprotected_routes.append(f"{list(route.methods)} {route.path}")

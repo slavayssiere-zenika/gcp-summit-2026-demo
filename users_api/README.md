@@ -23,6 +23,7 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8000` |
 | `MCP_SIDECAR_URL` | Infra | `http://users_mcp:8000` |
@@ -52,10 +53,15 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 - `GET /stats`
 - `GET /duplicates`
 - `POST /merge`
-- `GET /version`
-- `GET /spec`
-- `GET /mcp/tools`
-- `POST /mcp/call`
+- `GET /users/`
+- `GET /items/`
+- `PUT /items/{item_id}`
+- `POST /items/`
+- `DELETE /items/{item_id}`
+- `PATCH /items/`
+- `POST /send-notification/{email}`
+- `POST /files/`
+- `POST /uploadfile/`
 
 ## MCP tools exposés
 _Aucun tool MCP détecté dans `mcp_server.py`._

@@ -28,7 +28,7 @@ args = parser.parse_args()
 try:
     from google.cloud import storage as gcs_storage
 except ImportError:
-    print("❌ google-cloud-storage non installé. Lancez: pip install google-cloud-storage")
+    print("❌ google-cloud-storage non installé. Lancez: uv add google-cloud-storage")
     sys.exit(1)
 
 print(f"🔍 Audit taxonomy drops — bucket: {args.bucket} | env: {args.env}")

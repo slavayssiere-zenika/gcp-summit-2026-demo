@@ -23,6 +23,7 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `GEMINI_EMBEDDING_MODEL` | Comportement | `gemini-embedding-001` |
@@ -57,10 +58,14 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 - `DELETE /missions`
 - `DELETE /missions/{mission_id}`
 - `GET /missions/user/{user_id}/active`
-- `GET /version`
-- `GET /spec`
-- `GET /mcp/tools`
-- `POST /mcp/call`
+- `GET /users/`
+- `GET /items/`
+- `PUT /items/{item_id}`
+- `POST /items/`
+- `DELETE /items/{item_id}`
+- `PATCH /items/`
+- `POST /send-notification/{email}`
+- `POST /files/`
 
 ## MCP tools exposés
 - `create_mission`, `delete_all_missions`, `get_mission`, `get_mission_candidates`, `get_mission_status_history`, `get_mission_task_status`, `get_user_active_missions`, `list_missions`, `reanalyze_mission`, `update_mission_status`

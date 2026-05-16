@@ -23,6 +23,7 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8001` |
 | `MCP_SIDECAR_URL` | Infra | `http://items_mcp:8000` |

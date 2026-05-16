@@ -84,6 +84,7 @@ COMPETENCIES_ZENIKA_TREE = {
     }
 }
 
+
 def get_db_url(dbname):
     base_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
     if "?" in base_url:
@@ -93,8 +94,10 @@ def get_db_url(dbname):
     else:
         return base_url.rsplit("/", 1)[0] + "/" + dbname
 
+
 def random_string(length=8):
     return ''.join(random.choices(string.ascii_lowercase, k=length))
+
 
 def create_category(name, description):
     # Pre-check existence
@@ -104,7 +107,8 @@ def create_category(name, description):
             if c['name'] == name:
                 print(f"  - Category {name} already exists. Skipping.")
                 return c
-    except: pass
+    except Exception:
+        pass
 
     data = {"name": name, "description": description}
     try:
@@ -115,12 +119,13 @@ def create_category(name, description):
         print(f"  ❌ Error creating category {name}: {str(e)}")
         raise
 
+
 def create_competency(name, description, parent_id=None):
 
     data = {"name": name, "description": description}
     if parent_id is not None:
         data["parent_id"] = parent_id
-        
+
     try:
         response = httpx.post(f"{COMPETENCIES_API}/", json=data, headers=AUTH_HEADERS)
         response.raise_for_status()
@@ -128,6 +133,7 @@ def create_competency(name, description, parent_id=None):
     except Exception as e:
         print(f"  ❌ Error creating competency {name}: {str(e)}")
         raise
+
 
 def assign_competency(user_id, comp_id):
     try:
@@ -138,6 +144,7 @@ def assign_competency(user_id, comp_id):
         print(f"  - Error assigning competency {comp_id} to user {user_id}: {str(e)}")
         return None
 
+
 def import_cv(url):
     try:
         response = httpx.post(f"{CV_API}/import", json={"url": url}, headers=AUTH_HEADERS, timeout=60.0)
@@ -147,12 +154,13 @@ def import_cv(url):
         print(f"  ❌ Error importing CV {url}: {str(e)}")
         return None
 
-def create_user(first, last, allowed_category_ids=None):
+
+def create_user(first, last, allowed_category_ids=None, suffix=""):
     if allowed_category_ids is None:
         allowed_category_ids = []
-    username = f"{first[0].lower()}{last.lower()}{random.randint(10, 99)}"
-    email = f"{first.lower()}.{last.lower()}@zenika.com"
-    
+    username = f"{first[0].lower()}{last.lower()}{random.randint(10, 9999)}{suffix}"
+    email = f"{first.lower()}.{last.lower()}{suffix}@zenika.com"
+
     # Check if user exists by email or username search
     try:
         search_res = httpx.get(f"{USERS_API}/", params={"skip": 0, "limit": 100}, headers=AUTH_HEADERS)
@@ -181,6 +189,7 @@ def create_user(first, last, allowed_category_ids=None):
         response.raise_for_status()
     return response.json()
 
+
 def create_item(user_id, category_ids):
     item_names = ["Laptop", "Monitor", "Keyboard", "Mouse", "Desk", "Chair", "License", "Server", "Consulting", "Workshop"]
     name = f"{random.choice(item_names)} {random_string(4).upper()}"
@@ -194,7 +203,8 @@ def create_item(user_id, category_ids):
     response.raise_for_status()
     return response.json()
 
-def main():
+
+def main(perf: bool = False) -> None:
     print("🚀 Starting Zenika Seed Data Process...\n")
 
     print("🔑 Connecting to DB recursively to insert Root Admin...")
@@ -206,7 +216,7 @@ def main():
         # Stable bcrypt hash for 'admin'
         admin_hash = "$2b$12$DmcLZx/FfS5ZVVpGVbYOZOM6a27EsafCWBmc26RTxfY5mnn0o/Usi"
         # Removed DDL/ALTER TABLE since Liquibase handles schema management natively
-        
+
         cur.execute("SELECT id FROM users WHERE username = 'admin'")
         if not cur.fetchone():
             cur.execute("""
@@ -236,7 +246,7 @@ def main():
     print("\n🔐 Authenticating Admin securely to retrieve JWT...")
     try:
         login_res = httpx.post(
-            f"{USERS_API}/login", 
+            f"{USERS_API}/login",
             json={"email": "admin@zenika.com", "password": "admin"}
         )
         if login_res.status_code == 200:
@@ -287,9 +297,9 @@ def main():
         conn.commit()
         cur.close()
         conn.close()
-        
+
         login_res = httpx.post(
-            f"{USERS_API}/login", 
+            f"{USERS_API}/login",
             json={"email": "admin@zenika.com", "password": "admin"}
         )
         if login_res.status_code == 200:
@@ -301,24 +311,31 @@ def main():
     except Exception as e:
         print(f"  ❌ Error upgrading admin permissions: {str(e)}")
 
-    print("\n👤 Seeding 12 Zenika Users with Permissions...")
+    user_count = 400 if perf else 12
+    item_count = 2000 if perf else 50
+
+    print(f"\n👤 Seeding {user_count} Zenika Users with Permissions...")
     users = []
-    for i in range(12):
-        first = FIRST_NAMES[i]
-        last = LAST_NAMES[i]
+    for i in range(user_count):
+        first = random.choice(FIRST_NAMES)
+        last = random.choice(LAST_NAMES)
+        suffix = f"{i}" if perf else ""
         # Assign 3 to 5 random categories as allowed
         user_allowed_cats = random.sample(category_ids, k=random.randint(3, 5))
-        user = create_user(first, last, user_allowed_cats)
-        users.append(user)
-        print(f"  - Created user: {user['full_name']} (Allowed Cats: {len(user['allowed_category_ids'])})")
+        user = create_user(first, last, user_allowed_cats, suffix=suffix)
+        if user:
+            users.append(user)
+        print(f"  - Created user: {user['full_name']} (Allowed Cats: {len(user['allowed_category_ids']) if user else 0})")
 
-    print("\n📦 Seeding 50 Tagged Items (Respecting Permissions)...")
-    for i in range(50):
+    print(f"\n📦 Seeding {item_count} Tagged Items (Respecting Permissions)...")
+    for i in range(item_count):
+        if not users:
+            break
         user = random.choice(users)
         # Randomly assign 1 to 2 categories from the user's ALLOWED ones
         item_categories = random.sample(user['allowed_category_ids'], k=random.randint(1, min(2, len(user['allowed_category_ids']))))
         item = create_item(user['id'], item_categories)
-        print(f"  - Created item {i+1}/50: {item['name']} (assigned to {user['username']})")
+        print(f"  - Created item {i+1}/{item_count}: {item['name']} (assigned to {user['username']})")
 
     print("\n🛠️ Seeding Competencies (Cleaning legacy flats...)")
     try:
@@ -335,7 +352,7 @@ def main():
         print(f"  ❌ Error truncating competencies: {str(e)}")
 
     comp_ids = []
-    
+
     def seed_tree(nodes, parent_id=None, level=1):
         if isinstance(nodes, dict):
             for name, content in nodes.items():
@@ -400,7 +417,6 @@ def main():
         if res:
             print(f"    ↳ Successfully imported CV mapping to User ID {res.get('user_id')} (Mapped {res.get('competencies_assigned')} competencies)")
 
-    
     print("\n📁 Seeding Drive Folders for CV Intake...")
     try:
         import psycopg2
@@ -410,7 +426,6 @@ def main():
         # Seed the Niort folder
         cur.execute("SELECT id FROM drive_folders WHERE google_folder_id = '1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin'")
         if not cur.fetchone():
-            from datetime import datetime, timezone
             cur.execute("""
                 INSERT INTO drive_folders (google_folder_id, tag, created_at)
                 VALUES ('1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin', 'Niort', %s)
@@ -426,5 +441,10 @@ def main():
 
     print("\n✨ Done! Zenika Seed process complete.")
 
+
 if __name__ == "__main__":
-    main()
+    import argparse
+    _parser = argparse.ArgumentParser(description="Zenika Seed Data")
+    _parser.add_argument("--perf", action="store_true", help="Mode perf : 400 users, 2000 items")
+    _args = _parser.parse_args()
+    main(perf=_args.perf)

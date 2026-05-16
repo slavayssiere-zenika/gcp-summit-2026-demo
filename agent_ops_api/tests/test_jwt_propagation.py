@@ -14,7 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import jwt as pyjwt
 import pytest
-from main import SECRET_KEY
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
 
 sys.path.insert(0, os.path.dirname(__file__))
 

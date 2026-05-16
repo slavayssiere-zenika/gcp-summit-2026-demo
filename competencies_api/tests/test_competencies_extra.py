@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
-import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./competencies_test.db")
@@ -347,11 +346,23 @@ def test_get_competency_users_returns_list(mocker):
 def test_bulk_tree_non_admin_returns_403(mocker):
     """Non-admin → 403."""
     _patch_cache(mocker)
-    app.dependency_overrides[verify_jwt] = override_jwt_user
-    with TestClient(app) as client:
-        resp = client.post("/bulk_tree", json={"tree": {}}, headers=AUTH)
-    assert resp.status_code == 403
-    app.dependency_overrides[verify_jwt] = override_jwt_admin
+    from main import app
+    from shared.auth.jwt import VerifyJwtOrOidc
+    from unittest.mock import patch
+    overrides = {}
+    for route in app.routes:
+        if hasattr(route, "dependencies"):
+            for dep in route.dependencies:
+                if isinstance(dep.dependency, VerifyJwtOrOidc):
+                    overrides[dep.dependency] = lambda: {"sub": "2", "role": "user", "allowed_category_ids": [1]}
+        if hasattr(route, "dependant"):
+            for dep in route.dependant.dependencies:
+                if isinstance(dep.call, VerifyJwtOrOidc):
+                    overrides[dep.call] = lambda: {"sub": "2", "role": "user", "allowed_category_ids": [1]}
+    with patch.dict(app.dependency_overrides, overrides):
+        with TestClient(app) as client:
+            resp = client.post("/bulk_tree", json={"tree": {}}, headers=AUTH)
+        assert resp.status_code == 403
 
 
 def test_bulk_tree_empty_tree_admin(mocker):
@@ -367,8 +378,19 @@ def test_bulk_tree_empty_tree_admin(mocker):
     async def override_db():
         yield mock_db
 
-    app.dependency_overrides[get_db] = override_db
-    with get_client() as client:
-        resp = client.post("/bulk_tree", json={"tree": {}}, headers=AUTH)
-    assert resp.status_code in (200, 422)
-    app.dependency_overrides.pop(get_db, None)
+    from shared.auth.jwt import VerifyJwtOrOidc
+    from unittest.mock import patch
+    overrides = {get_db: override_db}
+    for route in app.routes:
+        if hasattr(route, "dependencies"):
+            for dep in route.dependencies:
+                if isinstance(dep.dependency, VerifyJwtOrOidc):
+                    overrides[dep.dependency] = lambda: {"sub": "1", "role": "admin", "allowed_category_ids": [1]}
+        if hasattr(route, "dependant"):
+            for dep in route.dependant.dependencies:
+                if isinstance(dep.call, VerifyJwtOrOidc):
+                    overrides[dep.call] = lambda: {"sub": "1", "role": "admin", "allowed_category_ids": [1]}
+    with patch.dict(app.dependency_overrides, overrides):
+        with get_client() as client:
+            resp = client.post("/bulk_tree", json={"tree": {}}, headers=AUTH)
+        assert resp.status_code in (200, 422)

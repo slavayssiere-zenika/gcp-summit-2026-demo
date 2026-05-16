@@ -536,9 +536,9 @@ compute_service_hash() {
   if [[ "$SERVICE" == "agent_"* ]]; then
     DIRS_TO_CHECK+=("./agent_commons")
   fi
-  # shared/ est toujours inclus dans le hash de tous les services
-  # → tout changement dans shared/ invalide le hash de TOUS les consumers
-  if [ -d "./shared" ]; then
+  # shared/ est toujours inclus dans le hash des services backend
+  # → tout changement dans shared/ invalide le hash de TOUS les consumers backend
+  if [ -d "./shared" ] && [ "$SERVICE" != "frontend" ]; then
     DIRS_TO_CHECK+=("./shared")
   fi
 
@@ -665,10 +665,10 @@ run_service_tests() {
     return 0
   fi
 
-  # Vérification de la présence du virtualenv de test
-  if [ ! -f "$TEST_RUNNER" ]; then
-    echo -e "${YELLOW}[⚠️  SKIP TESTS] test_env/bin/pytest introuvable pour $SERVICE.${RESET}"
-    echo -e "${YELLOW}   → Créez le venv : python3 -m venv test_env && test_env/bin/pip install -r scripts/requirements.txt${RESET}"
+  # Vérification de la présence de uv
+  if ! command -v uv >/dev/null 2>&1; then
+    echo -e "${YELLOW}[⚠️  SKIP TESTS] uv introuvable pour $SERVICE.${RESET}"
+    echo -e "${YELLOW}   → Installez uv : curl -LsSf https://astral.sh/uv/install.sh | sh${RESET}"
     echo -e "${YELLOW}   → Build autorisé sans validation des tests.${RESET}"
     return 0
   fi
@@ -709,8 +709,7 @@ run_service_tests() {
   OTEL_LOGS_EXPORTER=none \
   SECRET_KEY="testsecret" \
   PYTHONPATH="$PYTHONPATH_VAL" \
-  "$TEST_RUNNER" "./${SERVICE}" -x \
-    --ignore=test_env \
+  uv run --project "./${SERVICE}" --with-requirements scripts/test_requirements.txt pytest "./${SERVICE}" -x \
     --cov="./${SERVICE}" --cov-report=term-missing:skip-covered \
     2>&1 | tee "$TMP_OUTPUT" | grep --line-buffered -E "(test_.*\.py|\[[ 0-9]+%\]|===.*===|^FAILED|^ERROR)" | awk '{print "   " $0; fflush()}' || PYTEST_EXIT=${PIPESTATUS[0]}
 
@@ -874,29 +873,33 @@ build_and_push_standard() {
     -f "./${SERVICE}/Dockerfile" .
   
   echo "--- Smoke Test: Vérification du démarrage du conteneur ---"
-  local SMOKE_CONTAINER="smoke_${SERVICE}_$RANDOM"
-  
-  docker run -d --name "$SMOKE_CONTAINER" \
-    -e SECRET_KEY="smoke_test_key" \
-    -e GEMINI_API_KEY="dummy" \
-    -e REDIS_URL="redis://localhost:6379" \
-    -e DATABASE_URL="postgresql+asyncpg://dummy:dummy@localhost:5432/dummy" \
-    "${IMAGE_NAME}:${TAG}" >/dev/null
+  if [ "$SERVICE" == "db_migrations" ]; then
+    echo -e "${GREEN}✅ [SMOKE TEST] Ignoré pour $SERVICE (Job d'exécution courte).${RESET}"
+  else
+    local SMOKE_CONTAINER="smoke_${SERVICE}_$RANDOM"
     
-  sleep 3
-  
-  if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
-    echo -e "${RED}❌ [SMOKE TEST] L'image Docker a crashé au démarrage (Missing Module, Syntax Error, etc) !${RESET}"
-    echo -e "${RED}   Logs du crash :${RESET}"
-    docker logs "$SMOKE_CONTAINER" 2>&1 | tee -a "${LOG_DIR}/${SERVICE}_tests.log"
+    docker run -d --name "$SMOKE_CONTAINER" \
+      -e SECRET_KEY="smoke_test_key" \
+      -e GEMINI_API_KEY="dummy" \
+      -e REDIS_URL="redis://localhost:6379" \
+      -e DATABASE_URL="postgresql+asyncpg://dummy:dummy@localhost:5432/dummy" \
+      "${IMAGE_NAME}:${TAG}" >/dev/null
+      
+    sleep 3
+    
+    if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
+      echo -e "${RED}❌ [SMOKE TEST] L'image Docker a crashé au démarrage (Missing Module, Syntax Error, etc) !${RESET}"
+      echo -e "${RED}   Logs du crash :${RESET}"
+      docker logs "$SMOKE_CONTAINER" 2>&1 | tee -a "${LOG_DIR}/${SERVICE}_tests.log"
+      docker rm -f "$SMOKE_CONTAINER" >/dev/null
+      DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
+      CURRENT_DEPLOYING_SERVICE=""
+      return 1
+    fi
+    
+    echo -e "${GREEN}✅ [SMOKE TEST] Démarrage réussi.${RESET}"
     docker rm -f "$SMOKE_CONTAINER" >/dev/null
-    DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
-    CURRENT_DEPLOYING_SERVICE=""
-    return 1
   fi
-  
-  echo -e "${GREEN}✅ [SMOKE TEST] Démarrage réussi.${RESET}"
-  docker rm -f "$SMOKE_CONTAINER" >/dev/null
 
   
   # Push
@@ -1100,12 +1103,8 @@ build_and_push_shared_wheel() {
   local WHEEL_DIST="shared/dist"
   rm -rf "$WHEEL_DIST"
   echo "--- Building wheel zenika-shared-schemas==${NEW_SEMVER} ---"
-  # Utilise le venv test_env qui contient 'build' (scripts/requirements.txt)
-  local PYTHON_BIN="./test_env/bin/python3"
-  if [ ! -f "$PYTHON_BIN" ]; then
-    PYTHON_BIN="python3"  # Fallback si le venv n'est pas inité
-  fi
-  "$PYTHON_BIN" -m build --wheel --outdir "$WHEEL_DIST" ./shared/ 2>&1 | tail -5
+  # Utilisation de uv pour le build
+  uv build --wheel --out-dir "$WHEEL_DIST" ./shared/ 2>&1 | tail -5
   local WHEEL_FILE
   WHEEL_FILE=$(ls "${WHEEL_DIST}"/*.whl 2>/dev/null | head -1)
   if [ -z "$WHEEL_FILE" ]; then
@@ -1116,7 +1115,7 @@ build_and_push_shared_wheel() {
 
   # ── 4. Push vers Artifact Registry Python ─────────────────────────────────
   echo "--- Pushing wheel vers Artifact Registry (${PYTHON_REPO_URL}) ---"
-  if "$PYTHON_BIN" -m twine upload \
+  if uvx twine upload \
     --repository-url "https://${PYTHON_REPO_URL}/" \
     --username "oauth2accesstoken" \
     --password "$(gcloud auth print-access-token)" \

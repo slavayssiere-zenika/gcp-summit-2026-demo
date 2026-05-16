@@ -42,6 +42,7 @@ Le monolithe `router.py` (~2490L) a été décomposé en modules spécialisés.
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8003` |
 | `MCP_SIDECAR_URL` | Infra | `http://competencies_mcp:8000` |

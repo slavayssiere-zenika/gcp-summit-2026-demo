@@ -25,7 +25,7 @@ from sqlalchemy import delete, update, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from shared.auth.jwt import verify_jwt
+from shared.auth.jwt import VerifyJwtOrOidc
 from src.competencies.helpers import (
     check_grammatical_conflict,
     trigger_taxonomy_cache_invalidation,
@@ -36,7 +36,7 @@ from src.competencies.schemas import TreeImportRequest
 logger = logging.getLogger(__name__)
 CACHE_TTL = 60
 
-router = APIRouter(prefix="", tags=["competency-tree"], dependencies=[Depends(verify_jwt)])
+router = APIRouter(prefix="", tags=["competency-tree"], dependencies=[Depends(VerifyJwtOrOidc())])
 
 
 @router.post("/bulk_tree", status_code=200)
@@ -45,10 +45,10 @@ async def bulk_import_tree(
     bg_tasks: BackgroundTasks,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    jwt_payload: dict = Depends(verify_jwt),
+    jwt_payload: dict = Depends(VerifyJwtOrOidc()),
 ):
     """(Admin) Import atomique de la taxonomie complète avec fusion, sweep et archivage des orphelins."""
-    if jwt_payload.get("role") not in ("admin", "service_account"):
+    if jwt_payload.get("role") not in ("admin", "service_account", "scheduler"):
         raise HTTPException(
             status_code=403,
             detail="Privilèges administrateur ou compte de service requis.",
@@ -427,10 +427,10 @@ async def cleanup_orphan_competencies(
     request: Request,
     bg_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    jwt_payload: dict = Depends(verify_jwt),
+    jwt_payload: dict = Depends(VerifyJwtOrOidc()),
 ):
     """Supprime les compétences feuilles qui ne sont liées à aucun consultant (Quality Gate)."""
-    if jwt_payload.get("role") not in ("admin", "service_account"):
+    if jwt_payload.get("role") not in ("admin", "service_account", "scheduler"):
         raise HTTPException(status_code=403, detail="Accès refusé.")
 
     try:

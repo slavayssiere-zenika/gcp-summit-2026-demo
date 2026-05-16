@@ -19,6 +19,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
@@ -48,13 +49,26 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 **DB 10** — namespace `session:hr:*` (historique de session par user)
 
 ## Endpoints clés
-- `GET /.well-known/agent.json`
-- `GET /`
-- `GET /spec`
-- `POST /query`
 - `POST /a2a/query`
-- `GET /mcp/registry`
+- `GET /users/`
+- `GET /items/`
+- `PUT /items/{item_id}`
+- `POST /items/`
+- `DELETE /items/{item_id}`
+- `PATCH /items/`
+- `POST /send-notification/{email}`
+- `POST /files/`
+- `POST /uploadfile/`
+- `GET /items/{item_id}`
+- `GET /users/me/items/`
+- `GET /users/me`
+- `POST /login`
 - `GET /version`
+- `GET /list-apps`
+- `GET /apps/{app_name}/app-info`
+- `GET /debug/trace/{event_id}`
+- `GET /dev/build_graph/{app_name}`
+- `GET /debug/trace/session/{session_id}`
 
 ## MCP APIs consommées
 - `ANALYTICS_MCP_URL`

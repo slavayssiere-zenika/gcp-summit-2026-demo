@@ -19,6 +19,7 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
@@ -45,20 +46,26 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 **DB 2** — namespace `session:*` (historique) + `semantic:*` (cache sémantique)
 
 ## Endpoints clés
-- `GET /`
-- `GET /version`
-- `GET /spec`
+- `POST /a2a/query`
+- `GET /users/`
+- `GET /items/`
+- `PUT /items/{item_id}`
+- `POST /items/`
+- `DELETE /items/{item_id}`
+- `PATCH /items/`
+- `POST /send-notification/{email}`
+- `POST /files/`
+- `POST /uploadfile/`
+- `GET /items/{item_id}`
+- `GET /users/me/items/`
+- `GET /users/me`
 - `POST /login`
-- `POST /logout`
-- `GET /me`
-- `POST /query`
-- `GET /history`
-- `DELETE /history`
-- `GET /sessions`
-- `POST /sessions`
-- `PATCH /sessions/{session_id:path}`
-- `DELETE /sessions/{session_id:path}`
-- `GET /mcp/registry`
+- `GET /version`
+- `GET /list-apps`
+- `GET /apps/{app_name}/app-info`
+- `GET /debug/trace/{event_id}`
+- `GET /dev/build_graph/{app_name}`
+- `GET /debug/trace/session/{session_id}`
 
 ## Sous-agents consommés (A2A)
 - `agent_hr_api` — RH, CVs, compétences

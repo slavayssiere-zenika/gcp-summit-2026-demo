@@ -50,15 +50,15 @@ echo -e "${BOLD}${RED}╚══════════════════�
 echo -e "${GREY}  Env  : ${ENV} | URL : ${RAG_EVAL_BASE_URL}${RESET}"
 echo -e "${GREY}  Rapport : ${REPORT_FILE}${RESET}\n"
 
-TEST_RUNNER="./test_env/bin/pytest"
-if [ ! -f "$TEST_RUNNER" ]; then
-  echo -e "${RED}❌ test_env/bin/pytest introuvable.${RESET}"
-  echo -e "${YELLOW}   python3 -m venv test_env && test_env/bin/pip install -r scripts/requirements.txt httpx pytest${RESET}"
+TEST_RUNNER="uv run pytest"
+if ! command -v uv >/dev/null 2>&1; then
+  echo -e "${RED}❌ uv introuvable.${RESET}"
+  echo -e "${YELLOW}   Installez uv : curl -LsSf https://astral.sh/uv/install.sh | sh${RESET}"
   exit 1
 fi
 
-./test_env/bin/python3 -c "import httpx" 2>/dev/null || \
-  { echo -e "${YELLOW}Installation httpx...${RESET}"; ./test_env/bin/pip install httpx --quiet; }
+uv run python3 -c "import httpx" 2>/dev/null || \
+  { echo -e "${YELLOW}Installation httpx...${RESET}"; uv add httpx --quiet; }
 
 # ── Token JWT ──────────────────────────────────────────────────────────────────
 RAG_EVAL_TOKEN=""

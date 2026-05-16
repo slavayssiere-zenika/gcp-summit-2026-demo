@@ -110,12 +110,11 @@ else
   RAG_EVAL_TOKEN=""
 fi
 
-# ── Vérification du virtualenv de test ────────────────────────────────────────
-TEST_RUNNER="./test_env/bin/pytest"
-if [ ! -f "$TEST_RUNNER" ]; then
-  echo -e "${RED}❌ test_env/bin/pytest introuvable.${RESET}"
-  echo -e "${YELLOW}   → Créez le venv : python3 -m venv test_env && test_env/bin/pip install -r scripts/requirements.txt${RESET}"
-  echo -e "${YELLOW}   → Puis installez httpx : test_env/bin/pip install httpx${RESET}"
+# ── Vérification de uv ────────────────────────────────────────
+TEST_RUNNER="uv run pytest"
+if ! command -v uv >/dev/null 2>&1; then
+  echo -e "${RED}❌ uv introuvable.${RESET}"
+  echo -e "${YELLOW}   Installez uv : curl -LsSf https://astral.sh/uv/install.sh | sh${RESET}"
   exit 1
 fi
 

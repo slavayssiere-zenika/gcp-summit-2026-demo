@@ -1,28 +1,30 @@
 import os
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from shared.database import get_db
 from fastapi.testclient import TestClient
 from main import app
 from shared.auth.jwt import security, verify_jwt
-from src.cvs.schemas import CVImportStep, CVResponse
 from src.cvs.models import CVProfile
 
 os.environ['SECRET_KEY'] = 'testsecret'
+
 
 async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test", "role": "admin"}
+
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_jwt] = override_verify_jwt
 app.dependency_overrides[security] = lambda: MagicMock(credentials="testtoken")
 
 client = TestClient(app)
+
 
 def test_recalculate_tree(mocker):
     mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=False))
@@ -31,8 +33,6 @@ def test_recalculate_tree(mocker):
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json()["message"] == "Calcul interactif de l'arbre lancé"
-
-
 
 
 def test_recalculate_tree_no_auth(mocker):
@@ -46,8 +46,6 @@ def test_recalculate_tree_no_auth(mocker):
     app.dependency_overrides[security] = original_sec
 
 
-
-
 def test_recalculate_tree_bad_token(mocker):
     original_jwt = app.dependency_overrides.get(verify_jwt)
     original_sec = app.dependency_overrides.get(security)
@@ -59,8 +57,6 @@ def test_recalculate_tree_bad_token(mocker):
     app.dependency_overrides[security] = original_sec
 
 
-
-
 def test_recalculate_tree_not_admin(mocker):
     app.dependency_overrides[verify_jwt] = lambda: {"role": "user"}
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
@@ -68,10 +64,8 @@ def test_recalculate_tree_not_admin(mocker):
     assert response.status_code in [401, 403]
 
 
-
-
 def test_recalculate_tree_no_client(mocker):
-    mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
+    mocker.patch("jwt.decode", return_value={"role": "admin"})
     mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=False))
     mocker.patch("src.cvs.task_state.TreeTaskState.initialize_task", new=AsyncMock())
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
@@ -79,16 +73,12 @@ def test_recalculate_tree_no_client(mocker):
     assert response.json()["status"] == "running"
 
 
-
-
 def test_recalculate_tree_already_running(mocker):
-    mocker.patch("jose.jwt.decode", return_value={"role": "admin"})
+    mocker.patch("jwt.decode", return_value={"role": "admin"})
     mocker.patch("src.cvs.task_state.TreeTaskState.is_task_running", new=AsyncMock(return_value=True))
     response = client.post("/recalculate_tree", headers={"Authorization": "Bearer valid"})
     assert response.status_code == 200
     assert response.json()["message"] == "Un calcul de l'arbre est déjà en cours"
-
-
 
 
 def test_reanalyze_returns_json_immediately(mocker):
@@ -170,8 +160,6 @@ def test_reanalyze_returns_json_immediately(mocker):
     assert delete_calls, "DELETE /user/10/clear doit être appelé pour nettoyer les compétences"
 
 
-
-
 def test_reanalyze_url_without_google_doc_id(mocker):
     """
     UC7 — /reanalyze : si la source_url n'est pas un Google Doc (pas de /d/{id}),
@@ -200,8 +188,6 @@ def test_reanalyze_url_without_google_doc_id(mocker):
     # Aucun PATCH /files/ ne doit être émis
     patch_calls = [c for c in ci.patch.call_args_list if "/files/" in str(c)]
     assert not patch_calls, f"Aucun PATCH /files attendu pour URL externe. Appels: {patch_calls}"
-
-
 
 
 def test_reanalyze_drive_api_unavailable_degraded(mocker):
@@ -242,8 +228,6 @@ def test_reanalyze_drive_api_unavailable_degraded(mocker):
     assert "message" in data
 
 
-
-
 def test_reanalyze_no_cvs_in_db(mocker):
     """
     UC9 — /reanalyze : aucun CV en base → retour immédiat avec message indiquant
@@ -270,8 +254,6 @@ def test_reanalyze_no_cvs_in_db(mocker):
     assert data["pending_reset"] == 0
     assert "re-découverte" in data["message"].lower() or "drive" in data["message"].lower(), \
         f"Le message doit mentionner la re-découverte Drive. Reçu: {data['message']}"
-
-
 
 
 def test_reanalyze_status_proxies_drive_api(mocker):
@@ -302,8 +284,6 @@ def test_reanalyze_status_proxies_drive_api(mocker):
     assert get_calls, "GET /status doit être appelé sur drive_api"
 
 
-
-
 def test_reanalyze_not_admin(mocker):
     """
     /reanalyze doit retourner 403 si le rôle n'est pas admin.
@@ -314,8 +294,6 @@ def test_reanalyze_not_admin(mocker):
         assert response.status_code == 403
     finally:
         app.dependency_overrides[verify_jwt] = override_verify_jwt
-
-
 
 
 def _make_extraction_scores_mocks(mocker, has_score=True):
@@ -330,15 +308,14 @@ def _make_extraction_scores_mocks(mocker, has_score=True):
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [mock_cv]
     mock_db.execute.return_value = mock_result
-    
+
     # Pour le func.count()
     mock_count_result = MagicMock()
     mock_count_result.scalar_one.return_value = 1
     mock_db.execute.side_effect = [mock_count_result, mock_result]
-    
+
     app.dependency_overrides[get_db] = lambda: mock_db
     return mock_db
-
 
 
 def test_extraction_scores_calculated(mocker):
@@ -366,8 +343,6 @@ def test_extraction_scores_calculated(mocker):
     assert data["items"][0]["extraction_reliability_score"] == 95.0
 
 
-
-
 def test_extraction_scores_uncalculated(mocker):
     """Vérifie le paramètre status=uncalculated."""
     _make_extraction_scores_mocks(mocker, has_score=False)
@@ -375,7 +350,7 @@ def test_extraction_scores_uncalculated(mocker):
     mock_httpx = mocker.patch("httpx.AsyncClient")
     ci = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = ci
-    
+
     users_mock = MagicMock(status_code=200)
     users_mock.json.return_value = {"full_name": "Alice Wonderland"}
     ci.get.return_value = users_mock
@@ -385,8 +360,6 @@ def test_extraction_scores_uncalculated(mocker):
     data = response.json()
     assert data["items"][0]["extraction_reliability_score"] is None
     assert data["items"][0]["full_name"] == "Alice Wonderland"
-
-
 
 
 def test_extraction_scores_users_api_failure(mocker):
@@ -419,7 +392,3 @@ def _make_reanalyze_mocks(mocker, source_url="https://docs.google.com/document/d
     mock_db.execute.return_value = mock_result
     app.dependency_overrides[get_db] = lambda: mock_db
     return mock_db
-
-
-
-

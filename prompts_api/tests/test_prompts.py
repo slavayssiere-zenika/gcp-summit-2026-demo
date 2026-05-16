@@ -159,12 +159,12 @@ def test_auth_verify_jwt_pass():
     import os
     from unittest.mock import MagicMock
 
-    import jose.jwt
+    import jwt
     from fastapi.security import HTTPAuthorizationCredentials
     from src.prompts.router import verify_jwt
 
     secret = os.getenv("SECRET_KEY", "zenika_super_secret_key_change_me_in_production")
-    token = jose.jwt.encode({"sub": "1", "role": "admin"}, secret, algorithm="HS256")
+    token = jwt.encode({"sub": "1", "role": "admin"}, secret, algorithm="HS256")
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
     # verify_jwt(request, credentials) — request needed for cookie fallback

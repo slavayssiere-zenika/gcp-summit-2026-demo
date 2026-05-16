@@ -23,6 +23,7 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 |---|---|---|
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8006` |
 | `MCP_SIDECAR_URL` | Infra | `http://drive_mcp:8000` |

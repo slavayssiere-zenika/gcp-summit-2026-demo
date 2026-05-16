@@ -9,28 +9,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1 : Build (compilation des wheels) ─────────────────────────────────
-FROM python:3.13-slim AS builder
-
-WORKDIR /app
-
-# asyncpg nécessite gcc pour la compilation de ses extensions C
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
-
-# ── Stage 2 : Runtime (image finale légère) ───────────────────────────────────
 FROM python:3.13-slim
-
 WORKDIR /app
 
-# Pas de libpq5 nécessaire : asyncpg utilise son propre driver pure-Python/C
-COPY --from=builder /app/wheels /wheels
-COPY requirements.txt .
-RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
-    && rm -rf /wheels
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
 
 COPY db_init.py .
 

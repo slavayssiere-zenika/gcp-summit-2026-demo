@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from main import SECRET_KEY
+
+import os
+SECRET_KEY = os.environ.get("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

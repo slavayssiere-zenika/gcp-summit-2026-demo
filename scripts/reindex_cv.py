@@ -17,7 +17,7 @@ Exemples:
     python3 scripts/reindex_cv.py --mode chunks --no-logs  # déclencher sans surveiller
 
 Pré-requis:
-    pip install httpx pyyaml
+    uv add httpx pyyaml
     GCLOUD_BIN=/path/to/gcloud python3 scripts/reindex_cv.py
 """
 

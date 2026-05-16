@@ -15,10 +15,9 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
-| `PYTHONUNBUFFERED` | Comportement | `1` |
 | `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
-| `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |

@@ -19,7 +19,8 @@ services:
 
   db_migrations:
     build:
-      context: ./db_migrations
+      context: .
+      dockerfile: db_migrations/Dockerfile
     container_name: db_migrations
     hostname: db_migrations
     environment:
@@ -35,7 +36,9 @@ services:
       - monitoring_net
 
   users_api:
-    build: ./users_api
+    build:
+      context: .
+      dockerfile: users_api/Dockerfile
     container_name: users_api
     hostname: users_api
     ports:
@@ -66,7 +69,9 @@ services:
           - users_api
 
   users_mcp:
-    build: ./users_api
+    build:
+      context: .
+      dockerfile: users_api/Dockerfile
     container_name: users_mcp
     hostname: users_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -81,7 +86,9 @@ services:
       - monitoring_net
 
   items_api:
-    build: ./items_api
+    build:
+      context: .
+      dockerfile: items_api/Dockerfile
     container_name: items_api
     hostname: items_api
     ports:
@@ -107,7 +114,9 @@ services:
           - items_api
 
   items_mcp:
-    build: ./items_api
+    build:
+      context: .
+      dockerfile: items_api/Dockerfile
     container_name: items_mcp
     hostname: items_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -123,7 +132,9 @@ services:
       - monitoring_net
 
   competencies_api:
-    build: ./competencies_api
+    build:
+      context: .
+      dockerfile: competencies_api/Dockerfile
     container_name: competencies_api
     hostname: competencies_api
     ports:
@@ -150,7 +161,9 @@ services:
           - competencies_api
 
   competencies_mcp:
-    build: ./competencies_api
+    build:
+      context: .
+      dockerfile: competencies_api/Dockerfile
     container_name: competencies_mcp
     hostname: competencies_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -165,7 +178,9 @@ services:
     networks:
       - monitoring_net
   cv_api:
-    build: ./cv_api
+    build:
+      context: .
+      dockerfile: cv_api/Dockerfile
     container_name: cv_api
     hostname: cv_api
     ports:
@@ -199,7 +214,9 @@ services:
           - cv_api
 
   cv_mcp:
-    build: ./cv_api
+    build:
+      context: .
+      dockerfile: cv_api/Dockerfile
     container_name: cv_mcp
     hostname: cv_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -214,7 +231,9 @@ services:
       - monitoring_net
 
   missions_api:
-    build: ./missions_api
+    build:
+      context: .
+      dockerfile: missions_api/Dockerfile
     container_name: missions_api
     hostname: missions_api
     ports:
@@ -242,7 +261,9 @@ services:
           - missions_api
 
   missions_mcp:
-    build: ./missions_api
+    build:
+      context: .
+      dockerfile: missions_api/Dockerfile
     container_name: missions_mcp
     hostname: missions_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -257,7 +278,9 @@ services:
       - monitoring_net
 
   drive_api:
-    build: ./drive_api
+    build:
+      context: .
+      dockerfile: drive_api/Dockerfile
     container_name: drive_api
     hostname: drive_api
     ports:
@@ -285,7 +308,9 @@ services:
           - drive_api
 
   drive_mcp:
-    build: ./drive_api
+    build:
+      context: .
+      dockerfile: drive_api/Dockerfile
     container_name: drive_mcp
     hostname: drive_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -301,7 +326,9 @@ services:
       - monitoring_net
 
   analytics_mcp:
-    build: ./analytics_mcp
+    build:
+      context: .
+      dockerfile: analytics_mcp/Dockerfile
     container_name: analytics_mcp
     hostname: analytics_mcp
     ports:
@@ -318,7 +345,9 @@ services:
       - monitoring_net
 
   monitoring_mcp:
-    build: ./monitoring_mcp
+    build:
+      context: .
+      dockerfile: monitoring_mcp/Dockerfile
     container_name: monitoring_mcp
     hostname: monitoring_mcp
     ports:
@@ -380,7 +409,9 @@ services:
 
   # MCP sidecar for prompts_api
   prompts_mcp:
-    build: ./prompts_api
+    build:
+      context: .
+      dockerfile: prompts_api/Dockerfile
     container_name: prompts_mcp
     hostname: prompts_mcp
     command: ["python3", "-m", "uvicorn", "mcp_app:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -524,13 +555,15 @@ services:
 
   # The New Vue.js SPA Frontend
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    # Image pré-buildée : le dist/ est extrait du bucket GCS par local_up.py (ensure_frontend)
+    image: nginxinc/nginx-unprivileged:alpine
     container_name: frontend
     hostname: frontend
     ports:
       - "8080:8080"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./frontend/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - agent_router_api
       - users_api
@@ -697,7 +730,9 @@ services:
       - monitoring_net
 
   prompts_api:
-    build: ./prompts_api
+    build:
+      context: .
+      dockerfile: prompts_api/Dockerfile
     container_name: prompts_api
     hostname: prompts_api
     ports:
@@ -722,6 +757,19 @@ services:
       monitoring_net:
         aliases:
           - prompts_api
+
+  locust:
+    image: locustio/locust
+    container_name: locust
+    hostname: locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./locust:/locust
+    profiles:
+      - perf
+    networks:
+      - monitoring_net
 
 volumes:
   postgres_data:

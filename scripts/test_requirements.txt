@@ -1,0 +1,10 @@
+pytest
+pytest-cov
+pytest-asyncio
+httpx
+aiosqlite
+schemathesis
+psycopg2-binary
+testcontainers[postgres,redis]
+greenlet
+pytest-mock

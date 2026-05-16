@@ -18,7 +18,7 @@ os.environ.setdefault("SECRET_KEY", "testsecret_must_be_32_characters_long_for_s
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
 
-history_routes.SECRET_KEY = "testsecret_must_be_32_characters_long_for_sha256"
+history_routes.SECRET_KEY = os.environ.get("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
 history_routes.ALGORITHM = "HS256"
 
 
@@ -27,8 +27,8 @@ client = TestClient(app)
 
 def get_auth_token(sub="user_test@zenika.com"):
     import jwt
-    from main import ALGORITHM, SECRET_KEY
-    return jwt.encode({"sub": sub, "role": "admin"}, SECRET_KEY, algorithm=ALGORITHM)
+    import history_routes
+    return jwt.encode({"sub": sub, "role": "admin"}, history_routes.SECRET_KEY, algorithm=history_routes.ALGORITHM)
 
 
 def _make_session(events):
