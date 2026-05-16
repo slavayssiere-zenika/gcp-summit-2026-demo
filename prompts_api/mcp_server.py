@@ -1,34 +1,26 @@
 import asyncio
-import contextvars
 import json
 import logging
 import os
 
 import httpx
 from mcp.server import InitializationOptions, Server
-from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-from opentelemetry import propagate, trace
+from mcp.server.stdio import stdio_server
+from shared.mcp_server_utils import setup_mcp_tracer_provider
+from shared.auth.context import auth_header_var
+from opentelemetry import propagate
 from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.trace.propagation.tracecontext import \
     TraceContextTextMapPropagator
 
-mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
-
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
+    pass
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    pass
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    pass
 
 propagate.set_global_textmap(TraceContextTextMapPropagator())
 
@@ -36,23 +28,7 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', 
 
 API_BASE_URL = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
 
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "prompts-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(
-        OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)
-    ))
-trace.set_tracer_provider(provider)
-tracer = trace.get_tracer(__name__)
+tracer = setup_mcp_tracer_provider("prompts-api-mcp")
 
 server = Server("prompts-api")
 
@@ -192,7 +168,7 @@ def get_trace_headers() -> dict:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     headers = get_trace_headers()
-    auth = mcp_auth_header_var.get(None)
+    auth = auth_header_var.get(None)
     if auth:
         headers["Authorization"] = auth
 

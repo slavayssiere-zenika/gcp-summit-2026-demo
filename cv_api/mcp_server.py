@@ -1,4 +1,5 @@
 # flake8: noqa: E501
+import asyncio
 from tools.taxonomy_tools import (
     handle_recalculate_competencies_tree, handle_get_recalculate_tree_status,
     handle_get_skills_coverage, handle_global_reanalyze_cvs,
@@ -23,12 +24,16 @@ import os
 import httpx
 from mcp.server import Server
 from mcp.types import TextContent, Tool
+from opentelemetry.propagate import inject
+from shared.mcp_server_utils import setup_mcp_tracer_provider
+from shared.auth.context import auth_header_var
 
 API_BASE_URL = os.getenv("CV_API_URL", "http://localhost:8004")
 
 tracer = setup_mcp_tracer_provider("cv-api-mcp")
 
 server = Server("cv-api")
+
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -498,10 +503,11 @@ async def list_tools() -> list[Tool]:
         ),
     ]
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
-        auth_header = mcp_auth_header_var.get()
+        auth_header = auth_header_var.get()
         headers = {}
         if auth_header:
             headers["Authorization"] = auth_header
@@ -565,6 +571,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Error executing {name}: {str(e)}"}))]
 
+
 async def main():
     """Main entry point for the MCP server when run as a script."""
     from mcp.server.stdio import stdio_server
@@ -578,6 +585,4 @@ async def main():
         await server.run(read_stream, write_stream, options)
 
 if __name__ == "__main__":
-    from shared.mcp_server_utils import get_mcp_trace_headers, setup_mcp_tracer_provider
-import asyncio
     asyncio.run(main())

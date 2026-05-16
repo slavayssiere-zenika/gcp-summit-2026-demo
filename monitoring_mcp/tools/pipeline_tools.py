@@ -12,7 +12,7 @@ import logging
 import os
 
 import httpx
-from context import mcp_auth_header_var
+from shared.auth.context import auth_header_var
 from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ async def get_ingestion_pipeline_status_internal() -> dict:
     """
     try:
         drive_api_url = os.getenv("DRIVE_API_URL", "http://api.internal.zenika/api/drive")
-        auth = mcp_auth_header_var.get(None)
+        auth = auth_header_var.get(None)
         headers = {}
         inject(headers)
         if auth:

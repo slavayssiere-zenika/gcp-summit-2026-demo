@@ -14,6 +14,11 @@ PUBLIC_WHITELIST = {
     "/redoc",
     "/spec",
     "/version",
+    # Routes d'authentification publiques (proxy vers users_api)
+    "/",
+    "/login",
+    "/logout",
+    "/me",
 }
 
 

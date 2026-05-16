@@ -3,7 +3,6 @@ import asyncio
 import json
 import logging
 import os
-import traceback
 
 import httpx
 import redis
@@ -11,12 +10,9 @@ import uvicorn
 from auth import verify_jwt
 from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
                      HTTPException, Request, Response)
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from google.cloud import bigquery
 from shared.fastapi_utils import instrument_app
-from shared.observability import setup_logging
 from mcp_server import (
     FINOPS_TABLE_REF,
     call_tool,
@@ -194,7 +190,7 @@ async def detect_finops_anomalies(http_request: Request, token_payload: dict = D
 
     suspended_users = []
 
-    async with httpx.AsyncClient() as http:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as http:
         for row in results:
             user_email = row.user_email
             total_tokens = row.total_tokens

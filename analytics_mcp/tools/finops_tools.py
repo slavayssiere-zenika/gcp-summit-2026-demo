@@ -5,11 +5,16 @@ from datetime import datetime, timezone
 from google.cloud import bigquery
 from mcp.types import TextContent
 
+
 async def handle_log_ai_consumption(arguments: dict, client, FINOPS_TABLE_REF) -> list[TextContent]:
+    user_email = arguments.get("user_email")
+    if not user_email:
+        return [TextContent(type="text", text="Error: user_email is required and cannot be null/empty.")]
+
     row_to_insert = [
         {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "user_email": arguments["user_email"],
+            "user_email": user_email,
             "action": arguments["action"],
             "model": arguments["model"],
             "input_tokens": arguments["input_tokens"],
@@ -20,22 +25,27 @@ async def handle_log_ai_consumption(arguments: dict, client, FINOPS_TABLE_REF) -
         }
     ]
     errors = client.insert_rows_json(FINOPS_TABLE_REF, row_to_insert)
-    if errors == []: return [TextContent(type="text", text="Consumption logged successfully.")]
-    else: return [TextContent(type="text", text=f"Errors occurred while logging consumption: {errors}")]
+    if errors == []:
+        return [TextContent(type="text", text="Consumption logged successfully.")]
+    else:
+        return [TextContent(type="text", text=f"Errors occurred while logging consumption: {errors}")]
+
 
 async def handle_get_finops_report(arguments: dict, client, PROJECT_ID, FINOPS_DATASET_ID, FINOPS_TABLE_REF) -> list[TextContent]:
     period = arguments.get("period", "daily")
     user_email = arguments.get("user_email")
     date_col = "DATE(timestamp)"
-    if period == "weekly": date_col = "DATE_TRUNC(DATE(timestamp), WEEK)"
-    elif period == "monthly": date_col = "DATE_TRUNC(DATE(timestamp), MONTH)"
+    if period == "weekly":
+        date_col = "DATE_TRUNC(DATE(timestamp), WEEK)"
+    elif period == "monthly":
+        date_col = "DATE_TRUNC(DATE(timestamp), MONTH)"
     where_clause = ""
     params = []
     if user_email:
         where_clause = "WHERE user_email = @user_email"
         params.append(bigquery.ScalarQueryParameter("user_email", "STRING", user_email))
     query = f"""
-        SELECT 
+        SELECT
             {date_col} as period,
             user_email,
             action,
@@ -53,8 +63,10 @@ async def handle_get_finops_report(arguments: dict, client, PROJECT_ID, FINOPS_D
     results = query_job.result()
     data = [dict(row) for row in results]
     for d in data:
-        if 'period' in d and hasattr(d['period'], 'isoformat'): d['period'] = d['period'].isoformat()
+        if 'period' in d and hasattr(d['period'], 'isoformat'):
+            d['period'] = d['period'].isoformat()
     return [TextContent(type="text", text=json.dumps(data))]
+
 
 async def handle_detect_usage_anomalies(arguments: dict, client, FINOPS_TABLE_REF) -> list[TextContent]:
     threshold = int(arguments.get("threshold_tokens_per_hour", 50000))
@@ -98,6 +110,7 @@ async def handle_detect_usage_anomalies(arguments: dict, client, FINOPS_TABLE_RE
         "anomaly_count": len(anomalies),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }))]
+
 
 async def handle_get_aiops_dashboard_data(get_aiops_dashboard_data_internal) -> list[TextContent]:
     data = await get_aiops_dashboard_data_internal()

@@ -545,7 +545,7 @@ Un 429 sur un endpoint "pool sink" est **toujours transitoire** (le pool se lib�
 > **Objectif** : identifier **tout** bloc de code similaire entre services, sans liste de patterns pré-établie.
 > Deux niveaux : clones textuels (pylint R0801) + similarité structurelle par paires de fichiers (difflib).
 
-**Niveau 1 — Clones textuels avec pylint R0801**
+**Niveau 1 — Clones textuels avec pylint duplicate-code (R0801)**
 
 // turbo
 ```bash
@@ -557,10 +557,10 @@ for svc in $SERVICES; do
     ! -path '*/build/*' ! -path '*/dist/*' ! -path '*/test_env/*' \
     ! -path '*/migrations/*' ! -path '*/changelogs/*' 2>/dev/null)"
 done
-echo "=== PYLINT R0801 — Clones textuels (min 4 lignes similaires) ==="
+echo "=== PYLINT duplicate-code — Clones textuels (min 4 lignes similaires) ==="
 echo "Fichiers : $(echo $PY_FILES | wc -w)"
 python3 -m pylint $PY_FILES \
-  --disable=all --enable=R0801 \
+  --disable=all --enable=duplicate-code \
   --min-similarity-lines=4 \
   --ignore-comments=yes --ignore-docstrings=yes --ignore-imports=yes \
   2>/dev/null | grep -E "^Similar|^=|^\s+[0-9]+:" | head -100 \
@@ -732,7 +732,26 @@ grep -rn 'monkeypatch\.setattr.*"auth\.' */tests/ --include="*.py" 2>/dev/null \
 > Toute duplication jugée légitime doit être annotée `# Duplication intentionnelle — <raison>` pour être tracée et exclue des futures analyses.
 
 
-### Étape 4 : Exécution des Tests
+### Étape 4 : Analyse de la couverture des tests aux limites (edge-cases)
+
+Pour chaque conteneur, vérifier que les "edge-cases" (cas limites, sécurité, résilience) sont bien testés. Un conteneur sans fichiers de tests spécifiques aux limites (`test_edge_cases.py`, `test_zero_trust.py`, `test_jwt*.py`, etc.) doit être signalé.
+
+// turbo
+```bash
+echo "=== Tests aux limites — coverage par service ==="
+for d in *_api *_mcp agent_*; do
+  if [ -d "$d" ] && [ -d "$d/tests" ]; then
+    count=$(ls "$d/tests/"test_*.py 2>/dev/null | wc -l | tr -d ' ')
+    edge=$(ls "$d/tests/"test_edge*.py "$d/tests/"test_zero_trust*.py "$d/tests/"test_jwt*.py 2>/dev/null | wc -l | tr -d ' ')
+    echo "  $d: $count fichiers tests [$edge edge/security]"
+    if [ "$edge" -eq 0 ]; then
+      echo "  ⚠️ $d: AUCUN test spécifique edge-case/sécurité détecté"
+    fi
+  fi
+done
+```
+
+### Étape 5 : Exécution des Tests
 Pour chaque service détecté, exécute la suite de tests pour vérifier la robustesse du code :
 
 // turbo
@@ -748,7 +767,7 @@ for d in *_api *_mcp agent_*; do
 done
 ```
 
-### Étape 5 : Génération du Rapport
+### Étape 6 : Génération du Rapport
 Une fois l'audit et les tests terminés, génère un artefact détaillé (ex: `rapport_audit_apis.md`).
 Le rapport doit catégoriser les services (APIs Data, Agents) et contenir une matrice d'audit (avec emojis ✅ ❌) montrant précisément quels points de la **CHECKLIST DE CONFORMITÉ** de `AGENTS.md` sont respectés ou violés, un résumé de l'état des tests, accompagnés du plan d'action recommandé pour corriger les non-conformités.
 

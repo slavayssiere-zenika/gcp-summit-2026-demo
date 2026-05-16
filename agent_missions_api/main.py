@@ -1,3 +1,4 @@
+from agent_commons.metadata import extract_metadata_from_session
 import json
 import logging
 import os
@@ -8,6 +9,7 @@ from contextlib import asynccontextmanager
 import httpx  # noqa: F401
 import uvicorn
 from agent import MISSIONS_TOOLS, run_agent_query
+from agent_commons.a2a_utils import make_agent_card
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response  # noqa: F401
@@ -27,8 +29,10 @@ from agent_commons.exception_handler import make_global_exception_handler
 from shared.auth.jwt import ALGORITHM  # noqa: F401
 from shared.auth.jwt import verify_jwt_request as verify_jwt
 from agent_commons.mcp_client import auth_header_var  # noqa: F401
-from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest)  # noqa: F401
+
+# Exposé pour les tests (import 'from main import SECRET_KEY')
+SECRET_KEY = os.getenv("SECRET_KEY", "")
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +160,6 @@ async def version():
 @app.get("/.well-known/agent.json", include_in_schema=False)
 async def agent_card():
     """A2A v2 — Service Discovery endpoint (google-adk 1.33+)."""
-    from agent_commons.a2a_utils import make_agent_card
     return make_agent_card(
         name="Missions Agent (Staffing Director)",
         description=(

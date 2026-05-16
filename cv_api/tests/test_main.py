@@ -31,7 +31,7 @@ client = TestClient(app)
 
 
 def test_health(mocker):
-    mocker.patch("database.check_db_connection", new=AsyncMock(return_value=True))
+    mocker.patch("shared.database.check_db_connection", new=AsyncMock(return_value=True))
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}

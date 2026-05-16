@@ -23,6 +23,7 @@ from src.cvs.routers.profile_router import \
 from src.cvs.routers.profile_router import router as profile_router
 from src.cvs.routers.search_router import router as search_router
 from src.cvs.routers.taxonomy_router import router as taxonomy_router
+from src.cvs.routers.taxonomy_router import public_router as taxonomy_public_router
 from src.cvs.routers.admin_router import router as admin_router
 
 # ── Router principal (protégé JWT) ───────────────────────────────────────────
@@ -43,3 +44,4 @@ router.include_router(admin_router)
 
 public_router.include_router(profile_public_router)
 public_router.include_router(data_quality_public_router)
+public_router.include_router(taxonomy_public_router)

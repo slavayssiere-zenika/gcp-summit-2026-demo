@@ -17,7 +17,7 @@ import pytest
 
 
 def make_token(sub: str = "user@zenika.com", role: str = "user", expired: bool = False, omit_sub: bool = False) -> str:
-    from jose import jwt
+    import jwt
     from router import SECRET_KEY
 
     from shared.auth.jwt import ALGORITHM
@@ -69,8 +69,8 @@ def test_expired_jwt_returns_401(client):
 
 def test_invalid_signature_returns_401(client):
     """Token signé avec une mauvaise clé → 401."""
-    from jose import jwt
-    bad_token = jwt.encode({"sub": "hacker@evil.com"}, "WRONG_SECRET_KEY", algorithm="HS256")
+    import jwt
+    bad_token = jwt.encode({"sub": "hacker@evil.com"}, "WRONG_SECRET_KEY_THAT_IS_LONG_ENOUGH_32B", algorithm="HS256")
     resp = client.post("/query", json={"query": "test"}, headers={"Authorization": f"Bearer {bad_token}"})
     assert resp.status_code == 401
 

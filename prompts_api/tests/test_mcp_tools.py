@@ -2,11 +2,11 @@ import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from mcp_server import call_tool, mcp_auth_header_var
+from mcp_server import call_tool
+from shared.auth.context import auth_header_var
 
 os.environ['SECRET_KEY'] = 'testsecret'
 os.environ['PROMPTS_API_URL'] = 'http://test-prompts'
-
 
 
 @pytest.mark.asyncio
@@ -14,31 +14,33 @@ async def test_get_prompt_tool(mocker):
     mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
+
     mock_resp = MagicMock(status_code=200)
     mock_resp.json.return_value = {"key": "agent_hr", "value": "Test prompt"}
     client_instance.get.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
-    
+    auth_header_var.set("Bearer token")
+
     result = await call_tool(name="get_prompt", arguments={"key": "agent_hr"})
     assert "agent_hr" in result[0].text
     assert "Test prompt" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_create_prompt_tool(mocker):
     mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
+
     mock_resp = MagicMock(status_code=200)
     mock_resp.json.return_value = {"success": True}
     client_instance.post.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
 
     result = await call_tool(name="create_prompt", arguments={"key": "test_agent", "value": "Test"})
     assert "success" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_tool_errors(mocker):

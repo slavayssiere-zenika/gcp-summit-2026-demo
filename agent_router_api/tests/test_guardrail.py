@@ -15,7 +15,7 @@ import pytest
 
 
 def get_auth_token(sub: str = "user_test@zenika.com", role: str = "user") -> str:
-    from jose import jwt
+    import jwt
     from router import SECRET_KEY
 
     from shared.auth.jwt import ALGORITHM

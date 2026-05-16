@@ -19,11 +19,35 @@ function detectLocale(): SupportedLocale {
   return 'fr'
 }
 
+// Pre-process messages to escape @ characters that are not followed
+// by a vue-i18n linked message syntax (@:key). This ensures compatibility
+// with vue-i18n v11's stricter message compiler without requiring
+// changes to all translation strings.
+function escapeAtSign(messages: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(messages)) {
+    if (typeof value === 'string') {
+      // Replace @ not followed by : (linked message syntax) with literal @
+      // We use a regex that identifies "@" not part of "@:key" patterns
+      result[key] = value.replace(/@(?!:)/g, "{'@'}")
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = escapeAtSign(value as Record<string, unknown>)
+    } else {
+      result[key] = value
+    }
+  }
+  return result
+}
+
 export const i18n = createI18n({
-  legacy: false,           // Composition API mode
+  legacy: false,           // Composition API mode (requis pour useI18n())
   locale: detectLocale(),
   fallbackLocale: 'fr',
-  messages: { fr, en },
+  messages: {
+    fr: escapeAtSign(fr) as typeof fr,
+    en: escapeAtSign(en) as typeof en,
+  },
+  warnHtmlMessage: false,
 })
 
 export function setLocale(locale: SupportedLocale) {

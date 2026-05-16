@@ -48,7 +48,7 @@ const isLast = computed(() => props.current >= props.total)
 
 <style scoped>
 .onboarding-bubble {
-  position: fixed;
+  position: relative;
   z-index: 10001;
   background: white;
   border-radius: 16px;

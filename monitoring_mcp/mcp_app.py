@@ -5,20 +5,15 @@ import os
 import traceback
 from datetime import datetime, timezone
 
-import httpx
 import redis
 import uvicorn
 from auth import verify_jwt
 from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
                      HTTPException, Request, Response)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from shared.fastapi_utils import instrument_app
-from shared.observability import setup_logging
 from mcp_server import call_tool, list_tools
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from shared.mcp_server_utils import setup_mcp_tracer_provider
 
@@ -26,7 +21,6 @@ from shared.mcp_server_utils import setup_mcp_tracer_provider
 # La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py.
 
 tracer = setup_mcp_tracer_provider("monitoring-mcp")
-
 
 
 app = FastAPI(title="Monitoring MCP Sidecar", root_path=os.getenv("ROOT_PATH", ""))
@@ -162,53 +156,8 @@ async def get_spec():
         return Response(content="# Monitoring MCP — Spécification introuvable", media_type="text/markdown")
 
 
-async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        inject(headers)
-    except Exception:
-        raise
-
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(
-                f"{prompts_api_url}/errors/report",
-                json={
-                    "service_name": service_name,
-                    "error_message": error_msg,
-                    "context": trace_context[:2000],
-                },
-                headers=headers,
-            )
-        except Exception as e:
-            # Best-effort : ne jamais relancer l'exception pour ne pas masquer l'erreur originale.
-            logging.error("Failed to report error to prompts_api: %s", e)
-
-
 # Exception handler global enregistré par instrument_app() via shared.exception_handler
 # (register_global_exception_handler(app, service_name="monitoring-mcp"))
-
-    # Guard : préserver les codes HTTP natifs FastAPI (401, 404, 422...)
-    if isinstance(exc, StarletteHTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    if isinstance(exc, RequestValidationError):
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
-
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-
-    if token:
-        await report_exception_to_prompts_api("monitoring_mcp", error_msg, trace_context, token)
-
-    logging.error(
-        "[monitoring_mcp] Unhandled exception on %s %s: %s\n%s",
-        request.method, request.url.path, error_msg, trace_context
-    )
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 if __name__ == "__main__":

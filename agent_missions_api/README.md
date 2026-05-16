@@ -9,7 +9,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 389 | ✅ |
+| `main.py` | 481 | ⚠️ |
 | `conftest.py` | 18 | ✅ |
 | `metrics.py` | 20 | ✅ |
 | `agent.py` | 243 | ✅ |
@@ -17,6 +17,8 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `PORT` | Infra | `8080` |
@@ -44,6 +46,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 
 ## Endpoints clés
 - `GET /version`
+- `GET /.well-known/agent.json`
 - `POST /query`
 - `POST /a2a/query`
 - `GET /history`

@@ -1,20 +1,20 @@
 """Tests pour shared/auth/context.py et shared/auth/jwt.py."""
 import os
 
-import pytest
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
-from jose import jwt
+import jwt
 
 # SECRET_KEY doit être définie avant l'import de jwt.py
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
 
 from auth.context import auth_header_var  # noqa: E402
 from auth.jwt import (  # noqa: E402
-    ALGORITHM, SECRET_KEY, security, verify_jwt, verify_jwt_bearer, verify_jwt_request,
+    ALGORITHM, SECRET_KEY, verify_jwt, verify_jwt_bearer, verify_jwt_request,
 )
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
+
 
 def make_token(payload: dict | None = None) -> str:
     data = payload or {"sub": "user@example.com", "role": "user"}

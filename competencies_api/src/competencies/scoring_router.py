@@ -13,9 +13,8 @@ import asyncio
 import logging
 import os
 
-import google.auth.transport.requests
-import google.oauth2.id_token
 import httpx
+from shared.auth.jwt import verify_jwt, VerifyJwtOrOidc
 from shared.database import get_db
 from fastapi import (
     APIRouter,
@@ -30,7 +29,6 @@ from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from shared.auth.jwt import verify_jwt
 from src.competencies.ai_scoring import _bulk_scoring_all_bg
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.models import CompetencyEvaluation, user_competency
@@ -77,57 +75,10 @@ async def get_scoring_debug_config(_: dict = Depends(verify_jwt)):
     }
 
 
-async def verify_scheduler_oidc(request: Request) -> None:
-    """Valide le token OIDC Google émis par le Cloud Scheduler Service Account.
-
-    Stratégie de validation (par ordre de priorité) :
-    1. Si SCHEDULER_SA_EMAIL configuré → valide le claim 'email' du token (sans audience check).
-       Privilégié car l'URL du service CR ne peut pas être auto-référencée en Terraform.
-    2. Si SCHEDULER_AUDIENCE configuré → valide l'audience exacte (ancienne approche).
-    3. Si aucun configuré → token vérifié cryptographiquement, claim email loggué (warn).
-
-    Dans tous les cas le token est vérifié par Google (signature RS256 + expiration).
-    """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401, detail="[scheduler] Token OIDC Bearer requis."
-        )
-    token = auth_header[7:]
-    try:
-        google_request = google.auth.transport.requests.Request()
-        # Validation cryptographique — audience=None = skip audience check
-        audience = SCHEDULER_AUDIENCE if SCHEDULER_AUDIENCE else None
-        claims = google.oauth2.id_token.verify_oauth2_token(
-            token, google_request, audience
-        )
-        caller_email = claims.get("email", "")
-        logger.debug("[scheduler] OIDC token valide — email=%s", caller_email)
-
-        # Vérification de l'identité du SA (plus fiable que l'audience pour CR)
-        if SCHEDULER_SA_EMAIL and caller_email != SCHEDULER_SA_EMAIL:
-            logger.warning(
-                "[scheduler] Email SA inattendu: got=%s expected=%s",
-                caller_email,
-                SCHEDULER_SA_EMAIL,
-            )
-            raise HTTPException(
-                status_code=401,
-                detail=f"[scheduler] SA non autorisé: {caller_email}",
-            )
-        if not SCHEDULER_SA_EMAIL and not SCHEDULER_AUDIENCE:
-            logger.warning(
-                "[scheduler] SCHEDULER_SA_EMAIL et SCHEDULER_AUDIENCE absents — "
-                "appel accepté sans vérification d'identité (caller=%s)",
-                caller_email,
-            )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning("[scheduler] Échec validation OIDC: %s", exc)
-        raise HTTPException(
-            status_code=401, detail=f"[scheduler] Token OIDC invalide ou expiré: {exc}"
-        )
+verify_jwt_or_oidc = VerifyJwtOrOidc(
+    allowed_sa_emails=[os.getenv("SCHEDULER_SA_EMAIL")] if os.getenv("SCHEDULER_SA_EMAIL") else None,
+    audience_env_var="SCHEDULER_AUDIENCE"
+)
 
 
 class BulkScoringStatus(BaseModel):
@@ -376,11 +327,11 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
 
 
 @scheduler_router.post("/bulk-scoring-all/resume")
-@router.post("/bulk-scoring-all/resume/manual")
+@scheduler_router.post("/bulk-scoring-all/resume/manual")
 async def resume_bulk_scoring(
     background_tasks: BackgroundTasks,
     request: Request,
-    _oidc: None = Depends(verify_scheduler_oidc),
+    _auth: dict = Depends(verify_jwt_or_oidc),
 ):
     """
     Endpoint de résilient keepalive — deux points d'entrée :

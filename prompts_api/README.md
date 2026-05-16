@@ -9,14 +9,16 @@ Gestion et versioning des system prompts des agents IA. Centralise les instructi
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 185 | ✅ |
-| `mcp_server.py` | 279 | ✅ |
+| `main.py` | 154 | ✅ |
+| `mcp_server.py` | 255 | ✅ |
 | `conftest.py` | 32 | ✅ |
 | `src/prompts/router.py` | 300 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `NPM_CONFIG_PREFIX` | Comportement | `/opt/promptfoo-env` |
 | `PATH` | Comportement | `"/opt/promptfoo-env/bin:${PATH}"` |
 | `PYTHONPATH` | Comportement | `/app` |

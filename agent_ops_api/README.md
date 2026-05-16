@@ -9,7 +9,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 274 | ✅ |
+| `main.py` | 360 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `agent.py` | 261 | ✅ |
@@ -17,6 +17,8 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
@@ -46,6 +48,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 **DB 11** — namespace `session:ops:*`
 
 ## Endpoints clés
+- `GET /.well-known/agent.json`
 - `GET /`
 - `GET /spec`
 - `POST /query`

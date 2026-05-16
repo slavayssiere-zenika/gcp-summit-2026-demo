@@ -7,7 +7,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from google.auth import jwt as google_jwt
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger(__name__)
 
@@ -101,14 +102,14 @@ def _decode_and_validate(token: str) -> dict:
                 raise
             except Exception as e:
                 logger.debug(f"Échec de la validation Google OIDC : {e}")
-                raise JWTError("Invalid OIDC Token")
+                raise InvalidTokenError("Invalid OIDC Token")
 
         # Validation JWT applicative classique (HS256)
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300})
         if not payload.get("sub"):
             logger.warning("[JWT] Token HS256 valide mais claim 'sub' manquant — accès refusé.")
             raise HTTPException(status_code=401, detail="Claim 'sub' manquant")
         return payload
-    except JWTError as e:
-        logger.debug(f"[JWT] Erreur de décodage JWTError: {e}")
-        raise
+    except InvalidTokenError as e:
+        logger.debug(f"[JWT] Erreur de décodage InvalidTokenError: {e}")
+        raise HTTPException(status_code=401, detail=f"Token invalide: {e}")

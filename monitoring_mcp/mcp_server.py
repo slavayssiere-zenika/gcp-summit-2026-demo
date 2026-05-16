@@ -15,7 +15,7 @@ Architecture :
 import json
 import logging
 
-from context import mcp_auth_header_var  # noqa: F401
+from shared.auth.context import auth_header_var  # noqa: F401
 from mcp.server import Server
 from mcp.types import TextContent, Tool
 from tools.data_tools import (execute_read_only_query_internal,

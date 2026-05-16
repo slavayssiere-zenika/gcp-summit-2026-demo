@@ -14,6 +14,9 @@ PUBLIC_WHITELIST = {
     "/redoc",
     "/spec",
     "/version",
+    "/pubsub",
+    "/bulk-scoring-all/resume",
+    "/bulk-scoring-all/resume/manual",
 }
 
 

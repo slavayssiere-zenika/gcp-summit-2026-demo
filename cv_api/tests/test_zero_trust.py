@@ -14,6 +14,8 @@ PUBLIC_WHITELIST = {
     "/pubsub/scoring",
     "/ready",
     "/redoc",
+    "/recalculate_tree/batch/check",
+    "/recalculate_tree/batch/start",
     "/spec",
     "/version",
 }

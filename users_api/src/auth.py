@@ -4,7 +4,8 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 import bcrypt
 
 # Configuration for JWT
@@ -72,17 +73,22 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
                 credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300}
             )
             if payload.get("type") == "refresh":
-                raise JWTError("Refresh token cannot be used as access token")
+                raise InvalidTokenError("Refresh token cannot be used as access token")
             # Vérification blacklist Redis (compte suspendu)
             username = payload.get("sub")
-            if username and _is_user_blacklisted(username):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Compte suspendu — accès révoqué",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+            try:
+                if username and _is_user_blacklisted(username):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Compte suspendu — accès révoqué",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                pass  # Fail-open : Redis indisponible n'interrompt pas l'auth
             return payload
-        except JWTError:
+        except InvalidTokenError:
             # If header token is invalid, we don't fail yet, we'll try the cookie
             pass
 
@@ -107,17 +113,22 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
             token, SECRET_KEY, algorithms=[ALGORITHM], options={"leeway": 300}
         )
         if payload.get("type") == "refresh":
-            raise JWTError("Refresh token cannot be used as access token")
+            raise InvalidTokenError("Refresh token cannot be used as access token")
         # Vérification blacklist Redis (compte suspendu)
         username = payload.get("sub")
-        if username and _is_user_blacklisted(username):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Compte suspendu — accès révoqué",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        try:
+            if username and _is_user_blacklisted(username):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Compte suspendu — accès révoqué",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # Fail-open : Redis indisponible n'interrompt pas l'auth
         return payload
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalide ou expiré",

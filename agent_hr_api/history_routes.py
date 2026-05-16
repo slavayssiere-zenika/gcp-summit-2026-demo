@@ -13,15 +13,14 @@ import logging
 from agent import get_session_service
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import jwt
+import jwt
 
-from shared.auth.jwt import ALGORITHM
 from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.metadata import extract_metadata_from_session
 
 logger = logging.getLogger(__name__)
 
-security = HTTPBearer()
+security = HTTPBearer()  # utilisé dans /history et /history DELETE via Depends(security)
 
 
 # APIRouter protégé — identique au pattern protected_router de main.py
@@ -142,7 +141,11 @@ def _parse_session_history(session) -> list[dict]:
 @history_router.get("/history")
 async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        payload = jwt.get_unverified_claims(auth.credentials)
+        payload = jwt.decode(
+            auth.credentials,
+            options={"verify_signature": False},
+            algorithms=["HS256"],
+        )
         session_id = payload.get("sub")
         if not session_id:
             raise ValueError("No sub claim")
@@ -169,7 +172,11 @@ async def get_history(auth: HTTPAuthorizationCredentials = Depends(security)):
 @history_router.delete("/history")
 async def delete_history(auth: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        payload = jwt.get_unverified_claims(auth.credentials)
+        payload = jwt.decode(
+            auth.credentials,
+            options={"verify_signature": False},
+            algorithms=["HS256"],
+        )
         session_id = payload.get("sub")
         if not session_id:
             raise ValueError("No sub claim")

@@ -1,37 +1,23 @@
 import { defineStore } from 'pinia'
-import type { Message } from '@/types'
+import type { ChatSession, Message } from '@/types'
 import { agentApi } from '@/services/agentApi'
 import { treeify } from '@/utils/treeify'
 import { useUxStore } from './uxStore'
 
-/**
- * Unwrap MCP envelope format: { result: [{ type: "text", text: "<JSON string>" }] }
- * Sub-agents return data wrapped in this MCP protocol structure.
- * Falls back gracefully to generic array/object handling.
- *
- * Guards against non-JSON text values (e.g. "Consumption logged successfully.").
- */
+// ── Helpers (repris de l'implémentation précédente) ──────────────────────────
+
 function looksLikeJson(s: string): boolean {
   const trimmed = s.trimStart()
   return trimmed.startsWith('{') || trimmed.startsWith('[')
 }
 
-/**
- * Détecte un objet dont TOUTES les clés sont des entiers (ex: mapping userId→ville).
- * Ces objets sont des données de contexte interne qui ne doivent pas être affichées
- * sous forme de cards dans l'interface (ex: résultat de get_tags_map).
- */
 function isNumericKeyMap(obj: any): boolean {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false
   const keys = Object.keys(obj)
-  if (keys.length < 5) return false // trop petit pour être un vrai mapping de masse
+  if (keys.length < 5) return false
   return keys.every(k => /^\d+$/.test(k))
 }
 
-/**
- * Détecte si un tableau de données correspond à des logs Cloud Run structurés.
- * Un log Cloud Run a: timestamp + cloud_run_service + (message | severity)
- */
 function isCloudRunLogs(data: any[]): boolean {
   if (!Array.isArray(data) || data.length === 0) return false
   const sample = data.slice(0, 3)
@@ -43,17 +29,11 @@ function isCloudRunLogs(data: any[]): boolean {
   )
 }
 
-/**
- * Détecte si le texte de réponse markdown contient un prompt de débogage suggéré.
- * L'agent ops génère typiquement des sections avec blockquotes `>` et des titres ###.
- */
 export function extractDebugPrompt(markdown: string): string | null {
-  // Cherche une section de prompt entre *** ou --- délimiteurs
   const sectionMatch = markdown.match(/\*{3,}\s*\n([\s\S]*?)(?:\*{3,}|$)/)
   if (sectionMatch && sectionMatch[1].length > 100) {
     return sectionMatch[1].trim()
   }
-  // Cherche une section ### Prompt
   const promptSection = markdown.match(/###\s+Prompt[^\n]*\n([\s\S]*?)(?=\n###|\n\*{3,}|$)/i)
   if (promptSection && promptSection[1].length > 80) {
     return promptSection[1].trim()
@@ -61,37 +41,25 @@ export function extractDebugPrompt(markdown: string): string | null {
   return null
 }
 
-/**
- * Extrait les résultats de recherche sémantique de consultants depuis les steps de l'agent.
- * Cherche le résultat du dernier appel à search_candidates_multi_criteria ou search_best_candidates.
- * Retourne null si aucun résultat sémantique trouvé.
- */
 function extractConsultantCards(steps: any[]): any[] | null {
   if (!steps || steps.length === 0) return null
   const semanticTools = [
     'search_candidates_multi_criteria',
     'search_best_candidates',
-    // Ajout : outils de liste directe d'utilisateurs filtrés par compétence
     'get_users_bulk',
     'list_users',
   ]
-  // Parcourir en sens inverse pour prendre le dernier résultat
   for (let i = steps.length - 1; i >= 0; i--) {
     const step = steps[i]
     if (step.type === 'result' && i > 0) {
       const callStep = steps[i - 1]
       if (callStep?.type === 'call' && semanticTools.includes(callStep.tool)) {
-        // get_users_bulk / list_users: data est dans step.data.content[0].text (MCP content envelope)
-        const raw =
-          step.data?.result?.[0]?.text ||
-          step.data?.content?.[0]?.text
+        const raw = step.data?.result?.[0]?.text || step.data?.content?.[0]?.text
         if (raw && looksLikeJson(raw)) {
           try {
             const parsed = JSON.parse(raw)
             const arr = Array.isArray(parsed) ? parsed : parsed.items || []
-            // Valider que c'est bien des consultants (id + full_name)
             if (arr.length > 0 && (arr[0].user_id || arr[0].id) && arr[0].full_name) {
-              // Normaliser user_id → id pour que ConsultantCard fonctionne avec les deux formats
               return arr.map((u: any) => ({ ...u, user_id: u.user_id ?? u.id }))
             }
           } catch (_) { /* ignore */ }
@@ -104,9 +72,6 @@ function extractConsultantCards(steps: any[]): any[] | null {
 
 function unwrapToolData(toolData: any): any[] {
   if (!toolData) return []
-
-  // Normalise: sub-agents return { content: [...] } while root agent uses { result: [...] }
-  // Both are MCP envelopes — treat them identically.
   const envelope = toolData.result || toolData.content
   if (typeof toolData === 'object' && Array.isArray(envelope)) {
     const textItem = envelope.find((r: any) => r.type === 'text' && r.text)
@@ -115,70 +80,241 @@ function unwrapToolData(toolData: any): any[] {
       if (looksLikeJson(raw)) {
         try {
           const parsed = JSON.parse(raw)
-          // Paginated MCP responses: { items: [...], total, skip, limit }
           if (!Array.isArray(parsed) && parsed.items && Array.isArray(parsed.items)) {
             return parsed.items
           }
-          // Mapping userId→tag (ex: get_tags_map) — données internes, pas d'affichage visuel
           if (!Array.isArray(parsed) && isNumericKeyMap(parsed)) {
             return []
           }
           return Array.isArray(parsed) ? parsed : [parsed]
         } catch (e) {
-          // Malformed JSON — surface raw text as a readable string item
-          console.warn('[unwrapToolData] JSON.parse failed on seemingly JSON-like string:', e)
+          console.warn('[unwrapToolData] JSON.parse failed:', e)
           return [{ _rawText: raw }]
         }
       }
-      // Plain-text result (e.g. "Consumption logged successfully.") — keep as-is
       return [{ _rawText: raw }]
     }
-    // No text item found — return wrapping object itself
     return [toolData]
   }
-
-  // Standard formats
   if (typeof toolData === 'object' && toolData.items) return toolData.items
   if (Array.isArray(toolData)) return toolData
   return [toolData]
 }
 
+/** Message de bienvenue par défaut de l'assistant. */
+function welcomeMessage(): Message {
+  return {
+    role: 'assistant',
+    content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements.",
+    activeTab: 'preview',
+  }
+}
+
+/** Crée un objet ChatSession runtime vide avec un message de bienvenue. */
+function makeRuntimeSession(meta: ChatSession): ChatSession {
+  return {
+    ...meta,
+    messages: [welcomeMessage()],
+    isTyping: false,
+    isLoadingHistory: false,
+    historyLoaded: false,
+  }
+}
+
+/** Applique la post-processing des messages d'historique (réhydratation). */
+function rehydrateHistoryMessage(msg: Message): Message {
+  if (msg.role !== 'assistant') return msg
+
+  const hasMcpEnvelope = msg.data && typeof msg.data === 'object' && Array.isArray(msg.data.result)
+  const missingParsedData = !msg.parsedData || msg.parsedData.length === 0
+  const parsedDataIsStillMcpEnvelope =
+    !missingParsedData &&
+    Array.isArray(msg.parsedData) &&
+    msg.parsedData.length > 0 &&
+    typeof msg.parsedData[0] === 'object' &&
+    Array.isArray((msg.parsedData[0] as any)?.result)
+
+  if (msg.data && (missingParsedData || parsedDataIsStillMcpEnvelope) && hasMcpEnvelope) {
+    const unwrapped = unwrapToolData(msg.data)
+    if (unwrapped.length > 0) {
+      msg.parsedData = unwrapped
+      if (!msg.displayType || msg.displayType === 'text_only') msg.displayType = 'cards'
+    }
+  }
+
+  if (msg.parsedData && Array.isArray(msg.parsedData) && isCloudRunLogs(msg.parsedData)) {
+    msg.displayType = 'cloudrun_logs'
+  }
+
+  if (!msg.debugPrompt) {
+    const markdownSource = msg.rawResponse || msg.content || ''
+    const debugPrompt = extractDebugPrompt(markdownSource)
+    if (debugPrompt) {
+      msg.debugPrompt = debugPrompt
+      if (!msg.rawResponse) {
+        msg.content = msg.content.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
+      }
+    }
+  }
+
+  if (!msg.consultantCards && msg.steps && msg.steps.length > 0) {
+    const cards = extractConsultantCards(msg.steps)
+    if (cards) msg.consultantCards = cards
+  }
+
+  if (
+    msg.data &&
+    msg.data.dataType === 'competency' &&
+    Array.isArray(msg.parsedData) &&
+    msg.displayType === 'tree'
+  ) {
+    msg.parsedData = treeify(msg.parsedData)
+  }
+
+  if (!msg.activeTab) msg.activeTab = 'preview'
+  return msg
+}
+
+
+// ── Store ────────────────────────────────────────────────────────────────────
+
 export const useChatStore = defineStore('chat', {
   state: () => ({
-    messages: [
-      {
-        role: 'assistant',
-        content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements.",
-        activeTab: 'preview' as const
-      }
-    ] as Message[],
-    isTyping: false,
-    isLoadingHistory: false
+    sessions: [] as ChatSession[],
+    activeSessionId: null as string | null,
+    isLoadingSessions: false,
   }),
+
+  getters: {
+    activeSession(state): ChatSession | null {
+      if (!state.activeSessionId) return null
+      return state.sessions.find(s => s.id === state.activeSessionId) ?? null
+    },
+    messages(): Message[] {
+      return this.activeSession?.messages ?? [welcomeMessage()]
+    },
+    isTyping(): boolean {
+      return this.activeSession?.isTyping ?? false
+    },
+    isLoadingHistory(): boolean {
+      return this.activeSession?.isLoadingHistory ?? false
+    },
+  },
+
   actions: {
+    // ── Session lifecycle ───────────────────────────────────────────────────
+
+    async loadSessions() {
+      this.isLoadingSessions = true
+      try {
+        const { sessions } = await agentApi.listSessions()
+        this.sessions = sessions.map(s => makeRuntimeSession(s))
+        // Active la première session par défaut
+        if (this.sessions.length > 0 && !this.activeSessionId) {
+          this.activeSessionId = this.sessions[0].id
+        }
+        // Charger l'historique de la session active immédiatement
+        if (this.activeSessionId) {
+          await this.fetchHistory(this.activeSessionId)
+        }
+      } catch (e) {
+        console.warn('[chatStore] Could not load sessions', e)
+      } finally {
+        this.isLoadingSessions = false
+      }
+    },
+
+    async createSession(name?: string) {
+      const uxStore = useUxStore()
+      if (this.sessions.length >= 10) {
+        uxStore.showToast('Limite de 10 sessions atteinte. Supprimez une session.', 'error')
+        return
+      }
+      try {
+        const newMeta = await agentApi.createSession(name)
+        this.sessions.push(makeRuntimeSession(newMeta))
+        this.activeSessionId = newMeta.id
+      } catch (e: any) {
+        uxStore.showToast(
+          e?.response?.data?.detail || 'Impossible de créer la session',
+          'error'
+        )
+      }
+    },
+
+    async switchSession(id: string) {
+      this.activeSessionId = id
+      const session = this.sessions.find(s => s.id === id)
+      if (session && !session.historyLoaded) {
+        await this.fetchHistory(id)
+      }
+    },
+
+    async renameSession(id: string, name: string) {
+      const uxStore = useUxStore()
+      try {
+        await agentApi.renameSession(id, name)
+        const session = this.sessions.find(s => s.id === id)
+        if (session) session.name = name
+      } catch (e: any) {
+        uxStore.showToast(
+          e?.response?.data?.detail || 'Impossible de renommer la session',
+          'error'
+        )
+      }
+    },
+
+    async deleteSession(id: string) {
+      const uxStore = useUxStore()
+      if (this.sessions.length <= 1) {
+        uxStore.showToast('Impossible de supprimer la dernière session.', 'error')
+        return
+      }
+      try {
+        await agentApi.deleteSession(id)
+        const idx = this.sessions.findIndex(s => s.id === id)
+        this.sessions.splice(idx, 1)
+        // Switcher vers une autre session si on vient de supprimer l'active
+        if (this.activeSessionId === id) {
+          const next = this.sessions[idx > 0 ? idx - 1 : 0]
+          if (next) await this.switchSession(next.id)
+        }
+        uxStore.showToast('Session supprimée', 'success')
+      } catch (e: any) {
+        uxStore.showToast(
+          e?.response?.data?.detail || 'Impossible de supprimer la session',
+          'error'
+        )
+      }
+    },
+
+    // ── Messages ────────────────────────────────────────────────────────────
+
     addMessage(msg: Message) {
+      const session = this.sessions.find(s => s.id === this.activeSessionId)
+      if (!session) return
       if (!msg.activeTab) msg.activeTab = 'preview'
-      this.messages.push(msg)
+      if (!session.messages) session.messages = []
+      session.messages.push(msg)
     },
 
     async sendQuery(queryText: string) {
       if (!queryText.trim()) return
-
       const uxStore = useUxStore()
+      const session = this.sessions.find(s => s.id === this.activeSessionId)
+      if (!session) return
+
       this.addMessage({ role: 'user', content: queryText })
-      this.isTyping = true
+      session.isTyping = true
 
       try {
-        const responseData = await agentApi.query(queryText)
+        const responseData = await agentApi.query(queryText, this.activeSessionId)
         let replyText = responseData.response || ''
         let displayType = 'text_only'
         let parsedData = null
         const toolData = responseData.data || null
         const steps = responseData.steps || []
 
-        // ── Chemin prioritaire : display_type émis par render_ui_widgets du sous-agent ──
-        // Le backend propage render_ui_widgets ADK → display_type dans la réponse /query.
-        // Ce signal est autoritaire : pas besoin d'inférence heuristique frontend.
         if (responseData.display_type) {
           displayType = responseData.display_type
         }
@@ -191,7 +327,6 @@ export const useChatStore = defineStore('chat', {
               replyText = jsonObj.reply
               displayType = jsonObj.display_type
               if (displayType === 'profile') displayType = 'cards'
-
               if (jsonObj.display_type === 'tree') {
                 parsedData = jsonObj.data
               } else if (jsonObj.data) {
@@ -208,7 +343,6 @@ export const useChatStore = defineStore('chat', {
           if (displayType === 'text_only') displayType = 'cards'
         }
 
-        // Détection logs Cloud Run — prioritaire sur les cards génériques
         if (parsedData && isCloudRunLogs(parsedData)) {
           displayType = 'cloudrun_logs'
         }
@@ -218,17 +352,14 @@ export const useChatStore = defineStore('chat', {
           displayType = 'tree'
         }
 
-        // Détection prompt de débogage dans la réponse markdown
         const debugPrompt = extractDebugPrompt(replyText)
         if (debugPrompt) {
           replyText = replyText.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
         }
 
-        // Extraction des cards consultants depuis les steps sémantiques (dual display)
         const consultantCards = extractConsultantCards(steps)
 
         if (responseData.response) {
-          // ADR12-4 — Alerte si le sous-agent répond en mode dégradé (erreur réseau A2A)
           if (responseData.degraded) {
             uxStore.showToast(
               '⚠️ Réponse partielle — un sous-agent est temporairement indisponible',
@@ -249,129 +380,87 @@ export const useChatStore = defineStore('chat', {
             pagination: { currentPage: 1, itemsPerPage: 10 },
             usage: responseData.usage,
             semanticCacheHit: responseData.semantic_cache_hit === true,
-            debugPrompt: debugPrompt || undefined
+            debugPrompt: debugPrompt || undefined,
           })
         } else {
           this.addMessage({
             role: 'assistant',
             content: JSON.stringify(responseData, null, 2),
-            activeTab: 'expert'
+            activeTab: 'expert',
           })
         }
       } catch (error: any) {
         uxStore.showToast(`Erreur: ${error.response?.data?.detail || error.message}`, 'error')
       } finally {
-        this.isTyping = false
+        session.isTyping = false
       }
     },
 
     async applyTree(treeData: any) {
       const uxStore = useUxStore()
-      this.isTyping = true
+      const session = this.sessions.find(s => s.id === this.activeSessionId)
+      if (!session) return
+      session.isTyping = true
       try {
-        const responseData = await agentApi.query(`Applique cette taxonomie de compétences : ${JSON.stringify(treeData)}`)
+        const responseData = await agentApi.query(
+          `Applique cette taxonomie de compétences : ${JSON.stringify(treeData)}`,
+          this.activeSessionId
+        )
         this.addMessage({
           role: 'assistant',
           content: responseData.response || '',
           displayType: 'text_only',
-          activeTab: 'preview'
+          activeTab: 'preview',
         })
         uxStore.showToast('Taxonomie appliquée avec succès', 'success')
       } catch (error: any) {
-        uxStore.showToast(`Erreur lors de l'application: ${error.response?.data?.detail || error.message}`, 'error')
+        uxStore.showToast(
+          `Erreur lors de l'application: ${error.response?.data?.detail || error.message}`,
+          'error'
+        )
       } finally {
-        this.isTyping = false
+        session.isTyping = false
       }
     },
 
-    async fetchHistory() {
+    async fetchHistory(sessionId?: string) {
+      const id = sessionId ?? this.activeSessionId
+      if (!id) return
+      const session = this.sessions.find(s => s.id === id)
+      if (!session) return
+
       const uxStore = useUxStore()
-      this.isLoadingHistory = true
+      session.isLoadingHistory = true
       try {
-        const response = await agentApi.history()
+        const response = await agentApi.history(id)
         if (response.history && response.history.length > 0) {
-          this.messages = response.history.map((msg: Message) => {
-            if (msg.role !== 'assistant') return msg
-
-            const hasMcpEnvelope = msg.data && typeof msg.data === 'object' && Array.isArray(msg.data.result)
-            const missingParsedData = !msg.parsedData || msg.parsedData.length === 0
-
-            // Detect when parsedData was persisted in Redis still wrapped in MCP envelope format:
-            // parsedData = [{ result: [{ type: "text", text: "<JSON string>" }] }]
-            // This happens when the Redis session stores msg.parsedData before client-side unwrapping.
-            const parsedDataIsStillMcpEnvelope = !missingParsedData &&
-              Array.isArray(msg.parsedData) &&
-              msg.parsedData.length > 0 &&
-              typeof msg.parsedData[0] === 'object' &&
-              Array.isArray((msg.parsedData[0] as any)?.result)
-
-            // Re-unwrap if: parsedData is absent OR still in raw MCP envelope format
-            if (msg.data && (missingParsedData || parsedDataIsStillMcpEnvelope) && hasMcpEnvelope) {
-              const unwrapped = unwrapToolData(msg.data)
-              if (unwrapped.length > 0) {
-                msg.parsedData = unwrapped
-                if (!msg.displayType || msg.displayType === 'text_only') msg.displayType = 'cards'
-              }
-            }
-
-            // ── Re-apply intelligent display type detection (same logic as sendQuery) ──
-            // The backend persists displayType='cards' for all data messages. We must
-            // re-detect Cloud Run logs and debug prompts on every history load.
-            if (msg.parsedData && Array.isArray(msg.parsedData) && isCloudRunLogs(msg.parsedData)) {
-              msg.displayType = 'cloudrun_logs'
-            }
-
-            // Re-extract debug prompt from rawResponse or content if not already set
-            if (!msg.debugPrompt) {
-              const markdownSource = msg.rawResponse || msg.content || ''
-              const debugPrompt = extractDebugPrompt(markdownSource)
-              if (debugPrompt) {
-                msg.debugPrompt = debugPrompt
-                // Strip the *** ... *** block from the visible content (same as sendQuery)
-                if (!msg.rawResponse) {
-                  // rawResponse was not stored — strip from content directly
-                  msg.content = msg.content.replace(/\*{3,}[\s\S]*?(?:\*{3,}|$)/, '').trim()
-                }
-              }
-            }
-
-            // Re-extract consultant cards from steps on history reload
-            if (!msg.consultantCards && msg.steps && msg.steps.length > 0) {
-              const cards = extractConsultantCards(msg.steps)
-              if (cards) msg.consultantCards = cards
-            }
-
-            if (msg.data && msg.data.dataType === 'competency' && Array.isArray(msg.parsedData) && msg.displayType === 'tree') {
-              msg.parsedData = treeify(msg.parsedData)
-            }
-            if (!msg.activeTab) msg.activeTab = 'preview'
-            return msg
-          })
+          session.messages = response.history.map(rehydrateHistoryMessage)
+        } else {
+          session.messages = [welcomeMessage()]
         }
-
+        session.historyLoaded = true
       } catch (e) {
         console.warn('Could not load agent history', e)
         uxStore.showToast("Impossible de charger l'historique de conversation", 'error')
+        session.messages = [welcomeMessage()]
       } finally {
-        this.isLoadingHistory = false
+        session.isLoadingHistory = false
       }
     },
 
     async resetHistory() {
       const uxStore = useUxStore()
       try {
-        await agentApi.resetHistory()
-        this.messages = [
-          {
-            role: 'assistant',
-            content: "Bonjour ! Je suis l'Assistant Opérationnel de Zenika. Je peux vous aider à rechercher des profils, analyser des compétences, ou gérer le catalogue d'équipements.",
-            activeTab: 'preview'
-          }
-        ]
+        await agentApi.resetHistory(this.activeSessionId)
+        const session = this.sessions.find(s => s.id === this.activeSessionId)
+        if (session) {
+          session.messages = [welcomeMessage()]
+          session.historyLoaded = false
+        }
         uxStore.showToast('Historique effacé', 'success')
       } catch (e) {
         uxStore.showToast("Impossible de réinitialiser l'historique", 'error')
       }
-    }
-  }
+    },
+  },
 })

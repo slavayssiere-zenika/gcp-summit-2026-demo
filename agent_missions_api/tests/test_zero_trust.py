@@ -6,6 +6,8 @@ from shared.tests.zero_trust import assert_zero_trust
 
 # Liste blanche des URL publiques autorisées sans authentification JWT
 PUBLIC_WHITELIST = {
+    "/",
+    "/.well-known/agent.json",
     "/docs",
     "/health",
     "/metrics",

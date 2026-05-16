@@ -4,7 +4,6 @@ import logging
 
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Request)
-from shared.auth.jwt import verify_jwt
 from src.cvs.routers._shared import (GCP_PROJECT_ID, VERTEX_LOCATION,
                                      RecalculateStepRequest)
 from src.cvs.task_state import tree_task_manager
@@ -13,6 +12,8 @@ from src.services.taxonomy_service import (fetch_prompt,
                                            get_existing_competencies,
                                            run_taxonomy_step)
 
+from shared.auth.jwt import verify_jwt, VerifyJwtOrOidc
+
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
 _bg_retry_apply = bg_retry_apply
@@ -20,6 +21,9 @@ _bg_retry_apply = bg_retry_apply
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["CV Taxonomy"], dependencies=[Depends(verify_jwt)])
+public_router = APIRouter(prefix="", tags=["CV Taxonomy Public"])
+
+verify_jwt_or_oidc = VerifyJwtOrOidc()
 
 
 @router.post("/recalculate_tree/step")
@@ -91,8 +95,8 @@ async def get_recalculate_tree_status():
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@router.post("/recalculate_tree/batch/start", summary="Lance le processus batch asynchrone (Map)")
-async def recalculate_tree_batch_start(request: Request, user: dict = Depends(verify_jwt)):
+@public_router.post("/recalculate_tree/batch/start", summary="Lance le processus batch asynchrone (Map)")
+async def recalculate_tree_batch_start(request: Request, user: dict = Depends(verify_jwt_or_oidc)):
     from src.services.taxonomy_batch_service import TaxonomyBatchService
     auth_header = request.headers.get("Authorization")
     return await TaxonomyBatchService.start_batch(auth_header)
@@ -103,8 +107,8 @@ async def _generate_autonomous_service_token() -> str:
     return await TaxonomyBatchService.generate_autonomous_service_token()
 
 
-@router.post("/recalculate_tree/batch/check", summary="Vérifie l'état du batch et avance la machine à états")
-async def recalculate_tree_batch_check(request: Request, user: dict = Depends(verify_jwt)):
+@public_router.post("/recalculate_tree/batch/check", summary="Vérifie l'état du batch et avance la machine à états")
+async def recalculate_tree_batch_check(request: Request, user: dict = Depends(verify_jwt_or_oidc)):
     from src.services.taxonomy_batch_service import TaxonomyBatchService
     auth_header = request.headers.get("Authorization")
     user_caller = user.get("sub", "scheduler")
@@ -190,7 +194,10 @@ async def recalculate_tree_batch_cancel(request: Request, user: dict = Depends(v
     latest_status = await tree_task_manager.get_latest_status()
     if latest_status and latest_status.get("batch_job_id"):
         try:
-            await asyncio.to_thread(_svc_config.vertex_batch_client.batches.cancel, name=latest_status.get("batch_job_id"))
+            await asyncio.to_thread(
+                _svc_config.vertex_batch_client.batches.cancel,
+                name=latest_status.get("batch_job_id")
+            )
         except Exception as e:
             logger.warning(f"Impossible d'annuler le batch Vertex AI (déjà terminé ou inexistant) : {e}")
 
@@ -215,7 +222,10 @@ async def recalculate_tree_batch_recover(request: Request, user: dict = Depends(
             step = "reduce"
 
         await tree_task_manager.update_progress(status="batch_running", batch_step=step, error="")
-        return {"success": True, "message": "État du batch forcé à 'batch_running'. L'interface va reprendre le relais."}
+        return {
+            "success": True,
+            "message": "État du batch forcé à 'batch_running'. L'interface va reprendre le relais."
+        }
     return {"success": False, "error": "Aucun job batch récent en mémoire."}
 
 

@@ -1,7 +1,6 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 # CRITICAL: Set environment variables BEFORE imports
@@ -16,8 +15,10 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
 
 client = TestClient(app)
 
+
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
+
 
 async def override_get_db():
     db = AsyncMock()
@@ -28,7 +29,7 @@ app.dependency_overrides[verify_jwt] = override_verify_jwt
 
 
 def test_health(mocker):
-    mocker.patch("database.check_db_connection", new=AsyncMock(return_value=True))
+    mocker.patch("shared.database.check_db_connection", new=AsyncMock(return_value=True))
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "healthy"

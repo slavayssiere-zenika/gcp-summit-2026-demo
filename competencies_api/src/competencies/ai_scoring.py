@@ -23,6 +23,7 @@ from google.genai import types
 from pydantic import ValidationError
 from sqlalchemy.future import select
 from src.competencies.bulk_task_state import bulk_scoring_manager
+from src.competencies.gemini_cache import get_or_create_scoring_cache
 from src.competencies.helpers import (
     _compute_recency_weight,
     _duration_multiplier,
@@ -245,19 +246,51 @@ async def _compute_ai_score(
         f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit at Airbus (+0.5 bonus)."}}'  # noqa: E501
     )
 
-    # 5. Appel Gemini avec JSON forcé
+    # 5. Appel Gemini avec JSON forcé + context caching si Vertex AI disponible
     try:
         client = genai.Client(api_key=api_key)
-        response = await asyncio.wait_for(
-            client.aio.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json", temperature=0.1
+
+        # Tentative de context caching (Vertex AI uniquement)
+        cached_content_name = await get_or_create_scoring_cache(client, GEMINI_MODEL)
+
+        if cached_content_name:
+            # Mode caché : le system prompt est injecté via cached_content
+            # Le prompt utilisateur contient uniquement les missions + instruction
+            user_prompt = (
+                f"Tu dois noter la maîtrise de la compétence '{competency_name}' "
+                f"pour ce consultant.\n\n"
+                f"=== MISSIONS {context_label.upper()} ===\n{missions_text}\n\n"
+                f"=== INSTRUCTION ===\n"
+                f"Reply ONLY with valid JSON with exactly two fields:\n"
+                f"- score : float 0.0-5.0, rounded to nearest 0.5 step\n"
+                f"- justification : factual string, 50-250 characters\n"
+                f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit (+0.5 bonus)."}}'  # noqa: E501
+            )
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1,
+                        cached_content=cached_content_name,
+                    ),
                 ),
-            ),
-            timeout=60.0,
-        )
+                timeout=60.0,
+            )
+        else:
+            # Fallback : prompt complet sans cache (API key mode ou quota)
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json", temperature=0.1
+                    ),
+                ),
+                timeout=60.0,
+            )
+
         raw = response.text.strip()
         if not raw.startswith("{"):
             json_match = re.search(r"\{.*\}", raw, re.DOTALL)

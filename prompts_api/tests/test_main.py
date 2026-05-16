@@ -1,7 +1,6 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 # CRITICAL: Set environment variables BEFORE imports
@@ -10,11 +9,12 @@ os.environ["SECRET_KEY"] = "testsecret"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     import src.prompts.router as prompts_router
-    from shared.database import get_db
     from main import app
+
 
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
+
 
 # N'écrase PAS get_db globalement — les tests CRUD sont couverts par tests/test_prompts.py
 # avec une vraie DB SQLite. Ce fichier ne teste que les endpoints sans DB.
@@ -24,7 +24,7 @@ client = TestClient(app)
 
 
 def test_health(mocker):
-    mocker.patch("database.check_db_connection", new=AsyncMock(return_value=True))
+    mocker.patch("shared.database.check_db_connection", new=AsyncMock(return_value=True))
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "healthy"

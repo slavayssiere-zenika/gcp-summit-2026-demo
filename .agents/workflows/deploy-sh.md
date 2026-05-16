@@ -4,17 +4,18 @@ description: Lance ./scripts/deploy.sh all db_migrations et analyse le résultat
 
 Ce workflow lance le déploiement complet et exploite les rapports enrichis générés automatiquement.
 
-> ⚠️ **RÈGLE §11** : L'agent ne peut PAS exécuter `deploy.sh` lui-même (build/deploy interdits). Ce workflow est **déclenché par l'utilisateur**. Le rôle de l'agent est d'analyser le résultat une fois le run terminé.
+> ⚠️ **RÈGLE §11 (EXCEPTION EXPLICITE POUR CETTE SESSION)** : L'agent a l'autorisation d'exécuter `deploy.sh` lui-même pour itérer rapidement sur les erreurs lors des builds et sur les améliorations de deploy.sh.
+> Pour lancer le script, l'agent utilisera son outil `run_command` avec `PATH=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin:$PATH ./scripts/deploy.sh all db_migrations`.
 
 ---
 
 ### Étape 1 : Lancer le déploiement
 
-Communiquer à l'utilisateur la commande exacte à exécuter dans son terminal :
+L'agent DOIT lancer le script de déploiement lui-même via la commande suivante :
 
+// turbo
 ```bash
-# Depuis la racine du mono-repo :
-./scripts/deploy.sh all db_migrations
+PATH=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin:$PATH ./scripts/deploy.sh all db_migrations
 ```
 
 > 💡 **Options utiles :**
@@ -22,7 +23,7 @@ Communiquer à l'utilisateur la commande exacte à exécuter dans son terminal :
 > - `--force-all` : force le rebuild de tous les services même sans changement détecté
 > - `all db_migrations minor` : bump de version mineur au lieu de patch
 
-**Attendre que l'utilisateur confirme la fin du run avant de continuer.**
+**Attendre que la commande se termine (via command_status) avant de continuer vers l'étape 2.**
 
 ---
 

@@ -14,7 +14,7 @@ from mcp.server import Server
 from mcp.types import TextContent, Tool
 
 # Standard context var for MCP auth
-mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
+auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -240,7 +240,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 async def get_aiops_dashboard_data_internal():
     # 1. Monthly Summary (Current vs Last)
     query_monthly = f"""
-        SELECT 
+        SELECT
             DATE_TRUNC(DATE(timestamp), MONTH) as month,
             SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)) as cost,
             COUNT(*) as requests
@@ -252,7 +252,7 @@ async def get_aiops_dashboard_data_internal():
 
     # 2. Daily Evolution (Last 30 Days)
     query_daily = f"""
-        SELECT 
+        SELECT
             DATE(timestamp) as day,
             SUM((input_tokens * IFNULL(p.input_cost_per_token, 0.000000075) + output_tokens * IFNULL(p.output_cost_per_token, 0.0000003)) * IF(IFNULL(t.is_batch, FALSE), 0.5, 1.0)) as cost,
             COUNT(*) as requests

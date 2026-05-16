@@ -64,6 +64,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/version` : Get Version
 - **GET** `/spec` : Get Spec
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
+- **POST** `/bulk-scoring-all/resume/manual` : Resume Bulk Scoring
 - **POST** `/bulk-scoring-all/resume` : Resume Bulk Scoring
 - **POST** `/suggestions` : Create Competency Suggestion
 - **GET** `/suggestions` : List Competency Suggestions
@@ -89,7 +90,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/evaluations/bulk-scoring-all` : Trigger Bulk Scoring All
 - **GET** `/bulk-scoring-all/status` : Get Bulk Scoring Status
 - **POST** `/bulk-scoring-all/cancel` : Cancel Bulk Scoring
-- **POST** `/bulk-scoring-all/resume/manual` : Resume Bulk Scoring
 - **GET** `/stats/coverage` : Get Competency Coverage
 - **GET** `/evaluations/scoring-stats` : Get Scoring Stats
 - **GET** `/analytics/agency-coverage` : Get Agency Competency Coverage

@@ -330,7 +330,7 @@ body {
 .header {
   background: var(--header-bg);
   backdrop-filter: blur(12px);
-  padding: 1.25rem 2.5rem;
+  padding: 1rem 1.5rem;
   display: flex;
   align-items: center;
   position: sticky;
@@ -345,7 +345,7 @@ body {
   font-size: 1.5rem;
   letter-spacing: -0.5px;
   color: var(--zenika-red);
-  margin-right: 1.5rem;
+  margin-right: 1rem;
 }
 
 .subtitle {
@@ -353,12 +353,12 @@ body {
   font-weight: 500;
   color: var(--text-secondary);
   opacity: 0.8;
-  padding-left: 1.5rem;
+  padding-left: 1rem;
   border-left: 1px solid #e0e0e0;
 }
 
-/* Caché en dessous de 1400px pour gagner de la place */
-@media (max-width: 1400px) {
+/* Caché en dessous de 1600px pour gagner de la place */
+@media (max-width: 1600px) {
   .subtitle { display: none; }
 }
 
@@ -369,15 +369,14 @@ body {
   gap: 10px;
   min-width: 0;
   flex-shrink: 1;
-  overflow: hidden;
 }
 
 .nav-pills {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   background: rgba(0, 0, 0, 0.03);
-  padding: 6px;
+  padding: 4px;
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
@@ -386,7 +385,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-radius: 8px;
   color: var(--text-secondary);
   text-decoration: none;

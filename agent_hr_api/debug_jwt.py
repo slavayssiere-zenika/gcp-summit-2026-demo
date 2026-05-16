@@ -1,4 +1,4 @@
-from jose import jwt
+import jwt
 
 SECRET_KEY = b"testsecret"
 ALGORITHM = "HS256"

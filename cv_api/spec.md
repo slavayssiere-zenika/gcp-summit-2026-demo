@@ -58,6 +58,8 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/pubsub/import-cv` : Handle Pubsub Cv Import
 - **POST** `/pubsub/user-events` : Handle User Pubsub Events
 - **POST** `/pubsub/data-quality-snapshot` : Trigger Data Quality Snapshot
+- **POST** `/recalculate_tree/batch/start` : Lance le processus batch asynchrone (Map)
+- **POST** `/recalculate_tree/batch/check` : Vérifie l'état du batch et avance la machine à états
 - **POST** `/cache/invalidate-taxonomy` : Force Invalidate Taxonomy Cache
 - **POST** `/import` : Import And Analyze Cv
 - **GET** `/users/tags/map` : Get All User Tags
@@ -82,8 +84,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/recalculate_tree/step` : Recalculate Competencies Tree Step
 - **POST** `/recalculate_tree` : Recalculate Competencies Tree
 - **GET** `/recalculate_tree/status` : Get Recalculate Tree Status
-- **POST** `/recalculate_tree/batch/start` : Lance le processus batch asynchrone (Map)
-- **POST** `/recalculate_tree/batch/check` : Vérifie l'état du batch et avance la machine à états
 - **GET** `/recalculate_tree/batch/list` : Liste l'historique des jobs batch de taxonomie
 - **DELETE** `/recalculate_tree/batch/{job_id}` : Supprime un job batch GCP de l'historique
 - **POST** `/recalculate_tree/cancel` : Annule le traitement interactif en cours
@@ -99,7 +99,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/bulk-reanalyse/reindex-mission-chunks` : Reindex Mission Chunks
 - **POST** `/admin/remediate-legacy` : Remediate Legacy Errors
 - **POST** `/admin/clear-processing-errors` : Clear Processing Errors
-- **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp

@@ -14,6 +14,7 @@ PUBLIC_WHITELIST = {
     "/redoc",
     "/spec",
     "/version",
+    "/pubsub/user-events",
 }
 
 

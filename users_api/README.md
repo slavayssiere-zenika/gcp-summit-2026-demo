@@ -9,11 +9,11 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 290 | ✅ |
-| `mcp_server.py` | 98 | ✅ |
+| `main.py` | 253 | ✅ |
+| `mcp_server.py` | 43 | ✅ |
 | `conftest.py` | 72 | ✅ |
 | `metrics.py` | 4 | ✅ |
-| `src/users/auth_router.py` | 293 | ✅ |
+| `src/users/auth_router.py` | 308 | ✅ |
 | `src/users/crud_router.py` | 310 | ✅ |
 | `src/users/router.py` | 10 | ✅ |
 | `src/users/system_router.py` | 131 | ✅ |
@@ -21,6 +21,8 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8000` |
 | `MCP_SIDECAR_URL` | Infra | `http://users_mcp:8000` |

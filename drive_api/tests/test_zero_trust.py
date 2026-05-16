@@ -16,6 +16,7 @@ PUBLIC_WHITELIST = {
     "/spec",
     "/sync",
     "/version",
+    "/scheduled/retry-errors",
 }
 
 

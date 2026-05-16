@@ -8,7 +8,8 @@ import pytest
 from shared.database import get_db
 from fastapi.testclient import TestClient
 from main import app
-from mcp_server import call_tool, mcp_auth_header_var
+from mcp_server import call_tool
+from shared.auth.context import auth_header_var
 from shared.auth.jwt import security, verify_jwt
 
 os.environ['SECRET_KEY'] = 'testsecret'
@@ -372,7 +373,7 @@ class TestBulkReanalyseMcpTools:
         resp.json.return_value = {"message": "Pipeline lancé", "status": "building"}
         resp.raise_for_status = MagicMock()
         ci.post.return_value = resp
-        mcp_auth_header_var.set("Bearer token")
+        auth_header_var.set("Bearer token")
         result = await call_tool(name="start_bulk_cv_reanalyse", arguments={})
         assert result[0].text
         assert "/bulk-reanalyse/start" in str(ci.post.call_args)
@@ -385,7 +386,7 @@ class TestBulkReanalyseMcpTools:
         mock_httpx.return_value.__aenter__.return_value = ci
         err_resp = MagicMock(status_code=409, text="déjà en cours")
         ci.post.side_effect = httpx.HTTPStatusError("409", request=MagicMock(), response=err_resp)
-        mcp_auth_header_var.set("Bearer token")
+        auth_header_var.set("Bearer token")
         result = await call_tool(name="start_bulk_cv_reanalyse", arguments={})
         assert "409" in result[0].text or "cours" in result[0].text.lower()
 
@@ -399,7 +400,7 @@ class TestBulkReanalyseMcpTools:
         resp.json.return_value = {"status": "idle", "total_cvs": 0}
         resp.raise_for_status = MagicMock()
         ci.get.return_value = resp
-        mcp_auth_header_var.set("Bearer token")
+        auth_header_var.set("Bearer token")
         result = await call_tool(name="get_bulk_cv_reanalyse_status", arguments={})
         assert "idle" in result[0].text
         assert "/bulk-reanalyse/status" in str(ci.get.call_args)
@@ -412,7 +413,7 @@ class TestBulkReanalyseMcpTools:
         mock_httpx.return_value.__aenter__.return_value = ci
         err_resp = MagicMock(status_code=500, text="Internal error")
         ci.get.side_effect = httpx.HTTPStatusError("500", request=MagicMock(), response=err_resp)
-        mcp_auth_header_var.set("Bearer token")
+        auth_header_var.set("Bearer token")
         result = await call_tool(name="get_bulk_cv_reanalyse_status", arguments={})
         payload = json.loads(result[0].text)
         assert payload["success"] is False
@@ -427,7 +428,7 @@ class TestBulkReanalyseMcpTools:
         resp.json.return_value = {"message": "Annulé"}
         resp.raise_for_status = MagicMock()
         ci.post.return_value = resp
-        mcp_auth_header_var.set("Bearer token")
+        auth_header_var.set("Bearer token")
         result = await call_tool(name="cancel_bulk_cv_reanalyse", arguments={})  # noqa: F841
         assert "/bulk-reanalyse/cancel" in str(ci.post.call_args)
 
@@ -438,7 +439,7 @@ class TestBulkReanalyseMcpTools:
         ci = AsyncMock()
         mock_httpx.return_value.__aenter__.return_value = ci
         ci.post.side_effect = Exception("Connection refused")
-        mcp_auth_header_var.set("Bearer token")
+        auth_header_var.set("Bearer token")
         result = await call_tool(name="cancel_bulk_cv_reanalyse", arguments={})  # noqa: F841
         payload = json.loads(result[0].text)
         assert payload["success"] is False

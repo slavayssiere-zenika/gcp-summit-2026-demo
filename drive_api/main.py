@@ -1,18 +1,12 @@
-import logging
 import os
-import traceback
 from contextlib import asynccontextmanager
 
 import shared.database as database
-import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from shared.fastapi_utils import instrument_app
-from shared.observability import setup_logging
 from opentelemetry import trace
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -46,7 +40,6 @@ else:
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
         "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
-
 
 
 @asynccontextmanager
@@ -141,84 +134,6 @@ async def get_version():
 app.include_router(router)
 app.include_router(public_router)
 app.include_router(protected_router)
-
-
-async def get_service_token_fallback() -> str:
-    logging.getLogger(__name__)
-    dev_token = os.getenv("DEV_SERVICE_TOKEN")
-    if dev_token:
-        return dev_token
-
-    try:
-        users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
-            res_meta = await client.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/"
-                "service-accounts/default/identity?audience=users_api",
-                headers={"Metadata-Flavor": "Google"},
-                timeout=2.0
-            )
-            if res_meta.status_code == 200:
-                id_token = res_meta.text
-                res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
-                if res.status_code == 200:
-                    from shared.schemas.auth import TokenResponse
-                    data = TokenResponse.model_validate(res.json())
-                    return data.access_token
-    except Exception as e:
-        logging.getLogger(__name__).error(f"[ServiceToken] Impossible d'obtenir un token de service: {e}")
-        raise
-    return ""
-
-
-async def report_exception_to_prompts_api(service_name: str, error_msg: str, trace_context: str, token: str):
-    _logger = logging.getLogger(__name__)
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        inject(headers)
-    except Exception as e:
-        _logger.warning(f"[OTel] Impossible d'injecter les headers de trace: {e}")
-        raise
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
-        try:
-            await client.post(
-                f"{prompts_api_url}/errors/report",
-                json={
-                    "service_name": service_name,
-                    "error_message": error_msg,
-                    "context": trace_context[-2000:] if len(trace_context) > 2000 else trace_context
-                },
-                headers=headers
-            )
-        except Exception as e:
-            logging.error(f"Failed to report error to prompts_api: {e}")
-            raise e
-
-
-# Exception handler global enregistré par instrument_app() via shared.exception_handler
-# (register_global_exception_handler(app, service_name="drive-api"))
-
-    error_msg = str(exc)
-    trace_context = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-
-    try:
-        if not token:
-            token = await get_service_token_fallback()
-
-        if token:
-            await report_exception_to_prompts_api("drive_api", error_msg, trace_context, token)
-
-    except Exception as fallback_e:
-        logging.error(f"Failed to process exception reporting: {fallback_e}")
-
-    logging.error(
-        f"[drive_api] Unhandled exception on {request.method} {request.url.path}: {error_msg}\n{trace_context}")
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 if __name__ == "__main__":

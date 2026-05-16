@@ -17,12 +17,14 @@ RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
 COPY agent_commons/ /agent_commons/
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels /agent_commons/
 
-# 3. Shared schemas package via Artifact Registry (BuildKit secret)
+# zenika-shared-schemas : pull depuis Artifact Registry via token éphémère (BuildKit secret)
+# Le token n'est JAMAIS persisté dans les layers Docker (--mount=type=secret)
 ARG PYTHON_AR_REPO
+ENV PYTHON_AR_REPO=${PYTHON_AR_REPO}
+ARG SHARED_VERSION
+ENV SHARED_VERSION=${SHARED_VERSION}
 RUN --mount=type=secret,id=ar_token \
-    pip wheel --no-cache-dir --wheel-dir /app/wheels \
-      --index-url "https://oauth2accesstoken:$(cat /run/secrets/ar_token)@${PYTHON_AR_REPO}/simple/" \
-      "zenika-shared-schemas"
+    sh -c 'PIP_EXTRA_INDEX_URL="https://oauth2accesstoken:$(cat /run/secrets/ar_token)@${PYTHON_AR_REPO}/simple/" pip wheel --no-cache-dir --wheel-dir /app/wheels "zenika-shared-schemas${SHARED_VERSION:+==$SHARED_VERSION}"'
 
 # ---- Runtime Stage ----
 FROM python:3.13-slim
@@ -34,9 +36,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/wheels /wheels
-COPY agent_hr_api/requirements.txt .
-RUN grep -v "zenika-shared-schemas" requirements.txt > /tmp/req_public.txt \
-    && pip wheel --no-cache-dir --wheel-dir /app/wheels -r /tmp/req_public.txt
+COPY --from=builder /app/requirements.txt .
 
 # Install service deps + agent_commons wheel in one pass
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt agent_commons zenika-shared-schemas \

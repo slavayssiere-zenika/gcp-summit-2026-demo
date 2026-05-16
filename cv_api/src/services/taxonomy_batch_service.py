@@ -137,15 +137,15 @@ class TaxonomyBatchService:
                     return {
                         "success": False, "message": f"Batch déjà en cours ({live_state}). Attendez la fin ou annulez."}
                 logger.info(
-                    f"[batch-start] Job {job_id_check} déjà terminé ({live_state}) mais Redis bloqué — déblocage automatique.")
+                    f"[batch-start] Job {job_id_check} déjà terminé ({live_state}) mais Redis bloqué — déblocage automatique.")  # noqa: E501
             except Exception as e_check:
                 logger.warning(
                     f"[batch-start] Impossible de vérifier l'état Vertex AI : {e_check} — blocage conservateur.")
                 return {
-                    "success": False, "message": "Batch en cours (impossible de vérifier Vertex AI). Utilisez 'Réinitialiser' si bloqué."}
+                    "success": False, "message": "Batch en cours (impossible de vérifier Vertex AI). Utilisez 'Réinitialiser' si bloqué."}  # noqa: E501
 
         await tree_task_manager.initialize_task()
-        await tree_task_manager.update_progress(batch_step="map", new_log="Démarrage du processus Batch (Map)...")
+        await tree_task_manager.update_progress(mode="batch", batch_step="map", new_log="Démarrage du processus Batch (Map)...")  # noqa: E501
 
         auth_token = auth_header.replace(
             "Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
@@ -166,11 +166,11 @@ class TaxonomyBatchService:
                 headers = {"Authorization": f"Bearer {start_service_token}"}
                 from opentelemetry.propagate import inject
                 inject(headers)
-                res = await client.post(f"{_svc_config.COMPETENCIES_API_URL.rstrip('/')}/bulk/cleanup-orphans", headers=headers)
+                res = await client.post(f"{_svc_config.COMPETENCIES_API_URL.rstrip('/')}/bulk/cleanup-orphans", headers=headers)  # noqa: E501
                 res.raise_for_status()
                 data = res.json()
                 deleted_count = data.get("deleted_count", 0)
-                await tree_task_manager.update_progress(new_log=f"Nettoyage terminé : {deleted_count} compétence(s) orpheline(s) supprimée(s).")
+                await tree_task_manager.update_progress(new_log=f"Nettoyage terminé : {deleted_count} compétence(s) orpheline(s) supprimée(s).")  # noqa: E501
         except Exception as e:
             logger.warning(
                 f"[batch-start] Échec du nettoyage des orphelines: {e}")
@@ -182,7 +182,7 @@ class TaxonomyBatchService:
         logger.info(
             f"[batch-start] {len(existing_names)} compétences récupérées pour le Map.")
         if not existing_names:
-            error_msg = "Aucune compétence trouvée dans competencies_api. Vérifiez que l'API est démarrée et que des compétences existent en base avant de lancer le batch."
+            error_msg = "Aucune compétence trouvée dans competencies_api. Vérifiez que l'API est démarrée et que des compétences existent en base avant de lancer le batch."  # noqa: E501
             await tree_task_manager.update_progress(status="error", error=error_msg)
             return {"success": False, "error": error_msg}
 
@@ -207,24 +207,7 @@ class TaxonomyBatchService:
                         "contents": [{"role": "user", "parts": [{"text": map_instruction}]}],
                         "generationConfig": {
                             "temperature": 0.1,
-                            "responseMimeType": "application/json",
-                            "responseSchema": {
-                                "type": "OBJECT",
-                                "properties": {
-                                    "API & Integration": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Artificial Intelligence & Machine Learning": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Business Architecture & Applications": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Cloud, DevOps & Infrastructure": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Cybersecurity": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Data Analytics & Business Intelligence": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Data Engineering & Management": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Leadership & Management": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Product & Project Management": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Quality Engineering & Testing": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "Software Engineering": {"type": "ARRAY", "items": {"type": "STRING"}},
-                                    "UX & Product Design": {"type": "ARRAY", "items": {"type": "STRING"}}
-                                }
-                            }
+                            "responseMimeType": "application/json"
                         }
                     }
                 }
@@ -254,7 +237,7 @@ class TaxonomyBatchService:
                 src=src_uri,
                 config={"display_name": "taxonomy-map-batch", "dest": dest_uri}
             )
-            await tree_task_manager.update_progress(batch_job_id=batch_job.name, batch_step="map", new_log=f"Job Batch Map créé (ID: {batch_job.name}). En attente de Vertex AI...")
+            await tree_task_manager.update_progress(batch_job_id=batch_job.name, batch_step="map", new_log=f"Job Batch Map créé (ID: {batch_job.name}). En attente de Vertex AI...")  # noqa: E501
             os.unlink(temp_path)
             return {"success": True, "batch_job_id": batch_job.name}
         except Exception as e:
@@ -293,7 +276,7 @@ class TaxonomyBatchService:
         persisted_svc_token = latest_status.get("service_token") or auth_token
         if not latest_status.get("service_token"):
             logger.warning(
-                "[batch-check] service_token absent du state Redis — tentative de ré-acquisition via identité autonome.")
+                "[batch-check] service_token absent du state Redis — tentative de ré-acquisition via identité autonome.")  # noqa: E501
             try:
                 fresh = await TaxonomyBatchService.generate_autonomous_service_token()
                 if fresh:
@@ -331,7 +314,7 @@ class TaxonomyBatchService:
                                 f"[batch-check] Batch {batch_job_id} bloqué en PENDING depuis {
                                     elapsed_hours:.1f}h (seuil={timeout_hours}h) — cancel + restart automatique.")
                             try:
-                                await asyncio.to_thread(_svc_config.vertex_batch_client.batches.cancel, name=batch_job_id)
+                                await asyncio.to_thread(_svc_config.vertex_batch_client.batches.cancel, name=batch_job_id)  # noqa: E501
                             except Exception as e_cancel:
                                 logger.warning(
                                     f"[batch-check] Impossible d'annuler le batch: {e_cancel}")
@@ -343,7 +326,7 @@ class TaxonomyBatchService:
                             return {
                                 "success": True,
                                 "action": "auto_restart",
-                                "message": f"Batch annulé après {elapsed_hours:.1f}h — prochain trigger relancera le pipeline.",
+                                "message": f"Batch annulé après {elapsed_hours:.1f}h — prochain trigger relancera le pipeline.",  # noqa: E501
                             }
 
                 progress_data = {}
@@ -436,11 +419,11 @@ class TaxonomyBatchService:
                     pass
 
             if batch_step == "map":
-                return await TaxonomyBatchService._handle_map_step(user_caller, auth_token, map_result, usage, persisted_svc_token)
+                return await TaxonomyBatchService._handle_map_step(user_caller, auth_token, map_result, usage, persisted_svc_token)  # noqa: E501
             elif batch_step == "reduce":
-                return await TaxonomyBatchService._handle_reduce_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token)
+                return await TaxonomyBatchService._handle_reduce_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token)  # noqa: E501
             elif batch_step == "sweep":
-                return await TaxonomyBatchService._handle_sweep_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token)
+                return await TaxonomyBatchService._handle_sweep_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token)  # noqa: E501
         except Exception as e:
             logger.error(
                 f"Erreur inattendue dans le check batch: {e}",
@@ -450,7 +433,7 @@ class TaxonomyBatchService:
 
     @staticmethod
     async def _handle_map_step(user_caller, auth_token, map_result, usage, persisted_svc_token):
-        await log_finops(user_caller, "recalculate_tree_batch_map", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)
+        await log_finops(user_caller, "recalculate_tree_batch_map", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)  # noqa: E501
 
         if not map_result:
             return {
@@ -465,7 +448,7 @@ class TaxonomyBatchService:
                 "Vérifiez que le prompt Map contient bien les PILIERS OBLIGATOIRES."
             )
 
-        await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")
+        await tree_task_manager.update_progress(map_result=map_result, batch_step="deduplicating", new_log="Map Batch terminé. Exécution de Deduplicate...")  # noqa: E501
 
         fresh = await TaxonomyBatchService.generate_autonomous_service_token()
         dedup_service_token = fresh if fresh else persisted_svc_token
@@ -502,7 +485,7 @@ class TaxonomyBatchService:
                         max_output_tokens=65536,
                     )
                 )
-                await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), response_dedup.usage_metadata, auth_token=svc_token)
+                await log_finops(user_caller, "recalculate_tree_batch_dedup", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), response_dedup.usage_metadata, auth_token=svc_token)  # noqa: E501
 
                 finish_reason = None
                 if response_dedup.candidates:
@@ -556,7 +539,7 @@ class TaxonomyBatchService:
                             str(raw_dedup)[
                                 :200]}")
 
-                await tree_task_manager.update_progress(completed_pillars=completed_pillars, new_log="Deduplicate terminé. Lancement du Batch Reduce...")
+                await tree_task_manager.update_progress(completed_pillars=completed_pillars, new_log="Deduplicate terminé. Lancement du Batch Reduce...")  # noqa: E501
 
                 instruction_reduce = await _fetch_prompt("cv_api.generate_taxonomy_tree_reduce", _svc_auth_header)
 
@@ -599,7 +582,7 @@ class TaxonomyBatchService:
                         "display_name": "taxonomy-reduce-batch",
                         "dest": dest_reduce_uri}
                 )
-                await tree_task_manager.update_progress(batch_job_id=reduce_batch_job.name, batch_step="reduce", new_log=f"Job Batch Reduce créé (ID: {reduce_batch_job.name}). En attente Vertex AI...")
+                await tree_task_manager.update_progress(batch_job_id=reduce_batch_job.name, batch_step="reduce", new_log=f"Job Batch Reduce créé (ID: {reduce_batch_job.name}). En attente Vertex AI...")  # noqa: E501
                 os.unlink(temp_path)
             except Exception as e:
                 logger.error(f"Erreur background dedup: {e}")
@@ -612,7 +595,7 @@ class TaxonomyBatchService:
 
     @staticmethod
     async def _handle_reduce_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token):
-        await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)
+        await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)  # noqa: E501
 
         res_tree = {}
         import json_repair
@@ -645,7 +628,7 @@ class TaxonomyBatchService:
             await tree_task_manager.update_progress(status="error", error=error_msg)
             return {"success": False, "error": error_msg}
 
-        await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")
+        await tree_task_manager.update_progress(res_tree=res_tree, batch_step="sweeping", new_log="Reduce Batch terminé. Exécution de Sweep...")  # noqa: E501
 
         if has_unsubstituted_placeholders(res_tree):
             error_msg = (
@@ -689,7 +672,7 @@ class TaxonomyBatchService:
             missing = list(set(existing_names) - used_names)
 
             if not missing:
-                await tree_task_manager.update_progress(sweep_result=[], missing_competencies=[], new_log="Aucune compétence manquante détectée. Application de l'arbre en DB...")
+                await tree_task_manager.update_progress(sweep_result=[], missing_competencies=[], new_log="Aucune compétence manquante détectée. Application de l'arbre en DB...")  # noqa: E501
 
                 competencies_api_url = os.getenv(
                     "COMPETENCIES_API_URL", "http://competencies_api:8000")
@@ -724,7 +707,7 @@ class TaxonomyBatchService:
                         _dq_bg.add_done_callback(_background_tasks.discard)
                         return {"success": True, "state": "COMPLETED"}
                     else:
-                        await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")
+                        await tree_task_manager.update_progress(status="error", error=f"Erreur d'application: {res.text}")  # noqa: E501
                         return {
                             "success": False, "error": f"Erreur d'application: {res.text}"}
             else:
@@ -853,7 +836,7 @@ class TaxonomyBatchService:
                                 "generationConfig": {
                                     "temperature": 0.1,
                                     "responseMimeType": "application/json",
-                                    "maxOutputTokens": 16384,  # 8192 →16384 : évite troncations (7/12 chunks tronqués observés)
+                                    "maxOutputTokens": 16384,  # 8192 →16384 : évite troncations (7/12 chunks tronqués observés)  # noqa: E501
                                     "responseSchema": {
                                         "type": "OBJECT",
                                         "properties": {
@@ -911,7 +894,7 @@ class TaxonomyBatchService:
                         "display_name": "taxonomy-sweep-batch",
                         "dest": dest_sweep_uri}
                 )
-                await tree_task_manager.update_progress(batch_job_id=sweep_batch_job.name, batch_step="sweep", missing_competencies=missing, new_log=f"Job Batch Sweep créé (ID: {sweep_batch_job.name}). En attente Vertex AI...")
+                await tree_task_manager.update_progress(batch_job_id=sweep_batch_job.name, batch_step="sweep", missing_competencies=missing, new_log=f"Job Batch Sweep créé (ID: {sweep_batch_job.name}). En attente Vertex AI...")  # noqa: E501
                 os.unlink(temp_path)
 
                 return {"success": True, "state": "PROCESSING_SWEEP"}
@@ -923,7 +906,7 @@ class TaxonomyBatchService:
 
     @staticmethod
     async def _handle_sweep_step(user_caller, auth_token, parsed_results, latest_status, usage, persisted_svc_token):
-        await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)
+        await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)  # noqa: E501
 
         try:
             import json_repair
@@ -1038,7 +1021,7 @@ class TaxonomyBatchService:
             # validé au moment de la construction du JSONL (ligne instruction_sweep).
             # ────────────────────────────────────────────────────────────────────────────────
 
-            await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges, {len(drops)} drops). Application en base de données...")
+            await tree_task_manager.update_progress(sweep_result=sweep_assignments, new_log=f"Sweep Batch terminé ({len(sweep_assignments)} assignations, {len(merges)} merges, {len(drops)} drops). Application en base de données...")  # noqa: E501
 
             competencies_api_url = os.getenv(
                 "COMPETENCIES_API_URL", "http://competencies_api:8000")

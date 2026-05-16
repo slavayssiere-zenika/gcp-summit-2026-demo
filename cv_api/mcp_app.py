@@ -35,8 +35,8 @@ async def get_tools():
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from mcp_server import mcp_auth_header_var
-        mcp_auth_header_var.set(auth_header)
+        from shared.auth.context import auth_header_var
+        auth_header_var.set(auth_header)
 
     try:
         result = await call_tool(request.name, request.arguments)

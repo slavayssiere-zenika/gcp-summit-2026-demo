@@ -7,18 +7,18 @@ from typing import Optional
 
 import httpx
 from fastapi import BackgroundTasks, HTTPException, Request
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token as google_id_token
-from jose import jwt as jose_jwt
-from jose.exceptions import JWTError
+import jwt as _jwt_lib
+from jwt.exceptions import InvalidTokenError
 from opentelemetry.propagate import inject
 from sqlalchemy.future import select
 
 import shared.database as database
 import src.services.config as _svc_config
-import os as _os; _AUTH_SECRET_KEY = _os.getenv('SECRET_KEY', '')
+import os as _os
 from src.cvs.models import CVProfile
 from src.services.cv_import_service import process_cv_core
+
+_AUTH_SECRET_KEY = _os.getenv('SECRET_KEY', '')
 
 logger = logging.getLogger(__name__)
 
@@ -251,52 +251,9 @@ class PubsubService:
         """
 
         # ── 1. Validation OIDC ───────────────────────────────────────────────
-        invoker_sa_email = os.getenv("PUBSUB_INVOKER_SA_EMAIL", "")
-        auth_header_val = request.headers.get("Authorization", "")
-
-        if not auth_header_val.startswith("Bearer "):
-            logger.warning("[PubSub] Requête sans token OIDC — rejetée.")
-            raise HTTPException(status_code=401, detail="Missing OIDC token")
-
-        oidc_token = auth_header_val.replace("Bearer ", "")
-
-        # En dev local (pas de SA configuré), on tolère un bypass contrôlé
-        if invoker_sa_email and invoker_sa_email != "sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com":
-            try:
-                # ⚠️ Ne PAS utiliser request.url.path : le LB GCP réécrit le path
-                # (ex: /cv-api/pubsub/import-cv → /pubsub/import-cv) donc il ne
-                # correspond plus à l'audience dans le token OIDC.
-                # On lit l'audience depuis une env var injectée par Terraform,
-                # qui est identique à push_config.oidc_token.audience dans
-                # pubsub.tf.
-                pubsub_audience = os.getenv("PUBSUB_CV_IMPORT_AUDIENCE", "")
-                if not pubsub_audience:
-                    # Fallback: reconstruction depuis Host + path original (dev
-                    # local sans LB)
-                    pubsub_audience = f"https://{
-                        request.headers.get(
-                            'host', '')}{
-                        request.url.path}"
-                decoded = google_id_token.verify_oauth2_token(
-                    oidc_token,
-                    google_requests.Request(),
-                    audience=pubsub_audience
-                )
-                token_email = decoded.get("email", "")
-                if token_email != invoker_sa_email:
-                    logger.warning(
-                        f"[PubSub] SA non autorisé: {token_email} (attendu: {invoker_sa_email})")
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized Pub/Sub invoker")
-                logger.info(
-                    f"[PubSub] OIDC validé pour {token_email} (audience: {pubsub_audience})")
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.warning(f"[PubSub] Échec validation OIDC: {e}")
-                raise HTTPException(
-                    status_code=401,
-                    detail=f"Invalid OIDC token: {e}")
+        from shared.auth.jwt import VerifyOIDC
+        verify_oidc = VerifyOIDC(audience_env_var="PUBSUB_CV_IMPORT_AUDIENCE")
+        await verify_oidc(request)
 
         # ── 2. Décodage du payload Pub/Sub ───────────────────────────────────
         try:
@@ -321,7 +278,7 @@ class PubsubService:
         # Production: OIDC ID Token Google (RS256, 1h)
         oidc_token = payload.get("oidc_token", "")
         # Local dev: MOCK_M2M_JWT fallback
-        jwt = payload.get("jwt", "")
+        jwt_token = payload.get("jwt", "")
         action = payload.get("action", "upsert")
 
         if not url or not google_file_id:
@@ -344,7 +301,7 @@ class PubsubService:
                     if oidc_res.status_code == 200:
                         from shared.schemas.auth import TokenResponse
                         data = TokenResponse.model_validate(oidc_res.json())
-                        jwt = data.access_token
+                        jwt_token = data.access_token
                         logger.info(
                             "[PubSub] OIDC token échangé → JWT applicatif frais obtenu.")
                     else:
@@ -369,17 +326,17 @@ class PubsubService:
             # Le traitement Gemini + compétences + missions peut dépasser ce délai → 403 sur items_api.
             # On échange vers /internal/service-token qui délivre un token de
             # 90 min.
-            if jwt:
+            if jwt_token:
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as svc_client:
                         svc_res = await svc_client.post(
                             f"{USERS_API_URL.rstrip('/')}/internal/service-token",
-                            headers={"Authorization": f"Bearer {jwt}"},
+                            headers={"Authorization": f"Bearer {jwt_token}"},
                         )
                         if svc_res.status_code == 200:
                             from shared.schemas.auth import TokenResponse
                             data = TokenResponse.model_validate(svc_res.json())
-                            jwt = data.access_token
+                            jwt_token = data.access_token
                             logger.info(
                                 "[PubSub] Service-token longue durée obtenu (90 min).")
                         else:
@@ -390,14 +347,14 @@ class PubsubService:
                     logger.warning(
                         f"[PubSub] Impossible d'obtenir le service-token longue durée: {e_svc} — JWT court conservé.")
 
-        if not jwt:
+        if not jwt_token:
             logger.error(
                 "[PubSub] Aucun token d'authentification dans le payload (ni oidc_token, ni jwt).")
             raise HTTPException(
                 status_code=500,
                 detail="Configuration error: aucun token dans le message Pub/Sub")
 
-        headers = {"Authorization": f"Bearer {jwt}"}
+        headers = {"Authorization": f"Bearer {jwt_token}"}
         inject(headers)
         logger.info(f"[PubSub] Traitement de {google_file_id} ({url})")
 
@@ -429,9 +386,12 @@ class PubsubService:
                 status_code=500,
                 detail="Configuration error: SECRET_KEY manquante")
         try:
-            token_payload = jose_jwt.decode(
-                jwt, _AUTH_SECRET_KEY, algorithms=["HS256"])
-        except JWTError as e:
+            token_payload = _jwt_lib.decode(
+                jwt_token, _AUTH_SECRET_KEY,
+                algorithms=["HS256"],
+                options={"leeway": 300},
+            )
+        except InvalidTokenError as e:
             logger.error(
                 f"[PubSub] JWT interne invalide (corrompu ou expiré): {e}")
             raise HTTPException(
@@ -443,13 +403,13 @@ class PubsubService:
             if action == "delete":
                 background_tasks.add_task(
                     PubsubService._run_cv_delete_bg,
-                    url, google_file_id, jwt, drive_api_url, headers
+                    url, google_file_id, jwt_token, drive_api_url, headers
                 )
             else:
                 background_tasks.add_task(
                     PubsubService._run_cv_pipeline_bg,
                     google_file_id, url, google_access_token, source_tag, folder_name,
-                    headers, jwt, token_payload, drive_api_url,
+                    headers, jwt_token, token_payload, drive_api_url,
                     file_type,
                 )
         except Exception as e:

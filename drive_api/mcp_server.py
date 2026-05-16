@@ -1,55 +1,29 @@
-import contextvars
 import json
 import os
 
 import httpx
 from mcp.server import Server
 from mcp.types import TextContent, Tool
-from opentelemetry import propagate, trace
+from shared.mcp_server_utils import setup_mcp_tracer_provider
+from shared.auth.context import auth_header_var
+from opentelemetry import propagate
 from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.trace.propagation.tracecontext import \
     TraceContextTextMapPropagator
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
+    pass
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    pass
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    pass
 
 
-mcp_auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
 propagate.set_global_textmap(TraceContextTextMapPropagator())
 
 API_BASE_URL = os.getenv("DRIVE_API_URL", "http://localhost:8006")
 
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "drive-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(
-        BatchSpanProcessor(
-            OTLPSpanExporter() if os.getenv(
-                "TRACE_EXPORTER",
-                "grpc") == "http" else OTLPSpanExporter(
-                insecure=True)))
-trace.set_tracer_provider(provider)
-tracer = trace.get_tracer(__name__)
+tracer = setup_mcp_tracer_provider("drive-api-mcp")
 
 server = Server("drive-api")
 
@@ -283,7 +257,7 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
-        auth_header = mcp_auth_header_var.get()
+        auth_header = auth_header_var.get()
         headers = {}
         if auth_header:
             headers["Authorization"] = auth_header

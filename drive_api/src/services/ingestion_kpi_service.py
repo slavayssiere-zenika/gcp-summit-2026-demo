@@ -9,6 +9,7 @@ from src.routers.files_router import _compute_kpi_metric, _reset_errors_to_pendi
 
 logger = logging.getLogger(__name__)
 
+
 class IngestionKpiService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -82,15 +83,29 @@ class IngestionKpiService:
             "unit": "s"
         }
 
+        redis = get_redis()
+        last_delta_run_str = redis.get("drive:sync:last_delta_run")
+
         last_imported_at = (await self.db.execute(
             select(func.max(DriveSyncState.imported_at)).where(DriveSyncState.imported_at.isnot(None))
         )).scalar()
         last_processed = (await self.db.execute(
             select(func.max(DriveSyncState.last_processed_at))
         )).scalar()
+
         freshness_hours = None
         freshness_status = "ok"
-        reference_time = last_imported_at or last_processed
+
+        if last_delta_run_str:
+            try:
+                # Redis returns bytes or string depending on connection setup
+                val = last_delta_run_str.decode("utf-8") if isinstance(last_delta_run_str, bytes) else last_delta_run_str
+                reference_time = datetime.fromisoformat(val)
+            except ValueError:
+                reference_time = last_imported_at or last_processed
+        else:
+            reference_time = last_imported_at or last_processed
+
         if reference_time:
             diff_hours = (datetime.now(timezone.utc) - reference_time).total_seconds() / 3600
             freshness_hours = round(diff_hours, 1)
@@ -303,7 +318,7 @@ class IngestionKpiService:
 
         total_queued = sum(reason_breakdown.values())
         logger.info(f"[QualityGate] {total_queued} fichiers remis en PENDING — {reason_breakdown}")
-        
+
         return {
             "total_queued": total_queued,
             "reason_breakdown": reason_breakdown

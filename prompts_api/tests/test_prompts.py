@@ -14,7 +14,7 @@ os.environ["SECRET_KEY"] = "testsecret"
 
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
-    import database
+    from shared import database
     from shared.database import engine, get_db
     from main import app
     from src.prompts.models import Base
@@ -392,8 +392,6 @@ def test_delete_prompt_success():
 def test_delete_prompt_not_found():
     resp = client.delete("/does_not_exist_ever")
     assert resp.status_code == 404
-
-
 
 
 # ── Main.py Endpoints ──────────────────────────────────────────────────────────

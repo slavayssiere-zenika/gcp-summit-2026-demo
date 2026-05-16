@@ -9,7 +9,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 271 | ✅ |
+| `main.py` | 323 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `agent.py` | 285 | ✅ |
@@ -17,6 +17,8 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
@@ -46,6 +48,7 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 **DB 10** — namespace `session:hr:*` (historique de session par user)
 
 ## Endpoints clés
+- `GET /.well-known/agent.json`
 - `GET /`
 - `GET /spec`
 - `POST /query`

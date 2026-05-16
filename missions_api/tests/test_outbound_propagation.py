@@ -10,7 +10,8 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 
 # Importation directe depuis mcp_server
-from mcp_server import call_tool, mcp_auth_header_var
+from mcp_server import call_tool
+from shared.auth.context import auth_header_var
 
 trace.set_tracer_provider(TracerProvider())
 
@@ -18,11 +19,11 @@ trace.set_tracer_provider(TracerProvider())
 @pytest.mark.asyncio
 async def test_mcp_server_call_tool_propagates_headers():
     """
-    Vérifie que call_tool() lit mcp_auth_header_var et utilise opentelemetry.propagate.inject
-    pour populer le dictionnaire de headers avant de créer le httpx.AsyncClient().
+    Vérifie que call_tool() lit auth_header_var et utilise opentelemetry.propagate.inject
+    pour populer le dictionnaire de headers avant de créer le httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)).
     """
     auth_token = "Bearer test_token_mcp_server"
-    token_id = mcp_auth_header_var.set(auth_token)
+    token_id = auth_header_var.set(auth_token)
 
     # Mock global de httpx.AsyncClient
     with patch("mcp_server.httpx.AsyncClient") as mock_client_class:
@@ -41,7 +42,7 @@ async def test_mcp_server_call_tool_propagates_headers():
             await call_tool("create_mission", {"title": "Test", "description": "Desc"})
 
             # Vérifier les arguments d'appel de client.post (si l'implémentation passe les headers au .post)
-            # ou à l'instanciation de httpx.AsyncClient() si passé au constructeur.
+            # ou à l'instanciation de httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) si passé au constructeur.
             # Dans missions_api, headers n'est pas passé au constructeur, il est passé au .post
             assert mock_post.call_count == 1
             call_kwargs = mock_post.call_args[1]
@@ -57,4 +58,4 @@ async def test_mcp_server_call_tool_propagates_headers():
             assert "traceparent" in headers_sent, "L'injection OpenTelemetry a échoué"
             assert "test_mcp_tool_span" not in headers_sent["traceparent"]
 
-    mcp_auth_header_var.reset(token_id)
+    auth_header_var.reset(token_id)

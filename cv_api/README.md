@@ -32,20 +32,22 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 237 | ✅ |
-| `mcp_server.py` | 623 | ⚠️ |
+| `main.py` | 128 | ✅ |
+| `mcp_server.py` | 588 | ⚠️ |
 | `conftest.py` | 89 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `src/cvs/router.py` | 45 | ✅ |
+| `src/cvs/router.py` | 47 | ✅ |
 | `src/cvs/routers/admin_router.py` | 174 | ✅ |
 | `src/cvs/routers/analytics_router.py` | 454 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 324 | ✅ |
-| `src/cvs/routers/data_quality_router.py` | 102 | ✅ |
+| `src/cvs/routers/data_quality_router.py` | 56 | ✅ |
 | `src/cvs/routers/profile_router.py` | 287 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-2.5-flash` |
 | `GEMINI_PRO_MODEL` | Comportement | `gemini-2.5-pro` |

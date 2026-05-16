@@ -369,4 +369,9 @@ class DiscoveryService:
                 if not page_token:
                     break
 
+        try:
+            self.redis.set("drive:sync:last_delta_run", datetime.now(timezone.utc).isoformat())
+        except Exception as e:
+            logger.warning(f"[Bottom-Up] Impossible de mettre à jour drive:sync:last_delta_run dans Redis : {e}")
+
         return new_discoveries

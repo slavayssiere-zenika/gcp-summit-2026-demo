@@ -39,7 +39,7 @@ def _make_pubsub_payload(
     oidc_token: str = "",  # Vide en local (USE_IAM_AUTH != true), rempli en prod
 ) -> dict:
     """Construit un payload Pub/Sub encodé en base64 comme GCP le ferait."""
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
     if not jwt and not oidc_token:
         jwt = jose_jwt.encode({"sub": "test-worker"}, _TEST_JWT_SECRET, algorithm="HS256")
 
@@ -211,7 +211,7 @@ async def test_pubsub_handler_oidc_exchange_success():
     le handler doit l'échanger contre un JWT applicatif frais via users_api.
     Vérifie que l'échange réussi permet l'exécution du pipeline.
     """
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
     from main import app
 
     mock_result = MagicMock()
@@ -400,3 +400,17 @@ async def test_run_cv_pipeline_bg_imported_cv_patch_error():
             with patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])):
                 with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
                     await PubsubService._run_cv_pipeline_bg("123", "http", None, None, None, {}, "jwt", {}, "http")
+
+
+@pytest.mark.asyncio
+async def test_pubsub_handler_raw_bytes_not_base64():
+    """Le handler doit retourner 400 si le payload data n'est pas du base64 mais des raw bytes string."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/pubsub/import-cv",
+            json={"message": {"data": '{"some": "json", "not": "base64"}'}},
+            headers={"Authorization": "Bearer dummy-oidc-token"},
+        )
+    assert resp.status_code == 400

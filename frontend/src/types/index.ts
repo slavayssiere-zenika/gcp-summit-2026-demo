@@ -51,6 +51,18 @@ export interface Step {
   data?: any
 }
 
+/** Métadonnées d'une session de travail, persistées dans Redis. */
+export interface ChatSession {
+  id: string         // ex: "alice@zenika.com" ou "alice@zenika.com:abc12345"
+  name: string       // ex: "Défaut", "Analyse missions Q2"
+  created_at: string // ISO 8601
+  // Champs runtime (non persistés côté backend)
+  messages?: Message[]
+  isTyping?: boolean
+  isLoadingHistory?: boolean
+  historyLoaded?: boolean
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'error'
   content: string

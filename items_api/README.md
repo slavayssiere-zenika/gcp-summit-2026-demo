@@ -9,8 +9,8 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 223 | ✅ |
-| `mcp_server.py` | 123 | ✅ |
+| `main.py` | 121 | ✅ |
+| `mcp_server.py` | 71 | ✅ |
 | `conftest.py` | 79 | ✅ |
 | `src/items/admin_router.py` | 125 | ✅ |
 | `src/items/crud_router.py` | 398 | ✅ |
@@ -21,6 +21,8 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8001` |
 | `MCP_SIDECAR_URL` | Infra | `http://items_mcp:8000` |

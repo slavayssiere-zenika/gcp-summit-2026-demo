@@ -21,7 +21,7 @@ Avant tout audit, lire les fichiers de configuration globaux et les `README.md` 
 ## 2. Audit de la Sécurité (Security)
 Évaluer la protection des données et le contrôle d'accès :
 - **Zero-Trust et Authentification** : Vérifier la présence systématique de `Depends(verify_jwt)` sur tous les routeurs (FastAPI) et la stricte validation des claims (ex: `sub`).
-- **Contrôle d'Accès par Rôle (RBAC)** : Valider que les actions sensibles et destructives imposent des rôles spécifiques (`admin`, `service_account`) au niveau du backend, et que les clients MCP propagent correctement le JWT (`mcp_auth_header_var`).
+- **Contrôle d'Accès par Rôle (RBAC)** : Valider que les actions sensibles et destructives imposent des rôles spécifiques (`admin`, `service_account`) au niveau du backend, et que les clients MCP propagent correctement le JWT (`auth_header_var`).
 - **Protection des Secrets (Leak Mitigation)** : S'assurer de l'utilisation de `os.environ.pop()` pour les secrets critiques après l'initialisation de l'application, afin d'éviter l'exposition via des attaques de Prompt Injection ou d'introspection.
 - **Protection de l'Infrastructure** : Vérifier les configurations Terraform (Cloud Armor, Egress VPC / Zero-Trust networking) et s'assurer que les images Docker s'exécutent en mode non-root (`USER appuser`).
 

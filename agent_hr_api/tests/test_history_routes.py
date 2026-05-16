@@ -26,7 +26,7 @@ client = TestClient(app)
 
 
 def get_auth_token(sub="user_test@zenika.com"):
-    from jose import jwt
+    import jwt
     from main import ALGORITHM, SECRET_KEY
     return jwt.encode({"sub": sub, "role": "admin"}, SECRET_KEY, algorithm=ALGORITHM)
 

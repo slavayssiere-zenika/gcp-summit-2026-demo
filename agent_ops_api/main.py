@@ -1,3 +1,6 @@
+from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
+                                   get_tool_metadata)
+from agent_commons.mcp_client import auth_header_var
 import logging
 import os
 # flake8: noqa: E402  — warnings.filterwarnings must precede third-party imports
@@ -7,6 +10,7 @@ from contextlib import asynccontextmanager
 import httpx
 import uvicorn
 from agent import OPS_TOOLS, run_agent_query
+from agent_commons.a2a_utils import make_agent_card
 from fastapi import (APIRouter, Depends, FastAPI, HTTPException, Request,
                      Response)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -28,13 +32,14 @@ from shared.fastapi_utils import instrument_app
 from shared.observability import setup_logging
 
 from agent_commons.exception_handler import make_global_exception_handler
-from shared.auth.jwt import ALGORITHM
 from shared.auth.jwt import verify_jwt_bearer as verify_jwt
-from agent_commons.mcp_client import auth_header_var
-from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest,
-                                   get_tool_metadata)
+
+import os as _os
+SECRET_KEY = _os.getenv("SECRET_KEY", "")
 
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
+
+security = HTTPBearer()
 
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
@@ -89,7 +94,6 @@ HTTPXClientInstrumentor().instrument()
 @app.get("/.well-known/agent.json", include_in_schema=False)
 async def agent_card():
     """A2A v2 — Service Discovery endpoint (google-adk 1.33+)."""
-    from agent_commons.a2a_utils import make_agent_card
     return make_agent_card(
         name="Ops Agent (Platform & FinOps)",
         description=(
@@ -185,7 +189,6 @@ async def agent_card():
              "skill": "prompt_management"},
         ],
     )
-
 
 
 @app.get("/")
@@ -332,7 +335,7 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
     if query_params:
         target_path += "?" + query_params
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
         try:
             res = await client.request(
                 method=request.method,

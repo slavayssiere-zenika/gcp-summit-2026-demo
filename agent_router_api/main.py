@@ -28,8 +28,28 @@ _logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting ADK Web Agent with Gemini...")
+    """Cycle de vie du Router — discovery A2A v2 au démarrage."""
+    _logger.info("[Router] 🚀 Démarrage agent_router_api — A2A v2 discovery en cours...")
+    try:
+        from a2a_tools import discover_sub_agents, enrich_tool_docstrings
+        cards = await discover_sub_agents()
+        if cards:
+            enrich_tool_docstrings(cards)
+            _logger.info(
+                "[Router] ✅ A2A v2 discovery OK — %d agents découverts : %s",
+                len(cards), list(cards.keys()),
+            )
+        else:
+            _logger.warning(
+                "[Router] ⚠️ A2A v2 discovery : aucun agent disponible au démarrage "
+                "(routage via docstrings statiques)."
+            )
+    except Exception as e:
+        _logger.warning(
+            "[Router] ⚠️ A2A v2 discovery échec au démarrage (non-bloquant): %s", e
+        )
     yield
+    _logger.info("[Router] 🛑 Arrêt agent_router_api.")
 
 app = FastAPI(
     title="ADK Router Agent (A2A)",

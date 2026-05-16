@@ -18,7 +18,9 @@ from tools.evaluation_tools import (
     handle_set_user_competency_score, handle_trigger_ai_scoring, handle_get_user_competency_evaluations,
     handle_clear_user_evaluations, handle_find_skill_gaps
 )
-from shared.mcp_server_utils import get_mcp_trace_headers, setup_mcp_tracer_provider
+from shared.auth.context import auth_header_var
+from shared.mcp_server_utils import setup_mcp_tracer_provider
+from opentelemetry.propagate import inject
 import asyncio
 import json
 import logging
@@ -33,25 +35,10 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', 
 
 API_BASE_URL = os.getenv("COMPETENCIES_API_URL", "http://localhost:8003")
 
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "competencies-api-mcp",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
-        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
-trace.set_tracer_provider(provider)
-
-tracer = trace.get_tracer(__name__)
+tracer = setup_mcp_tracer_provider("competencies-api-mcp")
 
 server = Server("competencies-api")
+
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -520,10 +507,12 @@ async def list_tools() -> list[Tool]:
         )
     ]
 
+
 def get_trace_headers() -> dict:
     headers = {}
     inject(headers)
     return headers
+
 
 def get_trace_context() -> dict:
     env_headers = {}
@@ -532,10 +521,11 @@ def get_trace_context() -> dict:
             env_headers[key] = os.environ[key]
     return env_headers
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     with tracer.start_as_current_span(f"mcp.tool.{name}"):
-        auth_header = mcp_auth_header_var.get()
+        auth_header = auth_header_var.get()
         headers = {}
         if auth_header:
             headers["Authorization"] = auth_header
@@ -609,6 +599,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": f"API Error {e.response.status_code}: {e.response.text}"}))]
             except Exception as e:
                 return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+
 
 async def main():
     """Main entry point for the MCP server when run as a script."""

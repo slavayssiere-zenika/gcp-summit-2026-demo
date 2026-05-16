@@ -65,7 +65,7 @@ class MCPHttpClient:
         if auth:
             headers["Authorization"] = auth
 
-        async with httpx.AsyncClient(headers=headers) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             try:
                 timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
                 res = await client.post(

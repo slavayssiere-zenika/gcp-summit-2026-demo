@@ -9,8 +9,8 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 239 | ✅ |
-| `mcp_server.py` | 407 | ⚠️ |
+| `main.py` | 141 | ✅ |
+| `mcp_server.py` | 381 | ✅ |
 | `conftest.py` | 71 | ✅ |
 | `src/routers/dlq_router.py` | 400 | ✅ |
 | `src/routers/files_router.py` | 397 | ✅ |
@@ -21,6 +21,8 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8006` |
 | `MCP_SIDECAR_URL` | Infra | `http://drive_mcp:8000` |

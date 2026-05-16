@@ -7,11 +7,10 @@ Couvre les frontières de :
 - zero_trust.py : whitelist vide, routes multi-méthodes, sous-chemins /mcp/, trailing slashes
 """
 import os
-import time
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
-from jose import jwt
+import jwt
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
 
@@ -185,7 +184,7 @@ class TestDatabaseBoundaries:
         captured, mock_eng = self._capture()
 
         with patch.dict(os.environ, {"DATABASE_URL": "postgresql+asyncpg://u:p@h/db",
-                                      "USE_IAM_AUTH": "false", "DB_POOL_SIZE": "0"}):
+                                     "USE_IAM_AUTH": "false", "DB_POOL_SIZE": "0"}):
             import database as db
             importlib.reload(db)
             with patch("database.create_async_engine", side_effect=mock_eng), \

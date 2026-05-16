@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock, mock_open
 from fastapi.testclient import TestClient
-from mcp_app import app, report_exception_to_prompts_api
+from mcp_app import app
 import json
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -40,40 +40,6 @@ def test_get_spec_error():
         response = client.get("/spec")
         assert response.status_code == 200
         assert "Monitoring MCP" in response.text
-
-
-@pytest.mark.asyncio
-@patch('httpx.AsyncClient.post')
-async def test_report_exception_to_prompts_api(mock_post):
-    mock_post.return_value = MagicMock(status_code=200)
-    await report_exception_to_prompts_api("test_service", "error", "trace", "token")
-    mock_post.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_global_exception_handler():
-    # Créer une sous-app FastAPI isolée avec le même exception handler global
-    # pour ne pas polluer les routes de l'app principale (détectées par test_zero_trust)
-    from fastapi import FastAPI, Request
-    from fastapi.responses import JSONResponse
-    import mcp_app as mcp_app_module
-
-    with patch.object(mcp_app_module, 'report_exception_to_prompts_api', new_callable=AsyncMock) as mock_report:
-        isolated_app = FastAPI()
-
-        @isolated_app.exception_handler(Exception)
-        async def _global_exception_handler(request: Request, exc: Exception):
-            await mcp_app_module.report_exception_to_prompts_api("monitoring-mcp", str(exc), "", "")
-            return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-
-        @isolated_app.get("/trigger_error")
-        def trigger_error():
-            raise ValueError("test error")
-
-        isolated_client = TestClient(isolated_app, raise_server_exceptions=False)
-        response = isolated_client.get("/trigger_error")
-        assert response.status_code == 500
-        mock_report.assert_called_once()
 
 
 def test_get_tools(override_verify_jwt):

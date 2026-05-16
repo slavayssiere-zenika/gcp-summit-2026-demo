@@ -86,6 +86,8 @@ declare -A COVERAGE_RESULTS   # service -> "75%" | "N/A" | "SKIPPED"
 # Répertoire de logs par run — conservé après exécution pour debug
 LOG_DIR="$(pwd)/deploy_logs/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOG_DIR"
+ln -sfn "$LOG_DIR/deploy.log" "$(pwd)/deploy_logs/latest_deploy.log"
+exec > >(tee -a "${LOG_DIR}/deploy.log") 2>&1
 
 # Tableau global des fichiers temporaires — nettoyé par le trap EXIT/INT/TERM (P0/R3)
 _TMPFILES=()
@@ -1248,6 +1250,7 @@ if check_shared_changed; then
   # local dans shared/dist/ soit disponible lors du COPY dans les Dockerfiles.
   CURRENT_DEPLOYING_SERVICE="shared"
   build_and_push_shared_wheel "$BUMP_TYPE"
+  save_shared_hash
   CURRENT_DEPLOYING_SERVICE=""
 
   EXPANDED=false
@@ -1354,12 +1357,6 @@ if [ "$SHOULD_SYNC" = true ]; then
     fi
     CURRENT_DEPLOYING_SERVICE=""
   fi
-fi
-
-# ── Sauvegarde du hash de shared/ si tous les consumers ont été buildés sans échec ──
-if [ ${#DEPLOYS_FAILED[@]} -eq 0 ] && [ -d "./shared" ]; then
-  save_shared_hash
-  echo -e "${GREY}[shared/HASH] Hash mis à jour après build réussi.${RESET}"
 fi
 
 # Le summary de fin est géré par le trap EXIT.

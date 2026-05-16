@@ -21,6 +21,13 @@ def _get_project_id() -> str:
     return os.getenv("GCP_PROJECT_ID", "")
 
 
+def _sanitize_log_filter(val: str) -> str:
+    """Sanitize strings to prevent Cloud Logging filter injection."""
+    if not isinstance(val, str):
+        return ""
+    return val.replace('"', '').replace('\\', '').replace('\0', '')
+
+
 async def get_service_logs_internal(
     service_name: str,
     limit: int = 10,
@@ -54,6 +61,7 @@ async def get_service_logs_internal(
         client_logging = logging_cloud.Client(project=project_id)
         start_time = (datetime.now(timezone.utc) - timedelta(hours=hours_lookback)).isoformat()
 
+        target_service = _sanitize_log_filter(target_service)
         filter_str = (
             f'resource.type="cloud_run_revision" '
             f'AND resource.labels.service_name="{target_service}" '
@@ -114,6 +122,7 @@ async def search_cloud_logs_by_trace_internal(trace_id: str, limit: int = 50) ->
             else trace_id
         )
 
+        trace_path = _sanitize_log_filter(trace_path)
         entries = client_logging.list_entries(
             filter_=f'trace="{trace_path}"',
             order_by=logging_cloud.ASCENDING,

@@ -1,4 +1,3 @@
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -7,7 +6,6 @@ import httpx  # noqa: F401 — kept for potential use by routers
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from shared.fastapi_utils import instrument_app
-from shared.observability import setup_logging
 from opentelemetry import trace
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -50,7 +48,6 @@ trace.set_tracer_provider(provider)
 
 # 1. Setup DB Schema
 # Deferring schema creation to async startup event to speed up uvicorn boot
-
 
 
 @asynccontextmanager

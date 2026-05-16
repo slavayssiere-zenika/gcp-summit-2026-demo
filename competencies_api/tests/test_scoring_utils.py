@@ -17,13 +17,11 @@ import json
 import os
 import sys
 
-import pytest
 from src.competencies.scoring_utils import (_build_jsonl_lines,
                                             _build_scoring_prompt,
                                             _compute_recency_weight,
                                             _duration_multiplier,
                                             _estimate_duration_from_dates,
-                                            _format_mission_v2,
                                             _get_mission_bonus,
                                             _parse_duration_months,
                                             _parse_scoring_results_gcs)
@@ -305,7 +303,7 @@ class TestParseScoringResultsGCS:
         assert len(results) == 1
         assert results[0][0] == 1   # user_id
         assert results[0][1] == 10  # comp_id
-        assert results[0][3] == 4.0 # score
+        assert results[0][3] == 4.0  # score
 
     def test_empty_input(self):
         results, usage = _parse_scoring_results_gcs([], {})
@@ -382,3 +380,19 @@ class TestParseScoringResultsGCS:
         results, _ = _parse_scoring_results_gcs([json.dumps(record)], index)
         assert len(results) == 1
         assert results[0][3] == 3.5
+
+    def test_interleaved_empty_and_malformed_lines_skipped(self):
+        index = {"score-1-10": (1, 10, "Python"), "score-2-11": (2, 11, "Django")}
+        lines = [
+            self._make_valid_line("score-1-10", score=3.0),
+            "",
+            "   ",
+            "not a json string at all",
+            self._make_valid_line("score-2-11", score=4.0)
+        ]
+        results, usage = _parse_scoring_results_gcs(lines, index)
+        assert len(results) == 2
+        assert results[0][3] == 3.0
+        assert results[1][3] == 4.0
+        assert 1 in usage
+        assert 2 in usage

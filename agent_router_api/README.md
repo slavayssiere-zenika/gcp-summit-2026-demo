@@ -9,7 +9,7 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 200 | ✅ |
+| `main.py` | 219 | ✅ |
 | `conftest.py` | 20 | ✅ |
 | `metrics.py` | 45 | ✅ |
 | `agent.py` | 474 | ⚠️ |
@@ -17,6 +17,8 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 ## Variables d'environnement
 | Var | Type | Valeur dev |
 |---|---|---|
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
@@ -43,26 +45,20 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 **DB 2** — namespace `session:*` (historique) + `semantic:*` (cache sémantique)
 
 ## Endpoints clés
-- `GET /users/`
-- `GET /items/`
-- `PUT /items/{item_id}`
-- `POST /items/`
-- `DELETE /items/{item_id}`
-- `PATCH /items/`
-- `POST /send-notification/{email}`
-- `POST /files/`
-- `POST /uploadfile/`
-- `GET /items/{item_id}`
-- `GET /users/me/items/`
-- `GET /users/me`
-- `POST /login`
 - `GET /`
 - `GET /version`
 - `GET /spec`
+- `POST /login`
 - `POST /logout`
 - `GET /me`
 - `POST /query`
 - `GET /history`
+- `DELETE /history`
+- `GET /sessions`
+- `POST /sessions`
+- `PATCH /sessions/{session_id:path}`
+- `DELETE /sessions/{session_id:path}`
+- `GET /mcp/registry`
 
 ## Sous-agents consommés (A2A)
 - `agent_hr_api` — RH, CVs, compétences

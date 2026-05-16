@@ -39,8 +39,8 @@ async def get_tools():
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from mcp_server import mcp_auth_header_var
-        mcp_auth_header_var.set(auth_header)
+        from shared.auth.context import auth_header_var
+        auth_header_var.set(auth_header)
 
     try:
         # Evaluate call_tool dynamically bypassing the mcp.Server event loop queue

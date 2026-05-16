@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from shared.schemas.pagination import PaginationResponse
 from src.cvs.models import CVProfile
 from src.cvs.task_state import tree_task_manager
+from src.gemini_cache import get_or_create_prompt_cache
 from src.gemini_retry import generate_content_with_retry
 from src.services.config import COMPETENCIES_API_URL, PROMPTS_API_URL
 from src.services.finops import log_finops
@@ -58,7 +59,9 @@ async def fetch_prompt(prompt_name: str, auth_header: str) -> str:
         logger.error(
             f"Prompt {prompt_name} indisponible (erreur: {type(e).__name__} - {e}). Arrêt de l'agent (Fail-fast).")
         raise RuntimeError(
-            f"Critical failure: System prompt '{prompt_name}' could not be fetched from prompts_api. ({type(e).__name__} - {e})") from e
+            f"Critical failure: System prompt '{prompt_name}' could not be fetched "
+            f"from prompts_api. ({type(e).__name__} - {e})"
+        ) from e
 
 
 async def get_existing_competencies(auth_header: str) -> list[str]:
@@ -91,7 +94,7 @@ async def get_existing_competencies(auth_header: str) -> list[str]:
                     timeout=10.0,
                 )
                 comp_res.raise_for_status()
-                
+
                 try:
                     comp_data = PaginationResponse[dict].model_validate(comp_res.json())
                 except ValidationError as ve:
@@ -231,12 +234,21 @@ async def run_taxonomy_step(
                 skills_str = ", ".join(chunk)
                 map_instruction = instruction_map.replace("{{EXISTING_COMPETENCIES}}", skills_str)
 
+                # Context caching : le prompt système Map est invariant entre les chunks
+                cache_name = await get_or_create_prompt_cache(
+                    genai_client,
+                    model=os.environ["GEMINI_MODEL"],
+                    system_prompt=instruction_map.split("{{EXISTING_COMPETENCIES}}")[0].strip(),
+                    cache_key="taxonomy_map_v1",
+                )
+                extra_config = {"cached_content": cache_name} if cache_name else {}
+
                 response_map = await generate_content_with_retry(
                     genai_client,
                     model=os.environ["GEMINI_MODEL"],
-                    contents=[map_instruction],
+                    contents=[skills_str if cache_name else map_instruction],
                     config=types.GenerateContentConfig(
-                        temperature=0.1, response_mime_type="application/json"
+                        temperature=0.1, response_mime_type="application/json", **extra_config
                     ),
                 )
 
@@ -304,12 +316,23 @@ async def run_taxonomy_step(
             dedup_instruction = instruction_dedup.replace(
                 "{{MAP_RESULT}}", json.dumps(map_result, ensure_ascii=False)
             )
+
+            # Context caching pour l'étape Dedup
+            cache_name_dedup = await get_or_create_prompt_cache(
+                genai_client,
+                model=os.environ["GEMINI_MODEL"],
+                system_prompt=instruction_dedup.split("{{MAP_RESULT}}")[0].strip(),
+                cache_key="taxonomy_dedup_v1",
+            )
+            extra_dedup = {"cached_content": cache_name_dedup} if cache_name_dedup else {}
+            map_result_json = json.dumps(map_result, ensure_ascii=False)
+
             response_dedup = await generate_content_with_retry(
                 genai_client,
                 model=os.environ["GEMINI_MODEL"],
-                contents=[dedup_instruction],
+                contents=[map_result_json if cache_name_dedup else dedup_instruction],
                 config=types.GenerateContentConfig(
-                    temperature=0.1, response_mime_type="application/json"
+                    temperature=0.1, response_mime_type="application/json", **extra_dedup
                 ),
             )
             await log_finops(

@@ -18,7 +18,7 @@ Le monolithe `mcp_server.py` (~887L) a été décomposé en modules spécialisé
 | `tools/logs_tools.py` | ~209 | Cloud Logging (traces, logs, erreurs 500) |
 | `tools/data_tools.py` | ~126 | Redis, AlloyDB, Pub/Sub DLQ |
 | `tools/pipeline_tools.py` | ~222 | Health checks, statut ingestion CV |
-| `context.py` | ~11 | `mcp_auth_header_var` (ContextVar — évite les cycles) |
+| `context.py` | ~11 | `auth_header_var` (ContextVar — évite les cycles) |
 | `mcp_app.py` | 228 | ✅ FastAPI app + routes HTTP |
 | `auth.py` | 75 | ✅ verify_jwt local |
 
@@ -36,6 +36,8 @@ POST /mcp/call  →  mcp_server.py (dispatcher)
 | Var | Type | Valeur dev |
 |---|---|---|
 | `PYTHONUNBUFFERED` | Comportement | `1` |
+| `PYTHON_AR_REPO` | Comportement | `${PYTHON_AR_REPO}` |
+| `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `PORT` | Infra | `8080` |
@@ -56,7 +58,7 @@ POST /mcp/call  →  mcp_server.py (dispatcher)
 
 ## Gotchas connus
 - **`ROOT_PATH` vide** : contrairement aux autres services, `ROOT_PATH=""` — fix Dockerfile appliqué 2026-04-28.
-- **Anti-circularité** : `mcp_auth_header_var` défini dans `context.py` (pas dans `mcp_server.py`) pour éviter les imports circulaires entre le dispatcher et les modules `tools/`.
+- **Anti-circularité** : `auth_header_var` défini dans `context.py` (pas dans `mcp_server.py`) pour éviter les imports circulaires entre le dispatcher et les modules `tools/`.
 - **`is_ephemeral=True` interdite** en dev — les tools NAT doivent lever une `ValueError` si `SECRET_KEY` absente.
 - La sanity check timeout est à 90s — cold start AlloyDB IAM peut dépasser 35s.
 

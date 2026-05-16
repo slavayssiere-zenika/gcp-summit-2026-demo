@@ -1,11 +1,12 @@
 import asyncio
 import os
 from httpx import AsyncClient
-from jose import jwt
+import jwt
 
 SECRET_KEY = os.getenv("SECRET_KEY", "test_secret")
 token = jwt.encode({"sub": "testuser"}, SECRET_KEY, algorithm="HS256")
 print(f"Token: {token}")
+
 
 async def run():
     async with AsyncClient() as client:

@@ -10,7 +10,7 @@ client = TestClient(app)
 
 
 def get_auth_token(sub="user_1"):
-    from jose import jwt
+    import jwt
     from router import SECRET_KEY
 
     from shared.auth.jwt import ALGORITHM

@@ -2,7 +2,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from mcp_server import call_tool, mcp_auth_header_var
+from mcp_server import call_tool
+from shared.auth.context import auth_header_var
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -25,7 +26,7 @@ async def test_list_missions_tool(mocker):
     mock_resp.json.return_value = [{"id": 1, "name": "Mission 1"}]
     client_instance.get.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
 
     result = await call_tool(name="list_missions", arguments={})
     data = json.loads(result[0].text)
@@ -72,7 +73,7 @@ async def test_other_tools(mocker):
     client_instance.patch.return_value = mock_resp
     client_instance.delete.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
 
     tools = [
         ("reanalyze_mission", {"mission_id": 1}),

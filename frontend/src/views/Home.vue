@@ -26,6 +26,7 @@ import CompetencyBadge from '@/components/agent/CompetencyBadge.vue'
 import CompetencyList from '@/components/agent/CompetencyList.vue'
 import EvaluationCard from '@/components/agent/EvaluationCard.vue'
 import EvaluationTable from '@/components/agent/EvaluationTable.vue'
+import SessionPanel from '@/components/agent/SessionPanel.vue'
 
 const isHealthComponent = (obj: any) => obj && typeof obj.status === 'string' && typeof obj.component === 'string'
 const isHealthData = (arr: any[]) => arr && arr.length > 0 && arr.every((o: any) => isHealthComponent(o))
@@ -178,7 +179,7 @@ onMounted(() => {
   if (route.query.q) {
     handleSearch(route.query.q as string)
   }
-  chatStore.fetchHistory().then(() => scrollToBottom())
+  chatStore.loadSessions().then(() => scrollToBottom())
 })
 
 watch(() => route.query.q, (newQ) => {
@@ -196,12 +197,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="chat-wrapper">
-    <!-- History loading banner -->
-    <div v-if="chatStore.isLoadingHistory" class="history-loading-banner" aria-live="polite">
-      <RefreshCw size="13" class="history-loading-spin" />
-      {{ t('chat.loading_history') }}
-    </div>
+  <div class="home-layout">
+    <!-- Panneau latéral sessions -->
+    <SessionPanel />
+
+    <!-- Zone de chat principale -->
+    <div class="chat-wrapper">
+      <!-- History loading banner -->
+      <div v-if="chatStore.isLoadingHistory" class="history-loading-banner" aria-live="polite">
+        <RefreshCw size="13" class="history-loading-spin" />
+        {{ t('chat.loading_history') }}
+      </div>
 
     <div class="chat-container" ref="chatContainer">
       <!-- Project Introduction -->
@@ -497,18 +503,27 @@ onUnmounted(() => {
       </div>
     </div>
   </div>
+</div>
 </template>
 
 <style scoped>
-.chat-wrapper {
+.home-layout {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: calc(100vh - 140px);
   background: white;
   border-radius: 24px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.chat-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .history-loading-banner {

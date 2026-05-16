@@ -7,7 +7,8 @@ import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from mcp_server import call_tool, mcp_auth_header_var
+from mcp_server import call_tool
+from shared.auth.context import auth_header_var
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -19,44 +20,46 @@ def mcp_tools_env(session_mocker):
     })
 
 
-
 @pytest.mark.asyncio
 async def test_analyze_cv_tool(mocker):
     mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
+
     mock_resp = MagicMock(status_code=200)
-    mock_resp.json.return_value = {"message": "Success", "user_id": 1, "competencies_assigned": 5}
+    mock_resp.json.return_value = {
+        "message": "Success",
+        "user_id": 1,
+        "competencies_assigned": 5}
     client_instance.post.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
-    
+    auth_header_var.set("Bearer token")
+
     result = await call_tool(name="analyze_cv", arguments={"url": "http://test.com/cv"})
     assert "Success" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_search_best_candidates_tool(mocker):
     mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
+
     mock_resp = MagicMock(status_code=200)
     mock_resp.json.return_value = [{"user_id": 1, "similarity_score": 0.9}]
     client_instance.get.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
 
     result = await call_tool(name="search_best_candidates", arguments={"query": "Java developer", "limit": 5})
     assert "similarity_score" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_recalculate_competencies_tree_tool(mocker):
     mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
-    import httpx
 
     # simulate HTTPError for branch coverage
     # First success
@@ -64,15 +67,16 @@ async def test_recalculate_competencies_tree_tool(mocker):
     mock_resp.json.return_value = {"tree": {"Root": "Child"}}
     client_instance.post.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
 
     result = await call_tool(name="recalculate_competencies_tree", arguments={})
     assert "Root" in result[0].text
-    
+
     # 2. exception coverage
     client_instance.post.side_effect = Exception("General error")
     result = await call_tool(name="recalculate_competencies_tree", arguments={})
     assert "Request failed: General error" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_tool_errors(mocker):
@@ -85,29 +89,31 @@ async def test_tool_errors(mocker):
     result = await call_tool(name="non_existent", arguments={})
     assert "Unknown tool" in result[0].text
 
+
 @pytest.mark.asyncio
 async def test_api_error_returns_structured_error(mocker):
     """Vérifie qu'une erreur réseau/HTTP ne fait pas crasher l'agent mais retourne {success: false}"""
     mock_httpx = mocker.patch("mcp_server.httpx.AsyncClient")
     client_instance = AsyncMock()
     mock_httpx.return_value.__aenter__.return_value = client_instance
-    
+
     import httpx
     mock_resp = MagicMock()
     mock_resp.status_code = 500
     mock_resp.text = "Internal Server Error"
-    
+
     # Simuler une erreur HTTP (ex: 500)
     client_instance.get.side_effect = httpx.HTTPStatusError(
         "500 Server Error", request=MagicMock(), response=mock_resp
     )
-    
-    mcp_auth_header_var.set("Bearer token")
+
+    auth_header_var.set("Bearer token")
     result = await call_tool(name="search_best_candidates", arguments={"query": "Java", "limit": 5})
-    
+
     # Doit retourner du texte contenant 'success' et 'false' ou 'error'
     assert result[0].text
-    assert "success" in result[0].text.lower() or "error" in result[0].text.lower()
+    assert "success" in result[0].text.lower(
+    ) or "error" in result[0].text.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -122,11 +128,15 @@ async def test_reindex_cv_embeddings_tool(mocker):
     mock_httpx.return_value.__aenter__.return_value = client_instance
 
     mock_resp = MagicMock(status_code=200)
-    mock_resp.json.return_value = {"message": "Re-indexation des embeddings lancée", "filter": {"tag": None, "user_id": None}}
+    mock_resp.json.return_value = {
+        "message": "Re-indexation des embeddings lancée",
+        "filter": {
+            "tag": None,
+            "user_id": None}}
     mock_resp.raise_for_status = MagicMock()
     client_instance.post.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
     result = await call_tool(name="reindex_cv_embeddings", arguments={})
     assert "Re-indexation" in result[0].text or "embeddings" in result[0].text.lower()
 
@@ -143,19 +153,21 @@ async def test_find_similar_consultants_tool(mocker):
     mock_httpx.return_value.__aenter__.return_value = client_instance
 
     mock_resp = MagicMock(status_code=200)
-    mock_resp.json.return_value = [
-        {"user_id": 2, "similarity_score": 0.92, "full_name": "Alice Dupont", "current_role": "Tech Lead"}
-    ]
+    mock_resp.json.return_value = [{"user_id": 2,
+                                    "similarity_score": 0.92,
+                                    "full_name": "Alice Dupont",
+                                    "current_role": "Tech Lead"}]
     mock_resp.raise_for_status = MagicMock()
     client_instance.get.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
     result = await call_tool(name="find_similar_consultants", arguments={"user_id": 1, "limit": 5})
     assert "similarity_score" in result[0].text or "Alice" in result[0].text
 
     # Erreur : user_id manquant
     result_err = await call_tool(name="find_similar_consultants", arguments={})
-    assert "user_id requis" in result_err[0].text or "success" in result_err[0].text.lower()
+    assert "user_id requis" in result_err[0].text or "success" in result_err[0].text.lower(
+    )
 
 
 @pytest.mark.asyncio
@@ -166,13 +178,14 @@ async def test_search_candidates_multi_criteria_tool(mocker):
     mock_httpx.return_value.__aenter__.return_value = client_instance
 
     mock_resp = MagicMock(status_code=200)
-    mock_resp.json.return_value = [
-        {"user_id": 5, "combined_similarity": 0.87, "full_name": "Bob Martin", "current_role": "DevOps"}
-    ]
+    mock_resp.json.return_value = [{"user_id": 5,
+                                    "combined_similarity": 0.87,
+                                    "full_name": "Bob Martin",
+                                    "current_role": "DevOps"}]
     mock_resp.raise_for_status = MagicMock()
     client_instance.post.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
     result = await call_tool(
         name="search_candidates_multi_criteria",
         arguments={"queries": ["expert GCP", "migration legacy"], "weights": [0.7, 0.3], "limit": 5}
@@ -181,7 +194,8 @@ async def test_search_candidates_multi_criteria_tool(mocker):
 
     # Erreur : queries manquant
     result_err = await call_tool(name="search_candidates_multi_criteria", arguments={})
-    assert "queries requis" in result_err[0].text or "success" in result_err[0].text.lower()
+    assert "queries requis" in result_err[0].text or "success" in result_err[0].text.lower(
+    )
 
 
 @pytest.mark.asyncio
@@ -200,13 +214,14 @@ async def test_get_rag_snippet_tool(mocker):
     mock_resp.raise_for_status = MagicMock()
     client_instance.get.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
     result = await call_tool(name="get_rag_snippet", arguments={"user_id": 1, "query": "Kubernetes CI/CD"})
     assert "snippets" in result[0].text or "Kubernetes" in result[0].text
 
     # Erreur : paramètres manquants
     result_err = await call_tool(name="get_rag_snippet", arguments={"user_id": 1})
-    assert "user_id et query requis" in result_err[0].text or "success" in result_err[0].text.lower()
+    assert "user_id et query requis" in result_err[0].text or "success" in result_err[0].text.lower(
+    )
 
 
 @pytest.mark.asyncio
@@ -217,19 +232,21 @@ async def test_match_mission_to_candidates_tool(mocker):
     mock_httpx.return_value.__aenter__.return_value = client_instance
 
     mock_resp = MagicMock(status_code=200)
-    mock_resp.json.return_value = [
-        {"user_id": 3, "similarity_score": 0.88, "full_name": "Carol Li", "current_role": "Cloud Architect"}
-    ]
+    mock_resp.json.return_value = [{"user_id": 3,
+                                    "similarity_score": 0.88,
+                                    "full_name": "Carol Li",
+                                    "current_role": "Cloud Architect"}]
     mock_resp.raise_for_status = MagicMock()
     client_instance.post.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
     result = await call_tool(name="match_mission_to_candidates", arguments={"mission_id": 42, "limit": 5})
     assert "similarity_score" in result[0].text or "Carol" in result[0].text
 
     # Erreur : mission_id manquant
     result_err = await call_tool(name="match_mission_to_candidates", arguments={})
-    assert "mission_id requis" in result_err[0].text or "success" in result_err[0].text.lower()
+    assert "mission_id requis" in result_err[0].text or "success" in result_err[0].text.lower(
+    )
 
 
 @pytest.mark.asyncio
@@ -248,7 +265,7 @@ async def test_get_skills_coverage_tool(mocker):
     mock_resp.raise_for_status = MagicMock()
     client_instance.get.return_value = mock_resp
 
-    mcp_auth_header_var.set("Bearer token")
+    auth_header_var.set("Bearer token")
     result = await call_tool(name="get_skills_coverage", arguments={"top_n": 3})
     assert "Kubernetes" in result[0].text or "consultant_count" in result[0].text
 

@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 from metrics import USER_CREATIONS_TOTAL, USER_LOGINS_TOTAL
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -30,8 +31,14 @@ auth_router = APIRouter(prefix="", tags=["auth"])
 
 def _set_auth_cookies(request: Request, response: Response, access_token: str, refresh_token: str) -> None:
     is_https = request.headers.get("x-forwarded-proto", "http").lower() == "https"
-    response.set_cookie(key="access_token", value=access_token, httponly=True, max_age=15 * 60, samesite="lax", secure=is_https)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, max_age=3600 * 24 * 7, samesite="lax", secure=is_https)
+    response.set_cookie(
+        key="access_token", value=access_token, httponly=True,
+        max_age=15 * 60, samesite="lax", secure=is_https
+    )
+    response.set_cookie(
+        key="refresh_token", value=refresh_token, httponly=True,
+        max_age=3600 * 24 * 7, samesite="lax", secure=is_https
+    )
 
 
 @auth_router.post("/login", response_model=TokenResponse)
@@ -70,7 +77,7 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
         username: str = payload.get("sub")
         if not username:
             raise HTTPException(status_code=401, detail="Token invalide")
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Refresh token expiré ou invalide")
 
     user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
@@ -98,10 +105,12 @@ async def logout(response: Response):
 @auth_router.post("/service-account/login", response_model=TokenResponse)
 async def service_account_login(req: ServiceAccountLoginRequest, db: AsyncSession = Depends(get_db)):
     try:
-        from jose import jwt as jose_jwt
         try:
-            unverified_claims = jose_jwt.get_unverified_claims(req.id_token)
-            aud = unverified_claims.get("aud")
+            # PyJWT : decode sans vérification de signature pour extraire l'audience
+            unverified = jwt.decode(
+                req.id_token, options={"verify_signature": False}, algorithms=["RS256", "ES256"]
+            )
+            aud = unverified.get("aud")
         except Exception:
             aud = None
 
@@ -238,9 +247,15 @@ async def router_health():
 
 
 @auth_router.post("/internal/service-token", response_model=TokenResponse)
-async def create_service_token(request: Request, db: AsyncSession = Depends(get_db), token_payload: dict = Depends(verify_jwt)):
+async def create_service_token(
+    request: Request, db: AsyncSession = Depends(get_db),
+    token_payload: dict = Depends(verify_jwt)
+):
     if token_payload.get("role") not in ["admin", "service_account"]:
-        raise HTTPException(status_code=403, detail="Privilèges administrateur (ou compte de service) requis pour générer un service token.")
+        raise HTTPException(
+            status_code=403,
+            detail="Privilèges administrateur (ou compte de service) requis pour générer un service token."
+        )
 
     username = token_payload.get("sub")
     if not username:

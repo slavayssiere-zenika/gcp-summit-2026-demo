@@ -8,6 +8,8 @@ Ce module expose :
   - _record_failure()     : enregistre un échec (incrémente le compteur Redis/mémoire)
   - _record_success()     : réinitialise le circuit-breaker après un succès
   - _call_sub_agent()     : appel HTTP A2A résilient avec retry + circuit-breaker + mode dégradé
+  - discover_sub_agents() : A2A v2 — récupère les AgentCards via /.well-known/agent.json (cache TTL)
+  - _SUB_AGENT_REGISTRY   : registre statique des sous-agents (URL de base)
   - ask_hr_agent()        : outil LLM → délègue à l'Agent RH
   - ask_ops_agent()       : outil LLM → délègue à l'Agent Ops
   - ask_missions_agent()  : outil LLM → délègue à l'Agent Missions
@@ -312,7 +314,6 @@ async def _call_sub_agent(
     }
 
 
-
 # ── Outils LLM A2A ───────────────────────────────────────────────────────────
 
 async def ask_hr_agent(query: str, user_id: str = "") -> dict:
@@ -441,6 +442,187 @@ async def ask_missions_agent(query: str, user_id: str = "") -> dict:
         "thoughts": data.get("thoughts", ""),
         "confidence": _compute_confidence(data.get("steps", [])),
     })}
+
+
+# ── A2A v2 — Service Discovery ────────────────────────────────────────────────
+# Registre statique des sous-agents avec leur URL de base.
+# Alimenté par les variables d'environnement (configurées dans docker-compose / Cloud Run).
+_SUB_AGENT_REGISTRY: dict[str, str] = {
+    "hr_agent": os.getenv("AGENT_HR_API_URL", "http://agent_hr_api:8080"),
+    "ops_agent": os.getenv("AGENT_OPS_API_URL", "http://agent_ops_api:8080"),
+    "missions_agent": os.getenv("AGENT_MISSIONS_API_URL", "http://agent_missions_api:8080"),
+}
+
+# Cache TTL pour les AgentCards (évite les appels réseau redondants — 5 min)
+_AGENT_CARD_CACHE: dict[str, tuple[dict, float]] = {}
+_AGENT_CARD_CACHE_TTL_S: float = float(os.getenv("AGENT_CARD_CACHE_TTL_S", "300"))
+
+
+async def discover_sub_agents(force_refresh: bool = False) -> dict[str, dict]:
+    """A2A v2 — Découverte dynamique des sous-agents via GET /.well-known/agent.json.
+
+    Interroge chaque sous-agent enregistré dans _SUB_AGENT_REGISTRY pour récupérer
+    son AgentCard (nom, description, compétences, endpoint). Les résultats sont mis en
+    cache TTL (_AGENT_CARD_CACHE_TTL_S = 5 min par défaut) pour éviter les appels
+    réseau redondants sur chaque requête.
+
+    Usage typique : appelé au démarrage du Router pour construire le contexte système
+    de l'agent LLM et enrichir les docstrings des outils avec les capacités réelles.
+
+    Args:
+        force_refresh: Si True, ignore le cache et interroge les agents directement.
+
+    Returns:
+        Dict ``{agent_name: agent_card_dict}`` pour chaque agent accessible.
+        Les agents inaccessibles sont absents du dict (pas d'erreur levée — fail-soft).
+    """
+    now = time.monotonic()
+    result: dict[str, dict] = {}
+
+    for agent_name, base_url in _SUB_AGENT_REGISTRY.items():
+        if not force_refresh:
+            cached = _AGENT_CARD_CACHE.get(agent_name)
+            if cached is not None:
+                card, expires_at = cached
+                if now < expires_at:
+                    result[agent_name] = card
+                    logger.debug("[A2A:discovery] Cache HIT for %s (expires in %.0fs)", agent_name, expires_at - now)
+                    continue
+
+        discovery_url = f"{base_url.rstrip('/')}/.well-known/agent.json"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.get(discovery_url)
+                res.raise_for_status()
+                card = res.json()
+                _AGENT_CARD_CACHE[agent_name] = (card, now + _AGENT_CARD_CACHE_TTL_S)
+                result[agent_name] = card
+                logger.info(
+                    "[A2A:discovery] ✅ AgentCard fetched for %s — skills: %s",
+                    agent_name,
+                    [s.get("id") for s in card.get("skills", [])],
+                )
+        except Exception as e:
+            logger.warning(
+                "[A2A:discovery] ⚠️ Could not fetch AgentCard for %s at %s: %s",
+                agent_name, discovery_url, e,
+            )
+
+    return result
+
+
+def _build_docstring_from_card(card: dict, tool_fn_name: str) -> str:
+    """Construit la docstring LLM d'un outil A2A à partir d'une AgentCard.
+
+    La docstring produite suit le format que google-adk injecte dans le contexte
+    du LLM comme description de l'outil. Elle doit être :
+    - Claire sur CE QUE fait l'agent (skills avec descriptions)
+    - Explicite sur QUAND utiliser cet outil (routing_hints.do_use_when)
+    - Explicite sur QUAND NE PAS l'utiliser (routing_hints.do_not_use_when)
+    - Illustrée par des exemples concrets (examples)
+
+    Args:
+        card:         L'AgentCard retournée par GET /.well-known/agent.json.
+        tool_fn_name: Nom de la fonction Python (pour les logs).
+
+    Returns:
+        Docstring complète prête à être assignée à ``fn.__doc__``.
+    """
+    lines: list[str] = []
+
+    name = card.get("name", tool_fn_name)
+    description = card.get("description", "")
+    lines.append(f"{description}")
+    lines.append("")
+
+    # ── Capacités (skills) ────────────────────────────────────────────────────
+    skills = card.get("skills", [])
+    if skills:
+        lines.append("Capacités disponibles :")
+        for skill in skills:
+            skill_name = skill.get("name", skill.get("id", ""))
+            skill_desc = skill.get("description", "")
+            lines.append(f"  - {skill_name} : {skill_desc}")
+        lines.append("")
+
+    # ── Routing — quand utiliser ──────────────────────────────────────────────
+    hints = card.get("routing_hints", {})
+    do_use = hints.get("do_use_when", [])
+    if do_use:
+        lines.append("Utiliser cet outil quand :")
+        for hint in do_use:
+            lines.append(f"  ✓ {hint}")
+        lines.append("")
+
+    # ── Routing — quand NE PAS utiliser ──────────────────────────────────────
+    do_not = hints.get("do_not_use_when", [])
+    if do_not:
+        lines.append("NE PAS utiliser cet outil quand :")
+        for hint in do_not:
+            lines.append(f"  ✗ {hint}")
+        lines.append("")
+
+    # ── Exemples d'invocation ─────────────────────────────────────────────────
+    examples = card.get("examples", [])
+    if examples:
+        lines.append("Exemples de requêtes :")
+        for ex in examples[:4]:
+            lines.append(f'  - "{ex.get("query", "")}"')
+        lines.append("")
+
+    # ── Args (constant — tous les tools A2A ont la même signature) ────────────
+    lines.append("Args:")
+    lines.append("    query (str): La requête détaillée à transmettre à l'agent. Inclure tout le contexte pertinent.")
+    lines.append("    user_id (str): L'identifiant utilisateur (email JWT). Laissé vide — résolu depuis le token.")
+
+    logger.info("[A2A:enrich] Docstring built for '%s' from AgentCard '%s'", tool_fn_name, name)
+    return "\n".join(lines)
+
+
+# Mapping tool_function → agent_name dans le registre de discovery
+_TOOL_AGENT_MAP: dict[str, str] = {
+    "ask_hr_agent": "hr_agent",
+    "ask_ops_agent": "ops_agent",
+    "ask_missions_agent": "missions_agent",
+}
+
+
+def enrich_tool_docstrings(cards: dict[str, dict]) -> None:
+    """Injecte les docstrings LLM dynamiques depuis les AgentCards dans les tool functions.
+
+    Appelée au démarrage du Router (lifespan) après ``discover_sub_agents()``.
+    Met à jour l'attribut ``__doc__`` de chaque fonction A2A tool afin que
+    google-adk expose les bonnes descriptions au LLM lors de la création de l'Agent.
+
+    Fail-soft : si une AgentCard est manquante pour un agent donné, la docstring
+    statique hardcodée dans le code source est conservée.
+
+    Args:
+        cards: Dict ``{agent_name: agent_card_dict}`` retourné par discover_sub_agents().
+    """
+    import sys
+    current_module = sys.modules[__name__]
+
+    for fn_name, agent_name in _TOOL_AGENT_MAP.items():
+        card = cards.get(agent_name)
+        if card is None:
+            logger.warning(
+                "[A2A:enrich] No AgentCard for '%s' — keeping static docstring for '%s'.",
+                agent_name, fn_name,
+            )
+            continue
+
+        fn = getattr(current_module, fn_name, None)
+        if fn is None:
+            logger.warning("[A2A:enrich] Function '%s' not found in module — skipping.", fn_name)
+            continue
+
+        new_doc = _build_docstring_from_card(card, fn_name)
+        fn.__doc__ = new_doc
+        logger.info(
+            "[A2A:enrich] ✅ Docstring updated for '%s' (%d chars from AgentCard '%s').",
+            fn_name, len(new_doc), card.get("name", agent_name),
+        )
 
 
 # Liste des outils exposés au Router LLM

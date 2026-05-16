@@ -6,7 +6,8 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from mcp_server import call_tool, list_tools, mcp_auth_header_var
+from mcp_server import call_tool, list_tools
+from shared.auth.context import auth_header_var
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -34,7 +35,7 @@ async def get_tools():
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        mcp_auth_header_var.set(auth_header)
+        auth_header_var.set(auth_header)
 
     try:
         result = await call_tool(request.name, request.arguments)
