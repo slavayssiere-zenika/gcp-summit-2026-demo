@@ -39,6 +39,9 @@ async def init_db_connector():
         "pool_recycle": 1800,
         "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
         "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
+        # Fail-fast si pool sature : renvoie 500 apres 5s au lieu de bloquer 30s
+        # (defaut SQLAlchemy = 30s → cascade de latences sur toutes les routes items_api)
+        "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", 5)),
     }
 
     if USE_IAM_AUTH and ALLOYDB_INSTANCE_URI:
@@ -111,8 +114,8 @@ async def check_db_connection() -> bool:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    # Pas de finally: await db.close() — async with SessionLocal() gere deja le cycle
+    # de vie via __aexit__ + asyncio.shield(). Un double-close cause IllegalStateChangeError
+    # sous charge concurrente avec SQLAlchemy 2.x + Python 3.13.
     async with SessionLocal() as db:
-        try:
-            yield db
-        finally:
-            await db.close()
+        yield db

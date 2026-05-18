@@ -28,9 +28,11 @@ class TestCrudRouterEdgeCases:
         from src.items.crud_router import get_user_from_api
 
         mock_request = MagicMock()
+        mock_request.user = None
         mock_request.headers.get.return_value = "Bearer fake"
 
         mock_response = MagicMock()
+        mock_response.user = None
         mock_response.status_code = 404
 
         async def run():
@@ -54,6 +56,7 @@ class TestCrudRouterEdgeCases:
         from src.items.crud_router import get_user_from_api
 
         mock_request = MagicMock()
+        mock_request.user = None
         mock_request.headers.get.return_value = "Bearer fake"
 
         async def run():
@@ -124,6 +127,7 @@ class TestItemsCacheEdgeCases:
         import cache
         with patch("cache.get_client") as mock_cl:
             mock_setex = MagicMock()
+            mock_setex.user = None
             mock_cl.return_value.setex = mock_setex
             cache.set_cache("k", {"ts": datetime.datetime(2026, 1, 1)}, expire=30)
             mock_setex.assert_called_once()
@@ -137,6 +141,7 @@ class TestItemsCacheEdgeCases:
         with patch("cache.get_client") as mock_cl:
             mock_cl.return_value.scan_iter = MagicMock(return_value=iter(["k1", "k2", "k3"]))
             mock_delete = MagicMock()
+            mock_delete.user = None
             mock_cl.return_value.delete = mock_delete
             cache.delete_cache_pattern("items:*")
             assert mock_delete.call_count == 3

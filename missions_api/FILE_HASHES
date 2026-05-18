@@ -7,8 +7,8 @@
 0ef20bc643318962139d0938ec7cc7ca208125ee  ./missions_api/tests/test_analysis.py
 11f97146d8c4a145e50a24052d0df2233c30abb3  ./missions_api/tests/test_security_upload.py
 1711ff67eb98c8e0f51ba7d23b2f54da33d8f601  ./missions_api/exemples/E.txt
-1717a995a1c39df11ec33a3af520be0c434853e3  ./shared/pyproject.toml
 19ca37cf46a9a7f05a090d6d6c654c0ada4d84f3  ./shared/tests/test_edge_cases.py
+1bbcbbb4ba29f695566b8de26aef1394684a1a4e  ./shared/database.py
 25868914107e2c1ac286f7cbc363b58a287cbabc  ./shared/tests/zero_trust.py
 25a73734485c33a9f1ceca62ae03dddeee4059e3  ./missions_api/src/missions/analysis_service.py
 26fdf39a22dab108a59f278c7855a665a48c3c0a  ./missions_api/tests/test_helpers.py
@@ -25,7 +25,7 @@
 4e6818299475eadd0c23030f1ce008fad2904e45  ./missions_api/mcp_app.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f51a07770851ba1f12acd471e85c2d658449988  ./missions_api/exemples/C.txt
-562c6acf8fc916c83f4b75171a8104398e60d9f7  ./shared/database.py
+52966f9a7d9d62c2f1a51d6986f5c9f11a6a6c5b  ./shared/pyproject.toml
 59dc185a4e17ca5d3996a4ca96d4822cf540d9a0  ./shared/mcp_server_utils.py
 59dfd4b5d0b3b1c161ea9ddfc331c09e45796bb3  ./missions_api/tests/test_jwt_propagation.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
@@ -47,8 +47,8 @@
 99db07f3413749b498631ce9e80ae0ba2a850b9d  ./missions_api/src/missions/document_extractor.py
 9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 a0925fe8e9c7b1cbf5183f4b499952550a3cd9bd  ./missions_api/tests/test_edge_cases.py
+a480f8dc248051d5d0b95811fd32101b696f0fe3  ./missions_api/Dockerfile
 aa390b320caaa317866a638033f554682cc94a5f  ./missions_api/extract_mission_info.txt
-abcff4d0453d071ce3b20ad8851d5c7b2942ff9a  ./missions_api/Dockerfile
 b29442319a24f7321c583ddabff757e7e613ddb2  ./missions_api/tests/test_mcp_tools.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
 b7c483212a41f3539c6e70d2e4ae28b02dbbb76c  ./missions_api/exemples/B.txt

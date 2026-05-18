@@ -1,4 +1,4 @@
-from conftest import override_get_db, override_verify_jwt as orig_verify_jwt
+from conftest import override_get_db, override_verify_jwt as orig_verify_jwt  # noqa: E402
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,6 +26,7 @@ def setup_and_clear_overrides():
 def test_delete_user_items_success():
     mock_db = AsyncMock()
     mock_execute_res = MagicMock()
+    mock_execute_res.user = None
     mock_execute_res.scalars.return_value.all.return_value = [1, 2]
     mock_db.execute.return_value = mock_execute_res
     app.dependency_overrides[get_db] = lambda: mock_db

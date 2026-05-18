@@ -18,6 +18,12 @@ from src.items.schemas import (BulkItemCreate, CategoryResponse,
                                ItemCreate, ItemResponse, ItemUpdate,
                                PaginationResponse, UserInfo)
 
+# Semaphore limitant les appels HTTP concurrents vers users_api depuis asyncio.gather.
+# Sans ce plafond : 50 users Locust x limit=10 items = 500 connexions DB simultanees
+# -> QueuePool(size=10, overflow=20) explose en TimeoutError.
+# Valeur : DB_POOL_SIZE * 0.75 = ~15 appels concurrents max par process.
+_ENRICH_SEM = asyncio.Semaphore(int(os.getenv("DB_POOL_SIZE", 20)) * 3 // 4)
+
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
 # Guard 429 — protège le pool AlloyDB contre les appels bulk massifs (post-mortem 2026-05-13)
@@ -48,7 +54,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
         headers["Authorization"] = auth_header
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
-            response = await client.get(f"{USERS_API_URL.rstrip('/')}/users/{user_id}", headers=headers)
+            response = await client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
             if response.status_code == 404:
                 raise HTTPException(status_code=400, detail=f"User with id {user_id} not found")
             response.raise_for_status()
@@ -58,10 +64,23 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
 
 
 async def enrich_item(item: Item, request: Request) -> ItemResponse:
-    try:
-        user = await get_user_from_api(item.user_id, request)
-    except HTTPException:
-        user = None
+    """Enrichit un item avec les infos user.
+
+    Optimisation N+1 : le UserInfo est cache en Redis (TTL=120s) pour eviter
+    un appel HTTP vers users_api par item lors des GET /items/ avec pagination.
+    _ENRICH_SEM limite les appels concurrents pour eviter l epuisement du pool DB.
+    """
+    async with _ENRICH_SEM:
+        user_cache_key = f"items:user_info:{item.user_id}"
+        cached_user = get_cache(user_cache_key)
+        if cached_user:
+            user = UserInfo(**cached_user)
+        else:
+            try:
+                user = await get_user_from_api(item.user_id, request)
+                set_cache(user_cache_key, user.model_dump(), 120)  # TTL 120s
+            except HTTPException:
+                user = None
     return ItemResponse(
         id=item.id,
         name=item.name,
@@ -82,13 +101,21 @@ async def list_items(
     skip: int = Query(0, ge=0, le=2_147_483_647, description="Number of records to skip"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
     search: str = Query(None, description="Search term"),
+    include_user: bool = Query(
+        False,
+        description=(
+            "Enrichit chaque item avec les infos user (nom, email) via users_api. "
+            "False par defaut : evite N appels HTTP sous charge (N=taille de la page). "
+            "Mettre True uniquement si le client a besoin des details utilisateur."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
     allowed_ids = auth_payload.get("allowed_category_ids", [])
     allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
     search_str = search or "none"
-    cache_key = f"items:list:{skip}:{limit}:search_{search_str}:auth_{allowed_ids_str}"
+    cache_key = f"items:list:{skip}:{limit}:search_{search_str}:auth_{allowed_ids_str}:enrich_{include_user}"
 
     cached = get_cache(cache_key)
     if cached:
@@ -98,12 +125,30 @@ async def list_items(
         return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
 
     from sqlalchemy import func
-    base_query = select(Item).options(selectinload(Item.categories)).join(
-        Item.categories).filter(Category.id.in_(allowed_ids)).distinct()
+    # Count optimise : evite le double-wrap subquery
+    count_q = (
+        select(func.count(Item.id.distinct()))
+        .join(Item.categories)
+        .filter(Category.id.in_(allowed_ids))
+    )
+    base_query = (
+        select(Item).options(selectinload(Item.categories))
+        .join(Item.categories)
+        .filter(Category.id.in_(allowed_ids))
+        .distinct()
+    )
 
-    total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar()
+    # Sequentiel obligatoire : AsyncSession n'accepte pas 2 db.execute() en gather simultane
+    total = (await db.execute(count_q)).scalar()
     items = (await db.execute(base_query.offset(skip).limit(limit))).scalars().all()
-    enriched_items = [await enrich_item(item, request) for item in items]
+
+    if include_user:
+        # Parallelisation asyncio.gather uniquement sur les appels HTTP (enrich = users_api)
+        enriched_items = await asyncio.gather(*[enrich_item(item, request) for item in items])
+    else:
+        # Mode rapide : aucun appel HTTP vers users_api, user=null dans la reponse
+        enriched_items = [ItemResponse.model_validate(item, from_attributes=True) for item in items]
+
     result = PaginationResponse(
         items=[i.model_dump() for i in enriched_items],
         total=total,
@@ -118,15 +163,27 @@ async def list_items(
 async def get_item(
     request: Request,
     item_id: int = Path(..., gt=0, le=2_147_483_647),
+    include_user: bool = Query(
+        True,
+        description=(
+            "Enrichit l item avec les infos user via users_api. "
+            "True par defaut sur /items/{id} car c est un endpoint de detail. "
+            "Mettre False pour une lecture rapide sans user info."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     auth_payload: dict = Depends(verify_jwt)
 ):
-    cache_key = f"items:{item_id}"
+    cache_key = f"items:{item_id}:enrich_{include_user}"
     cached = get_cache(cache_key)
     if cached:
         return ItemResponse(**cached)
 
-    item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()  # noqa: E501
+    item = (
+        await db.execute(
+            select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id)
+        )
+    ).scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -137,7 +194,10 @@ async def get_item(
         if not item_categories.intersection(allowed_ids):
             raise HTTPException(status_code=403, detail="Not authorized to view this item")
 
-    result = await enrich_item(item, request)
+    if include_user:
+        result = await enrich_item(item, request)
+    else:
+        result = ItemResponse.model_validate(item, from_attributes=True)
     set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
@@ -326,8 +386,14 @@ async def _create_items_bulk_inner(
             await db.rollback()
             raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création en masse")
 
-    final_items = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id.in_(result_item_ids)))).scalars().all()  # noqa: E501
-    return [await enrich_item(db_item, request) for db_item in final_items]
+    final_items = (
+        await db.execute(
+            select(Item).options(selectinload(Item.categories))
+            .filter(Item.id.in_(result_item_ids))
+        )
+    ).scalars().all()  # noqa: E501
+    # Parallelisation asyncio.gather — evite N awaits sequentiels pour 5 items
+    return list(await asyncio.gather(*[enrich_item(db_item, request) for db_item in final_items]))
 
 
 @router.put("/{item_id}", response_model=ItemResponse)

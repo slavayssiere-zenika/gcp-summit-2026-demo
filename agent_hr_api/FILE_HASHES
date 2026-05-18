@@ -4,10 +4,10 @@
 0e4b7bb4513f2cf14938dcdf814c263731758177  ./agent_hr_api/agent_api.capabilities_instruction.txt
 1068cd5199e812f8c08ec88e23c1579e76ffc7b5  ./agent_commons/agent_commons/taxonomy_utils.py
 10ddc76334420c4025b19db20eddc62ea2f545f3  ./agent_hr_api/tests/test_create_agent_jwt.py
-1717a995a1c39df11ec33a3af520be0c434853e3  ./shared/pyproject.toml
 1761955cae3ae0584311dd867ffb5996405d4269  ./agent_hr_api/tests/test_session.py
 18cc69b64bf865bd73d1c6a0376865ef28e53245  ./agent_hr_api/agent_api.assistant_system_instruction.txt
 19ca37cf46a9a7f05a090d6d6c654c0ada4d84f3  ./shared/tests/test_edge_cases.py
+1bbcbbb4ba29f695566b8de26aef1394684a1a4e  ./shared/database.py
 1d725d567d81190d35a2f6d81d0e954a435d2a7b  ./agent_commons/tests/test_guardrail_ops_metrics.py
 1eb3dc98a9d162f983ef2b16c198e0db3b4a705e  ./agent_commons/tests/test_schemas_agent_response.py
 1fa5d028739a2a437b39a75b7a09dca43f24c5da  ./agent_commons/agent_commons/exception_handler.py
@@ -15,7 +15,6 @@
 25868914107e2c1ac286f7cbc363b58a287cbabc  ./shared/tests/zero_trust.py
 2cf6c1ada7941df6612b49151a315ce9fe67b8de  ./agent_commons/agent_commons/metadata.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
-2e7c39cd3bf64a18671474a6b944cbb2419e344b  ./agent_hr_api/tests/test_history_routes.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 334148686822e2c057a1bb0454a5a6633e679cc2  ./agent_commons/agent_commons/schemas.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
@@ -26,7 +25,7 @@
 40e8de3ced505af7b0d907f6ad4794dfb8d661f7  ./shared/tests/test_fastapi_utils.py
 42f2f011f3fe427dfb9afdc412a4151183b5dde5  ./agent_commons/agent_commons/mcp_client.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
-562c6acf8fc916c83f4b75171a8104398e60d9f7  ./shared/database.py
+52966f9a7d9d62c2f1a51d6986f5c9f11a6a6c5b  ./shared/pyproject.toml
 583d5c7e5c3e38600c2da6d9d8012b07d3910c92  ./agent_hr_api/metadata.py
 59dc185a4e17ca5d3996a4ca96d4822cf540d9a0  ./shared/mcp_server_utils.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
@@ -57,6 +56,7 @@ acef654bdf0e1197537cfe1a69e22bc9f8faf0d0  ./agent_commons/agent_commons/http_res
 aff77694e553f03d5a11ab4503847c181331f3c8  ./agent_hr_api/tests/test_zero_trust.py
 b0de4a079635eda20c582ea4ef8fe5b5ed87d6c6  ./agent_commons/agent_commons/guardrails.py
 b3c476a5f26849856a46e3171440db3e865cc7e5  ./shared/schemas/auth.py
+b78135ea10ebe917ca00429b353ea516a0743719  ./agent_hr_api/tests/test_history_routes.py
 b992f73eb132ab64f859a1c1131f3999ab4f95c6  ./agent_hr_api/main.py
 be54873f9b91433df0789e7548db0df5d9da2cfb  ./agent_commons/tests/test_schemas.py
 c6678f4d4bf49c9483170176c42087f363bbd700  ./agent_commons/agent_commons/finops.py

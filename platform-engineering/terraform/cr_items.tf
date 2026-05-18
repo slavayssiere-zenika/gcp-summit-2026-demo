@@ -105,6 +105,16 @@ resource "google_cloud_run_v2_service" "items_api" {
         name  = "USERS_API_URL"
         value = "http://api.internal.zenika/api/users/"
       }
+      # Pool AlloyDB — root cause P95=35s (2026-05-16) : QueuePool saturé (size=10+overflow=15).
+      # Règle : max_instances × DB_POOL_SIZE ≤ alloydb_max_connections (~400 avec 2vCPU).
+      env {
+        name  = "DB_POOL_SIZE"
+        value = "20"
+      }
+      env {
+        name  = "DB_MAX_OVERFLOW"
+        value = "20"
+      }
       env {
         name = "SECRET_KEY"
         value_source {

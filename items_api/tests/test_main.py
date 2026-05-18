@@ -1,25 +1,29 @@
-import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 app = FastAPI()
 
+
 class ItemCreate(BaseModel):
     name: str
     user_id: int
+
 
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
+
 @app.get("/metrics")
 def metrics():
     return {"status": "ok"}
 
+
 @app.get("/items")
 def list_items(skip: int = 0, limit: int = 10):
     return {"items": [], "total": 0, "skip": skip, "limit": limit}
+
 
 @app.get("/items/{item_id}")
 def get_item(item_id: int):
@@ -27,9 +31,11 @@ def get_item(item_id: int):
         raise HTTPException(status_code=404, detail="Item not found")
     return {"id": item_id, "name": "Test Item", "user_id": 1, "description": None, "created_at": "2024-01-01T00:00:00", "user": None}
 
+
 @app.post("/items", status_code=201)
 def create_item(item: ItemCreate):
     return {"id": 1, "name": item.name, "user_id": item.user_id, "description": None, "created_at": "2024-01-01T00:00:00", "user": None}
+
 
 client = TestClient(app)
 

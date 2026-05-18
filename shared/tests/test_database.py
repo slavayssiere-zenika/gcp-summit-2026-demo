@@ -256,7 +256,7 @@ class TestGetDb:
         async for session in db.get_db():
             sessions.append(session)
         assert len(sessions) == 1
-        mock_session.close.assert_called_once()
+        mock_session.__aexit__.assert_called_once()
         db.SessionLocal = original
 
 

@@ -181,6 +181,12 @@ resource "google_cloud_run_v2_service" "competencies_api" {
         name  = "SCORING_MISSIONS_FETCH_SEMAPHORE"
         value = "5"
       }
+      # P2 perf : semaphore bulk-assign eleve a 15 pour reduire les 429 sous charge
+      # (valeur defaut 5 trop restrictive sous concurrence elevee Cloud Run)
+      env {
+        name  = "ASSIGN_BULK_SEMAPHORE"
+        value = "15"
+      }
     }
 
     # Conteneur Sidecar (MCP)

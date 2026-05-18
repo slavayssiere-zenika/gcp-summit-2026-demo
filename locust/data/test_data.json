@@ -1,0 +1,44 @@
+{
+  "_comment": "Referentiel de donnees de test — source unique pour seed_data.py et locustfile.py. Ne pas modifier les cles sans adapter les deux scripts.",
+
+  "first_names": [
+    "Alice", "Bob", "Charlie", "David", "Emma", "Frank", "Grace", "Henry",
+    "Isabel", "Jack", "Karl", "Laura", "Marie", "Nicolas", "Olivia", "Pierre",
+    "Quentin", "Rachel", "Sophie", "Thomas", "Ugo", "Valerie", "William", "Xavier"
+  ],
+
+  "last_names": [
+    "Martin", "Bernard", "Thomas", "Petit", "Robert", "Richard", "Durand",
+    "Dubois", "Moreau", "Laurent", "Simon", "Michel", "Lefebvre", "Leroy",
+    "Roux", "David", "Bertrand", "Morel", "Fournier", "Girard"
+  ],
+
+  "agencies": ["Paris", "Lyon", "Bordeaux", "Nantes", "Toulouse", "Lille", "Rennes", "Niort"],
+
+  "categories": [
+    {"name": "Electronique",  "description": "Appareils, gadgets et hardware"},
+    {"name": "Mobilier",      "description": "Bureaux, chaises et amenagement"},
+    {"name": "Logiciel",      "description": "Licences, abonnements et outils SaaS"},
+    {"name": "Materiel",      "description": "Fournitures et consommables"},
+    {"name": "Services",      "description": "Consulting, maintenance et support"},
+    {"name": "Formation",     "description": "Cours, certifications et e-learning"},
+    {"name": "Cloud",         "description": "Infrastructure, stockage et serveurs"}
+  ],
+
+  "item_names": [
+    "Laptop", "Monitor", "Keyboard", "Mouse", "Desk", "Chair",
+    "License", "Server", "Consulting", "Workshop", "Tablet", "Headset"
+  ],
+
+  "search_queries": {
+    "users":  ["alice", "bob", "consultant", "zenika", "paris", "martin", "thomas"],
+    "items":  ["python", "java", "cloud", "data", "devops", "laptop", "formation"],
+    "cv":     ["python senior", "cloud architect", "data engineer", "devops", "java microservices"]
+  },
+
+  "prompt_keys": [
+    "agent_router_api.system_instruction",
+    "agent_hr_api.system_instruction",
+    "agent_ops_api.system_instruction"
+  ]
+}

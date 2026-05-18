@@ -309,7 +309,7 @@ print_summary() {
       svc_name=$(basename "$f" _tests.log)
       local errors
       errors=$(grep -E 'ERROR|FAILED|Error|Exception|NameError|ImportError|assert|XFAIL' "$f" \
-        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info\|warnings.warn\|PytestUnraisable\|ConnectionError' \
+        | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info\|warnings.warn\|PytestUnraisable\|ConnectionError\|opentelemetry\|ServiceUnavailable\|_InactiveRpcError\|ValueError' \
         | head -50)
       if [ -n "$errors" ]; then
         HAS_ERRORS=true

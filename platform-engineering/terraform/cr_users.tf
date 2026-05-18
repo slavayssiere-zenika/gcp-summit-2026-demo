@@ -162,6 +162,17 @@ resource "google_cloud_run_v2_service" "users_api" {
         name  = "FRONTEND_URL"
         value = "https://${terraform.workspace}.${var.base_domain}"
       }
+      # Pool AlloyDB pour users_api
+      # Contrainte prd : max_instances(50) x (pool_size+max_overflow) <= alloydb_max_connections(~400)
+      # 50 x (5+3) = 400 → marge exacte. En pratique pas toutes les instances actives simultanement.
+      env {
+        name  = "DB_POOL_SIZE"
+        value = "5"
+      }
+      env {
+        name  = "DB_MAX_OVERFLOW"
+        value = "3"
+      }
     }
 
     # Conteneur Sidecar (MCP)

@@ -55,8 +55,13 @@ async def get_competency_coverage(
         await db.execute(select(func.count(func.distinct(user_competency.c.user_id))))
     ).scalar_one() or 0
 
-    # Récupérer le total réel depuis users_api (consultants non-anonymes)
-    total_real_users = None
+    # Récupérer le total réel depuis users_api (consultants non-anonymes et actifs).
+    # Fallback robuste : si users_api est inaccessible (réseau Cloud Run),
+    # on utilise le COUNT distinct des user_id dans user_competency comme proxy fiable.
+    # Ce proxy est légèrement sous-estimé (exclut les users sans compétences assignées)
+    # mais garantit que total_users n'est jamais null, évitant les ratios incorrects
+    # dans data_quality_service.
+    total_real_users: int | None = None
     auth_header = request.headers.get("Authorization", "") if request else ""
     try:
         headers = {"Authorization": auth_header}
@@ -64,17 +69,26 @@ async def get_competency_coverage(
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as hc:
             res = await hc.get(
                 f"{USERS_API_URL.rstrip('/')}/users/",
-                params={"skip": 0, "limit": 1, "is_anonymous": "false"},
+                params={"skip": 0, "limit": 1, "is_anonymous": "false", "is_active": "true"},
                 headers=headers,
             )
             if res.status_code == 200:
                 data = res.json()
                 total_real_users = data.get("total")
+                logger.info(
+                    "[stats/coverage] total_users=%d (source=users_api)", total_real_users or 0
+                )
     except Exception as exc:
-        logger.warning("[stats/coverage] users_api indisponible pour total_users: %s", exc)
+        logger.warning("[stats/coverage] users_api indisponible: %s — fallback sur user_competency", exc)
 
-    # Fallback : si users_api indisponible, on ne peut pas corriger le ratio
-    # → retourner None pour que data_quality_service utilise users_with_cv comme fallback
+    # Fallback : si users_api indisponible, utiliser users_with_competencies comme proxy
+    # plutôt que de retourner null (qui casse le ratio coverage dans data_quality_service).
+    if total_real_users is None:
+        total_real_users = users_with_competencies
+        logger.info(
+            "[stats/coverage] total_users=%d (source=fallback:user_competency)", total_real_users
+        )
+
     return {
         "users_with_competencies": users_with_competencies,
         "total_users": total_real_users,

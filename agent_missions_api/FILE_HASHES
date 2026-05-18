@@ -1,11 +1,13 @@
 02b5f51fbd08c948d8a52cda67b4f52011a3dc85  ./agent_missions_api/uv.lock
+064bc95fd047a39942f536fa7866c49c8b2687d0  ./agent_missions_api/tests/test_jwt_propagation.py
 08463e221b00fb4cb958a260c188cca4309e0cdd  ./agent_missions_api/tests/debug_test_history.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
+0f3ed874e1b951f7fff9d14c0a565463e83d50c0  ./agent_missions_api/tests/test_history.py
 1068cd5199e812f8c08ec88e23c1579e76ffc7b5  ./agent_commons/agent_commons/taxonomy_utils.py
-1717a995a1c39df11ec33a3af520be0c434853e3  ./shared/pyproject.toml
 19ca37cf46a9a7f05a090d6d6c654c0ada4d84f3  ./shared/tests/test_edge_cases.py
+1bbcbbb4ba29f695566b8de26aef1394684a1a4e  ./shared/database.py
 1d725d567d81190d35a2f6d81d0e954a435d2a7b  ./agent_commons/tests/test_guardrail_ops_metrics.py
 1eb3dc98a9d162f983ef2b16c198e0db3b4a705e  ./agent_commons/tests/test_schemas_agent_response.py
 1fa5d028739a2a437b39a75b7a09dca43f24c5da  ./agent_commons/agent_commons/exception_handler.py
@@ -21,9 +23,8 @@
 40e8de3ced505af7b0d907f6ad4794dfb8d661f7  ./shared/tests/test_fastapi_utils.py
 42f2f011f3fe427dfb9afdc412a4151183b5dde5  ./agent_commons/agent_commons/mcp_client.py
 46d65a118335e841a8e45a2e59f6f3261550d148  ./agent_missions_api/tests/test_runner_propagation.py
-4974f888b417372503e675a061146ed6e97710e0  ./agent_missions_api/tests/test_jwt_propagation.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
-562c6acf8fc916c83f4b75171a8104398e60d9f7  ./shared/database.py
+52966f9a7d9d62c2f1a51d6986f5c9f11a6a6c5b  ./shared/pyproject.toml
 59dc185a4e17ca5d3996a4ca96d4822cf540d9a0  ./shared/mcp_server_utils.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 5de53d3f073c15c9352924144c3faff7eb60aa37  ./agent_commons/agent_commons/a2a_utils.py
@@ -37,7 +38,6 @@
 71aa89c9295507a361e33930a52c1d66025f4116  ./agent_commons/agent_commons/circuit_breaker.py
 7b25ef78b79ee7417cafc3996aabe7f791a39d1d  ./agent_commons/tests/test_mcp_client_propagation.py
 7d36e7ae1b657810a0e50d3d849fb8e7b2d25318  ./agent_missions_api/conftest.py
-7da21eab13fbf50694219eaf758c66cc7dab9d34  ./agent_missions_api/tests/test_history.py
 83eff2f28e5e28c0095435c920671841f6d9c3ee  ./agent_commons/tests/test_runner_display_type.py
 8738bf4bf3bd8937c3677f11f438636cb777ea52  ./shared/exception_handler.py
 8916d6222d9d87c3951a66d3da647a936854aba2  ./agent_commons/agent_commons/__init__.py

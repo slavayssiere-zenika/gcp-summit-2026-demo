@@ -16,7 +16,6 @@ os.environ.setdefault("SECRET_KEY", "testsecret")
 os.environ.setdefault("ITEMS_API_URL", "http://test-items")
 
 
-
 # ── Fixture partagée ──────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -126,6 +125,7 @@ class TestDeleteUserItemsEndpoint:
 
         mock_db = AsyncMock()
         mock_result = MagicMock()
+        mock_result.user = None
         mock_result.rowcount = 5
         mock_db.execute = AsyncMock(return_value=mock_result)
 

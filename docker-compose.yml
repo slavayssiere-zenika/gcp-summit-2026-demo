@@ -27,6 +27,10 @@ services:
       - DB_HOST=postgres
       - DB_USER=postgres
       - DB_PASSWORD=postgres
+    volumes:
+      # Monte les changelogs depuis le host pour eviter de rebuilder l'image
+      # a chaque modification YAML. Override le contenu bake dans l'image.
+      - ./db_migrations/changelogs:/liquibase/changelogs:ro
     depends_on:
       db_init:
         condition: service_completed_successfully
@@ -52,7 +56,12 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - GOOGLE_SECRET_ID=${GOOGLE_SECRET_ID}
       - GOOGLE_SECRET_KEY=${GOOGLE_SECRET_KEY}
+      - DB_POOL_SIZE=25
+      - DB_MAX_OVERFLOW=25
       - ROOT_PATH=/users-api
+      # Perf testing : TTL etendu pour eviter les 401 mid-test sous Locust.
+      # Prod Cloud Run : non defini → retombe sur le defaut 15 min.
+      - ACCESS_TOKEN_EXPIRE_MINUTES=120
       - CV_API_URL=http://cv_api:8004
       - ITEMS_API_URL=http://items_api:8001
       - COMPETENCIES_API_URL=http://competencies_api:8003
@@ -101,6 +110,12 @@ services:
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/items-api
+      - DB_POOL_SIZE=25
+      - DB_MAX_OVERFLOW=25
+    volumes:
+      # Sources montees depuis le host pour appliquer les correctifs sans rebuild
+      - ./items_api/src:/app/src:ro
+      - ./shared:/app/.venv/lib/python3.13/site-packages/shared:ro
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -148,6 +163,9 @@ services:
       - USERS_API_URL=http://users_api:8000
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/comp-api
+      # P2 perf : augmente la limite du semaphore bulk-assign pour reduire les 429
+      # (defaut=5 trop restrictif sous 50 users locust simultaneus)
+      - ASSIGN_BULK_SEMAPHORE=15
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -231,9 +249,7 @@ services:
       - monitoring_net
 
   missions_api:
-    build:
-      context: .
-      dockerfile: missions_api/Dockerfile
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/missions_api:latest
     container_name: missions_api
     hostname: missions_api
     ports:
@@ -261,9 +277,7 @@ services:
           - missions_api
 
   missions_mcp:
-    build:
-      context: .
-      dockerfile: missions_api/Dockerfile
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/missions_api:latest
     container_name: missions_mcp
     hostname: missions_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -278,9 +292,7 @@ services:
       - monitoring_net
 
   drive_api:
-    build:
-      context: .
-      dockerfile: drive_api/Dockerfile
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest
     container_name: drive_api
     hostname: drive_api
     ports:
@@ -308,9 +320,7 @@ services:
           - drive_api
 
   drive_mcp:
-    build:
-      context: .
-      dockerfile: drive_api/Dockerfile
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest
     container_name: drive_mcp
     hostname: drive_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -604,6 +614,16 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=mydb
+    # max_connections=400 : parité avec AlloyDB 2vCPU en production (prd.yaml alloydb_cpu=2).
+    # Règle prd : cv_api_max_instances(8) × DB_POOL_SIZE(20) = 160 connexions → marge 400.
+    # shared_buffers=256MB + work_mem=8MB pour améliorer les query plans sous charge.
+    command: >
+      postgres
+      -c max_connections=400
+      -c shared_buffers=256MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c log_min_duration_statement=2000
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -758,16 +778,72 @@ services:
         aliases:
           - prompts_api
 
+  # ── Locust standalone (--perf, 50 users) ────────────────────────────────────
   locust:
-    image: locustio/locust
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
     container_name: locust
     hostname: locust
     ports:
       - "8089:8089"
     volumes:
       - ./locust:/locust
+      - ./shared:/shared:ro
+    environment:
+      - PYTHONPATH=/
+      - MISSIONS_API_URL=http://missions_api:8009
+      - DRIVE_API_URL=http://drive_api:8006
+      - PROMPTS_API_URL=http://prompts_api:8000
     profiles:
       - perf
+    networks:
+      - monitoring_net
+
+  # ── Locust distribue (--stress, 500 users) ───────────────────────────────────
+  # 1 master + N workers. Le master orchestre et agrege les stats.
+  # Les workers generent effectivement la charge (1 CPU par worker).
+  #
+  # Reseau : le master a container_name=locust-master → DNS stable pour les workers.
+  # Le master est demarre via "docker-compose up -d locust-master" (hostname fixe),
+  # puis les workers se connectent via --master-host=locust-master.
+  locust-master:
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
+    container_name: locust-master
+    hostname: locust-master
+    volumes:
+      - ./locust:/locust
+      - ./shared:/shared:ro
+    environment:
+      - PYTHONPATH=/
+      - MISSIONS_API_URL=http://missions_api:8009
+      - DRIVE_API_URL=http://drive_api:8006
+      - PROMPTS_API_URL=http://prompts_api:8000
+    profiles:
+      - perf-stress
+    networks:
+      - monitoring_net
+
+  locust-worker:
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
+    volumes:
+      - ./locust:/locust
+      - ./shared:/shared:ro
+    environment:
+      - PYTHONPATH=/
+      - MISSIONS_API_URL=http://missions_api:8009
+      - DRIVE_API_URL=http://drive_api:8006
+      - PROMPTS_API_URL=http://prompts_api:8000
+    # Workers en mode distribue : connexion vers le master par hostname fixe.
+    command: -f /locust/locustfile.py --worker --master-host=locust-master
+    profiles:
+      - perf-stress
+    # Pas de depends_on : le master est deja lance manuellement via docker-compose run -d
+    # avant le demarrage des workers. L ordre est gere par le script local_up.py.
     networks:
       - monitoring_net
 

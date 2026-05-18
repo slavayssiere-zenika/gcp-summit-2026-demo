@@ -14,7 +14,7 @@ import jwt
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
 
-from auth.jwt import ALGORITHM, SECRET_KEY  # noqa: E402
+from shared.auth.jwt import ALGORITHM, SECRET_KEY  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ class TestJwtBoundaries:
 
     def setup_method(self):
         from fastapi.testclient import TestClient
-        from auth.jwt import verify_jwt
+        from shared.auth.jwt import verify_jwt
         self.app = FastAPI()
 
         @self.app.get("/p")
@@ -105,14 +105,14 @@ class TestJwtBoundaries:
         Un sub='' doit passer — c'est verify_jwt_bearer qui bloque."""
         token = jwt.encode({"sub": "", "role": "user"}, SECRET_KEY, algorithm=ALGORITHM)
         resp = self.client.get("/p", headers=self._bearer(token))
-        # verify_jwt ne vérifie pas sub → 200
-        assert resp.status_code == 200
+        # verify_jwt exige desormais sub → 401
+        assert resp.status_code == 401
 
     def test_token_with_no_sub_at_all_accepted_by_verify_jwt(self):
         """verify_jwt ne vérifie pas sub — seulement verify_jwt_bearer le fait."""
         token = jwt.encode({"role": "admin"}, SECRET_KEY, algorithm=ALGORITHM)
         resp = self.client.get("/p", headers=self._bearer(token))
-        assert resp.status_code == 200
+        assert resp.status_code == 401
 
     # ─── Cookie vs Header : priorité ─────────────────────────────────────────
 
@@ -145,7 +145,7 @@ class TestJwtBoundaries:
     def test_bearer_sub_empty_string_returns_401(self):
         """verify_jwt_bearer : sub='' doit retourner 401 (falsy)."""
         from fastapi.testclient import TestClient
-        from auth.jwt import verify_jwt_bearer
+        from shared.auth.jwt import verify_jwt_bearer
         app = FastAPI()
 
         @app.get("/agent")

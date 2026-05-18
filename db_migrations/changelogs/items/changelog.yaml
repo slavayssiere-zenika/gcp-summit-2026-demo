@@ -113,3 +113,48 @@ databaseChangeLog:
         - dropUniqueConstraint:
             tableName: "items"
             constraintName: "uq_items_user_name"
+  - changeSet:
+      id: "4"
+      author: "antigravity"
+      comment: "Index de performance items_api — idempotent (IF NOT EXISTS) pour eviter les conflits avec des indexes pre-existants hors Liquibase"
+      changes:
+        - sql:
+            sql: >-
+              CREATE INDEX IF NOT EXISTS idx_item_category_category_id
+              ON item_category (category_id);
+        - sql:
+            sql: >-
+              CREATE INDEX IF NOT EXISTS idx_items_user_id
+              ON items (user_id);
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_item_category_category_id;"
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_items_user_id;"
+  - changeSet:
+      id: "5"
+      author: "antigravity"
+      runInTransaction: false
+      comment: "Index de performance P95 — created_at DESC + GIN trgm pour ILIKE. runInTransaction:false requis pour les index GIN."
+      changes:
+        - sql:
+            sql: "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+        - sql:
+            sql: >-
+              CREATE INDEX IF NOT EXISTS idx_items_created_at
+              ON items (created_at DESC);
+        - sql:
+            sql: >-
+              CREATE INDEX IF NOT EXISTS idx_items_name_trgm
+              ON items USING gin (name gin_trgm_ops);
+        - sql:
+            sql: >-
+              CREATE INDEX IF NOT EXISTS idx_items_desc_trgm
+              ON items USING gin (description gin_trgm_ops);
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_items_created_at;"
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_items_name_trgm;"
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_items_desc_trgm;"

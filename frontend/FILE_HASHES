@@ -26,6 +26,7 @@
 1f644f3dce01d62d1bcd14e400b9ac6d60554502  ./frontend/src/components/agent/FinopsBadge.vue
 21c02c8a0d9af00dc74568919a2e7a61ad4f9542  ./frontend/coverage/src/components/agent/CandidateProfileCard.vue.html
 22d8074cbd77d52afb7ca279fb643cce7758e111  ./frontend/coverage/src/components/agent/index.html
+23e2b420107f534d326ef065d6483142b59b10df  ./frontend/vitest.log
 2453bc8adf40d9c6dab9ef8330d59ffc4e1b0771  ./frontend/src/views/ExtractionQualityList.vue
 24a31d44cfd70e8f428d1ecfee4a2a221645111e  ./frontend/src/components/agent/MissionCard.vue
 299c1ad15b1320e8d0a2437361f68f23560b67b8  ./frontend/src/stores/__tests__/uxStore.spec.ts
@@ -86,7 +87,6 @@
 80bde06ae9bb857c4a0d6d3b0258f7fa850ac6f6  ./frontend/coverage/src/components/agent/FinopsBadge.vue.html
 826b5611ba0cc7754f207a21f3b098a607be81a0  ./frontend/coverage/coverage-final.json
 84470b29579f3a859a511d161fd3c1d61b823713  ./frontend/coverage/src/stores/chatStore.ts.html
-855c35446e7a0a0883c396b576a2dfc201044136  ./frontend/vitest.log
 8666fe21bbb1ad9c05e884485d1ddb11d24d34bd  ./frontend/coverage/src/views/Docs.vue.html
 884b9218d2984dabee9b80ae611a628d456db80e  ./frontend/coverage/src/components/StarRating.vue.html
 8907cae430171ed070575a72bb61a0af7cdadf80  ./frontend/src/views/__tests__/Login.spec.ts

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.auth import (ALGORITHM, SECRET_KEY, create_access_token,
                       create_refresh_token, get_password_hash, verify_jwt,
-                      verify_password)
+                      verify_password_async)
 from src.users.models import User, UserAuditLog
 from src.users.schemas import (LoginRequest, ServiceAccountLoginRequest,
                                TokenResponse)
@@ -44,7 +44,8 @@ def _set_auth_cookies(request: Request, response: Response, access_token: str, r
 @auth_router.post("/login", response_model=TokenResponse)
 async def login(login_data: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).filter(User.email == login_data.email))).scalars().first()
-    if not user or not verify_password(login_data.password, user.hashed_password):
+    # verify_password_async : bcrypt dans ThreadPoolExecutor, ne bloque pas asyncio
+    if not user or not await verify_password_async(login_data.password, user.hashed_password):
         USER_LOGINS_TOTAL.labels(status="failure").inc()
         raise HTTPException(status_code=401, detail="Identifiants invalides")
 

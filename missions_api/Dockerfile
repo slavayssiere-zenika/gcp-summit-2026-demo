@@ -38,9 +38,9 @@ ENV CV_API_URL=http://cv_api:8004
 ENV COMPETENCIES_API_URL=http://competencies_api:8003
 ENV ITEMS_API_URL=http://items_api:8001
 ENV PROMPTS_API_URL=http://prompts_api:8000
-EXPOSE 8004
+EXPOSE ${PORT}
 
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
-CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--no-server-header"]
+CMD ["sh", "-c", "python3 -m uvicorn main:app --host 0.0.0.0 --port ${PORT} --no-server-header"]

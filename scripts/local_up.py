@@ -52,8 +52,10 @@ AR_SERVICES = [
     "items_api",
     "missions_api",
     "monitoring_mcp",
+    "missions_api",
     "prompts_api",
     "users_api",
+    "drive_api",
 ]
 
 # Bucket GCS contenant les archives du frontend (cf. deploy.sh)
@@ -74,12 +76,24 @@ MCP_SIDECAR_ALIASES: dict = {
     "missions_mcp": "missions_api",
     "prompts_mcp": "prompts_api",
     "users_mcp": "users_api",
+    "missions_mcp": "missions_api",
+    "drive_mcp": "drive_api",
 }
 
 # Locust config
+# Mode perf standard (--perf)
 LOCUST_USERS = 50
 LOCUST_SPAWN_RATE = 10
 LOCUST_DURATION = "1m"
+
+# Mode stress (--stress) : montee progressive vers 500 users, navigation pure sans ingestion CV
+LOCUST_STRESS_USERS = 500
+LOCUST_STRESS_SPAWN_RATE = 5   # 5/s -> 500 users atteints apres ~100s
+LOCUST_STRESS_DURATION = "5m"
+# Distributed : 1 master + N workers. Regle : 1 worker par 170 users.
+# 500 / 170 ≈ 3 workers. Machine 12 CPUs, services ~6 CPUs → 3 workers sans contention.
+LOCUST_STRESS_WORKERS = 3
+
 RESULTS_DIR = ROOT / "locust" / "results"
 
 
@@ -236,10 +250,14 @@ def ensure_frontend(force: bool = False) -> None:
 # ── Docker Compose ────────────────────────────────────────────────────────────
 
 def compose_up(services: list) -> None:
-    """Lance docker-compose up -d sans rebuild."""
-    cmd = ["docker-compose", "up", "-d", "--no-build"]
+    """Lance docker-compose up -d en reutilisant les images existantes (pas de rebuild).
+
+    Le vrai build appartient exclusivement a deploy.sh.
+    --remove-orphans assure que les nouveaux env vars (DB_POOL_SIZE, etc.) sont pris en
+    compte en recreant les conteneurs si la config docker-compose a change.
+    """
+    cmd = ["docker-compose", "up", "-d", "--no-build", "--remove-orphans"]
     if services:
-        # Si services partiels fournis, on passe uniquement ceux-là
         cmd += services
     print(f"\n🚀 Démarrage : {' '.join(cmd)}")
     run(cmd, cwd=ROOT)
@@ -259,30 +277,147 @@ def run_seed(perf: bool = False) -> None:
     print("  ✅ Seed terminé.")
 
 
-def run_locust() -> None:
-    """Lance Locust en mode headless via docker-compose --profile perf."""
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    print(
-        f"\n🔥 Lancement Locust"
-        f" ({LOCUST_USERS} users, spawn {LOCUST_SPAWN_RATE}/s, durée {LOCUST_DURATION})..."
-    )
+def _build_locust_image() -> None:
+    """Build l image locust (locustio/locust + pydantic). Cache Docker si inchange."""
+    print("  🔨 Build image locust (cache Docker si inchange)...")
+    run(["docker-compose", "--profile", "perf", "build", "locust"], cwd=ROOT)
+
+
+def _locust_base_args(users: int, spawn: int, duration: str, scenario: str,
+                      autostart: bool = True) -> list:
+    """Arguments communs aux modes standalone et distributed.
+
+    autostart=True (defaut) : --autostart, web UI accessible sur :8089 en temps reel.
+    """
+    start_mode = "--autostart" if autostart else "--headless"
+    return [
+        "-f", "/locust/locustfile.py",
+        start_mode,
+        "--autoquit", "5",   # quitte 5s apres la fin du test (requis avec --autostart)
+        "-u", str(users),
+        "-r", str(spawn),
+        "-t", duration,
+        "--csv", "/locust/results/perf_stats",
+        "--html", "/locust/results/perf_report.html",
+        "--host", "http://localhost",
+    ]
+
+
+def _run_locust_standalone(users: int, spawn: int, duration: str, scenario: str) -> bool:
+    """Mode standalone (--perf, 50 users) : 1 seul process Locust, web UI sur :8089."""
     cmd = [
         "docker-compose", "--profile", "perf",
-        "run", "--rm", "locust",
-        "-f", "/locust/locustfile.py",
-        "--headless",
-        "-u", str(LOCUST_USERS),
-        "-r", str(LOCUST_SPAWN_RATE),
-        "-t", LOCUST_DURATION,
-        "--csv", "/locust/results/perf_stats",
-        "--host", "http://localhost",  # placeholder — URLs réelles dans locustfile.py
-    ]
+        "run", "--rm",
+        "-p", "8089:8089",
+        "-e", f"LOCUST_SCENARIO={scenario}",
+        "locust",
+    ] + _locust_base_args(users, spawn, duration, scenario, autostart=True)
+    print("  🟡 Web UI disponible sur http://localhost:8089")
     result = subprocess.run(cmd, cwd=ROOT)
     if result.returncode not in (0, 1):
-        # Exit code 1 = Locust found failures (expected) — on continue quand même.
-        # Tout autre code est une erreur réelle (ex: fichier locustfile introuvable).
-        print(f"  ⚠️  Locust s'est terminé avec le code {result.returncode}.")
-    print("  ✅ Test Locust terminé.")
+        print(f"  ❌ Locust standalone echoue (code {result.returncode}) — fail-fast.")
+        return False
+    print("  ✅ Test Locust standalone termine.")
+    return True
+
+
+def _run_locust_distributed(users: int, spawn: int, duration: str, scenario: str) -> bool:
+    """Mode distributed (--stress, 500 users) : 1 master + LOCUST_STRESS_WORKERS workers.
+
+    Architecture :
+      - Master demarre via "docker-compose up -d locust-master" avec container_name=locust-master.
+        Hostname DNS fixe → workers peuvent resoudre "locust-master" sur monitoring_net.
+      - Workers demarres en background (docker-compose up --scale N).
+      - Script attend l exit du master via "docker wait locust-master" (bloquant).
+      - Workers stoppes apres exit du master.
+    Rapport HTML genere par le master dans /locust/results/perf_report.html.
+    """
+    n_workers = LOCUST_STRESS_WORKERS
+    print("  🔨 Build images locust-master/worker (cache Docker si inchange)...")
+    run(["docker-compose", "--profile", "perf-stress", "build", "locust-master", "locust-worker"], cwd=ROOT)
+
+    # Nettoyage preventif du master precedent (container_name fixe → conflit si existe deja)
+    subprocess.run(
+        ["docker", "rm", "-f", "locust-master"],
+        cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+    # Master : run -d avec port 8089 expose + --autostart (web UI accessible en temps reel)
+    master_args = _locust_base_args(users, spawn, duration, scenario, autostart=True) + [
+        "--master",
+        f"--expect-workers={n_workers}",
+    ]
+    env_args = ["-e", f"LOCUST_SCENARIO={scenario}"]
+    run(
+        [
+            "docker-compose", "--profile", "perf-stress",
+            "run", "-d", "--name", "locust-master",
+            "-p", "8089:8089",
+        ] + env_args + [
+            "locust-master",
+        ] + master_args,
+        cwd=ROOT,
+    )
+    print("  🟡 Master demarre. Web UI disponible sur http://localhost:8089")
+    print(f"     Demarrage {n_workers} workers...")
+
+    # Workers : up --scale (se connectent a locust-master par DNS container_name)
+    # Workers : up -d (detache) — sans --no-deps car depends_on est retire du compose
+    run(
+        [
+            "docker-compose", "--profile", "perf-stress",
+            "up", "-d", "--scale", f"locust-worker={n_workers}",
+            "locust-worker",
+        ],
+        cwd=ROOT,
+    )
+    time.sleep(8)  # Workers : ~3s demarrage + ~5s connexion au master avant autostart
+    print(f"  🔥 Test en cours ({n_workers} workers connectes au master)...")
+
+    # Attente bloquante de la fin du master
+    wait_result = subprocess.run(["docker", "wait", "locust-master"], cwd=ROOT, capture_output=True, text=True)
+    exit_code = int(wait_result.stdout.strip()) if wait_result.stdout.strip().isdigit() else 2
+
+    print("  🛑 Arret des workers...")
+    subprocess.run(
+        ["docker-compose", "--profile", "perf-stress", "stop", "locust-worker"],
+        cwd=ROOT, stdout=subprocess.DEVNULL,
+    )
+    # Copier les resultats depuis le master avant de le supprimer
+    subprocess.run(
+        ["docker", "cp", "locust-master:/locust/results/.", str(RESULTS_DIR)],
+        cwd=ROOT,
+    )
+    subprocess.run(["docker", "rm", "-f", "locust-master"], cwd=ROOT, stdout=subprocess.DEVNULL)
+
+    if exit_code not in (0, 1):
+        print(f"  ❌ Locust master echoue (code {exit_code}) — fail-fast.")
+        return False
+    print(f"  ✅ Test Locust distribue termine ({n_workers} workers).")
+    return True
+
+
+def run_locust(stress: bool = False) -> bool:
+    """Lance Locust : standalone (--perf, 50 users) ou distribue (--stress, 500 users).
+
+    Les deux modes generent :
+      - CSV : /locust/results/perf_stats_*.csv
+      - HTML : /locust/results/perf_report.html (graphiques latence/throughput)
+    """
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    if stress:
+        users, spawn, duration = LOCUST_STRESS_USERS, LOCUST_STRESS_SPAWN_RATE, LOCUST_STRESS_DURATION
+        scenario = "navigation"
+        label = f"STRESS distribue {users} users ({LOCUST_STRESS_WORKERS} workers), {duration}"
+        print(f"\n🔥 Lancement Locust ({label})...")
+        return _run_locust_distributed(users, spawn, duration, scenario)
+    else:
+        users, spawn, duration = LOCUST_USERS, LOCUST_SPAWN_RATE, LOCUST_DURATION
+        scenario = "full"
+        label = f"{users} users standalone, {duration}"
+        print(f"\n🔥 Lancement Locust ({label})...")
+        _build_locust_image()
+        return _run_locust_standalone(users, spawn, duration, scenario)
 
 
 def display_results() -> None:
@@ -493,6 +628,13 @@ def main() -> None:
         "--service", nargs="+", metavar="SERVICE",
         help="Limite le pull/up à certains services (ex: --service users_api items_api).",
     )
+    parser.add_argument(
+        "--stress", action="store_true",
+        help=(
+            "Mode stress : 500 users progressifs sur 5 min, navigation pure (ZenikaPerfUser). "
+            "Seed perf lancé avant le test. Pas d ingestion CV."
+        ),
+    )
     parsed = parser.parse_args()
 
     # Modes seed standalone (sans docker-compose up)
@@ -507,12 +649,15 @@ def main() -> None:
     ensure_frontend(force=not parsed.no_pull)
     compose_up(parsed.service or [])
 
-    if parsed.perf:
+    if parsed.perf or parsed.stress:
         print("\n⏳ Attente du démarrage des services (15s)...")
         time.sleep(15)
         run_seed(perf=True)
-        run_locust()
-        display_results()
+        locust_ok = run_locust(stress=parsed.stress)
+        if locust_ok:
+            display_results()
+        else:
+            print("\n⛔ Locust a echoue — resultats precedents non affiches (fail-fast).")
 
     print("\n✨ local_up.py terminé.")
 

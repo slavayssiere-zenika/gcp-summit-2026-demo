@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import httpx
 import random
 import string
@@ -13,17 +14,17 @@ COMPETENCIES_API = "http://localhost:8003"
 CV_API = "http://localhost:8004"
 PROMPTS_API = "http://localhost:8005"
 
-FIRST_NAMES = ["Alice", "Bob", "Charlie", "David", "Emma", "Frank", "Grace", "Henry", "Isabel", "Jack", "Karl", "Laura"]
-LAST_NAMES = ["Martin", "Bernard", "Thomas", "Petit", "Robert", "Richard", "Durand", "Dubois", "Moreau", "Laurent", "Simon", "Michel"]
-CATEGORIES_LIST = [
-    ("Électronique", "Appareils, gadgets et hardware"),
-    ("Mobilier", "Bureaux, chaises et aménagement"),
-    ("Logiciel", "Licences, abonnements et outils SaaS"),
-    ("Matériel", "Fournitures et consommables"),
-    ("Services", "Consulting, maintenance et support"),
-    ("Formation", "Cours, certifications et e-learning"),
-    ("Cloud", "Infrastructure, stockage et serveurs")
-]
+# Referentiel partage avec locust/locustfile.py
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "locust", "data")
+_TEST_DATA_PATH = os.path.join(_DATA_DIR, "test_data.json")
+_SEEDED_IDS_PATH = os.path.join(_DATA_DIR, "seeded_ids.json")
+
+with open(_TEST_DATA_PATH, encoding="utf-8") as _f:
+    _TEST_DATA = json.load(_f)
+
+FIRST_NAMES = _TEST_DATA["first_names"]
+LAST_NAMES = _TEST_DATA["last_names"]
+CATEGORIES_LIST = [tuple(c.values()) for c in _TEST_DATA["categories"]]
 
 COMPETENCIES_ZENIKA_TREE = {
     "Architecture & Craft": {
@@ -100,19 +101,32 @@ def random_string(length=8):
 
 
 def create_category(name, description):
-    # Pre-check existence
+    # Pre-check existence - reponse paginee {"items": [...]}
     try:
-        categories = httpx.get(f"{ITEMS_API}/categories", headers=AUTH_HEADERS).json()
-        for c in categories:
-            if c['name'] == name:
-                print(f"  - Category {name} already exists. Skipping.")
-                return c
+        resp = httpx.get(f"{ITEMS_API}/categories?limit=500", headers=AUTH_HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            categories = data.get("items", []) if isinstance(data, dict) else data
+            for c in categories:
+                if c.get("name") == name:
+                    print(f"  - Category {name} already exists. Skipping.")
+                    return c
     except Exception:
         pass
 
-    data = {"name": name, "description": description}
+    payload = {"name": name, "description": description}
     try:
-        response = httpx.post(f"{ITEMS_API}/categories", json=data, headers=AUTH_HEADERS)
+        response = httpx.post(f"{ITEMS_API}/categories", json=payload, headers=AUTH_HEADERS)
+        if response.status_code == 400 and "already exists" in response.text.lower():
+            # Race condition ou seed idempotent : recuperer l existant
+            resp2 = httpx.get(f"{ITEMS_API}/categories?limit=500", headers=AUTH_HEADERS)
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                cats2 = data2.get("items", []) if isinstance(data2, dict) else data2
+                for c in cats2:
+                    if c.get("name") == name:
+                        print(f"  - Category {name} recovered from DB. Skipping.")
+                        return c
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -204,8 +218,164 @@ def create_item(user_id, category_ids):
     return response.json()
 
 
+TECH_STACKS = [
+    ["Python", "FastAPI", "PostgreSQL", "Docker", "Kubernetes"],
+    ["Java", "Spring Boot", "MySQL", "CI/CD", "AWS"],
+    ["TypeScript", "Vue.js", "Node.js", "Redis", "GCP"],
+    ["Go", "gRPC", "Kafka", "Terraform", "Azure"],
+    ["Python", "TensorFlow", "Spark", "BigQuery", "Vertex AI"],
+]
+
+ROLES = [
+    "Lead Developer", "Architecte Cloud", "Data Engineer",
+    "DevOps Engineer", "Tech Lead", "Ingénieur IA", "Consultant Senior",
+]
+
+CLIENTS_FAKE = [
+    "Renault Digital", "BNP Paribas", "SNCF Connect", "Orange Business",
+    "Société Générale", "EDF", "Airbus", "Michelin", "Total Energies",
+]
+
+
+def seed_cv_profiles(user_ids: list) -> int:
+    """
+    Insere un CVProfile synthetique pour chaque user_id dans la liste.
+    Insertion directe en DB (base 'cv') sans passer par le pipeline LLM.
+    Idempotent : skip si user_id deja present dans cv_profiles.
+    Retourne le nombre de profils inseres.
+    """
+    if not user_ids:
+        return 0
+
+    import psycopg2
+    import json as _json
+
+    db_url = get_db_url("cv")
+    inserted = 0
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+
+        # Recup les user_ids deja presents (idempotence)
+        cur.execute("SELECT DISTINCT user_id FROM cv_profiles")
+        existing = {row[0] for row in cur.fetchall()}
+
+        to_insert = [uid for uid in user_ids if uid not in existing]
+        print(f"  - {len(existing)} profils CV deja en base, {len(to_insert)} a creer.")
+
+        for uid in to_insert:
+            stack = random.choice(TECH_STACKS)
+            role = random.choice(ROLES)
+            yoe = random.randint(3, 15)
+            client1 = random.choice(CLIENTS_FAKE)
+            client2 = random.choice(CLIENTS_FAKE)
+            summary = (
+                f"{role} avec {yoe} ans d'experience. "
+                f"Expert en {', '.join(stack[:3])}. "
+                f"Missions recentes chez {client1} et {client2}."
+            )
+            missions = [
+                {
+                    "title": f"Mission {i + 1}",
+                    "client": random.choice(CLIENTS_FAKE),
+                    "duration_months": random.randint(6, 24),
+                    "skills": random.sample(stack, k=min(3, len(stack))),
+                    "description": f"Projet {i + 1} : architecture et developpement avec {stack[0]}.",
+                }
+                for i in range(random.randint(3, 8))
+            ]
+            raw = (
+                f"CV synthetique perf-test\n"
+                f"Role : {role}\n"
+                f"Experience : {yoe} ans\n"
+                f"Competences : {', '.join(stack)}\n"
+                f"Missions : {len(missions)} missions.\n"
+            )
+            cur.execute(
+                """
+                INSERT INTO cv_profiles
+                    (user_id, source_url, source_tag, extracted_competencies,
+                     "current_role", years_of_experience, summary,
+                     competencies_keywords, missions, raw_content,
+                     is_archived, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """,
+                (
+                    uid,
+                    f"perf-test://synthetic/{uid}",
+                    "perf-test",
+                    _json.dumps([{"name": s, "level": "confirmed"} for s in stack]),
+                    role,
+                    yoe,
+                    summary,
+                    stack,
+                    _json.dumps(missions),
+                    raw,
+                    False,
+                ),
+            )
+            inserted += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"  - {inserted} profils CV synthetiques inseres.")
+    except Exception as e:
+        print(f"  ❌ Erreur seed CV profiles: {e}")
+    return inserted
+
+
+def erase_data() -> None:
+    """Purge toutes les données de test avant un nouveau seed.
+
+    Préserve :
+    - Les tables Liquibase (databasechangelog, databasechangeloglock)
+    - Les comptes admin@zenika.com et slavayssiere (recrees par main())
+
+    Utilise TRUNCATE ... RESTART IDENTITY CASCADE pour remettre les sequences
+    a zero et supprimer les donnees liees par FK en une seule passe.
+    """
+    import psycopg2
+
+    # (db_name, [tables a truncater dans l'ordre FK-safe])
+    # CASCADE gere les dependances, RESTART IDENTITY reset les sequences
+    ERASE_PLAN = [
+        ("items", ["item_category", "items", "categories"]),
+        ("competencies", [
+            "user_competency", "competency_evaluations",
+            "competency_suggestions", "competencies",
+        ]),
+        ("cv", ["cv_mission_embeddings", "cv_profiles"]),
+        ("missions", ["mission_status_history", "missions"]),
+        ("drive", ["drive_sync_state", "drive_folders"]),
+        ("prompts", ["prompts"]),
+        # users en dernier (FK entrantes depuis competencies.user_competency)
+        ("users", ["user_audit_logs", "users"]),
+    ]
+
+    print("\n🗑️  Erasing existing test data...")
+    for db_name, tables in ERASE_PLAN:
+        try:
+            conn = psycopg2.connect(get_db_url(db_name))
+            cur = conn.cursor()
+            tables_sql = ", ".join(tables)
+            cur.execute(
+                f"TRUNCATE TABLE {tables_sql} RESTART IDENTITY CASCADE;"
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            print(f"  - [{db_name}] {tables_sql} → tronque.")
+        except Exception as e:
+            print(f"  ❌ Erreur erase [{db_name}]: {e}")
+
+    print("  ✅ Erase termine.")
+
+
 def main(perf: bool = False) -> None:
     print("🚀 Starting Zenika Seed Data Process...\n")
+
+    erase_data()
 
     print("🔑 Connecting to DB recursively to insert Root Admin...")
     db_url = get_db_url("users")
@@ -438,6 +608,73 @@ def main(perf: bool = False) -> None:
         conn.close()
     except Exception as e:
         print(f"  - Error seeding drive folder: {e}")
+
+    # Injection de faux CVs pour eviter les 404 lors des tests de perf
+    print("\n🎭 Seeding synthetic CV profiles (perf-test, no LLM)...")
+    user_ids_for_cv = [u['id'] for u in users if u and u.get('id')]
+    seed_cv_profiles(user_ids_for_cv)
+
+    # --- Ecriture du referentiel partage avec locust ---
+    print("\n📄 Writing seeded_ids.json for locust referential...")
+
+    # Collecte de tous les item_ids via pagination complete (evite la limite hard de 500)
+    item_ids: list[int] = []
+    skip = 0
+    limit = 100  # max limite acceptee par l'endpoint items_api (le=100)
+    while True:
+        try:
+            resp = httpx.get(
+                f"{ITEMS_API}/",
+                params={"skip": skip, "limit": limit},
+                headers=AUTH_HEADERS,
+                timeout=30.0,
+            )
+            if resp.status_code != 200:
+                print(f"  ❌ GET /items/ HTTP {resp.status_code}: {resp.text[:120]}")
+                break
+            data = resp.json()
+            batch = [i["id"] for i in data.get("items", [])]
+            item_ids.extend(batch)
+            if len(batch) < limit:
+                break
+            skip += limit
+        except Exception as e:
+            print(f"  ❌ Erreur collecte item_ids (skip={skip}): {e}")
+            break
+
+    # Collecte des mission_ids directement via DB (evite les filtres JWT)
+    mission_ids: list[int] = []
+    try:
+        import psycopg2
+        conn = psycopg2.connect(get_db_url("missions"))
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM missions ORDER BY id LIMIT 5000;")
+        mission_ids = [row[0] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"  ❌ Erreur collecte mission_ids: {e}")
+
+    seeded = {
+        "_comment": "Genere par seed_data.py — source de verite pour locustfile.py. Ne pas editer.",
+        "_generated_at": datetime.now(timezone.utc).isoformat(),
+        "user_ids": [u["id"] for u in users if u and u.get("id")],
+        "cv_profile_user_ids": user_ids_for_cv,
+        "category_ids": category_ids,
+        "item_ids": item_ids,
+        "mission_ids": mission_ids,
+        "prompt_keys": list(_TEST_DATA.get("prompt_keys", [])),
+    }
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_SEEDED_IDS_PATH, "w", encoding="utf-8") as sf:
+        json.dump(seeded, sf, indent=2, ensure_ascii=False)
+    print(
+        f"  - seeded_ids.json ecrit : "
+        f"{len(seeded['user_ids'])} users, "
+        f"{len(seeded['category_ids'])} categories, "
+        f"{len(seeded['item_ids'])} items, "
+        f"{len(seeded['mission_ids'])} missions"
+    )
 
     print("\n✨ Done! Zenika Seed process complete.")
 

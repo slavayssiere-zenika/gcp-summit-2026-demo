@@ -311,8 +311,12 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         grade = "C"
         score = min(score, 64)  # borne haute de la plage C
 
-    # ── 5. Issues actionnables ────────────────────────────────────────────────
+    # ── 5. Issues actionnables et notes informatives ─────────────────────────
+    # issues      : anomalies actionnables bloquantes → déclenche la recommendation d'alerte
+    # info_notes  : observations non-bloquantes → affichées séparément, n'impactent pas la recommendation
     issues: list[str] = []
+    info_notes: list[str] = []
+
     if m_embedding["status"] != "ok":
         issues.append(f"Embeddings manquants : {total - embedding_ok} CVs sans vecteur sémantique.")
     if m_competencies["status"] != "ok":
@@ -336,9 +340,9 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             f"{MIN_SCORED_COUNT} compétences scorées."
         )
     if ext_na:
-        # Échantillon insuffisant : metric non représentatif (CVs traités via Vertex Batch)
-        # On affiche une note informative sans bloquer le grade
-        issues.append(
+        # Échantillon insuffisant : metric non représentatif (CVs traités via Vertex Batch).
+        # Note informative UNIQUEMENT — ne déclenche pas la recommendation d'alerte.
+        info_notes.append(
             f"Fiabilité d'extraction : seulement {extraction_scored_count} CV(s) avec score "
             f"(seuil min={MIN_EXTRACTION_SAMPLE}). Metric non représentatif — "
             "les CVs importés via Vertex Batch n'ont pas de score de fiabilité calculable."
@@ -416,7 +420,11 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             if mission_chunks_profiles > 0:
                 mission_chunks_avg = round(mission_chunks_total / mission_chunks_profiles, 1)
             if mission_chunks_total > 0:
-                mission_chunks_status = "ok" if mission_chunks_profiles >= total_cvs * 0.9 else "partial"
+                # Comparaison correcte : profiles_indexed vs users_with_cv (utilisateurs uniques),
+                # et non total_cvs (fichiers CV, 1 user peut avoir plusieurs CVs).
+                mission_chunks_status = (
+                    "ok" if mission_chunks_profiles >= users_with_cv * 0.9 else "partial"
+                )
     except Exception as exc:
         logger.warning("[data-quality] Lecture cv_mission_embeddings échouée (non-bloquant): %s", exc)
 
@@ -438,6 +446,7 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             "processing_errors":     m_processing_errors,
         },
         "issues": issues,
+        "info": info_notes,
         "recommendation": recommendation,
         # ── RAG Quality (R3) — ajouté au rapport sans impacter le score global ──
         "rag": {

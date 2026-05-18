@@ -2,8 +2,8 @@
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
 1269f970ea908ee0b88099b42a81969023d59b50  ./monitoring_mcp/tests/test_infra_tools.py
-1717a995a1c39df11ec33a3af520be0c434853e3  ./shared/pyproject.toml
 19ca37cf46a9a7f05a090d6d6c654c0ada4d84f3  ./shared/tests/test_edge_cases.py
+1bbcbbb4ba29f695566b8de26aef1394684a1a4e  ./shared/database.py
 25868914107e2c1ac286f7cbc363b58a287cbabc  ./shared/tests/zero_trust.py
 2a291b4572b7b8a4d3d1c4e5631867aa55defeca  ./monitoring_mcp/conftest.py
 2e34d5229c98ff3f2cc220bb4ae626a2003986b7  ./shared/schemas/pagination.py
@@ -14,7 +14,7 @@
 3dd2bc08a28a7d12db1d24b4522d8f11716ec96d  ./monitoring_mcp/mcp_app.py
 40e8de3ced505af7b0d907f6ad4794dfb8d661f7  ./shared/tests/test_fastapi_utils.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
-562c6acf8fc916c83f4b75171a8104398e60d9f7  ./shared/database.py
+52966f9a7d9d62c2f1a51d6986f5c9f11a6a6c5b  ./shared/pyproject.toml
 59dc185a4e17ca5d3996a4ca96d4822cf540d9a0  ./shared/mcp_server_utils.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py

@@ -99,7 +99,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/bulk-reanalyse/reindex-mission-chunks` : Reindex Mission Chunks
 - **POST** `/admin/remediate-legacy` : Remediate Legacy Errors
 - **POST** `/admin/clear-processing-errors` : Clear Processing Errors
+- **PUT** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
-- **DELETE** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
