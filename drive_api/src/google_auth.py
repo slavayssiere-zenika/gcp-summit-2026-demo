@@ -6,6 +6,9 @@ import httpx
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from opentelemetry.propagate import inject
+import google.auth.transport.requests
+from google.oauth2 import id_token as sa_id_token
+import google.auth.transport.requests as google_requests
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +47,6 @@ async def get_m2m_jwt_token() -> str:
         return os.getenv("MOCK_M2M_JWT", "mock_local_jwt")
 
     try:
-        import google.auth.transport.requests
-        from google.oauth2 import id_token as sa_id_token
 
         req = google.auth.transport.requests.Request()
         audience = USERS_API_URL
@@ -99,8 +100,6 @@ def get_google_oidc_id_token() -> str:
 
     audience = os.getenv("USERS_API_URL", "http://users_api:8000")
     try:
-        import google.auth.transport.requests as google_requests
-        from google.oauth2 import id_token as sa_id_token
         req = google_requests.Request()
         token = sa_id_token.fetch_id_token(req, audience)
         logger.info(f"[OIDC] ID Token généré pour audience={audience}")

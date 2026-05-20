@@ -34,7 +34,7 @@ async def handle_categories_tool(name: str, arguments: dict, client, api_base_ur
     if name == "list_categories":
         skip = arguments.get("skip", 0)
         limit = arguments.get("limit", 50)
-        response = await client.get(f"{api_base_url}/categories", params={"skip": skip, "limit": limit})
+        response = await client.get(f"{api_base_url}/categories", params={"skip": skip, "limit": limit}, timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -42,7 +42,7 @@ async def handle_categories_tool(name: str, arguments: dict, client, api_base_ur
         response = await client.post(f"{api_base_url}/categories", json={
             "name": arguments["name"],
             "description": arguments.get("description")
-        })
+        }, timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 

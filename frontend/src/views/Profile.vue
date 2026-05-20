@@ -215,7 +215,7 @@ onMounted(() => {
       <div class="hero-content">
         <!-- Avatar -->
         <div class="avatar-ring">
-          <img v-if="user?.picture_url" :src="user.picture_url" :alt="user.full_name" class="avatar-img" />
+          <img v-if="user?.picture_url" :src="user.picture_url" :alt="user.full_name" width="80" height="80" class="avatar-img" />
           <div v-else class="avatar-initials">{{ userInitials }}</div>
           <div class="avatar-status" :class="user?.is_active ? 'active' : 'inactive'" />
         </div>
@@ -251,6 +251,7 @@ onMounted(() => {
           @click="activeTab = 'identity'"
           id="tab-identity"
           aria-controls="panel-identity"
+          title="Mon Profil"
         >
           <UserIcon :size="15" />
           Mon Profil
@@ -262,6 +263,7 @@ onMounted(() => {
           @click="activeTab = 'competencies'"
           id="tab-competencies"
           aria-controls="panel-competencies"
+          title="Mes Compétences"
         >
           <Award :size="15" />
           Mes Compétences
@@ -273,6 +275,7 @@ onMounted(() => {
           @click="activeTab = 'settings'"
           id="tab-settings"
           aria-controls="panel-settings"
+          title="Paramètres Agent"
         >
           <MessageSquare :size="15" />
           Paramètres Agent
@@ -349,16 +352,18 @@ onMounted(() => {
           <div class="add-period-form" style="margin-top: 1rem;">
             <p class="form-label">{{ t('profile.cv_label') }}</p>
             <div class="form-row" style="align-items: flex-start;">
-              <label class="field" style="flex: 1;">
+              <div class="field" style="flex: 1;">
+                <label for="cv-url-input" class="sr-only">{{ t('profile.cv_label') }}</label>
                 <input 
+                  id="cv-url-input"
                   type="url" 
                   v-model="cvUrl" 
                   class="field-input" 
                   :placeholder="t('profile.cv_placeholder')" 
                   :aria-label="t('profile.cv_aria')" 
                 />
-              </label>
-              <button @click="importCv" :disabled="!cvUrl || isImportingCv" class="btn-primary" style="padding: 9px 18px; margin-top: 0;">
+              </div>
+              <button @click="importCv" :disabled="!cvUrl || isImportingCv" class="btn-primary" style="padding: 9px 18px; margin-top: 0;" aria-label="Importer le CV">
                 <Check v-if="cvImportSuccess" :size="16" />
                 <Plus v-else :size="16" />
                 <span>{{ isImportingCv ? 'Importation...' : cvImportSuccess ? 'Importé !' : 'Importer le CV' }}</span>
@@ -383,7 +388,7 @@ onMounted(() => {
 
           <!-- Liste existante -->
           <div v-if="unavailabilityPeriods.length" class="periods-list">
-            <div v-for="(period, idx) in unavailabilityPeriods" :key="idx" class="period-chip">
+            <div v-for="(period, idx) in unavailabilityPeriods" :key="period.start_date + '-' + period.end_date + '-' + idx" class="period-chip">
               <div class="period-chip-left">
                 <span class="period-dates">
                   <Clock :size="13" />
@@ -407,30 +412,30 @@ onMounted(() => {
           <div class="add-period-form">
             <p class="form-label">{{ t('profile.unavailability_add') }}</p>
             <div class="form-row">
-              <label class="field">
-                <span>{{ t('profile.field_start') }}</span>
-                <input type="date" v-model="newPeriod.start_date" class="field-input" :aria-label="t('profile.field_start')" />
-              </label>
-              <label class="field">
-                <span>{{ t('profile.field_end') }}</span>
-                <input type="date" v-model="newPeriod.end_date" class="field-input" :aria-label="t('profile.field_end')" />
-              </label>
-              <label class="field">
-                <span>{{ t('profile.field_type') }}</span>
-                <select v-model="newPeriod.type" class="field-input" :aria-label="t('profile.field_type')">
+              <div class="field">
+                <label for="unavailability-start" style="font-size: 0.75rem; font-weight: 600; color: #6b7280;">{{ t('profile.field_start') }}</label>
+                <input id="unavailability-start" type="date" v-model="newPeriod.start_date" class="field-input" :aria-label="t('profile.field_start')" />
+              </div>
+              <div class="field">
+                <label for="unavailability-end" style="font-size: 0.75rem; font-weight: 600; color: #6b7280;">{{ t('profile.field_end') }}</label>
+                <input id="unavailability-end" type="date" v-model="newPeriod.end_date" class="field-input" :aria-label="t('profile.field_end')" />
+              </div>
+              <div class="field">
+                <label for="unavailability-type" style="font-size: 0.75rem; font-weight: 600; color: #6b7280;">{{ t('profile.field_type') }}</label>
+                <select id="unavailability-type" v-model="newPeriod.type" class="field-input" :aria-label="t('profile.field_type')">
                   <option value="full">{{ t('profile.type_full') }}</option>
                   <option value="am">{{ t('profile.type_am') }}</option>
                   <option value="pm">{{ t('profile.type_pm') }}</option>
                 </select>
-              </label>
-              <label class="field">
-                <span>{{ t('profile.field_reason') }}</span>
-                <select v-model="newPeriod.reason" class="field-input" :aria-label="t('profile.field_reason')">
+              </div>
+              <div class="field">
+                <label for="unavailability-reason" style="font-size: 0.75rem; font-weight: 600; color: #6b7280;">{{ t('profile.field_reason') }}</label>
+                <select id="unavailability-reason" v-model="newPeriod.reason" class="field-input" :aria-label="t('profile.field_reason')">
                   <option value="client">{{ t('profile.reason_client') }}</option>
                   <option value="vacances">{{ t('profile.reason_vacances') }}</option>
                   <option value="formation">{{ t('profile.reason_formation') }}</option>
                 </select>
-              </label>
+              </div>
               <button @click="addAvailability" :disabled="!newPeriod.start_date || !newPeriod.end_date || isSavingAvailability" class="btn-add" aria-label="Ajouter la période">
                 <Plus :size="16" />
                 <span>Ajouter</span>

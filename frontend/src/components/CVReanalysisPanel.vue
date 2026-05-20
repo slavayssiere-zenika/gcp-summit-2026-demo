@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: CV reanalysis status)
 import { RefreshCw, Users, Tag, Search, AlertTriangle, CheckCircle2, Zap } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
@@ -151,11 +152,11 @@ const triggerReanalysis = async () => {
 
       <div class="filter-controls">
         <label class="radio-label">
-          <input type="radio" v-model="filterType" value="user">
+          <input type="radio" v-model="filterType" value="user" id="filter-user">
           <span>Un Consultant</span>
         </label>
         <label class="radio-label">
-          <input type="radio" v-model="filterType" value="tag">
+          <input type="radio" v-model="filterType" value="tag" id="filter-tag-radio">
           <span>Agence entière (→ Batch)</span>
         </label>
       </div>
@@ -163,7 +164,7 @@ const triggerReanalysis = async () => {
       <!-- Sélection d'un seul utilisateur -->
       <div v-if="filterType === 'user'" class="input-group relative">
         <Search size="16" class="mt-3.5" />
-        <input type="text" v-model="userSearchQuery" @input="searchUsers" placeholder="Chercher un utilisateur..." class="form-input">
+        <input type="text" v-model="userSearchQuery" id="user-search-query" @input="searchUsers" placeholder="Chercher un utilisateur..." class="form-input">
         <div v-if="userResults.length > 0" class="autocomplete-dropdown">
           <div v-for="user in userResults" :key="user.id" @click="selectUser(user)" class="autocomplete-item">
             <span class="fw-bold">{{ user.full_name || user.username }}</span> ({{ user.email }})
@@ -178,13 +179,13 @@ const triggerReanalysis = async () => {
       <div v-if="filterType === 'tag'" class="batch-redirect-block">
         <div class="input-group">
           <Tag size="16" class="mt-3.5" />
-          <input type="text" v-model="filterTag" placeholder="Nom de l'agence (ex: 'zenika-lyon')" class="form-input">
+          <input type="text" v-model="filterTag" id="filter-tag" placeholder="Nom de l'agence (ex: 'zenika-lyon')" class="form-input">
         </div>
         <p class="redirect-hint">
           ⚠️ L'analyse d'une agence entière traite potentiellement des centaines de CVs.
           Elle doit obligatoirement passer par le <strong>Pipeline Vertex AI Batch</strong>.
         </p>
-        <button class="action-btn primary-btn" @click="goToBulkImport">
+        <button class="action-btn primary-btn" @click="goToBulkImport" aria-label="Ouvrir le Pipeline Batch">
           <Zap size="18" /> Ouvrir le Pipeline Batch
         </button>
       </div>
@@ -211,13 +212,13 @@ const triggerReanalysis = async () => {
       </div>
 
       <div class="logs-container mt-4" v-if="logs.length > 0">
-        <h4>Journal d'Exécution</h4>
-        <div class="terminal">
-          <div v-for="(log, idx) in logs" :key="idx" class="log-line" :class="{ 'text-red': log.includes('ERREUR') || log.includes('ÉCHEC') }">
-            {{ log }}
+          <h4>Journal d'Exécution</h4>
+          <div class="terminal">
+            <div v-for="(log, idx) in logs" :key="'log-' + idx" class="log-line" :class="{ 'text-red': log.includes('ERREUR') || log.includes('ÉCHEC') }">
+              {{ log }}
+            </div>
           </div>
         </div>
-      </div>
     </div>
   </div>
 </template>

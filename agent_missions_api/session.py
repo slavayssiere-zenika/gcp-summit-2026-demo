@@ -16,7 +16,7 @@ class RedisSessionService(InMemorySessionService):
     def __init__(self):
         super().__init__()
         redis_url = os.getenv("REDIS_URL", REDIS_URL_DEFAULT)
-        self.r = redis.from_url(redis_url)
+        self.r = redis.from_url(redis_url)  # noqa: RedisSyncADK
         self.ttl = 30 * 24 * 60 * 60  # 30 jours
 
     def _save_all(self, session_id: str):

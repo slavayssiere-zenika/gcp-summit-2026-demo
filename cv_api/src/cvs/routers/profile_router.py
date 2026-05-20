@@ -21,8 +21,9 @@ from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
 from src.services.bulk_service import bg_retry_apply
 from shared.cache import delete_cache
 from src.services.cv_import_service import process_cv_core, process_cv_direct
-from src.services.taxonomy_service import (fetch_prompt,
-                                           get_existing_competencies)
+from src.services.pubsub_service import PubsubService
+from src.services.profile_service import ProfileService
+from src.services.taxonomy_service import fetch_prompt, get_existing_competencies
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -100,7 +101,6 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, backgrou
 @public_router.post("/pubsub/import-cv")
 async def handle_pubsub_cv_import(
         request: Request, background_tasks: BackgroundTasks):
-    from src.services.pubsub_service import PubsubService
     return await PubsubService.handle_pubsub_cv_import(request, background_tasks)
 
 
@@ -125,7 +125,6 @@ async def get_all_user_tags(db: AsyncSession = Depends(get_db)):
             response_model=PaginationResponse[CVProfileResponse])
 async def get_users_by_tag(tag: str, skip: int = Query(
         0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db)):
-    from src.services.profile_service import ProfileService
 
     auth_header = request.headers.get("Authorization") if request else None
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
@@ -144,8 +143,14 @@ async def get_users_by_tag(tag: str, skip: int = Query(
 @router.get("/user/{user_id}",
             response_model=PaginationResponse[CVProfileResponse])
 async def get_user_cv(user_id: int, skip: int = Query(
-        0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db)):
-    from src.services.profile_service import ProfileService
+        0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db),
+        token_payload: dict = Depends(verify_jwt)):
+
+    if token_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(token_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : consultation du CV non autorisée."
+        )
 
     auth_header = request.headers.get("Authorization") if request else None
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
@@ -166,9 +171,14 @@ async def get_user_cv(user_id: int, skip: int = Query(
 @router.get("/user/{user_id}/missions",
             response_model=PaginationResponse[ExtractedMission])
 async def get_user_missions(user_id: int, skip: int = Query(
-        0, ge=0), limit: int = 50, db: AsyncSession = Depends(get_db)):
-    from src.services.profile_service import ProfileService
+        0, ge=0), limit: int = 50, db: AsyncSession = Depends(get_db),
+        token_payload: dict = Depends(verify_jwt)):
 
+    if token_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(token_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : consultation du CV non autorisée."
+        )
     total, items = await ProfileService.get_user_missions(user_id, skip, limit, db)
     if total == 0 and not items:
         profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
@@ -180,8 +190,14 @@ async def get_user_missions(user_id: int, skip: int = Query(
 
 @router.get("/user/{user_id}/details", response_model=CVFullProfileResponse)
 async def get_user_cv_details(
-        user_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    from src.services.profile_service import ProfileService
+        user_id: int, request: Request, db: AsyncSession = Depends(get_db),
+        token_payload: dict = Depends(verify_jwt)):
+
+    if token_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(token_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : consultation du CV non autorisée."
+        )
 
     auth_header = request.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
@@ -271,7 +287,6 @@ async def remediate_anonymous_profiles(
     token_payload: dict = Depends(verify_jwt),
     db: AsyncSession = Depends(get_db),
 ):
-    from src.services.profile_service import ProfileService
 
     if token_payload.get("role") not in ("admin", "service_account"):
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")

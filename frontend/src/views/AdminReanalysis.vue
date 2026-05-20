@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: bulk reanalysis trigger/status)
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/ui/PageHeader.vue'
 import TaxonomySuggestions from '../components/TaxonomySuggestions.vue'
@@ -395,7 +396,7 @@ onUnmounted(() => {
       <div class="glass-panel batch-panel">
         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
           <h3><Server size="20" /> {{ t('admin_reanalysis.history_title') }}</h3>
-          <button @click="fetchBatchHistory" class="action-btn secondary-btn" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;" :disabled="isBatchHistoryLoading">
+          <button @click="fetchBatchHistory" class="action-btn secondary-btn" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;" :disabled="isBatchHistoryLoading" aria-label="Actualiser l'historique">
              <RefreshCcw size="14" :class="{ 'spin': isBatchHistoryLoading }" /> Actualiser
           </button>
         </div>

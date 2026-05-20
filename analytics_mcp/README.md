@@ -9,8 +9,8 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `mcp_server.py` | 359 | ✅ |
-| `conftest.py` | 36 | ✅ |
+| `mcp_server.py` | 358 | ✅ |
+| `conftest.py` | 37 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

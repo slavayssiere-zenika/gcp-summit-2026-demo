@@ -1,20 +1,20 @@
 ---
-description: Analyse complète de l'UX et de l'UI du frontend Vue.js (contraste WCAG, lisibilité, responsive) et proposition d'améliorations concrètes.
+description: Analyse complète de l'UX, de l'UI, de l'Accessibilité et de la Réactivité du frontend Vue.js (contraste WCAG, lisibilité, responsive, micro-interactions, fuites mémoire Vue 3) et proposition d'améliorations concrètes.
 ---
 
-# Workflow : Analyse UX/UI Complète (/analyse-ui-ux)
+# Workflow : Analyse UX/UI & Accessibilité Complète (/analyse-ui-ux)
 
 // turbo-all
 
-Ce workflow réalise un audit statique approfondi du frontend Vue.js (`frontend/src/`) sur trois axes : **contraste et accessibilité visuelle**, **lisibilité et typographie**, et **responsive design**. L'agent inspecte le code source (pas le navigateur, conformément à la règle §13 de AGENTS.md) et produit un rapport actionnable avec des diffs correctifs.
+Ce workflow réalise un audit statique approfondi et outillé du frontend Vue.js (`frontend/src/`) sur quatre axes fondamentaux : **contraste et accessibilité (WCAG 2.1 AA)**, **performance de rendu et réactivité Vue 3**, **lisibilité et responsive design**, et **micro-interactions (Design Émotionnel)**. L'agent inspecte le code source et exécute un script d'audit automatisé de structure (pas de navigateur, conformément à la règle §13 de AGENTS.md) puis produit un rapport actionnable.
 
 ---
 
-## Étape 1 : Inventaire du Système de Design
+## Étape 1 : Inventaire & Dépendances de Design
 
-### 1.1 Variables CSS globales
+### 1.1 Variables CSS globales & Résolution des conflits :root
 Lire `frontend/src/style.css` (et tout fichier `*.css` / `*.scss` dans `frontend/src/assets/`) pour extraire :
-- La palette de couleurs déclarée en variables CSS (`--zenika-red`, `--bg-primary`, `--text-primary`, etc.)
+- La palette de couleurs déclarée en variables CSS (`--zenika-red`, `--bg-primary`, etc.)
 - Les tailles de police de base (`font-size`, `line-height`) sur `:root` et `body`
 - Les breakpoints responsive déclarés (`@media` queries)
 
@@ -23,495 +23,218 @@ Lire `frontend/src/style.css` (et tout fichier `*.css` / `*.scss` dans `frontend
 grep -rn "^\s*--" frontend/src/style.css frontend/src/assets/ 2>/dev/null | head -60
 ```
 
+Le projet définit parfois des blocs `:root` dans **deux endroits distincts** : `style.css` et le `<style>` de `App.vue`. Des variables aux noms proches mais différents créent des incohérences silencieuses. Détecter les doublons de déclaration de variables :
+
+```bash
+# Lister toutes les déclarations de variables de manière robuste (se terminant par un deux-points)
+grep -roh "^\s*--[a-z0-9-]*:" frontend/src/ --include="*.vue" --include="*.css" | \
+  sed 's/://g; s/^\s*//' | sort | uniq -d
+```
+
 ### 1.2 Inventaire des vues et composants
-Lire la liste complète des fichiers `.vue` dans `frontend/src/views/` et `frontend/src/components/` (déjà connus : 25 vues, 10 composants). Identifier les fichiers les plus volumineux (> 20 Ko) comme cibles prioritaires d'audit : `DataQuality.vue`, `AdminReanalysis.vue`, `Home.vue`, `PromptsAdmin.vue`, `Profile.vue`.
+Lire la liste complète des fichiers `.vue` dans `frontend/src/views/` et `frontend/src/components/`. Identifier les fichiers les plus volumineux (> 20 Ko) comme cibles prioritaires d'audit : `DataQuality.vue`, `AdminReanalysis.vue`, `Home.vue`, `PromptsAdmin.vue`, `Profile.vue`.
 
 ```bash
 # Trier par taille décroissante
 find frontend/src -name "*.vue" | xargs wc -l | sort -rn | head -15
 ```
 
-### 1.3 Détection des variables CSS dupliquées (nouveau ⚠️)
-Le projet définit des blocs `:root` dans **deux endroits distincts** : `style.css` et le `<style>` de `App.vue`. Des variables aux noms proches mais différents (`--color-text-secondary` vs `--text-secondary`) créent des incohérences silencieuses. Détecter les doublons :
+---
 
+## Étape 2 : Audit de Réactivité & Rendu Vue.js 3
+
+### 2.1 Anti-patterns de réactivité (Props destructurées)
+En Vue 3 Composition API (Script Setup), destructurer directement les props (ex : `const { user } = defineProps(...)`) brise la réactivité. L'UI ne se met plus à jour lors des mutations de données.
 ```bash
-# Lister toutes les variables déclarées dans les .vue ET style.css
-grep -roh "--[a-z][a-z0-9-]*" frontend/src/ --include="*.vue" --include="*.css" | \
-  sed 's|.*:||' | sort | uniq -d
+# Détecter les destructurations directes de defineProps
+grep -rn "const {.*} = defineProps" frontend/src/ --include="*.vue"
+```
+*Correction standard* : Utiliser `toRefs(props)` ou accéder aux valeurs via `props.user`.
 
-# Comparer les blocs :root de style.css vs App.vue spécifiquement
-echo "=== style.css ==="
-grep -n "^\s*--" frontend/src/style.css
-echo "=== App.vue ==="
-grep -n "^\s*--" frontend/src/App.vue
+### 2.2 Fuites de mémoire et listeners non nettoyés
+L'usage de `addEventListener` globaux (`window` ou `document`) sans appel correspondant à `removeEventListener` dans le hook `onUnmounted` provoque d'importantes fuites de mémoire.
+```bash
+# Détecter les écouteurs d'événements globaux
+grep -rn "window\.addEventListener\|document\.addEventListener" frontend/src/ --include="*.vue" --include="*.ts"
+
+# S'assurer de la présence du hook de nettoyage
+grep -rn "onUnmounted\|onBeforeUnmount" frontend/src/ --include="*.vue"
 ```
 
-> **Règle** : Toute variable présente dans `App.vue <style>` et dans `style.css` avec un nom différent doit être consolidée dans `style.css` et référencée via `var(--nom-unique)`.
+### 2.3 Clés de boucle instables (`:key`)
+Utiliser l'index de boucle (`:key="index"`) sur un `v-for` contenant des éléments dynamiques (tri, suppression, insertion) force Vue à ré-instancier le DOM inutilement. Cela dégrade les performances UX et casse le focus des inputs.
+```bash
+# Détecter les v-for utilisant l'index comme clé
+grep -rn "v-for=" frontend/src/ --include="*.vue" | grep "index\|idx" | grep -v "key="
+```
 
 ---
 
-## Étape 2 : Audit de Contraste (WCAG 2.1 AA)
+## Étape 3 : Audit Accessibilité & Formulaires (WCAG 2.1 AA)
 
-### 2.1 Règle de référence
+### 3.1 Règle de référence de contraste
 La norme **WCAG 2.1 AA** exige :
-- Ratio **4.5:1** minimum pour le texte normal (< 18pt / < 14pt bold)
-- Ratio **3:1** minimum pour le texte large (≥ 18pt ou ≥ 14pt bold) et les composants UI (bordures, icônes actives)
-
-### 2.2 Extraction des couples texte/fond à risque
-
-Rechercher les patterns suivants dans tous les fichiers `.vue` et `.css` :
+- Ratio **4.5:1** minimum pour le corps de texte normal (< 18pt / < 14pt bold)
+- Ratio **3:1** minimum pour le texte large (≥ 18pt ou ≥ 14pt bold) et les composants interactifs (bordures, icônes)
 
 ```bash
 # Couleurs hardcodées (non-variables) — risque contraste non maîtrisé
 grep -rn "#[0-9a-fA-F]\{3,6\}" frontend/src/ --include="*.vue" --include="*.css" | grep -v "\.svg\|<!--" | grep "color\|background\|border" | head -40
 
-# Texte sur fond glassmorphism (rgba avec alpha < 0.7 = fond semi-transparent problématique)
+# Texte sur fond glassmorphism (rgba avec alpha < 0.7 = fond semi-transparent à risque)
 grep -rn "rgba(" frontend/src/ --include="*.vue" --include="*.css" | grep "background\|backdrop" | head -20
-
-# Couleur Zenika Red utilisée comme fond (contraste texte blanc critique)
-grep -rn "zenika-red\|#E31937\|#e31937" frontend/src/ --include="*.vue" | head -20
 ```
 
-### 2.3 Vérification manuelle des couples critiques connus
-Pour chaque occurrence trouvée, calculer le ratio via la formule W3C (luminance relative). Les couples à risque identifiés dans l'architecture Zenika :
-
-| Couple | Ratio estimé | Statut WCAG AA |
-|--------|:------------:|:--------------:|
-| Texte blanc `#FFF` sur fond Zenika Red `#E31937` | ~4.0:1 | ⚠️ Borderline |
-| Texte gris `#9CA3AF` sur fond anthracite `#1A1A1A` | ~4.6:1 | ✅ Conforme |
-| Texte gris `#9CA3AF` sur glassmorphism `rgba(255,255,255,0.1)` | ~2.5:1 | ❌ Non conforme |
-| Texte `#6B7280` sur fond blanc `#FFFFFF` | ~4.6:1 | ✅ Conforme |
-| Placeholder input `#9CA3AF` sur `#F3F4F6` | ~2.4:1 | ❌ Non conforme |
-
-### 2.4 Vérification des états disabled et placeholder
+### 3.2 Accessibilité des formulaires et liaisons labels/inputs
+Chaque `<input>`, `<textarea>` et `<select>` doit être lié explicitement à un élément `<label>` via un `id` correspondant pour être vocalisable par les lecteurs d'écran.
 ```bash
-# Placeholders (souvent oubliés — ratio requis 4.5:1)
+# Rechercher les inputs sans ID (qui ne peuvent donc pas être liés à un label)
+grep -rn "<input" frontend/src/ --include="*.vue" | grep -v "id=" | grep -v "type=\"hidden\""
+```
+
+### 3.3 Liens d'évitement (Skip links)
+Sur une application à barre latérale complexe comme la Console Zenika, la présence d'un lien d'évitement invisible permettant de sauter la navigation et d'aller directement au contenu principal au clavier est requise.
+```bash
+# Vérifier la présence de la classe de lien d'évitement
+grep -rn "skip-link\|skip-to-content" frontend/src/App.vue
+```
+
+### 3.4 États disabled et placeholders
+```bash
+# Placeholders (ratio de contraste requis : 4.5:1)
 grep -rn "::placeholder\|placeholder" frontend/src/ --include="*.vue" --include="*.css" | grep "color" | head -15
 
-# États disabled (ratio requis 3:1 pour signifier l'état)
+# États disabled (ratio requis : 3:1 pour signifier l'inactivité sans masquer l'élément)
 grep -rn ":disabled\|disabled" frontend/src/ --include="*.vue" | grep "color\|opacity" | head -15
 ```
 
 ---
 
-## Étape 3 : Audit de Lisibilité et Typographie
+## Étape 4 : Audit de Lisibilité et Typographie
 
-### 3.1 Taille de police minimale
-La taille de police lisible minimale est **14px** pour le corps de texte, **12px** pour les labels secondaires. Rechercher les valeurs inférieures :
-
-> **⚠️ Attention base mobile** : `style.css` définit `html { font-size: 14px }` sous `@media (max-width: 768px)`. Sur mobile, **1rem = 14px**. Donc :
-> - `0.68rem` → **9.5px** ❌ (ex: `.dropdown-section-label` dans `App.vue`)
-> - `0.75rem` → **10.5px** ❌
-> - `0.85rem` → **11.9px** ⚠️ borderline
-> - `0.9rem` → **12.6px** ✅ minimum toléré pour labels
-> - `1rem` → **14px** ✅ minimum pour corps de texte
-
+### 4.1 Taille de police minimale et base mobile
+La taille minimale lisible pour le corps de texte est **14px** (ou **1rem** sur mobile base 14px), et **12px** (**0.85rem**) pour les labels secondaires.
 ```bash
 # Tailles de police < 14px hardcodées (px)
 grep -rn "font-size:\s*[0-9]\{1,2\}px" frontend/src/ --include="*.vue" --include="*.css" | \
   awk -F: '{match($0,/[0-9]+px/,a); if(a[0]+0 < 14) print}' | head -20
 
-# Tailles en rem problématiques sur base mobile 14px (< 0.9rem)
-grep -rn "font-size:\s*0\.[0-8][0-9]*rem" frontend/src/ --include="*.vue" --include="*.css" | head -20
-
-# Cas concret connu : .dropdown-section-label (0.68rem = 9.5px mobile)
-grep -rn "0\.68rem\|0\.7rem\|0\.72rem\|0\.75rem" frontend/src/ --include="*.vue" --include="*.css" | head -10
+# Tailles de police en rem problématiques sur mobile (< 0.85rem)
+grep -rn "font-size:\s*0\.[0-7][0-9]*rem" frontend/src/ --include="*.vue" --include="*.css" | head -20
 ```
 
-### 3.2 Line-height et espacement
-Un `line-height` inférieur à `1.5` nuit à la lisibilité des blocs de texte. Vérifier :
+### 4.2 Hauteur de ligne (`line-height`) et longueur de ligne
+Un `line-height` inférieur à `1.5` sur les blocs de texte nuit à la lecture. Les colonnes dépassant **75 caractères** fatiguent l'œil (absence de `max-width` sur les conteneurs de prose).
 ```bash
 grep -rn "line-height:\s*[01]\.[0-4]" frontend/src/ --include="*.vue" --include="*.css" | head -15
 ```
 
-### 3.3 Longueur des lignes (mesure de colonne)
-Les colonnes de texte dépassant **75 caractères** par ligne réduisent la lisibilité. Inspecter visuellement les conteneurs sans `max-width` sur les blocs prose :
+### 4.3 Taille physique des zones cliquables (WCAG 2.5.5)
+Les éléments interactifs (boutons, icônes, liens) doivent présenter une zone de clic d'au moins **44×44px** pour être facilement sélectionnables sur mobile ou par des utilisateurs souffrant de tremblements.
 ```bash
-# Blocs de texte sans contrainte de largeur (absence de max-width dans les conteneurs de paragraphes)
-grep -rn "<p\|<li\|<span" frontend/src/views/Help.vue frontend/src/views/AgentsDocs.vue | grep -v "class\|:class" | head -20
-```
-
-### 3.4 Hiérarchie des titres (H1 unique par vue)
-```bash
-# Vérifier qu'une seule balise <h1> (ou équivalent .text-4xl / .title-primary) existe par vue
-grep -rn "<h1\b" frontend/src/views/ --include="*.vue"
-grep -rn "text-4xl\|\.page-title\|\.main-title" frontend/src/views/ --include="*.vue" | head -20
-```
-
-### 3.5 Polices de caractères
-Vérifier que la police déclarée dans `style.css` est chargée depuis Google Fonts (ou bundlée localement) et que le `font-family` de fallback est défini :
-```bash
-grep -rn "font-family\|@import.*fonts\|googlefonts" frontend/src/style.css frontend/index.html 2>/dev/null
-```
-
-### 3.6 Contraste dans les icônes et boutons d'action
-```bash
-# Boutons sans texte explicite (icônes seules sans aria-label)
-grep -rn "<button\|<IconButton" frontend/src/ --include="*.vue" -A 2 | grep -v "aria-label\|:aria-label\|title" | grep "<button" | head -20
-```
-
-> **⚠️ Limitation grep** : Les dimensions déclarées dans `<style>` non-scoped (ex: `.logout-pill { width: 36px }`) ne sont pas rattachées à un sélecteur `button` dans la même ligne — le grep naïf les rate. Utiliser la commande ciblée suivante :
-
-```bash
-# Taille des zones cliquables < 44px — recherche dans les blocs <style> complets
-# Cas connu : .logout-pill = 36x36px dans App.vue (sous le seuil WCAG 44px)
+# Identifier les hauteurs/largeurs de boutons/pills trop petites (< 44px) dans les <style>
 grep -rn "width:\s*[0-3][0-9]px\|height:\s*[0-3][0-9]px" frontend/src/ --include="*.vue" | head -20
-
-# Vérifier les sélecteurs associés (btn, pill, icon, action)
-grep -B5 -A1 "width:\s*3[0-9]px" frontend/src/App.vue frontend/src/components/ -r --include="*.vue" 2>/dev/null | head -30
-```
-
-> **Cas connu à corriger** : `.logout-pill` dans `App.vue` fait **36×36px**. La correction WCAG impose au minimum `min-width: 44px; min-height: 44px` ou une zone de clic étendue via `padding`.
-
----
-
-## Étape 4 : Audit Responsive Design
-
-### 4.1 Identification des breakpoints définis
-Lire `frontend/src/style.css` pour identifier les breakpoints media queries. Comparer avec les conventions Tailwind/Bootstrap standards si utilisés. Les breakpoints Zenika attendus : `640px` (sm), `768px` (md), `1024px` (lg), `1280px` (xl).
-
-```bash
-grep -rn "@media" frontend/src/ --include="*.vue" --include="*.css" | grep -v "prefers-color-scheme\|prefers-reduced-motion" | sed 's/.*@media//' | sort -u | head -30
-```
-
-### 4.2 Layouts rigides (px fixes sur largeur)
-Les largeurs fixées en `px` sur des conteneurs principaux sont un anti-pattern responsive :
-```bash
-# Widths fixes > 600px (non-flexibles)
-grep -rn "width:\s*[6-9][0-9][0-9]px\|width:\s*[0-9][0-9][0-9][0-9]px" frontend/src/ --include="*.vue" | head -20
-
-# Grilles sans responsive (grid-template-columns fixes sans @media)
-grep -rn "grid-template-columns" frontend/src/ --include="*.vue" --include="*.css" | grep -v "repeat\|auto\|fr\b" | head -15
-```
-
-### 4.3 Navigation mobile
-Vérifier que `App.vue` ou le composant de navigation contient un mécanisme de menu hamburger ou de collapse pour les petits écrans :
-```bash
-grep -rn "hamburger\|mobile-menu\|sidebar.*collapsed\|@media.*768\|sm:\|md:" frontend/src/App.vue frontend/src/components/ --include="*.vue" | head -20
-```
-
-### 4.4 Tables non-scrollables
-Les tableaux sans `overflow-x: auto` sur leur conteneur cassent le layout mobile :
-```bash
-grep -rn "<table\b" frontend/src/ --include="*.vue" -B 3 | grep -v "overflow-x\|table-responsive" | grep "<table" | head -15
-```
-
-### 4.5 Flex/Grid sans fallback
-```bash
-# Flex sans direction column sur mobile
-grep -rn "display:\s*flex\b" frontend/src/ --include="*.vue" | head -10
-# Vérifier si ces conteneurs ont un @media associé changeant flex-direction
-```
-
-### 4.6 Images et médias
-```bash
-# Images sans max-width: 100% (débordement sur mobile)
-grep -rn "<img\b" frontend/src/ --include="*.vue" | grep -v "max-width\|w-full\|class.*img" | head -15
 ```
 
 ---
 
-## Étape 5 : Audit Accessibilité Complémentaire (a11y)
+## Étape 5 : Audit Responsive & Fallbacks Résilients
 
-### 5.1 Focus visible (keyboard navigation)
+### 5.1 Breakpoints et layouts rigides (Largeurs fixes en px)
+Les largeurs fixées en `px` (ex: `width: 800px`) sur les conteneurs principaux cassent le responsive.
 ```bash
-# Absence de :focus styles (navigation clavier impossible)
-grep -rn ":focus\|focus-visible\|outline" frontend/src/ --include="*.vue" --include="*.css" | head -20
-
-# outline: none — ATTENTION aux faux positifs
-# outline: none est ACCEPTABLE si le même bloc :focus/:focus-visible
-# définit un box-shadow ou border-color alternatif visible.
-# Exemple conforme dans App.vue :
-#   .header-search input:focus { outline: none; box-shadow: 0 0 0 4px rgba(...) } ✅
-# Exemple NON conforme :
-#   button:focus { outline: none; } (sans alternative) ❌
-grep -rn "outline:\s*none\|outline:\s*0" frontend/src/ --include="*.vue" --include="*.css" | head -15
-
-# Vérifier si chaque occurrence a un box-shadow ou border compensatoire dans le même bloc
-# (inspection manuelle requise — chercher le contexte autour de chaque hit)
-grep -rn -A5 "outline:\s*none" frontend/src/ --include="*.vue" --include="*.css" | \
-  grep -v "box-shadow\|border-color\|border:" | grep -B1 "}" | head -20
+# Largeurs fixes absolues > 480px
+grep -rn "width:\s*[4-9][0-9][0-9]px\|width:\s*[0-9][0-9][0-9][0-9]px" frontend/src/ --include="*.vue" | head -20
 ```
 
-> **Règle** : Un `outline: none` sans `box-shadow` ou `border` alternatif dans le **même sélecteur `:focus`** est une violation WCAG 2.1 SC 2.4.7. Signaler uniquement les cas sans compensation visuelle.
-
-### 5.2 Attributs ARIA
+### 5.2 Cumulative Layout Shift (CLS)
+L'absence de dimensions explicites sur les ressources médias (`<img>` sans `width` et `height`) provoque des sursauts désagréables et dégradent le score de stabilité visuelle de l'UX.
 ```bash
-# Éléments interactifs sans aria-label (boutons icônes)
-grep -rn "<button" frontend/src/ --include="*.vue" | grep -v "aria-label\|:aria-label" | wc -l
-
-# Modales sans role="dialog" ou aria-modal
-grep -rn "modal\|dialog\|overlay" frontend/src/ --include="*.vue" | grep -v 'role=\|aria-modal' | head -15
-
-# Listes déroulantes sans aria-expanded
-grep -rn "dropdown\|v-if.*open\|v-show.*open" frontend/src/ --include="*.vue" | grep -v "aria-expanded" | head -10
+# Détecter les images sans taille explicite
+grep -rn "<img" frontend/src/ --include="*.vue" | grep -v "width=" | grep -v "height="
 ```
 
-### 5.3 Messages d'état dynamiques (aria-live)
-Les notifications toast, les spinners et les messages d'erreur doivent utiliser `aria-live="polite"` pour les lecteurs d'écran :
+### 5.3 Mouvements réduits
+Vérifier la présence de media queries désactivant ou adoucissant les transitions pour les utilisateurs préférant des mouvements réduits.
 ```bash
-grep -rn "toast\|notification\|alert\|spinner\|loading" frontend/src/ --include="*.vue" | grep -v "aria-live\|role=\"alert\"\|role=\"status\"" | head -15
-```
-
-### 5.4 Attributs `alt` sur les images
-```bash
-grep -rn "<img" frontend/src/ --include="*.vue" | grep -v " alt=" | head -10
+grep -rn "prefers-reduced-motion" frontend/src/ --include="*.css" --include="*.vue"
 ```
 
 ---
 
-## Étape 6 : Cohérence UI (Standards Zenika)
+## Étape 6 : Micro-interactions & Design Émotionnel
 
-### 6.1 Charte graphique
+### 6.1 Skeleton Screens & Loading States
+Vérifier si l'application met en place des squelettes de chargement progressifs sur les composants lourds (`Profile.vue`, `DataQuality.vue`) pour apaiser la perception du temps d'attente utilisateur.
 ```bash
-# Couleurs hors-charte (ni rouge Zenika, ni anthracite, ni blanc, ni gris système)
-grep -rn "#[0-9a-fA-F]\{6\}" frontend/src/ --include="*.vue" | grep -v "#E31937\|#1A1A1A\|#FFFFFF\|#F3F4F6\|#6B7280\|#9CA3AF\|#111827\|#374151\|#4B5563\|#D1D5DB\|#E5E7EB\|#EF4444\|#10B981\|#F59E0B\|#3B82F6" | head -20
+find frontend/src -name "*Skeleton*" -o -name "*Loader*"
 ```
 
-### 6.2 Iconographie (lucide-vue-next exclusif)
+### 6.2 Empty States qualitatifs
+Chaque rendu conditionnel de liste (`v-if="items.length"`) doit comporter une clause `v-else` structurée proposant un message explicite, une illustration, et un bouton d'action.
 ```bash
-# Usage de SVG bruts inline (interdit — utiliser lucide-vue-next)
-grep -rn "<svg\b" frontend/src/ --include="*.vue" | grep -v "<!--\|lucide\|icon-component" | head -20
-
-# Import depuis des librairies non-standard
-grep -rn "from '@heroicons\|from 'vue-feather\|from 'font-awesome" frontend/src/ --include="*.vue" --include="*.ts" | head -10
+grep -rn "v-if=" frontend/src/views/ --include="*.vue" -A 10 | grep -E "v-else|length === 0|length == 0"
 ```
-
-### 6.3 Glassmorphism responsable
-```bash
-grep -rn "backdrop-filter\|glass\|blur(" frontend/src/ --include="*.vue" --include="*.css" | head -15
-```
-
-### 6.4 Anti-patterns CSS : `!important` (nouveau ⚠️)
-Les déclarations `!important` brisent la cascade CSS et rendent impossible la surcharge responsive. Elles signalent souvent une mauvaise architecture de styles.
-
-```bash
-# Compter le nombre total de !important dans le frontend
-echo "Nombre total de !important :"
-grep -rn "!important" frontend/src/ --include="*.vue" --include="*.css" | grep -v "<!--" | wc -l
-
-# Lister tous les cas pour review manuelle
-grep -rn "!important" frontend/src/ --include="*.vue" --include="*.css" | grep -v "<!--" | head -30
-```
-
-> **Règle** : Zéro `!important` est l'objectif. Chaque occurrence doit être justifiée (override de librairie tierce uniquement). Les `!important` dans des composants maison (`.swagger-link`, `.hide-on-mobile`) doivent être refactorisés avec une spécificité CSS correcte ou des classes utilitaires dédiées.
 
 ---
 
-## Étape 7 : Sécurité UI & Cohérence des Rôles (RBAC)
+## Étape 7 : Exécution de l'Audit Automatisé Outillé (AST)
 
-Vérifier que les actions sensibles ou réservées à l'administration sont correctement protégées dans l'interface (sécurité par l'UI, dite "Guardrails visuels"). Un utilisateur "normal" ne doit pas voir des boutons "Supprimer" ou "Admin" non fonctionnels.
+Pour éviter les limitations et faux-positifs des regex bash sur des fichiers multi-lignes, exécutez le script d'audit automatisé centralisé. Ce script analyse l'AST HTML des templates Vue ainsi que les variables CSS orphelines.
 
-### 7.1 Détection des gardes de rôles
-Identifier les patterns de vérification de rôle utilisés dans le projet (`isAdmin`, `isRh`, `role === 'admin'`).
 ```bash
-# Identifier les composants contenant des directives de rôle
-grep -rn "v-if=\".*admin\|v-if=\".*rh\|isAdmin\|isRh" frontend/src/ --include="*.vue" | head -20
+# Lancer le script d'audit statique UX/UI
+python3 scripts/audit_templates.py
 ```
 
-### 7.2 Actions sensibles non protégées
-Vérifier si des boutons liés à des actions destructrices ou administratives sont présents sans garde de rôle visible dans le template.
-```bash
-# Rechercher des boutons d'actions sensibles sans v-if associé au rôle
-grep -rn -B1 -A1 "Supprimer\|Delete\|Reset\|Clear\|Admin" frontend/src/ --include="*.vue" | grep -v "v-if=\".*admin\|role\|isRh\|isAdmin" | grep "<button" | head -20
-```
+---
 
-### 7.3 Analyse Product Owner (PO) de l'UX des permissions
-Au-delà de simplement cacher une action non autorisée via `v-if`, vérifier si ce choix offre le meilleur parcours utilisateur (User Journey). Dans de nombreux cas, masquer entièrement un bouton crée de la confusion ("Où est passée cette fonctionnalité ?").
-- **Actions principales** : Faut-il plutôt afficher le bouton en état désactivé (`:disabled="!isAdmin()"`) avec une infobulle (tooltip) expliquant : *"Action réservée aux administrateurs"* ?
-- **Pages restreintes** : Si l'utilisateur accède à une page où il n'a aucun droit, y a-t-il un *Empty State* (état vide) clair et bienveillant ("Vous n'avez pas accès à ce module") plutôt qu'une page blanche ou une erreur brute ?
-- **Découverte (Discoverability)** : Le fait de montrer une fonctionnalité verrouillée (avec un cadenas ou grisée) informe l'utilisateur de son existence et de la structuration de la plateforme.
+## Étape 8 : Sécurité UI & Cohérence des Rôles (RBAC)
+
+Vérifier que les actions sensibles ou d'administration sont protégées par des guardrails d'UI.
+- **Règle PO (Product Owner)** : Les actions destructrices (ex: Supprimer) doivent être masquées (`v-if`). Les actions de navigation majeure ou d'accès à des modules doivent être affichées sous forme désactivée (`:disabled="!isAdmin"`) avec une infobulle explicative (`title`) pour ne pas désorienter l'utilisateur et guider son parcours (Discoverability).
 
 ```bash
-# Rechercher des boutons disabled liés au rôle (Bonne pratique UX pour la discoverability)
+# Détecter les boutons désactivés par rôle (discoverability)
 grep -rn ":disabled=\".*admin\|:disabled=\".*rh\|!isAdmin\|!isRh" frontend/src/ --include="*.vue" | head -15
-
-# Rechercher des infobulles explicatives sur les droits
-grep -rn "title=\".*admin\|title=\".*droit\|tooltip" frontend/src/ --include="*.vue" | grep -i "admin\|droit\|permission" | head -15
 ```
-
-> **Règle PO** : Lors de l'audit, évaluez le choix UX entre *cacher* et *désactiver*. Les actions de destruction pure (ex: supprimer) doivent être cachées (`v-if`). Les fonctionnalités majeures ou points d'entrée de modules devraient être visibles mais désactivés avec une explication (`disabled` + `title`) pour ne pas désorienter l'utilisateur.
 
 ---
 
-## Étape 8 : Audit de Cohérence Frontend ↔ MCP (Chaîne UI → Agent → Tool)
+## Étape 9 : Cohérence Frontend ↔ MCP (Traçabilité technique)
 
-Cette étape vérifie que les widgets UI qui déclenchent des actions IA sont effectivement connectés à des tools MCP réellement disponibles et correctement documentumés dans les agents. Un widget qui appelle un endpoint sans tool MCP correspondant produit des erreurs silencieuses ou des réponses vides que l'utilisateur ne peut pas interpréter.
-
-### 8.1 Inventaire des appels API depuis le frontend (stores Pinia)
-
-Identifier tous les appels HTTP sortants vers l'agent router et les APIs directes :
+Vérifier que chaque widget d'interface déclenchant une action IA est correctement câblé à un store Pinia gérant les erreurs, et que le store communique avec un tool MCP actif de l'agent.
 
 ```bash
-# Appels vers l'agent router (actions IA déclenchées par l'UI)
-grep -rn "/query\|/api/agent\|/a2a" frontend/src/stores/ --include="*.ts" | grep -v "//\|import" | head -30
-
-# Tous les endpoints appelés depuis les stores
-grep -rn "api\.\|axios\.\|fetch(\|\.get(\|\.post(\|\.put(\|\.delete(" frontend/src/stores/ --include="*.ts" | grep -v "//" | head -40
-
-# Composants Vue qui appellent directement des APIs (hors store)
-grep -rn "fetch(\|axios\|useApi" frontend/src/views/ frontend/src/components/ --include="*.vue" | grep -v "//\|import" | head -20
-```
-
-### 8.2 Inventaire des tools MCP enregistrés dans chaque agent
-
-Chaque agent déclare ses tools dans `agent.py`. Ce sont les seules capacités que l'agent peut utiliser pour répondre aux requêtes UI :
-
-```bash
-# Lister tous les tools/fonctions déclarés dans les agents ADK
-grep -rn "async def \|def " agent_*/agent*.py 2>/dev/null | grep -v "def __\|#" | head -50
-
-# Docstrings des tools (cruciales pour le routing LLM — vide = tool invisible)
-for f in agent_*/agent*.py; do
-  echo "=== $f ==="
-  python3 -c "
-import ast, sys
-try:
-  tree = ast.parse(open('$f').read())
-  for node in ast.walk(tree):
-    if isinstance(node, ast.AsyncFunctionDef) and not node.name.startswith('_'):
-      doc = ast.get_docstring(node) or 'DOCSTRING MANQUANTE'
-      print(f'  {node.name}: {doc[:80]}')
-except: pass
-" 2>/dev/null
-done
-
-# Clients MCP configurés dans les agents (sources de tools)
-grep -rn "MCPToolset\|StdioServerParameters\|server_params\|mcp_tools" agent_*/*.py 2>/dev/null | head -20
-```
-
-### 8.3 Inventaire des tools exposés par les serveurs MCP des APIs data
-
-```bash
-# Noms de tous les tools exposés par les mcp_server.py
-grep -rn "@mcp\.tool\|Tool(name=\|\"name\":\s*\"" *_api/mcp_server.py 2>/dev/null | head -50
-
-# Vérifier que chaque tool a une description (vide = agent aveugle)
-grep -rn "description=\"\"\|description=None\|\"description\":\s*\"\"" *_api/mcp_server.py 2>/dev/null | head -20
-
-# Tools qui gèrent les erreurs correctement (doivent retourner {success:false, error:...})
-grep -rn "except\|try:" *_api/mcp_server.py 2>/dev/null | grep -v "#" | head -20
-```
-
-### 8.4 Matrice de traçabilité : Widget UI → Store Pinia → Agent → Tool MCP → API
-
-Pour chaque fonctionnalité majeure, tracer la chaîne complète en croisant les résultats des étapes 8.1, 8.2 et 8.3 :
-
-| Widget UI (Vue component) | Store/Action | Agent cible | Tool agent | Tool MCP | API data |
-|---|---|---|---|---|---|
-| Recherche consultant | `useCvStore.search()` | `agent_hr_api` | `search_cvs` | `search_cvs_semantic` | `cv_api` |
-| Créer mission | `useMissionStore.create()` | `agent_ops_api` | `create_mission` | `create_mission` | `missions_api` |
-| Profil consultant | `useProfileStore.get()` | `agent_hr_api` | `get_cv_profile` | `get_cv_profile` | `cv_api` |
-| Scoring compétences | Direct API | — | — | — | `competencies_api` |
-| Import CV | Direct API | — | — | — | `cv_api` |
-
-> **Note** : Les actions "Direct API" (sans passage par l'agent) nécessitent tout de même vérification que le store gère correctement les erreurs 4xx/5xx.
-
-### 8.5 Détection des liens brisés
-
-```bash
-# 1. Stores sans gestion d'erreur sur les appels IA
+# 1. Stores sans gestion d'erreur try/catch sur les appels IA
 grep -rn "/query\|/api/agent" frontend/src/stores/ --include="*.ts" -A 5 | grep -v "catch\|error\|try\|finally" | grep -B3 "}" | head -30
 
-# 2. Tools agent référencés mais absents des MCP servers
-# Extraire les noms de tools des agents
-grep -rn "def " agent_*/agent*.py 2>/dev/null | grep -v "def __\|main\|query\|verify" | sed 's/.*def //;s/(.*//' | sort -u > /tmp/agent_tools.txt
-# Extraire les noms de tools des MCP servers
-grep -rn "@mcp\.tool\|Tool(name=" *_api/mcp_server.py 2>/dev/null | sed "s/.*name=\"//;s/\".*//' | sort -u > /tmp/mcp_tools.txt
-echo "=== Tools agent sans correspondance MCP ==="
-comm -23 /tmp/agent_tools.txt /tmp/mcp_tools.txt
-
-# 3. Tools MCP sans docstring (LLM ne peut pas les router correctement)
-grep -B1 -A5 "@mcp.tool" *_api/mcp_server.py 2>/dev/null | grep -A3 "async def" | grep -v "\"\"\"" | grep "def " | head -20
-
-# 4. Composants Vue avec des messages d'erreur génériques ("Une erreur est survenue")
-grep -rn "Une erreur\|something went wrong\|error occurred\|Erreur inconnue" frontend/src/ --include="*.vue" --include="*.ts" | head -15
+# 2. Détection des variables CSS orphelines (dette CSS style.css)
+# Le script python scripts/audit_templates.py réalise cette vérification de manière exhaustive
 ```
-
-### Violations à reporter dans le rapport
-
-| Type | Niveau | Description |
-|---|---|---|
-| Tool orphelin | ❌ P0 | Tool dans `agent.py` mais absent du `mcp_server.py` correspondant |
-| Docstring MCP vide | ❌ P0 | Tool MCP sans description → LLM ne sait pas quand l'appeler |
-| Store sans try/catch | ⚠️ P1 | Appel agent sans gestion d'erreur → échec silencieux pour l'utilisateur |
-| Message d'erreur générique | ⚠️ P1 | "Erreur inconnue" au lieu d'un message contextuel actionnable |
-| Tool MCP sans `{success: false}` | ⚠️ P1 | Gérer silencieusement les exceptions viole la règle Failfast |
-| Action UI sans feedback visuel | 🟡 P2 | Bouton qui appelle un agent sans spinner ou notification de résultat |
 
 ---
 
-## Étape 9 : Génération du Rapport et Plan d'Action
+## Étape 10 : Génération du Rapport d'Audit & Plan d'Action
 
-À l'issue des étapes 1 à 8, créer un artefact **`ui_ux_analysis_report.md`** avec la structure suivante :
+À l'issue de l'audit statique et de l'exécution du script, créer l'artefact **`ui_ux_analysis_report.md`** :
 
-### Structure du Rapport
+### Barème de Scoring du Rapport
+* **P0 : Violation Bloquante (Priorité critique)** $\rightarrow$ **-5 pts chacune**
+  * Violation WCAG AA de contraste strict (< 3:1).
+  * Bouton interactif sans texte et sans `aria-label` ou `title`.
+  * Input de formulaire orphelin (sans ID/label associé).
+  * Faille de sécurité UI (absence de garde de rôle sur action d'administration).
+* **P1 : Amélioration Importante (À corriger rapidement)** $\rightarrow$ **-2 pts chacune**
+  * `outline: none` sur focus sans compensation visuelle alternative (`box-shadow` ou `border`).
+  * Destruction de réactivité Vue 3 (destructuration directe de `defineProps`).
+  * Utilisation de `:key="index"` sur une boucle dynamic réordonnable.
+  * CLS potentiel (images/médias sans hauteur/largeur explicite).
+  * Absence d'état alternatif Empty State soigné sur les structures de listes.
+* **P2 : Suggestion UX (Backlog & Confort)** $\rightarrow$ **-1 pt chacune**
+  * Taille de police inférieure aux seuils sur mobile (< 12px label, < 14px corps).
+  * Line-height insuffisant (< 1.5 sur les paragraphes).
+  * Variable CSS orpheline.
+  * Absence de transitions fluides sur les volets ou chargements.
 
-```markdown
-# Rapport d'Audit UX/UI — [Date]
-
-## Synthèse Exécutive
-Score global UX/UI : [X/100]
-| Axe | Score | Statut |
-|-----|:-----:|:------:|
-| Contraste WCAG AA | X/20 | 🔴/🟡/🟢 |
-| Lisibilité & Typographie | X/20 | 🔴/🟡/🟢 |
-| Responsive Design | X/20 | 🔴/🟡/🟢 |
-| Accessibilité a11y | X/10 | 🔴/🟡/🟢 |
-| Sécurité UI & RBAC | X/15 | 🔴/🟡/🟢 |
-| Cohérence Frontend ↔ MCP | X/15 | 🔴/🟡/🟢 |
-
-## Violations Bloquantes (P0 — Priorité critique)
-[Liste des violations WCAG AA strictes — contraste < 3:1, boutons sans aria-label]
-
-## Améliorations Importantes (P1 — À corriger ce sprint)
-[Violations lisibilité, tables non-scrollables, outline: none]
-
-## Suggestions UX (P2 — Backlog)
-[Améliorations responsive, line-height, max-width prose]
-
-## Plan de Correction Détaillé
-
-### [Composant X] — [Type de violation]
-**Fichier** : `frontend/src/views/X.vue`
-**Problème** : [Description précise]
-**Correction** :
-\`\`\`diff
-- color: #9CA3AF; /* ratio 2.4:1 — NON CONFORME */
-+ color: #6B7280; /* ratio 4.6:1 — CONFORME WCAG AA */
-\`\`\`
-
-## Variables CSS Manquantes (à ajouter dans style.css)
-\`\`\`css
-:root {
-  /* À ajouter pour centraliser les couleurs conformes */
-  --text-secondary: #6B7280;    /* ratio 4.6:1 sur blanc */
-  --text-disabled: #9CA3AF;     /* réservé aux éléments disabled uniquement */
-  --focus-ring: 2px solid #E31937;
-}
-\`\`\`
-```
-
-## Variables CSS Orphelines
-
-Vérifier que les variables déclarées dans `style.css` sont effectivement utilisées dans les composants. Les variables non référencées constituent de la dette CSS silencieuse.
-
-```bash
-# Détecter les variables CSS déclarées mais jamais utilisées (orphelines)
-while IFS= read -r var; do
-  count=$(grep -r "var($var)" frontend/src/ --include="*.vue" --include="*.css" 2>/dev/null | wc -l)
-  [ "$count" -eq 0 ] && echo "ORPHAN: $var"
-done < <(grep -oh "--[a-z][a-z0-9-]*" frontend/src/style.css | sort -u)
-```
-
-> Les variables orphelines candidates à suppression dans `style.css` (vérifiées sur le code actuel) : `--space-1`, `--space-3`, `--shadow-md`, `--radius-xl`, `--radius-full`. À confirmer avec la commande ci-dessus avant suppression.
-```
-
-### Règle de scoring
-- **P0** : violation WCAG AA stricte (contraste < 3:1, bouton cliquable sans label) → **-5 pts chacune**
-- **P1** : bonne pratique manquante (`outline: none` sans compensation, table sans overflow, aria-live manquant, `!important` hors librairie tierce) → **-2 pts chacune**
-- **P2** : amélioration UX non bloquante (line-height, taille police borderline, variable orpheline) → **-1 pt chacune**
-
----
-
-> **⚠️ RAPPEL RÈGLE §13 AGENTS.md** : Ce workflow n'utilise PAS le `browser_subagent`. Toute l'analyse est statique (code source uniquement). Pour valider visuellement les corrections, le développeur doit lancer `npm run dev` et inspecter manuellement avec les outils de contraste du navigateur (ex: Chrome DevTools → Accessibility → Color Contrast).
+> **⚠️ RAPPEL CONFORMITÉ §13 AGENTS.md** : Ce workflow réalise uniquement un audit statique du code source. Pour valider visuellement les corrections et inspecter les rendus, le développeur doit lancer `npm run dev` localement et utiliser les outils de contraste de Chrome/Firefox DevTools.

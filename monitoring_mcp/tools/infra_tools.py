@@ -17,6 +17,9 @@ from urllib.parse import urlparse
 
 from google.cloud import run_v2
 from google.protobuf.timestamp_pb2 import Timestamp
+import google.auth
+import httpx
+from google.cloud import trace_v1
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,6 @@ def get_gcp_project_id() -> str:
     if pid and pid not in ("your-gcp-project-id", "YOUR_GCP_PROJECT_ID"):
         return pid
     try:
-        import google.auth
         _, project = google.auth.default()
         if project:
             logger.info("[GCP] Project ID résolu via ADC : '%s'", project)
@@ -48,7 +50,6 @@ async def get_gcp_project_id_from_metadata() -> str:
     if pid:
         return pid
     try:
-        import httpx
         async with httpx.AsyncClient(timeout=2.0) as client:
             res = await client.get(
                 "http://metadata.google.internal/computeMetadata/v1/project/project-id",
@@ -112,7 +113,6 @@ async def get_infrastructure_topology(hours_lookback: int = 1) -> dict:
         Dict {nodes: [...], links: [...]} ou lève une exception en cas d'erreur GCP.
     """
     try:
-        from google.cloud import trace_v1
 
         project_id = get_gcp_project_id()
         v1_client = trace_v1.TraceServiceClient()

@@ -1,28 +1,57 @@
 ---
-description: Lance les tests de performance et de stress locaux via local_up.py (mode perf + stress), analyse les rapports CSV générés et propose des améliorations architecturales concrètes.
+description: Lance les tests de performance et de stress locaux via local_up.py (mode perf + stress + full), analyse les rapports CSV générés et propose des améliorations architecturales concrètes.
 ---
 
 Ce workflow orchestre un cycle complet de tests de performance local :
-pipeline d'ingestion CV (mock_gemini), test de charge standard (50 users, 1 min)
+test de charge standard (50 users, 3 min), ingestion dédiée de 3 000 CVs (auto-stop),
 et stress test distribué (500 users, 5 min), puis analyse les rapports pour
 proposer des optimisations priorisées.
 
 > **Pré-requis** : Docker Desktop actif, `local_up.py` accessible, images AR présentes.
 > Ce workflow NE déploie PAS en production. Il est 100% local.
 
+### Modes disponibles
+
+| Flag | Phases | Durée totale |
+|---|---|---|
+| `--perf` | Perf 50 users 3 min | ~5 min (avec seed) |
+| `--stress` | Stress 500 users 5 min | ~8 min |
+| `--full` | Perf → Ingestion 3 000 CVs → Stress | ~25-30 min |
+| `--perf --erase` | Reseed complet + Perf | ~8 min |
+
 ### Seed intelligent — comportement automatique
 
-`local_up.py` inclut un **skip-seed par détection** : après le démarrage des services,
-il obtient un JWT admin et sonde **10 users + 5 items aléatoires** issus de `seeded_ids.json`.
-Si ≥ 80% répondent HTTP 200, les données sont confirmées en base → seed ignoré.
+`local_up.py` inclut un **skip-seed par probe API réelle** : après le démarrage des services,
+il tente un **login admin** (`admin@zenika.com` / `admin`) pour obtenir un JWT, puis sonde
+**10 users aléatoires** issus de `seeded_ids.json` avec ce JWT.
+Si ≥ 80 % répondent HTTP 200, les données sont confirmées en base → seed ignoré.
 Cela couvre les cas de reset DB, rollback Liquibase ou redémarrage sur volume vierge.
+
+> ⚠️ La simple existence de `seeded_ids.json` **ne prouve pas** que la DB est peuplée
+> (le fichier est persistant sur le filesystem). Seule la probe API est fiable.
 
 | Situation | Commande | Seed |
 |---|---|---|
 | Premier run (DB vide) | `--perf` | ✅ Seed complet |
-| Runs suivants (données OK) | `--perf` | ⏭️ Skip automatique (probe API) |
-| Forcer le skip (sans probe) | `--perf --skip-seed` | ⏭️ Skip forcé |
-| Repartir de zéro | `--perf --erase` | 🔄 Erase + reseed |
+| Runs suivants (données OK) | `--perf` | ⏭️ Skip automatique (probe admin login + JWT) |
+| Forcer le reseed | `--perf --erase` | 🔄 Probe ignorée + reseed complet |
+| Standalone sans docker-compose | `--seed-perf` | ✅ Seed perf uniquement |
+
+### Scénarios Locust
+
+| `LOCUST_SCENARIO` | Classes actives | Usage |
+|---|---|---|
+| `full` (défaut) | ZenikaPerfUser (75%) + CVIngestionPipelineUser (25%) | `--perf` |
+| `navigation` | ZenikaPerfUser uniquement | `--stress` |
+| `ingestion` | CVIngestionPipelineUser uniquement, auto-stop à `CV_TARGET` | Phase 2 de `--full` |
+
+### Paramètres mock Gemini par mode
+
+| Mode | `MOCK_LLM_LATENCY_MAX_S` | `MOCK_LLM_EMBED_LATENCY_MAX_S` | `LOCUST_CV_TARGET` |
+|---|---|---|---|
+| `--perf` | **1s** (feedback rapide) | 0s | 120 |
+| `--stress` | **3s** (simulation prod) | 0s | 3000 |
+| Phase ingestion (`--full`) | **1s** | 0s | **3000** (auto-stop) |
 
 ### Comparaison automatique
 
@@ -48,16 +77,17 @@ lsof -i :8000 -i :8001 -i :8004 -i :8089 2>/dev/null | grep LISTEN | awk '{print
 
 // turbo
 ```bash
-# Vérifier que le mock_gemini et les prérequis perf sont présents
+# Vérifier que les prérequis perf sont présents et flake8 propre
 ls -la mock_gemini/main.py locust/locustfile.py locust/data/mock_cv_pool.json 2>&1
-python3 -m flake8 scripts/local_up.py --max-line-length=120 --extend-ignore=W503,E501 2>&1 | head -5 || echo "⚠️ Violations flake8 détectées"
-# Afficher l'état du seed (âge de seeded_ids.json)
+python3 -m flake8 scripts/local_up.py locust/locustfile.py \
+  --max-line-length=120 --extend-ignore=W503,E501 2>&1 | head -10 || echo "⚠️ Violations flake8 détectées"
+# Afficher l'état du fichier de référentiel (son existence ne prouve pas que la DB est peuplée)
 python3 -c "
 import os, time
 p = 'locust/data/seeded_ids.json'
 if os.path.exists(p):
     age_h = (time.time() - os.path.getmtime(p)) / 3600
-    print(f'  seeded_ids.json : {age_h:.1f}h (skip auto si < 24h)')
+    print(f'  seeded_ids.json présent ({age_h:.1f}h) — probe API requise pour confirmer la DB')
 else:
     print('  seeded_ids.json absent → seed complet au prochain run')
 " 2>&1
@@ -78,10 +108,11 @@ cd cv_api && python3 -m pytest tests/test_perf_pipeline.py tests/test_mock_gemin
 
 ---
 
-### Étape 2 : Test de performance standard (50 users — ~3 min ou ~30s si seed skippé)
+### Étape 2 : Test de performance standard (50 users — 3 min)
 
-Lancement du pipeline complet : pull des dernières images AR + seed intelligent + Locust 50 users 1 min.
-Le seed est automatiquement skippé si les données sont détectées en base (probe API).
+Lancement du pipeline complet : pull des dernières images AR + seed intelligent + Locust 50 users 3 min.
+Le seed est automatiquement skippé si la probe API confirme les données en base
+(login admin → JWT → spot-check 10 users → ≥ 80% HTTP 200).
 
 // turbo
 ```bash
@@ -114,7 +145,7 @@ python3 scripts/compare_runs.py --runs 5 2>&1
 ### Étape 4 : Test de stress distribué (500 users — ~8 min)
 
 > ⚠️ Ce test est plus long. Lancer uniquement après validation du test standard (étape 2).
-> Le seed est auto-skippé si les données sont déjà en base (probe API).
+> Le seed est auto-skippé via probe API si les données sont déjà en base.
 
 // turbo
 ```bash
@@ -127,6 +158,24 @@ python3 scripts/local_up.py --stress 2>&1 | tee /tmp/stress_run.log
 echo "=== STATS STRESS ===" && cat locust/results/perf_stats_stats.csv 2>/dev/null
 echo "=== FAILURES STRESS ===" && cat locust/results/perf_stats_failures.csv 2>/dev/null
 echo "=== COMPARAISON ===" && python3 scripts/compare_runs.py --runs 3 2>&1
+```
+
+---
+
+### Étape 4bis (optionnelle) : Cycle complet 3 phases (--full, ~25-30 min)
+
+Lance les 3 phases en séquence : perf → ingestion → stress.
+L'ingestion s'arrête automatiquement quand 3 000 CVs sont ingérés (`runner.quit()` dans locustfile).
+
+// turbo
+```bash
+python3 scripts/local_up.py --full 2>&1 | tee /tmp/full_run.log
+```
+
+// turbo
+```bash
+echo "=== LOG COMPLET ===" && cat /tmp/full_run.log | tail -120
+python3 scripts/compare_runs.py --runs 5 2>&1
 ```
 
 ---
@@ -154,9 +203,14 @@ docker-compose logs --tail=50 users_api 2>/dev/null | grep -E "ERROR|WARNING|500
    - ⚠️ WARN : P95 entre 1 000 ms et 5 000 ms
    - ❌ CRIT : P95 > 5 000 ms
 3. **Throughput global** (Requests/s) et capacité théorique
-4. **Bottlenecks identifiés** (DB pool, LLM mock, réseau Docker, bcrypt)
+4. **Bottlenecks identifiés** (DB pool, LLM mock, réseau Docker)
 5. **Propositions d'amélioration priorisées** (P1/P2/P3) avec fichier et ligne impactés
-6. **Comparaison perf ↔ stress** (fournie automatiquement en fin de run)
+6. **Comparaison perf ↔ ingestion ↔ stress** (fournie automatiquement en fin de run)
+
+> ⚠️ **Avant de proposer une action corrective, vérifier si elle n'est pas déjà implémentée** :
+> - Index HNSW sur `cv_profiles(embedding)` → déjà présent (`db_migrations/changelogs/cv/changelog.yaml`)
+> - bcrypt async via `ThreadPoolExecutor` → déjà présent (`users_api/src/auth.py`)
+> - `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` → déjà calculés par service dans `platform-engineering/terraform/`
 
 **Format du rapport attendu :**
 
@@ -164,24 +218,24 @@ docker-compose logs --tail=50 users_api 2>/dev/null | grep -E "ERROR|WARNING|500
 ## Rapport Performance — <date>
 
 ### Vue d'ensemble
-| Métrique | Perf (50u) | Stress (500u) | Δ |
+| Métrique | Perf (50u/3min) | Ingestion (30u) | Stress (500u/5min) |
 |---|---|---|---|
-| Req/s | X | X | +X% |
-| Erreurs % | X% | X% | +X% |
-| P95 median | Xms | Xms | ×X |
+| Req/s | X | X | X |
+| Erreurs % | X% | X% | X% |
+| P95 médian | Xms | Xms | Xms |
+| CVs ingérés | ~X | X/3000 | N/A |
 
 ### Endpoints critiques
-- **[CRIT] GET /missions** : P95 = Xms → cause : QueuePool exhaustion
-- **[WARN] GET /users/me** : P95 = Xms → cause : bcrypt sync
+- **[CRIT] GET /cv/search** : P95 = Xms → cause : cold cache pgvector
 
 ### Propositions P1 (bloquant)
-1. **missions_api** : DB_POOL_SIZE manquant → ajouter dans docker-compose + cr_missions.tf
+1. ...
 
 ### Propositions P2 (performance)
-1. **items_api** : index manquant sur user_id
+1. ...
 
 ### Propositions P3 (long terme)
-1. Cache Redis pour /missions/
+1. ...
 ```
 
 ---
@@ -210,11 +264,12 @@ python3 scripts/compare_runs.py --runs 3 2>&1
 
 ```
 📊 Performance — <date>
-  Mode perf     : XX req/s, P95=XXms, Erreurs=X%
-  Mode stress   : XX req/s, P95=XXms, Erreurs=X%
+  Mode perf      : XX req/s, P95=XXms, Erreurs=X%, CV_TARGET=120 (1s latence)
+  Mode ingestion : XX CVs/min, X/3000 CVs ingérés, auto-stop atteint : oui/non
+  Mode stress    : XX req/s, P95=XXms, Erreurs=X%, (navigation pure)
+Seed : skippé (probe admin OK, 10/10 users HTTP 200) | complet (login échoué ou DB vide)
 Endpoints CRIT : <liste avec root cause>
 Endpoints WARN : <liste>
-P1 appliqués  : <liste des corrections avec fichiers>
-Seed : skippé (données < 24h) | complet (Nh depuis le dernier)
-Prochaine action : relancer stress ou corriger P2
+P1 appliqués   : <liste des corrections avec fichiers>
+Prochaine action : relancer --full ou corriger P2
 ```

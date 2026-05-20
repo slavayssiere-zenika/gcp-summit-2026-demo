@@ -17,6 +17,11 @@ from telemetry import setup_telemetry
 from tools_registry import router as mcp_router
 
 from agent_commons.exception_handler import make_global_exception_handler
+from a2a_tools import discover_sub_agents, enrich_tool_docstrings
+import asyncio
+import time
+from metrics import AGENT_HEALTH_PROBE_TOTAL
+from pydantic import BaseModel
 
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 
@@ -31,7 +36,6 @@ async def lifespan(app: FastAPI):
     """Cycle de vie du Router — discovery A2A v2 au démarrage."""
     _logger.info("[Router] 🚀 Démarrage agent_router_api — A2A v2 discovery en cours...")
     try:
-        from a2a_tools import discover_sub_agents, enrich_tool_docstrings
         cards = await discover_sub_agents()
         if cards:
             enrich_tool_docstrings(cards)
@@ -104,10 +108,6 @@ async def get_spec():
 @app.get("/health/agents")
 async def health_agents():
     """ADR12-5 — Agrège la santé des 3 sous-agents (HR, Ops, Missions)."""
-    import asyncio
-    import time
-
-    from metrics import AGENT_HEALTH_PROBE_TOTAL
 
     _AGENTS = {
         "hr":       os.getenv("AGENT_HR_API_URL",       "http://agent_hr_api:8080"),
@@ -129,7 +129,6 @@ async def health_agents():
             if not isinstance(h_res, Exception) and h_res.status_code == 200:
                 ok = True
             if not isinstance(v_res, Exception) and v_res.status_code == 200:
-                from pydantic import BaseModel
 
                 class VersionResp(BaseModel):
                     version: str
@@ -180,9 +179,8 @@ async def login(request: Request, response: Response):
     headers = {}
     inject(headers)
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
-        res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers)
+        res = await client.post(f"{USERS_API_URL}/login", json=data, headers=headers, timeout=10.0)
         if res.status_code != 200:
-            from pydantic import BaseModel
 
             class ErrorDetail(BaseModel):
                 detail: str
@@ -211,7 +209,7 @@ async def get_me(request: Request):
     inject(headers)
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         cookies = request.cookies
-        res = await client.get(f"{USERS_API_URL}/me", cookies=cookies, headers=headers)
+        res = await client.get(f"{USERS_API_URL}/me", cookies=cookies, headers=headers, timeout=10.0)
         if res.status_code != 200:
             raise HTTPException(status_code=res.status_code, detail="Non connecté")
         return res.json()

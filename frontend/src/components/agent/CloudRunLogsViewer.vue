@@ -58,7 +58,7 @@
       </div>
 
       <div class="logs-body">
-        <template v-for="(log, idx) in filteredLogs" :key="idx">
+        <template v-for="(log, idx) in filteredLogs" :key="'log-' + idx">
           <!-- Compact row -->
           <button
             :class="['log-row', severityClass(log), { 'row-expanded': expandedRows.has(idx) }]"

@@ -1218,6 +1218,33 @@ for svc in "${NEW_TARGETS[@]}"; do
   fi
 done
 
+# ── Gate de test E2E & Evaluation globale (fail-fast) ───────────────────────────
+if [ "$SKIP_TESTS" = false ]; then
+  echo -e "\n${RED}--- 🧪 Gates de validation Stateless & Prompts ---${RESET}"
+  echo -e "${GREY}   (Validation E2E in-memory + Évaluation de régression des Prompts IA...)${RESET}"
+
+  E2E_EXIT=0
+  PYTEST_CMD="./test_env/bin/pytest"
+  if [ ! -f "$PYTEST_CMD" ]; then
+    PYTEST_CMD="pytest"
+  fi
+
+  OTEL_TRACES_EXPORTER=none \
+  OTEL_METRICS_EXPORTER=none \
+  OTEL_LOGS_EXPORTER=none \
+  SECRET_KEY="testsecret" \
+  PYTHONPATH=. \
+  $PYTEST_CMD tests/test_e2e_stateless.py shared/tests/test_prompt_evaluation.py -vv 2>&1 || E2E_EXIT=$?
+
+  if [ "$E2E_EXIT" -eq 0 ]; then
+    echo -e "${GREEN}✅ Gates de validation Stateless & Prompts : SUCCÈS${RESET}\n"
+  else
+    echo -e "${RED}❌ Gates de validation Stateless & Prompts : ÉCHEC (${E2E_EXIT})${RESET}"
+    echo -e "${RED}   → Le déploiement est bloqué (fail-fast) pour cause d'intégration ou prompt corrompus.${RESET}"
+    exit 1
+  fi
+fi
+
 # ── Filet de sécurité : si shared/ a changé, forcer le rebuild de TOUS les consumers ──
 # Même si l'utilisateur a spécifié un seul service, shared/ impacte tout le monde
 SHARED_CONSUMERS=("competencies_api" "cv_api" "missions_api" "users_api" \

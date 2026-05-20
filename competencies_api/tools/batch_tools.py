@@ -9,7 +9,7 @@ from mcp.types import TextContent
 
 async def handle_bulk_import_tree(client, arguments: dict, headers: dict, api_base_url: str):
 
-    response = await client.post(f"{api_base_url}/bulk_tree", json={"tree": arguments["tree"]})
+    response = await client.post(f"{api_base_url}/bulk_tree", json={"tree": arguments["tree"]}, timeout=10.0)
     response.raise_for_status()
     return [TextContent(type="text", text=json.dumps(response.json()))]
 

@@ -23,6 +23,8 @@ from src.services.config import (
     PROMPTS_API_URL, USERS_API_URL,
 )
 from shared.cache import get_cache, set_cache
+from shared.schemas.auth import TokenResponse
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,6 @@ async def _acquire_service_token(auth_header: str) -> str:
                 headers={"Authorization": auth_header},
             )
             if res.status_code == 200:
-                from shared.schemas.auth import TokenResponse
                 data = TokenResponse.model_validate(res.json())
                 return data.access_token
             logger.warning(f"[bulk_reanalyse] service-token HTTP {res.status_code} — fallback JWT court.")
@@ -52,7 +53,6 @@ async def _get_cv_extraction_prompt() -> str:
         async with httpx.AsyncClient(timeout=10.0) as hc:
             res = await hc.get(f"{PROMPTS_API_URL.rstrip('/')}/prompts/cv_api.extract_cv_info")
             if res.status_code == 200:
-                from pydantic import BaseModel
 
                 class PromptResp(BaseModel):
                     value: str

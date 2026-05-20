@@ -18,6 +18,8 @@ import logging
 import os
 from typing import Optional
 from shared.cache import get_cache, set_cache
+from datetime import datetime, timezone
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,6 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
             existing = await client.aio.caches.get(name=cache_entry["name"])
             expire_time = existing.expire_time
             if expire_time:
-                from datetime import datetime, timezone
                 now = datetime.now(timezone.utc)
                 remaining_s = (expire_time - now).total_seconds()
                 if remaining_s > 300:  # Plus de 5 min → réutiliser
@@ -101,7 +102,6 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
 
     # Création du CachedContent
     try:
-        from google.genai import types
 
         cache = await client.aio.caches.create(
             model=model,

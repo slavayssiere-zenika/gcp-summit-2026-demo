@@ -1,7 +1,10 @@
-from tools.logs_tools import _sanitize_log_filter
+import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+
 from tools.logs_tools import (
+    _sanitize_log_filter,
     get_service_logs_internal,
     search_cloud_logs_by_trace_internal,
     get_recent_500_errors_internal
@@ -33,12 +36,11 @@ def mock_entry():
 
 @pytest.mark.asyncio
 @patch('google.cloud.logging_v2.Client')
-@patch('tools.infra_tools.list_gcp_services_internal', new_callable=AsyncMock)
+@patch('tools.logs_tools.list_gcp_services_internal', new_callable=AsyncMock)
 async def test_get_service_logs_internal(mock_list_services, mock_client_class, mock_entry):
     mock_list_services.return_value = [{"name": "test-service-dev"}]
     mock_client = mock_client_class.return_value
 
-    import datetime
     ts = datetime.datetime.now(datetime.timezone.utc)
     mock_client.list_entries.return_value = [
         mock_entry(ts, "ERROR", "Something failed")
@@ -56,7 +58,6 @@ async def test_get_service_logs_internal(mock_list_services, mock_client_class, 
 async def test_search_cloud_logs_by_trace_internal(mock_client_class, mock_entry):
     mock_client = mock_client_class.return_value
 
-    import datetime
     ts = datetime.datetime.now(datetime.timezone.utc)
     mock_client.list_entries.return_value = [
         mock_entry(ts, "INFO", "Trace log")
@@ -73,7 +74,6 @@ async def test_search_cloud_logs_by_trace_internal(mock_client_class, mock_entry
 async def test_get_recent_500_errors_internal(mock_client_class, mock_entry):
     mock_client = mock_client_class.return_value
 
-    import datetime
     ts = datetime.datetime.now(datetime.timezone.utc)
     mock_client.list_entries.return_value = [
         mock_entry(ts, "ERROR", "Internal Server Error", req_status=500, trace_id="projects/p/traces/123")

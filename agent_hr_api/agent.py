@@ -30,7 +30,8 @@ from agent_commons.session import (RedisSessionService, get_hr_candidates_pool,
                                    store_hr_candidates_pool)
 from agent_commons.ui_tools import render_ui_widgets
 from shared.schemas.staffing import StaffingResponse
-from agent_commons.prompt_loader import fetch_agent_prompt
+from agent_commons.prompt_loader import (fetch_agent_prompt,
+                                         get_or_create_gemini_context_cache)
 
 
 app_logger = logging.getLogger(__name__)
@@ -138,6 +139,19 @@ async def create_agent(session_id: str | None = None) -> Agent:
     else:
         app_logger.info("[HR] Creating Agent with %d tools...", len(HR_TOOLS))
 
+    # ── Context Caching Gemini ────────────────────────────────────────────────
+    cache_name = await get_or_create_gemini_context_cache(
+        prompt_key="agent_hr_api.system_instruction",
+        prompt_text=instruction_text,
+        model=model,
+        agent_prefix="[HR]",
+    )
+
+    cached_content = None
+    if cache_name:
+        cached_content = cache_name
+        instruction_text = None
+
     agent = Agent(
         name="assistant_zenika_hr",
         model=model,
@@ -148,6 +162,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
             tool_config=types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="AUTO")
             ),
+            cached_content=cached_content,
         ),
         instruction=instruction_text,
         description="Le module spécialisé dans les ressources humaines et le staffing.",

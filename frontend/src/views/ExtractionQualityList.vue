@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: extraction quality evaluations/statistics)
 import { useI18n } from 'vue-i18n'
 import { ShieldCheck, Search, ChevronLeft, ChevronRight, RotateCw, Info } from 'lucide-vue-next'
 import { authService } from '../services/auth'
@@ -147,11 +148,13 @@ onMounted(() => {
           <div class="search-box">
             <Search size="16" class="search-icon" />
             <input 
+              id="extraction-search"
               type="text" 
               v-model="searchQuery" 
               @keyup.enter="triggerSearch" 
               :placeholder="t('extractionquality.search_placeholder')"
               class="search-input"
+              aria-label="Recherche candidat"
             />
           </div>
           <button @click="triggerSearch" class="action-btn-secondary" :disabled="isLoading">
@@ -160,7 +163,7 @@ onMounted(() => {
         </div>
         
         <div style="display: flex; gap: 1rem; align-items: center;">
-          <button @click="fetchScores" class="action-btn-secondary" :disabled="isLoading">
+          <button @click="fetchScores" class="action-btn-secondary" :disabled="isLoading" aria-label="Rafraîchir les scores">
             <RotateCw :class="{ 'spin': isLoading }" size="16" /> Rafraîchir
           </button>
         </div>
@@ -210,7 +213,7 @@ onMounted(() => {
                     <div v-else class="score-badge" style="background: #f1f5f9; color: #64748b;">
                       N/A
                     </div>
-                    <button class="action-btn-secondary btn-sm" @click="triggerReanalyze(c.user_id)" :disabled="reanalyzingId === c.user_id">
+                    <button class="action-btn-secondary btn-sm" @click="triggerReanalyze(c.user_id)" :disabled="reanalyzingId === c.user_id" :aria-label="t('extractionquality.reimport')">
                       <RotateCw v-if="reanalyzingId === c.user_id" class="spin" size="14" />
                       <span v-else>{{ t('extractionquality.reimport') }}</span>
                     </button>
@@ -227,10 +230,10 @@ onMounted(() => {
           Affichage de {{ skip + 1 }} à {{ Math.min(skip + limit, total) }} sur {{ total }}
         </div>
         <div class="pagination-controls">
-          <button @click="prevPage" :disabled="skip === 0 || isLoading" class="action-btn-secondary">
+          <button @click="prevPage" :disabled="skip === 0 || isLoading" class="action-btn-secondary" aria-label="Page précédente">
             <ChevronLeft size="16" /> Précédent
           </button>
-          <button @click="nextPage" :disabled="skip + limit >= total || isLoading" class="action-btn-secondary">
+          <button @click="nextPage" :disabled="skip + limit >= total || isLoading" class="action-btn-secondary" aria-label="Page suivante">
             Suivant <ChevronRight size="16" />
           </button>
         </div>

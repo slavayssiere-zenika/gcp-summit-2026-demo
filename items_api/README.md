@@ -11,11 +11,11 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 |---|---|---|
 | `main.py` | 121 | ✅ |
 | `mcp_server.py` | 71 | ✅ |
-| `conftest.py` | 80 | ✅ |
+| `conftest.py` | 78 | ✅ |
 | `src/items/admin_router.py` | 125 | ✅ |
-| `src/items/crud_router.py` | 471 | ✅ |
+| `src/items/crud_router.py` | 467 | ✅ |
 | `src/items/router.py` | 26 | ✅ |
-| `src/items/routers/categories_router.py` | 61 | ✅ |
+| `src/items/routers/categories_router.py` | 60 | ✅ |
 | `src/items/routers/search_router.py` | 188 | ✅ |
 
 ## Variables d'environnement

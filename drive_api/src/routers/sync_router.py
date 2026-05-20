@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.drive_service import DriveService
 from src.google_auth import get_drive_service
 from src.models import DriveSyncState, DriveSyncStatus
+from shared.database import SessionLocal
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +155,6 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
 
     async def run_sync():
         # Get a new DB session since the one in dependency might close
-        from shared.database import SessionLocal
         async with SessionLocal() as session:
             try:
                 service = DriveService(session)
@@ -174,7 +175,6 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
                 logger.info(f"Fin de la synchronisation avec Google Drive. (CV traités: {total_processed})")
             except Exception as e:
                 logger.error(f"Erreur durant la synchronisation Google Drive: {e}")
-                import traceback
                 traceback.print_exc()
 
     background_tasks.add_task(run_sync)

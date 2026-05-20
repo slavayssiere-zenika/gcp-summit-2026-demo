@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: CV file upload status)
 import { useI18n } from 'vue-i18n'
 import { FileDown, RefreshCw, CheckCircle, AlertCircle, Lock, AlertTriangle, ChevronRight } from 'lucide-vue-next'
 import { authService } from '../services/auth'
@@ -227,8 +228,9 @@ const stepStatusIcon = (status: string) => {
         <!-- Form -->
         <form @submit.prevent="submitCV" class="import-form">
           <div class="form-group">
-            <label>{{ t('importcv.label_url') }}</label>
+            <label for="cv-url">{{ t('importcv.label_url') }}</label>
             <input
+              id="cv-url"
               v-model="cvUrl"
               type="url"
               required

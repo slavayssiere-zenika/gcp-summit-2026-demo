@@ -30,6 +30,7 @@ import httpx
 from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
+import asyncio
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', handlers=[logging.NullHandler()])
 
@@ -612,5 +613,4 @@ async def main():
         await server.run(read_stream, write_stream, options)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())

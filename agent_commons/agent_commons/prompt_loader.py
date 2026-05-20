@@ -19,6 +19,7 @@ Usage :
         agent_prefix="[HR]",
     )
 """
+import asyncio
 import logging
 import os
 
@@ -137,3 +138,96 @@ async def fetch_agent_prompt(
         )
 
     return default_text
+
+
+async def get_or_create_gemini_context_cache(
+    prompt_key: str,
+    prompt_text: str,
+    model: str,
+    agent_prefix: str = "[AGENT]",
+) -> str | None:
+    """Récupère ou crée un cache de contexte Gemini persistant.
+
+    - Utilise Redis pour stocker et récupérer l'ID de cache (cached_content_name).
+    - Valide l'existence du cache dans Gemini avant de le retourner.
+    - Fallback silencieux sur None en cas d'erreur ou d'incompatibilité modèle.
+    """
+    try:
+        from shared.cache import get_cache, set_cache
+        _cache_available = True
+    except ImportError:
+        _cache_available = False
+        logger.warning(
+            "%s shared.cache not available — Gemini Context Cache storage disabled", agent_prefix
+        )
+
+    # Si le prompt est trop petit ou vide, inutile de cacher
+    if not prompt_text or len(prompt_text) < 100:  # Seuil minimal raisonnable
+        return None
+
+    # Clé unique de cache dans Redis
+    redis_key = f"gemini:cache:{prompt_key}:{model}"
+    cached_content_name = None
+
+    # 1. Tenter de lire dans Redis
+    if _cache_available:
+        try:
+            cached_content_name = await get_cache(redis_key)
+            if cached_content_name:
+                logger.info("%s [GeminiCache] Found cached name in Redis: %s", agent_prefix, cached_content_name)
+        except Exception as e:
+            logger.warning("%s [GeminiCache] Redis read failed: %s", agent_prefix, e)
+
+    # 2. Si on a trouvé un ID dans Redis, vérifier son existence réelle dans Gemini
+    if cached_content_name:
+        try:
+            def _check_cache():
+                from google import genai
+                client = genai.Client()
+                client.caches.get(name=cached_content_name)
+                return True
+
+            exists = await asyncio.to_thread(_check_cache)
+            if exists:
+                logger.info("%s [GeminiCache] HIT — Cache validated in Gemini: %s", agent_prefix, cached_content_name)
+                return cached_content_name
+            else:
+                logger.warning("%s [GeminiCache] Cache found in Redis but missing/expired in Gemini", agent_prefix)
+        except Exception as e:
+            logger.warning("%s [GeminiCache] Verification in Gemini failed (will recreate): %s", agent_prefix, e)
+            cached_content_name = None
+
+    # 3. Création du cache Gemini si nécessaire (non trouvé ou expiré)
+    try:
+        def _create_cache():
+            from google import genai
+            from google.genai import types
+            client = genai.Client()
+            cache = client.caches.create(
+                model=model,
+                config=types.CreateCachedContentConfig(
+                    contents=prompt_text,
+                    ttl="600s",
+                )
+            )
+            return cache.name
+
+        cached_content_name = await asyncio.to_thread(_create_cache)
+        logger.info("%s [GeminiCache] Created new Gemini context cache: %s", agent_prefix, cached_content_name)
+
+        # 4. Stocker dans Redis (TTL de 500s pour être inférieur aux 10min/600s de Gemini)
+        if _cache_available and cached_content_name:
+            try:
+                await set_cache(redis_key, cached_content_name, 500)
+                logger.info("%s [GeminiCache] Cached name stored in Redis with 500s TTL", agent_prefix)
+            except Exception as e:
+                logger.warning("%s [GeminiCache] Redis write failed: %s", agent_prefix, e)
+
+        return cached_content_name
+
+    except Exception as e:
+        logger.warning(
+            "%s [GeminiCache] Context Caching not supported or failed for model %s: %s. Fallback to direct prompt.",
+            agent_prefix, model, e
+        )
+        return None

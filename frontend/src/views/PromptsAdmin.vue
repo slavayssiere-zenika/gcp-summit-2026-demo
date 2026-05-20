@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: prompt templates/system prompts)
 import {
   BrainCircuit, Search, Wand2, Save, RefreshCw, ChevronRight,
   Clock, Hash, AlertTriangle, CheckCircle2, Loader2, X,
@@ -9,6 +10,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useUxStore } from '@/stores/uxStore'
 import PageHeader from '../components/ui/PageHeader.vue'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 
 const { t } = useI18n()
 
@@ -196,6 +198,17 @@ const closeModal = () => {
   analysisResult.value = null
 }
 
+// ── Focus Trap (WCAG 2.1 AA — 2.1.2) ────────────────────────────────────
+const { trapRef: modalTrapRef, activateTrap: activateModalTrap, deactivateTrap: deactivateModalTrap } = useFocusTrap()
+
+watch(showModal, (open) => {
+  if (open) {
+    activateModalTrap()
+  } else {
+    deactivateModalTrap()
+  }
+})
+
 const formatDate = (iso?: string) => {
   if (!iso) return 'Jamais modifié'
   return new Date(iso).toLocaleString('fr-FR', {
@@ -266,6 +279,7 @@ onBeforeUnmount(() => {
         <div class="pa-search-wrapper">
           <Search size="15" class="pa-search-icon" />
           <input
+            id="prompts-search"
             v-model="searchQuery"
             type="text"
             class="pa-search-input"
@@ -286,6 +300,7 @@ onBeforeUnmount(() => {
             :class="{ active: selectedKey === p.key, dirty: isDirty(p.key) }"
             @click="selectPrompt(p.key)"
             :aria-current="selectedKey === p.key ? 'true' : 'false'"
+            :aria-label="p.key"
           >
             <div class="pa-nav-item-inner">
               <span class="pa-nav-key">{{ p.key }}</span>
@@ -422,7 +437,7 @@ onBeforeUnmount(() => {
     <!-- ── Analysis Modal ─────────────────────────────────────────────────── -->
     <Transition name="modal-fade">
       <div v-if="showModal && analysisResult" class="pa-modal-overlay" @click.self="closeModal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div class="pa-modal">
+        <div class="pa-modal" :ref="(el) => { if (el) modalTrapRef.value = el as HTMLElement }">
 
           <!-- Modal Header -->
           <div class="pa-modal-header">
@@ -443,6 +458,7 @@ onBeforeUnmount(() => {
               class="pa-tab"
               :class="{ active: activeModalTab === 'suggestion' }"
               @click="activeModalTab = 'suggestion'"
+              title="Prompt suggéré"
             >
               <FileText size="14" /> Prompt suggéré
             </button>
@@ -452,6 +468,7 @@ onBeforeUnmount(() => {
               class="pa-tab"
               :class="{ active: activeModalTab === 'diff' }"
               @click="activeModalTab = 'diff'"
+              title="Diff avant/après"
             >
               <ArrowLeftRight size="14" /> Diff avant/après
             </button>
@@ -461,6 +478,7 @@ onBeforeUnmount(() => {
               class="pa-tab"
               :class="{ active: activeModalTab === 'analysis' }"
               @click="activeModalTab = 'analysis'"
+              title="Rapport Promptfoo"
             >
               <BarChart3 size="14" /> Rapport Promptfoo
             </button>
@@ -514,7 +532,7 @@ onBeforeUnmount(() => {
           <!-- Modal Footer -->
           <div class="pa-modal-footer">
             <button class="pa-btn-ghost" @click="closeModal">{{ t('admin_prompts.btn_cancel') }}</button>
-            <button class="pa-btn-save" @click="acceptImprovedPrompt">
+            <button class="pa-btn-save" @click="acceptImprovedPrompt" aria-label="Remplacer par la suggestion">
               <CheckCircle2 size="16" /> Remplacer par la suggestion
             </button>
           </div>

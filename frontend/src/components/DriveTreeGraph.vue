@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: Drive tree graph representation data)
 import { authService } from '../services/auth'
 import { Folder, File, AlertCircle, ChevronRight, ChevronDown, CheckCircle2, User, Loader2, Network, Search, X, RefreshCcw, ExternalLink } from 'lucide-vue-next'
 
@@ -248,10 +249,10 @@ const reimportConsultant = async (consultant: any) => {
         Graphe d'Ingestion & Diagnostics
       </h3>
       <div style="display:flex; gap: 8px;">
-        <button class="btn-secondary btn-sm" @click="expandAllErrorNodes" :disabled="isLoading">
+        <button class="btn-secondary btn-sm" @click="expandAllErrorNodes" :disabled="isLoading" aria-label="Voir problèmes">
           <AlertCircle class="icon-sm text-danger" /> Voir problèmes
         </button>
-        <button class="btn-secondary btn-sm" @click="fetchTree" :disabled="isLoading">
+        <button class="btn-secondary btn-sm" @click="fetchTree" :disabled="isLoading" aria-label="Rafraîchir">
           <Loader2 v-if="isLoading" class="icon-sm spin" /> 
           <span v-else>Rafraîchir</span>
         </button>

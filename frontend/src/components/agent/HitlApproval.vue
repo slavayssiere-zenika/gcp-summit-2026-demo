@@ -77,7 +77,7 @@ function scoreClass(score: number): string {
     <p class="hitl-reason">{{ request.reason }}</p>
 
     <!-- ── Candidats (toggle) ──────────────────────────────────────── -->
-    <button class="toggle-candidates" @click="showCandidates = !showCandidates">
+    <button class="toggle-candidates" @click="showCandidates = !showCandidates" :aria-label="showCandidates ? 'Masquer les candidats' : 'Afficher les candidats'">
       <User size="14" />
       {{ request.candidates.length }} consultant{{ request.candidates.length > 1 ? 's' : '' }} proposé{{ request.candidates.length > 1 ? 's' : '' }}
       <component :is="showCandidates ? ChevronUp : ChevronDown" size="14" />
@@ -117,6 +117,7 @@ function scoreClass(score: number): string {
         class="btn btn-reject"
         :disabled="state === 'loading'"
         @click="respond('rejected')"
+        aria-label="Rejeter le staffing proposé"
       >
         <XCircle size="15" />
         Rejeter
@@ -125,6 +126,7 @@ function scoreClass(score: number): string {
         class="btn btn-approve"
         :disabled="state === 'loading'"
         @click="respond('approved')"
+        aria-label="Approuver le staffing proposé"
       >
         <template v-if="state === 'loading'">
           <span class="spinner" />

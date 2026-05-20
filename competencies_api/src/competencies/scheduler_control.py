@@ -14,6 +14,7 @@ Variables d'environnement :
 import asyncio
 import logging
 import os
+from google.cloud import scheduler_v1
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,6 @@ async def set_scoring_scheduler_enabled(enabled: bool) -> bool:
 
     action = "resume" if enabled else "pause"
     try:
-        from google.cloud import scheduler_v1
 
         def _call():
             client = scheduler_v1.CloudSchedulerClient()

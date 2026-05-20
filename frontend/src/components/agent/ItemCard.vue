@@ -41,7 +41,7 @@ const getCategories = (cats: any) => {
         </div>
 
         <div v-if="item.categories" class="categories-tags">
-          <span v-for="(cat, idx) in getCategories(item.categories)" :key="idx" class="tag">
+          <span v-for="(cat, idx) in getCategories(item.categories)" :key="(cat && typeof cat === 'object') ? (cat.id || cat.name) : cat" class="tag">
             <Tag size="10" /> {{ (cat && typeof cat === 'object') ? (cat.name || cat.id) : cat }}
           </span>
         </div>

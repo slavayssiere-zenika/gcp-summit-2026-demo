@@ -7,7 +7,7 @@
       <div class="folders-section">
         <div class="section-header-flex">
           <h3>Dossiers Cibles</h3>
-          <button class="btn-secondary btn-sm" @click="showAddFolder = !showAddFolder">
+          <button class="btn-secondary btn-sm" @click="showAddFolder = !showAddFolder" aria-label="Ajouter une source Drive">
             <Plus class="icon-sm" /> Ajouter
           </button>
         </div>
@@ -16,15 +16,15 @@
           <h4>Ajouter une source Drive</h4>
           <form @submit.prevent="addFolder" class="inline-form">
             <div class="form-group">
-              <input v-model="newFolder.google_folder_id" placeholder="ID du dossier (Google Drive)" required />
+              <input v-model="newFolder.google_folder_id" id="new-folder-drive-id" placeholder="ID du dossier (Google Drive)" required aria-label="ID du dossier (Google Drive)" />
             </div>
             <div class="form-group">
-              <input v-model="newFolder.tag" placeholder="Tag (ex: Paris, Lille)" required />
+              <input v-model="newFolder.tag" id="new-folder-tag" placeholder="Tag (ex: Paris, Lille)" required aria-label="Tag" />
             </div>
             <div class="form-group">
-              <input v-model="newFolder.excluded_folders_str" placeholder="Dossiers à exclure (ex: O1.old, _trash)" />
+              <input v-model="newFolder.excluded_folders_str" id="new-folder-exclusions" placeholder="Dossiers à exclure (ex: O1.old, _trash)" aria-label="Dossiers à exclure" />
             </div>
-            <button type="submit" class="btn-primary" :disabled="isAdding">
+            <button type="submit" class="btn-primary" :disabled="isAdding" aria-label="Inscrire la source">
               <Plus class="icon-sm" /> Inscrire la source
             </button>
           </form>
@@ -46,12 +46,12 @@
                   <td colspan="3">
                     <div class="edit-folder-form">
                       <div class="form-group" style="flex: 1;">
-                        <label class="text-sm">Tag</label>
-                        <input v-model="editFolderData.tag" class="w-full" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);" />
+                        <label class="text-sm" :for="'edit-folder-tag-' + folder.id">Tag</label>
+                        <input :id="'edit-folder-tag-' + folder.id" v-model="editFolderData.tag" class="w-full" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);" />
                       </div>
                       <div class="form-group" style="flex: 2;">
-                        <label class="text-sm">Exclusions (séparées par virgule)</label>
-                        <input v-model="editFolderData.excluded_folders_str" class="w-full" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);" />
+                        <label class="text-sm" :for="'edit-folder-exclusions-' + folder.id">Exclusions (séparées par virgule)</label>
+                        <input :id="'edit-folder-exclusions-' + folder.id" v-model="editFolderData.excluded_folders_str" class="w-full" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);" />
                       </div>
                     </div>
                   </td>
@@ -239,6 +239,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: Google Drive integration settings/tasks)
 import DriveTreeGraph from './DriveTreeGraph.vue'
 import {
   Loader2, CheckCircle2, AlertCircle, Trash2, FolderX, Plus, RefreshCcw, User, Zap, FileText, Edit2, X, Check

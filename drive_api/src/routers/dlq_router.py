@@ -213,7 +213,6 @@ async def delete_dlq_message(
                 )
                 messages = response.received_messages
             except Exception as e:
-                from google.api_core.exceptions import DeadlineExceeded
                 if isinstance(e, DeadlineExceeded) or "504" in str(e) or "Deadline" in str(e):
                     messages = []
                 else:
@@ -306,7 +305,6 @@ async def replay_dlq(db: AsyncSession = Depends(get_db), _: dict = Depends(_requ
                     )
                     messages = response.received_messages
                 except Exception as e:
-                    from google.api_core.exceptions import DeadlineExceeded
                     if isinstance(e, DeadlineExceeded) or "504" in str(e) or "Deadline" in str(e):
                         messages = []
                     else:

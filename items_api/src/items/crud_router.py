@@ -14,10 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from shared.auth.jwt import verify_jwt
-from src.items.models import Category, Item
+from src.items.models import Category, Item, item_category
 from src.items.schemas import (BulkItemCreate, CategoryResponse,
                                ItemCreate, ItemResponse, ItemUpdate,
                                PaginationResponse, UserInfo)
+from sqlalchemy import func, delete as sa_delete
+from sqlalchemy.orm import selectinload as _sil
+import logging as _log
 
 # Semaphore limitant les appels HTTP concurrents vers users_api depuis asyncio.gather.
 # Sans ce plafond : 50 users Locust x limit=10 items = 500 connexions DB simultanees
@@ -56,7 +59,7 @@ async def get_user_from_api(user_id: int, request: Request) -> UserInfo:
         headers["Authorization"] = auth_header
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as client:
         try:
-            response = await client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+            response = await client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers, timeout=10.0)
             if response.status_code == 404:
                 raise HTTPException(status_code=400, detail=f"User with id {user_id} not found")
             response.raise_for_status()
@@ -126,7 +129,6 @@ async def list_items(
     if not allowed_ids:
         return PaginationResponse(items=[], total=0, skip=skip, limit=limit)
 
-    from sqlalchemy import func
     # Count optimise : evite le double-wrap subquery
     count_q = (
         select(func.count(Item.id.distinct()))
@@ -225,14 +227,12 @@ async def create_item(
         if forbidden_ids:
             raise HTTPException(status_code=403, detail=f"User does not have rights for categories: {forbidden_ids}")
 
-    from sqlalchemy.orm import selectinload as _sil
     existing = (await db.execute(
         select(Item).options(_sil(Item.categories))
         .filter(Item.user_id == item.user_id, Item.name == item.name)
     )).scalars().first()
 
     if existing:
-        import logging as _log
         _log.getLogger(__name__).info(
             f"[create_item] Item '{item.name}' (user_id={item.user_id}) déjà existant — retour idempotent.")
         return await enrich_item(existing, request)
@@ -309,7 +309,6 @@ async def _create_items_bulk_inner(
         if forbidden_ids:
             raise HTTPException(status_code=403, detail=f"User does not have rights for categories: {forbidden_ids}")
 
-    from sqlalchemy.orm import selectinload as _sil
     user_ids = {item.user_id for item in payload.items}
     names = {item.name for item in payload.items}
 
@@ -349,7 +348,6 @@ async def _create_items_bulk_inner(
             await clear_namespace("items:search:")
         except IntegrityError as e:
             await db.rollback()
-            import logging as _log
             _log.getLogger(__name__).warning(
                 f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
 
@@ -458,8 +456,6 @@ async def delete_item(
             raise HTTPException(status_code=403, detail="Not authorized to delete this item")
 
     # Suppression des relations dans la table d'association
-    from src.items.models import item_category
-    from sqlalchemy import delete as sa_delete
     await db.execute(sa_delete(item_category).where(item_category.c.item_id == item_id))
 
     await db.delete(item)

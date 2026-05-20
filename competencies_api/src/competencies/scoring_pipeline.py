@@ -31,6 +31,7 @@ from src.competencies.scoring_utils import (
     _parse_scoring_results_gcs,
 )
 from shared.schemas.missions import MissionsResponse
+from google import genai  # import local pour éviter erreur si non installé
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ async def _apply_scoring_results(
                     )
                     errors += 1
 
-    chunks = [results[i : i + chunk_size] for i in range(0, len(results), chunk_size)]  # noqa: E203
+    chunks = [results[i: i + chunk_size] for i in range(0, len(results), chunk_size)]  # noqa: E203
     sem = asyncio.Semaphore(SCORING_APPLY_SEMAPHORE)
 
     async def _sem_worker(chunk: list):
@@ -175,7 +176,6 @@ async def bg_bulk_scoring_vertex(
     delta_only=True (défaut) : ne score que les compétences sans ai_score (moins coûteuses).
     delta_only=False          : re-score toutes les compétences feuilles assignées.
     """
-    from google import genai  # import local pour éviter erreur si non installé
 
     if not GCP_PROJECT_ID or not BATCH_GCS_BUCKET:
         await bulk_scoring_manager.update_progress(

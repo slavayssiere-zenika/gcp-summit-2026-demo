@@ -13,6 +13,9 @@ from pydantic import ValidationError
 # McpToolResult est défini localement dans agent_commons.mcp_client (copie de shared/schemas/mcp.py)
 # Le Dockerfile n'inclut PAS shared/ dans les images agents — uniquement agent_commons/.
 from agent_commons.mcp_client import McpToolResult
+from contextlib import AsyncExitStack
+from mcp.client.session import ClientSession
+from mcp.client.sse import sse_client
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
@@ -44,7 +47,7 @@ class MCPHttpClient:
         if auth:
             headers["Authorization"] = auth
         async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
-            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools")
+            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools", timeout=10.0)
             res.raise_for_status()
             return res.json()
 
@@ -59,7 +62,7 @@ class MCPHttpClient:
         if auth:
             headers["Authorization"] = auth
 
-        async with httpx.AsyncClient(headers=headers) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             try:
                 timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
                 res = await client.post(
@@ -97,10 +100,6 @@ class MCPSseClient:
         self.url = url
 
     async def list_tools(self) -> List[Any]:
-        from contextlib import AsyncExitStack
-
-        from mcp.client.session import ClientSession
-        from mcp.client.sse import sse_client
 
         async with AsyncExitStack() as stack:
             streams = await stack.enter_async_context(sse_client(self.url))
@@ -113,10 +112,6 @@ class MCPSseClient:
             ]
 
     async def call_tool(self, tool_name: str, arguments: dict) -> List[Any]:
-        from contextlib import AsyncExitStack
-
-        from mcp.client.session import ClientSession
-        from mcp.client.sse import sse_client
 
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info("[MCP-SSE] Calling tool '%s' on %s", tool_name, self.url)

@@ -7,6 +7,8 @@ Gère les erreurs transitoires :
 """
 import logging
 
+from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
+from google.genai import errors as genai_errors
 from tenacity import (AsyncRetrying, before_sleep_log, retry_if_exception,
                       stop_after_attempt, wait_exponential)
 
@@ -24,16 +26,10 @@ def _is_retryable(exc: BaseException) -> bool:
     if any(k in exc_str for k in ("429", "resource exhausted", "high traffic", "503", "service unavailable", "overloaded")):
         return True
     # google.api_core (présent via google-genai)
-    try:
-        from google.api_core.exceptions import (ResourceExhausted,
-                                                ServiceUnavailable)
-        if isinstance(exc, (ResourceExhausted, ServiceUnavailable)):
-            return True
-    except ImportError:
-        pass
+    if isinstance(exc, (ResourceExhausted, ServiceUnavailable)):
+        return True
     # google.genai.errors (SDK >=1.x)
     try:
-        from google.genai import errors as genai_errors
         if hasattr(genai_errors, "ServerError") and isinstance(exc, genai_errors.ServerError):
             return True
         if hasattr(genai_errors, "ClientError") and isinstance(exc, genai_errors.ClientError):

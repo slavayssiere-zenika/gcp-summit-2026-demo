@@ -16,15 +16,17 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from shared.auth.jwt import verify_jwt
 from src.cvs.router import public_router, router
+import uvicorn
+from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as OTLPGrpcExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as OTLPHttpExporter
 
 if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
+    OTLPSpanExporter = OTLPHttpExporter
 elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    OTLPSpanExporter = None  # CloudTraceSpanExporter utilisé directement
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    OTLPSpanExporter = OTLPGrpcExporter
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -96,8 +98,8 @@ app.include_router(public_router)
 app.include_router(router)
 
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://cv_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
@@ -130,5 +132,4 @@ app.include_router(protected_router)
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8004)

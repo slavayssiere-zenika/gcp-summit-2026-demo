@@ -1,3 +1,4 @@
+from fastapi.testclient import TestClient
 import os
 import sys
 
@@ -14,8 +15,6 @@ from main import app  # noqa: E402
 
 @pytest.fixture(scope="module")
 def client():
-
-    from fastapi.testclient import TestClient
 
     with TestClient(app) as c:
 

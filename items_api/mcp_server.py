@@ -10,6 +10,7 @@ from shared.mcp_server_utils import get_mcp_trace_headers, setup_mcp_tracer_prov
 
 from tools.categories import get_categories_tools, handle_categories_tool
 from tools.items import get_items_tools, handle_items_tool
+from mcp.server.stdio import stdio_server
 
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s', handlers=[logging.NullHandler()])
 
@@ -57,7 +58,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     """Main entry point for the MCP server when run as a script."""
-    from mcp.server.stdio import stdio_server
     options = InitializationOptions(
         server_name="items-api",
         server_version="1.0.0",

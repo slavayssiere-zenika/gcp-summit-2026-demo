@@ -18,6 +18,8 @@ from src.services.config import COMPETENCIES_API_URL, ITEMS_API_URL, USERS_API_U
 from src.services.utils import _coerce_to_str
 from shared.schemas.users import UsersResponse
 from pydantic import ValidationError
+from shared.schemas.pagination import PaginationResponse
+from shared.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,8 @@ class CVStorageService:
         fn_res = await http_client.get(
             f"{USERS_API_URL.rstrip('/')}/search",
             params={"query": folder_search_q, "limit": 10, "is_anonymous": "false"},
-            headers=headers
+            headers=headers,
+            timeout=10.0,
         )
         if fn_res.status_code == 200:
             try:
@@ -74,14 +77,16 @@ class CVStorageService:
         search_res = await http_client.get(
             f"{USERS_API_URL.rstrip('/')}/search",
             params={"query": email, "limit": 10, "is_anonymous": "false"},
-            headers=headers
+            headers=headers,
+            timeout=10.0,
         )
         if search_res.status_code == 200:
             try:
                 search_data = UsersResponse.model_validate(search_res.json())
                 for u in search_data.items:
                     if u.email and u.email.lower() == email.lower():
-                        u_full_norm = CVStorageService.normalize_str(u.full_name or f"{u.first_name or ''} {u.last_name or ''}")
+                        u_full_norm = CVStorageService.normalize_str(
+                            u.full_name or f"{u.first_name or ''} {u.last_name or ''}")
                         if ext_full_norm and ext_full_norm not in u_full_norm and u_full_norm not in ext_full_norm:
                             continue
                         return u.id
@@ -95,7 +100,8 @@ class CVStorageService:
         name_res = await http_client.get(
             f"{USERS_API_URL.rstrip('/')}/search",
             params={"query": search_q, "limit": 10, "is_anonymous": "false"},
-            headers=headers
+            headers=headers,
+            timeout=10.0,
         )
         if name_res.status_code == 200:
             try:
@@ -113,7 +119,7 @@ class CVStorageService:
         importer_username = token_payload.get("sub")
         if not importer_username:
             return None
-        importer_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": importer_username, "limit": 10}, headers=headers)
+        importer_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/search", params={"query": importer_username, "limit": 10}, headers=headers, timeout=10.0)
         if importer_res.status_code == 200:
             try:
                 importer_data = UsersResponse.model_validate(importer_res.json())
@@ -137,13 +143,13 @@ class CVStorageService:
             "password": "zenikacv123",
             "is_anonymous": is_anonymous
         }
-        create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+        create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers, timeout=10.0)
         if create_res.status_code == 409 or (create_res.status_code >= 400 and "already exists" in create_res.text.lower()):
             host = email.split('@')[1] if '@' in email else "zenika.com"
             prefix = email.split('@')[0] if '@' in email else "conflict"
             conflict_email = f"{prefix}.conflict.{random.randint(1000, 9999)}@{host}"
             new_u["email"] = conflict_email
-            create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers)
+            create_res = await http_client.post(f"{USERS_API_URL.rstrip('/')}/", json=new_u, headers=headers, timeout=10.0)
         if create_res.status_code >= 400:
             raise HTTPException(status_code=500, detail=f"User creation failed: {create_res.text}")
         return create_res.json()["id"]
@@ -238,14 +244,15 @@ class CVStorageService:
                     email = f"anon.{trigram.lower()}@anonymous.zenika.com"
 
             if user_id and is_anonymous:
-                user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers)
+                user_info_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers, timeout=10.0)
                 if user_info_res.status_code == 200:
                     user_data = user_info_res.json()
                     if not user_data.get("is_anonymous", False):
                         is_anonymous = False
                         logger.info("[cv_storage] Profil dés-anonymisé : user_id=%s résolu comme consultant réel.", user_id)
                 else:
-                    logger.warning("[cv_storage] Impossible de vérifier le statut anonyme de user_id=%s (HTTP %s).", user_id, user_info_res.status_code)
+                    logger.warning(
+                        "[cv_storage] Impossible de vérifier le statut anonyme de user_id=%s (HTTP %s).", user_id, user_info_res.status_code)
 
             if not user_id:
                 user_id = await CVStorageService._create_user(http_client, email, first_name, last_name, is_anonymous, headers)
@@ -300,7 +307,6 @@ class CVStorageService:
                             n_norm = normalize_comp(name)
                             # Contrat intentionnel : /search retourne PaginationResponse mais items
                             # sont des dicts compétences partiels (name, aliases) — parsing manuel OK
-                            from shared.schemas.pagination import PaginationResponse
                             data = PaginationResponse[dict].model_validate(res.json())
                             for item in data.items:
                                 if normalize_comp(
@@ -333,7 +339,8 @@ class CVStorageService:
                                     p_res = await bg_http_client.post(
                                         f"{COMPETENCIES_API_URL.rstrip('/')}/",
                                         json={"name": parent, "description": "Auto-identified from CV"},
-                                        headers=bg_headers
+                                        headers=bg_headers,
+                                        timeout=10.0,
                                     )
                                     if p_res.status_code < 400:
                                         p_id = p_res.json()["id"]
@@ -351,7 +358,8 @@ class CVStorageService:
                             if not c_id:
                                 c_res = await bg_http_client.post(
                                     f"{COMPETENCIES_API_URL.rstrip('/')}/",
-                                    json=leaf_data, headers=bg_headers
+                                    json=leaf_data, headers=bg_headers,
+                                    timeout=10.0,
                                 )
                                 if c_res.status_code < 400:
                                     c_id = c_res.json()["id"]
@@ -440,7 +448,7 @@ class CVStorageService:
 
             try:
                 missions_list = bg_structured_cv.get("missions", [])
-                cat_res = await bg_http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=bg_headers)
+                cat_res = await bg_http_client.get(f"{ITEMS_API_URL.rstrip('/')}/categories", headers=bg_headers, timeout=10.0)
                 if cat_res.status_code == 200:
                     cat_data = cat_res.json()
                     # /categories retourne {"items": [...], "total": N} (paginé) ou une liste directe
@@ -456,13 +464,13 @@ class CVStorageService:
 
                 mission_cat_id = find_cat_id("Missions")
                 if not mission_cat_id:
-                    m_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences"}, headers=bg_headers)
+                    m_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Missions", "description": "Professional experiences"}, headers=bg_headers, timeout=10.0)
                     if m_res.status_code < 400:
                         mission_cat_id = m_res.json()["id"]
 
                 sensitive_cat_id = find_cat_id("Restricted")
                 if not sensitive_cat_id:
-                    s_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive missions"}, headers=bg_headers)
+                    s_res = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/categories", json={"name": "Restricted", "description": "Sensitive missions"}, headers=bg_headers, timeout=10.0)
                     if s_res.status_code < 400:
                         sensitive_cat_id = s_res.json()["id"]
 
@@ -477,7 +485,7 @@ class CVStorageService:
                     })
 
                 if item_data_list:
-                    m_post = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/bulk", json={"items": item_data_list}, headers=bg_headers)
+                    m_post = await bg_http_client.post(f"{ITEMS_API_URL.rstrip('/')}/bulk", json={"items": item_data_list}, headers=bg_headers, timeout=10.0)
                     if m_post.status_code >= 400:
                         bg_errors.append("Création missions échouée")
             except Exception as e:
@@ -492,7 +500,6 @@ class CVStorageService:
         # ── Persistance en base (TOUJOURS, même si pas d'erreur) ────────────────
         # Une compétence non assignée = consultant invisible à la recherche = critique
         try:
-            from shared.database import SessionLocal
             async with SessionLocal() as db_bg:
                 async with db_bg.begin():
                     await db_bg.execute(

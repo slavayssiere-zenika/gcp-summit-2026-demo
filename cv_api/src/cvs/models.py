@@ -4,6 +4,7 @@ from shared.database import Base
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY
 
 
 class CVProfile(Base):
@@ -20,7 +21,6 @@ class CVProfile(Base):
     years_of_experience = Column(Integer, nullable=True)
     summary = Column(Text, nullable=True)
 
-    from sqlalchemy.dialects.postgresql import ARRAY
     competencies_keywords = Column(ARRAY(String), nullable=True)
     missions = Column(JSONB, nullable=True)
     educations = Column(JSONB, nullable=True)

@@ -13,7 +13,6 @@ Architecture :
   - Pas de httpx — hitl_create_entry() est maintenant un appel Python direct.
   - Mock de session_service.get_session() pour simuler les états ADK.
 """
-import json
 import os
 import sys
 
@@ -37,8 +36,8 @@ os.environ.setdefault("ENABLE_OUTPUT_SCHEMA", "true")
 
 @pytest.fixture()
 def fake_redis_client():
-    """FakeRedis partagé entre hitl_router._get_hitl_redis et les assertions."""
-    return fakeredis.FakeRedis(decode_responses=True)
+    """FakeRedis async partagé entre hitl_router._get_hitl_redis et les assertions."""
+    return fakeredis.aioredis.FakeRedis(decode_responses=True)
 
 
 @pytest.fixture(autouse=True)
@@ -98,7 +97,7 @@ class TestMaybeTriggerHitlApprovalRequired:
 
         # La clé Redis doit exister
         hitl_id = result["hitl_id"]
-        raw = fake_redis_client.get(f"hitl:{hitl_id}:pending")
+        raw = await fake_redis_client.get(f"hitl:{hitl_id}:pending")
         assert raw is not None, f"Clé Redis hitl:{hitl_id}:pending absente"
 
         from hitl_router import _decrypt_hitl
@@ -132,7 +131,7 @@ class TestMaybeTriggerHitlApprovalRequired:
 
         assert result is not None
         # La raison auto-générée doit contenir l'urgency_level dans le Redis
-        raw = fake_redis_client.get(f"hitl:{result['hitl_id']}:pending")
+        raw = await fake_redis_client.get(f"hitl:{result['hitl_id']}:pending")
         from hitl_router import _decrypt_hitl
         data = _decrypt_hitl(raw)
         assert "critical" in data["reason"], (
@@ -165,7 +164,7 @@ class TestMaybeTriggerHitlApprovalRequired:
         )
 
         assert result is not None
-        raw = fake_redis_client.get(f"hitl:{result['hitl_id']}:pending")
+        raw = await fake_redis_client.get(f"hitl:{result['hitl_id']}:pending")
         from hitl_router import _decrypt_hitl
         data = _decrypt_hitl(raw)
         assert len(data["candidates"]) == 2
@@ -246,12 +245,12 @@ class TestMaybeTriggerHitlDegradedBehavior:
     async def test_returns_none_on_redis_failure(self, monkeypatch):
         """Si hitl_create_entry() lève une exception (Redis down) → None, pas de crash."""
         from agent import _maybe_trigger_hitl
-        import main as main_module  # agent._maybe_trigger_hitl fait `from main import hitl_create_entry`
+        import hitl_router as hitl_module
 
-        def _failing_hitl_create_entry(**_kwargs):
+        async def _failing_hitl_create_entry(**_kwargs):
             raise ConnectionError("Redis indisponible")
 
-        monkeypatch.setattr(main_module, "hitl_create_entry", _failing_hitl_create_entry)
+        monkeypatch.setattr(hitl_module, "hitl_create_entry", _failing_hitl_create_entry)
 
         missions_result = {
             "mission_title": "Mission crash",

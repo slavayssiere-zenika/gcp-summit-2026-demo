@@ -1,5 +1,5 @@
 <template>
-  <button :class="['base-btn', variant]" :disabled="loading || disabled" @click="$emit('click')">
+  <button :class="['base-btn', variant]" :disabled="loading || disabled" @click="$emit('click')" :aria-label="ariaLabel">
     <slot name="icon-left" />
     <span v-if="loading" class="spinner"></span>
     <span v-else><slot /></span>
@@ -20,6 +20,10 @@ defineProps({
   disabled: {
     type: Boolean,
     default: false
+  },
+  ariaLabel: {
+    type: String,
+    default: 'Action'
   }
 })
 

@@ -65,7 +65,7 @@ const goToDetail = () => {
           <Users size="14" /> {{ mission.proposed_team.length }} expert{{ mission.proposed_team.length > 1 ? 's' : '' }} suggéré{{ mission.proposed_team.length > 1 ? 's' : '' }}
         </div>
         <div class="team-avatars">
-          <div v-for="(member, idx) in mission.proposed_team.slice(0, 3)" :key="idx" class="mini-avatar" :title="member.full_name">
+          <div v-for="(member, idx) in mission.proposed_team.slice(0, 3)" :key="member.consultant_id || member.id || idx" class="mini-avatar" :title="member.full_name">
             {{ member.full_name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '?' }}
           </div>
           <div v-if="mission.proposed_team.length > 3" class="more-members">

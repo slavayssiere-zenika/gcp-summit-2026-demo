@@ -41,7 +41,7 @@ const deduped = computed(() => {
       <span class="total-badge">{{ namedSteps.length }}</span>
     </div>
     <div class="steps-grid">
-      <div v-for="(item, idx) in deduped" :key="idx" class="step-chip" :class="{ error: item.hasError }">
+      <div v-for="(item, idx) in deduped" :key="item.tool" class="step-chip" :class="{ error: item.hasError }">
         <CheckCircle2 size="12" class="success-icon" v-if="!item.hasError" />
         <XCircle size="12" class="error-icon" v-else />
         <span class="step-name">{{ item.tool }}</span>

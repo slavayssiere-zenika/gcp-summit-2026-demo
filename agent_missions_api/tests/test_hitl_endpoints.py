@@ -17,7 +17,7 @@ Architecture HITL :
         → POST /hitl/respond (decision: approved/rejected)
         → Redis hitl:{id}:response
 """
-import json
+
 import os
 import time
 import uuid
@@ -48,28 +48,31 @@ def _make_jwt(sub: str = "manager@zenika.com", role: str = "manager") -> str:
 
 # ── Fake Redis ─────────────────────────────────────────────────────────────────
 class FakeRedis:
-    """Redis in-memory ultra-simplifié pour les tests HITL."""
+    """Redis in-memory ultra-simplifié pour les tests HITL (mimique redis.asyncio)."""
 
     def __init__(self):
         self._store: dict[str, str] = {}
         self._ttls: dict[str, int] = {}
 
-    def setex(self, key: str, ttl: int, value: str) -> None:
+    async def setex(self, key: str, ttl: int, value: str) -> None:
         self._store[key] = value
         self._ttls[key] = ttl
 
-    def get(self, key: str):
+    async def get(self, key: str):
         return self._store.get(key)
 
-    def delete(self, key: str) -> int:
+    async def delete(self, key: str) -> int:
         return 1 if self._store.pop(key, None) is not None else 0
 
-    def keys(self, pattern: str) -> list[str]:
+    async def keys(self, pattern: str) -> list[str]:
         """Support du pattern hitl:*:pending simplifié."""
         if "*" in pattern:
             prefix, suffix = pattern.split("*", 1)
             return [k for k in self._store if k.startswith(prefix) and k.endswith(suffix)]
         return [k for k in self._store if k == pattern]
+
+    async def close(self):
+        pass
 
     @classmethod
     def from_url(cls, url: str, **kwargs) -> "FakeRedis":
@@ -145,7 +148,7 @@ class TestHitlCreate:
         hitl_id = resp.json()["hitl_id"]
 
         # Vérifier le stockage Redis — le blob est chiffré (AES-256-GCM)
-        raw = fake_redis.get(f"hitl:{hitl_id}:pending")
+        raw = fake_redis._store.get(f"hitl:{hitl_id}:pending")
         assert raw is not None, "La clé Redis doit exister"
 
         # Déchiffrer pour vérifier le contenu
@@ -166,7 +169,7 @@ class TestHitlCreate:
         assert resp.status_code == 200
         hitl_id = resp.json()["hitl_id"]
 
-        raw = fake_redis.get(f"hitl:{hitl_id}:pending")
+        raw = fake_redis._store.get(f"hitl:{hitl_id}:pending")
         assert raw is not None
 
         # Le blob ne doit pas être parseable comme JSON clair
@@ -196,7 +199,8 @@ class TestHitlRespond:
             "candidates": [],
             "expires_at": "2099-01-01T00:00:00+00:00",
         }
-        fake_redis.setex(f"hitl:{hitl_id}:pending", 1800, _encrypt_hitl(payload))
+        fake_redis._store[f"hitl:{hitl_id}:pending"] = _encrypt_hitl(payload)
+        fake_redis._ttls[f"hitl:{hitl_id}:pending"] = 1800
 
     def test_respond_approved(self, client, fake_redis):
         """POST /hitl/respond avec decision=approved doit retourner success=True."""
@@ -237,7 +241,7 @@ class TestHitlRespond:
             headers=_auth_headers(),
         )
 
-        response_raw = fake_redis.get(f"hitl:{hitl_id}:response")
+        response_raw = fake_redis._store.get(f"hitl:{hitl_id}:response")
         assert response_raw is not None
         # Déchiffrer pour vérifier (IMP-3 — le blob est chiffré)
         from hitl_router import _decrypt_hitl
@@ -257,7 +261,7 @@ class TestHitlRespond:
             headers=_auth_headers(),
         )
 
-        assert fake_redis.get(f"hitl:{hitl_id}:pending") is None
+        assert fake_redis._store.get(f"hitl:{hitl_id}:pending") is None
 
     def test_respond_404_on_unknown_hitl_id(self, client, fake_redis):
         """POST /hitl/respond avec hitl_id inconnu doit retourner 404."""

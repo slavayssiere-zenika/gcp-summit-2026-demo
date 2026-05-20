@@ -26,6 +26,11 @@ from src.services.finops import log_finops
 from src.services.taxonomy_service import fetch_prompt as _fetch_prompt
 from src.services.taxonomy_service import get_existing_competencies as _get_existing_competencies
 from src.gemini_retry import generate_content_with_retry
+import google.auth.transport.requests as google_requests
+from google.oauth2 import id_token as sa_id_token
+from shared.schemas.auth import TokenResponse
+from opentelemetry.propagate import inject
+import json_repair
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +48,6 @@ class TaxonomyBatchService:
         par Cloud Scheduler (qui n'a pas de claim 'role') ou si le token du caller expire.
         """
         try:
-            import google.auth.transport.requests as google_requests
-            from google.oauth2 import id_token as sa_id_token
 
             is_local = os.getenv("USE_IAM_AUTH", "false").lower() != "true"
             users_api_url = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -62,7 +65,6 @@ class TaxonomyBatchService:
                             json={"id_token": oidc_token}
                         )
                         if res.status_code == 200:
-                            from shared.schemas.auth import TokenResponse
                             data = TokenResponse.model_validate(res.json())
                             short_jwt = data.access_token
                 except Exception as e:
@@ -76,7 +78,6 @@ class TaxonomyBatchService:
                         headers={"Authorization": f"Bearer {short_jwt}"}
                     )
                     if res2.status_code == 200:
-                        from shared.schemas.auth import TokenResponse
                         data = TokenResponse.model_validate(res2.json())
                         return data.access_token
         except Exception as e:
@@ -102,8 +103,6 @@ class TaxonomyBatchService:
             return ""
 
         try:
-            import google.auth.transport.requests as google_requests
-            from google.oauth2 import id_token as sa_id_token
 
             # L'audience correspond à l'URL interne du service (sans trailing slash)
             audience = service_url.rstrip("/")
@@ -164,7 +163,6 @@ class TaxonomyBatchService:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
                 headers = {"Authorization": f"Bearer {start_service_token}"}
-                from opentelemetry.propagate import inject
                 inject(headers)
                 res = await client.post(f"{_svc_config.COMPETENCIES_API_URL.rstrip('/')}/bulk/cleanup-orphans", headers=headers)  # noqa: E501
                 res.raise_for_status()
@@ -598,7 +596,6 @@ class TaxonomyBatchService:
         await log_finops(user_caller, "recalculate_tree_batch_reduce", os.environ["GEMINI_PRO_MODEL"], usage, auth_token=auth_token)  # noqa: E501
 
         res_tree = {}
-        import json_repair
 
         for i, text in enumerate(parsed_results):
             try:
@@ -678,7 +675,6 @@ class TaxonomyBatchService:
                     "COMPETENCIES_API_URL", "http://competencies_api:8000")
                 apply_token = await TaxonomyBatchService._get_oidc_token_for_competencies(competencies_api_url)
                 apply_headers = {"Authorization": f"Bearer {apply_token}"}
-                from opentelemetry.propagate import inject
                 inject(apply_headers)
                 async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=5.0)) as http_client:
                     res = await http_client.post(
@@ -909,7 +905,6 @@ class TaxonomyBatchService:
         await log_finops(user_caller, "recalculate_tree_batch_sweep", os.environ.get("GEMINI_BATCH_MODEL", os.environ["GEMINI_PRO_MODEL"]), usage, auth_token=auth_token)  # noqa: E501
 
         try:
-            import json_repair
 
             sweep_assignments = []
             merges = []
@@ -1027,7 +1022,6 @@ class TaxonomyBatchService:
                 "COMPETENCIES_API_URL", "http://competencies_api:8000")
             apply_token = await TaxonomyBatchService._get_oidc_token_for_competencies(competencies_api_url)
             apply_headers = {"Authorization": f"Bearer {apply_token}"}
-            from opentelemetry.propagate import inject
             inject(apply_headers)
 
             async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=5.0)) as http_client:

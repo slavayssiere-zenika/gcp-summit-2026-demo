@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: CV import statistics/monitoring)
 import {
   Activity, CheckCircle2, AlertTriangle, XCircle,
   Clock, FileText, Radio, Loader2, RefreshCw, Zap,

@@ -32,6 +32,7 @@ from src.services.finops import log_finops
 from src.services.search_service import scale_bulk_dependencies
 from src.services.semaphores import _items_delete_sem, acquire_shielded
 from src.services.utils import _build_distilled_content, _clean_llm_json, _coerce_to_str
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,6 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
 
         async def _apply_with_retry(hc: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
             """Retry exponentiel sur 429, 5xx et timeouts (voir bg_bulk_reanalyse pour la doc)."""
-            import random
             for attempt in range(4):
                 try:
                     resp = await getattr(hc, method)(url, **kwargs)

@@ -269,8 +269,8 @@ def test_delete_folder_non_admin_returns_403():
 
 def test_invalidate_cache_success(mocker):
     """POST /folders/invalidate-cache → 200 avec keys_deleted."""
-    mocker.patch("shared.cache.clear_namespace", new_callable=AsyncMock, return_value=1)
-    mocker.patch("shared.cache.delete_cache", new_callable=AsyncMock)
+    mocker.patch("src.services.folder_service.clear_namespace", new_callable=AsyncMock, return_value=1)
+    mocker.patch("src.services.folder_service.delete_cache", new_callable=AsyncMock)
 
     resp = client.post("/folders/invalidate-cache", headers=AUTH)
     assert resp.status_code == 200
@@ -280,8 +280,8 @@ def test_invalidate_cache_success(mocker):
 
 def test_invalidate_cache_deletes_rebuild_lock(mocker):
     """POST /folders/invalidate-cache → supprime drive:sync:rebuild_running."""
-    mock_delete_cache = mocker.patch("shared.cache.delete_cache", new_callable=AsyncMock)
-    mocker.patch("shared.cache.clear_namespace", new_callable=AsyncMock)
+    mock_delete_cache = mocker.patch("src.services.folder_service.delete_cache", new_callable=AsyncMock)
+    mocker.patch("src.services.folder_service.clear_namespace", new_callable=AsyncMock)
 
     resp = client.post("/folders/invalidate-cache", headers=AUTH)
     assert resp.status_code == 200

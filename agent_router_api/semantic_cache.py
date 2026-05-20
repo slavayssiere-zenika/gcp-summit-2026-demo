@@ -32,6 +32,11 @@ import uuid
 from typing import Optional
 
 import redis.asyncio as aioredis
+import struct
+from metrics import SEMANTIC_CACHE_MISSES_TOTAL
+from metrics import SEMANTIC_CACHE_SIMILARITY_HISTOGRAM
+from metrics import SEMANTIC_CACHE_HITS_TOTAL
+from google import genai
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +191,6 @@ class SemanticCache:
                 return None
 
             # Recherche HNSW via FT.SEARCH — O(log N) vs O(N) pour le scan
-            import struct
             embedding_bytes = struct.pack(f"{_EMBEDDING_DIM}f", *query_embedding[:_EMBEDDING_DIM])
 
             results = await self._redis.execute_command(
@@ -201,7 +205,6 @@ class SemanticCache:
 
             if not results or results[0] == 0:
                 try:
-                    from metrics import SEMANTIC_CACHE_MISSES_TOTAL
                     SEMANTIC_CACHE_MISSES_TOTAL.inc()
                 except Exception as e:
                     logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
@@ -223,7 +226,6 @@ class SemanticCache:
 
             # Import des métriques ici pour éviter les circular imports
             try:
-                from metrics import SEMANTIC_CACHE_SIMILARITY_HISTOGRAM
                 SEMANTIC_CACHE_SIMILARITY_HISTOGRAM.observe(score)
             except Exception as e:
                 logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
@@ -235,7 +237,6 @@ class SemanticCache:
                     f"query='{query[:60]}'"
                 )
                 try:
-                    from metrics import SEMANTIC_CACHE_HITS_TOTAL
                     SEMANTIC_CACHE_HITS_TOTAL.inc()
                 except Exception as e:
                     logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
@@ -247,7 +248,6 @@ class SemanticCache:
                     f"threshold={self._threshold} query='{query[:60]}'"
                 )
                 try:
-                    from metrics import SEMANTIC_CACHE_MISSES_TOTAL
                     SEMANTIC_CACHE_MISSES_TOTAL.inc()
                 except Exception as e:
                     logger.debug("[SemanticCache] metrics import failed (non-blocking): %s", e)
@@ -287,7 +287,6 @@ class SemanticCache:
             if embedding is None:
                 return
 
-            import struct
             embedding_bytes = struct.pack(f"{_EMBEDDING_DIM}f", *embedding[:_EMBEDDING_DIM])
 
             key = f"{_CACHE_KEY_PREFIX}{uuid.uuid4().hex}"
@@ -328,7 +327,6 @@ class SemanticCache:
     def _compute_embedding_sync(self, text: str) -> Optional[list]:
         """Appel synchrone à l'API Gemini Embedding — exécuté dans un thread pool."""
         try:
-            from google import genai
             client = genai.Client()
             result = client.models.embed_content(
                 model=self._embedding_model,

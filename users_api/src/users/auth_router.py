@@ -21,8 +21,8 @@ from src.auth import (ALGORITHM, SECRET_KEY, create_access_token,
                       create_refresh_token, get_password_hash, verify_jwt,
                       verify_password_async)
 from src.users.models import User, UserAuditLog
-from src.users.schemas import (LoginRequest, ServiceAccountLoginRequest,
-                               TokenResponse)
+from src.users.schemas import LoginRequest, ServiceAccountLoginRequest
+from shared.schemas.auth import TokenResponse
 
 _log = logging.getLogger(__name__)
 
@@ -182,16 +182,15 @@ async def google_callback(request: Request, code: str, response: Response, db: A
         "grant_type": "authorization_code"
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
-        token_res = await client.post(token_url, data=token_data)
+        token_res = await client.post(token_url, data=token_data, timeout=10.0)
         if token_res.is_error:
             raise HTTPException(status_code=400, detail="Failed to get token from Google")
 
-        from shared.schemas.auth import TokenResponse
         data = TokenResponse.model_validate(token_res.json())
         access_token_google = data.access_token
 
         userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
-        userinfo_res = await client.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"})
+        userinfo_res = await client.get(userinfo_url, headers={"Authorization": f"Bearer {access_token_google}"}, timeout=10.0)
         if userinfo_res.is_error:
             raise HTTPException(status_code=400, detail="Failed to get user info from Google")
 

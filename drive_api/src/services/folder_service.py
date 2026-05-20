@@ -4,10 +4,11 @@ from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
-from shared.cache import delete_cache
+from shared.cache import delete_cache, clear_namespace
 from src.models import DriveFolder, DriveSyncState
 from src.schemas import FolderCreate, FolderUpdate
 from src.google_auth import get_drive_service
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,6 @@ class FolderService:
         resolved_folder_name = folder.folder_name
         try:
             drive = get_drive_service()
-            import asyncio
             folder_meta = await asyncio.to_thread(
                 lambda: drive.files().get(fileId=raw_id, fields="name", supportsAllDrives=True).execute()
             )
@@ -143,7 +143,6 @@ class FolderService:
     @staticmethod
     async def invalidate_drive_cache() -> int:
         """Invalide le cache Drive (graphe, oos, noms) via shared.cache (async)."""
-        from shared.cache import clear_namespace, delete_cache
         deleted = 0
         for pattern in ["drive:graph:", "drive:oos:", "drive:name:"]:
             deleted += await clear_namespace(pattern)

@@ -1,37 +1,34 @@
 """
-workflow_agent.py — WorkflowAgent ADK v1.28+ pour le router Zenika.
+workflow_agent.py — Graphe d'États StateGraphAgent (ADK v2) pour le router Zenika.
 
-Implémente l'architecture DAG déterministe ADK v2 avec :
-  - SequentialAgent : classifier léger → agent spécialisé
-  - ParallelAgent   : fan-out HR+Ops simultané pour les requêtes mixtes
-  - LlmAgent        : classificateur de domaine (gemini-flash-lite, économique)
-
-Le routage déterministe remplace la logique implicite du LLM Router existant
-pour les cas simples (domaine identifiable), réduisant le coût LLM de ~40%.
-
-Usage :
-    from workflow_agent import build_workflow_agent, classify_query_domain
-
-Architecture cible :
-    query → [Classifier] → domaine
-                              ├── "hr"       → ask_hr_agent (Tool A2A)
-                              ├── "ops"      → ask_ops_agent (Tool A2A)
-                              ├── "missions" → ask_missions_agent (Tool A2A)
-                              └── "mixed"    → ParallelAgent(HR + Ops)
+Implémente :
+  - StateGraphAgent : agent de graphe d'états personnalisé tolérant aux pannes
+  - ask_missions_agent_with_hr_alignment : alignement autonome en boucle fermée
+  - build_workflow_agent : configure le graphe avec classifier et router
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
+from typing import AsyncGenerator, ClassVar, Type
+from typing_extensions import override
 
-from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
+from google.adk.agents import LlmAgent, ParallelAgent
+from google.adk.agents.base_agent import BaseAgent, BaseAgentState
+from google.adk.agents.base_agent_config import BaseAgentConfig
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events.event import Event
+from google.adk.features import experimental, FeatureName
+from google.adk.utils.context_utils import Aclosing
 from google.genai import types
+from a2a_tools import ask_hr_agent, ask_missions_agent
+from a2a_tools import ask_mixed_agents
 
 logger = logging.getLogger(__name__)
 
 # ── Modèle économique pour le Classifier ─────────────────────────────────────
-# gemini-flash-lite : ~0.3s, coût ~10x moins cher que gemini-pro
 _CLASSIFIER_MODEL = os.getenv(
     "GEMINI_CLASSIFIER_MODEL",
     os.getenv("GEMINI_ROUTER_MODEL", "gemini-3.1-flash-lite-preview"),
@@ -59,6 +56,99 @@ Exemples :
 """
 
 
+@experimental(FeatureName.AGENT_STATE)
+class StateGraphAgentState(BaseAgentState):
+    """État persistant pour StateGraphAgent stocké dans session.state."""
+
+    current_node: str = "classifier"
+    history: list[str] = []
+
+
+class StateGraphAgent(BaseAgent):
+    """Graphe d'États personnalisé pour l'orchestration multi-agents Zenika."""
+
+    config_type: ClassVar[Type[BaseAgentConfig]] = BaseAgentConfig
+
+    @override
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        if not self.sub_agents or len(self.sub_agents) < 2:
+            logger.warning("[StateGraphAgent] Pas assez de sous-agents configurés.")
+            return
+
+        classifier = self.sub_agents[0]
+        router_agent = self.sub_agents[1]
+
+        # Charger l'état persistant
+        agent_state = self._load_agent_state(ctx, StateGraphAgentState)
+        if agent_state is None:
+            agent_state = StateGraphAgentState(current_node="classifier", history=[])
+
+        pause_invocation = False
+
+        # --- Étape 1 : Classification ---
+        if agent_state.current_node == "classifier":
+            logger.info("[StateGraphAgent] Exécution du nœud 'classifier'")
+            agent_state.history.append("classifier")
+
+            if ctx.is_resumable:
+                ctx.set_agent_state(self.name, agent_state=agent_state)
+                yield self._create_agent_state_event(ctx)
+
+            async with Aclosing(classifier.run_async(ctx)) as agen:
+                async for event in agen:
+                    yield event
+                    if ctx.should_pause_invocation(event):
+                        pause_invocation = True
+
+            if pause_invocation:
+                return
+
+            # Extraire le domaine classifié et transiter
+            domain = extract_domain(ctx.session.state)
+            logger.info("[StateGraphAgent] Domaine classifié : %s", domain)
+
+            agent_state.current_node = f"router_{domain}"
+            if ctx.is_resumable:
+                ctx.set_agent_state(self.name, agent_state=agent_state)
+                yield self._create_agent_state_event(ctx)
+
+        # --- Étape 2 : Routage et exécution spécialisée ---
+        if agent_state.current_node.startswith("router_"):
+            node_name = agent_state.current_node
+            logger.info("[StateGraphAgent] Exécution du nœud de routage : %s", node_name)
+            agent_state.history.append(node_name)
+
+            async with Aclosing(router_agent.run_async(ctx)) as agen:
+                async for event in agen:
+                    yield event
+                    if ctx.should_pause_invocation(event):
+                        pause_invocation = True
+
+            if pause_invocation:
+                return
+
+            # Transition finale
+            agent_state.current_node = "end"
+            if ctx.is_resumable:
+                ctx.set_agent_state(self.name, end_of_agent=True, agent_state=agent_state)
+                yield self._create_agent_state_event(ctx)
+
+        logger.info("[StateGraphAgent] Terminé. Historique: %s", agent_state.history)
+
+    @override
+    async def _run_live_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        """Fall-back live non utilisé pour ce workflow."""
+        if not self.sub_agents:
+            return
+        async with Aclosing(self.sub_agents[0].run_live(ctx)) as agen:
+            async for event in agen:
+                yield event
+
+
 def _build_classifier_agent() -> LlmAgent:
     """Construit le LlmAgent classificateur de domaine (léger, économique)."""
     return LlmAgent(
@@ -76,11 +166,7 @@ def _build_classifier_agent() -> LlmAgent:
 
 
 def extract_domain(session_state: dict) -> str:
-    """Extrait et normalise le domaine classifié depuis session.state.
-
-    Le Classifier peut retourner "hr", " HR\n", "HR." etc.
-    Cette fonction normalise en minuscules et valide contre les domaines connus.
-    """
+    """Extrait et normalise le domaine classifié depuis session.state."""
     raw = session_state.get("query_domain", "hr")
     if isinstance(raw, str):
         clean = re.sub(r"[^a-z]", "", raw.lower().strip())
@@ -90,30 +176,84 @@ def extract_domain(session_state: dict) -> str:
     return "hr"
 
 
-def build_workflow_agent(hr_tool, ops_tool, missions_tool) -> SequentialAgent:
-    """Construit le WorkflowAgent DAG Zenika (SequentialAgent ADK v1.28+).
+async def ask_missions_agent_with_hr_alignment(query: str, user_id: str = "") -> dict:
+    """Wrapper intelligent pour ask_missions_agent avec alignement en boucle fermée via ask_hr_agent."""
 
-    Architecture :
-        SequentialAgent (pipeline principal)
-            ├── [Step 1] LlmAgent classifier (output_key="query_domain")
-            └── [Step 2] LlmAgent router (lit session.state["query_domain"])
-                         → appelle dynamiquement le bon tool A2A
+    # 1. Appel initial
+    res = await ask_missions_agent(query, user_id)
+    if res.get("degraded") or "result" not in res:
+        return res
 
-    Note : Le routing conditionnel par edges (ADK v2 pur) n'est pas disponible
-    en ADK 1.28. On utilise un SequentialAgent avec un router LLM qui reçoit
-    le domaine pré-classifié — plus déterministe et moins coûteux.
+    try:
+        parsed = json.loads(res["result"])
+        response_text = parsed.get("response", "")
+    except Exception as e:
+        logger.warning("[Alignment] Impossible de parser le JSON de ask_missions_agent: %s", e)
+        return res
+
+    # 2. Chercher si la réponse indique un identifiant de consultant manquant
+    match = re.search(
+        r"(?:identifiant|id|ID) manquant pour le consultant\s+([A-Za-zÀ-ÿ-]+(?:\s+[A-Za-zÀ-ÿ-]+)*)",
+        response_text,
+        re.IGNORECASE
+    )
+
+    if not match:
+        return res
+
+    consultant_name = match.group(1).strip()
+    logger.info("[Alignment] 🔍 Consultant manquant détecté : '%s'. Déclenchement de l'alignement...", consultant_name)
+
+    # 3. Interroger ask_hr_agent pour trouver l'ID
+    hr_query = f"Donne-moi l'identifiant (UUID ou email) du consultant {consultant_name}"
+    hr_res = await ask_hr_agent(hr_query, user_id)
+
+    resolved_id = None
+    if not hr_res.get("degraded") and "result" in hr_res:
+        try:
+            hr_parsed = json.loads(hr_res["result"])
+            hr_response = hr_parsed.get("response", "")
+
+            # Chercher un UUID ou un email dans la réponse
+            uuid_match = re.search(
+                r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                hr_response
+            )
+            email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", hr_response)
+
+            if uuid_match:
+                resolved_id = uuid_match.group(0)
+            elif email_match:
+                resolved_id = email_match.group(0)
+
+        except Exception as e:
+            logger.warning("[Alignment] Impossible de parser la réponse de ask_hr_agent: %s", e)
+
+    if not resolved_id:
+        logger.warning("[Alignment] ❌ Échec de la résolution de l'identifiant pour '%s'", consultant_name)
+        return res
+
+    logger.info("[Alignment] ✅ Résolution réussie pour '%s' : ID='%s'. Ré-exécution...", consultant_name, resolved_id)
+
+    # 4. Ré-exécuter ask_missions_agent avec la requête enrichie
+    enriched_query = f"{query} (avec l'identifiant du consultant {consultant_name} = {resolved_id})"
+    final_res = await ask_missions_agent(enriched_query, user_id)
+    return final_res
+
+
+def build_workflow_agent(hr_tool, ops_tool, missions_tool) -> StateGraphAgent:
+    """Construit le WorkflowAgent DAG Zenika (StateGraphAgent ADK v2).
 
     Args:
         hr_tool       : outil A2A ask_hr_agent (Python callable ADK tool)
         ops_tool      : outil A2A ask_ops_agent
-        missions_tool : outil A2A ask_missions_agent
+        missions_tool : outil A2A ask_missions_agent (ou wrapper d'alignement)
     """
+
     classifier = _build_classifier_agent()
 
     router_model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
 
-    # Le router reçoit le domaine pré-classifié dans session.state["query_domain"]
-    # et appelle le bon tool A2A directement — sans raisonner sur le domaine.
     router_agent = LlmAgent(
         name="zenika_workflow_router",
         model=router_model,
@@ -123,10 +263,10 @@ def build_workflow_agent(hr_tool, ops_tool, missions_tool) -> SequentialAgent:
             "- query_domain='hr'       → appelle ask_hr_agent\n"
             "- query_domain='ops'      → appelle ask_ops_agent\n"
             "- query_domain='missions' → appelle ask_missions_agent\n"
-            "- query_domain='mixed'    → appelle ask_hr_agent ET ask_ops_agent (les deux)\n\n"
+            "- query_domain='mixed'    → appelle ask_mixed_agents (interroge HR et Ops en parallèle)\n\n"
             "Réponds en français. Synthétise les résultats des outils de manière claire et concise."
         ),
-        tools=[hr_tool, ops_tool, missions_tool],
+        tools=[hr_tool, ops_tool, missions_tool, ask_mixed_agents],
         generate_content_config=types.GenerateContentConfig(
             tool_config=types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="AUTO"),
@@ -138,10 +278,10 @@ def build_workflow_agent(hr_tool, ops_tool, missions_tool) -> SequentialAgent:
         description="Router déterministe — délègue aux agents spécialisés selon le domaine pré-classifié.",
     )
 
-    return SequentialAgent(
+    return StateGraphAgent(
         name="zenika_staffing_workflow",
         description=(
-            "Workflow de staffing Zenika — pipeline déterministe en 2 étapes : "
+            "Workflow de staffing Zenika — pipeline de graphe d'états : "
             "classification du domaine puis délégation au spécialiste approprié."
         ),
         sub_agents=[classifier, router_agent],
@@ -149,14 +289,7 @@ def build_workflow_agent(hr_tool, ops_tool, missions_tool) -> SequentialAgent:
 
 
 def build_parallel_staffing_agent(hr_tool, ops_tool) -> ParallelAgent:
-    """Construit un ParallelAgent pour les requêtes mixtes HR+Ops simultanées.
-
-    Utilisable comme tool ou sous-agent pour les requêtes multi-domaines.
-    Les deux sous-agents s'exécutent en parallèle et leurs résultats sont
-    agrégés dans session.state.
-
-    Note : disponible en ADK 1.28+, pas besoin de v2.
-    """
+    """Construit un ParallelAgent pour les requêtes mixtes HR+Ops simultanées."""
     hr_mini = LlmAgent(
         name="hr_parallel_worker",
         model=os.getenv("GEMINI_HR_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")),

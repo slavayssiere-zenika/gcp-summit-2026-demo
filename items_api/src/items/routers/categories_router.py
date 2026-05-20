@@ -10,6 +10,7 @@ from shared.auth.jwt import verify_jwt
 from src.items.models import Category, Item
 from src.items.schemas import (CategoryCreate, CategoryResponse,
                                ItemStatsResponse, PaginationResponse)
+from sqlalchemy import func
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 CACHE_TTL = 60
@@ -24,7 +25,6 @@ async def list_categories(
     skip: int = Query(0, ge=0, le=2_147_483_647),
     limit: int = Query(50, ge=1, le=500),
 ):
-    from sqlalchemy import func
     total = (await db.execute(select(func.count()).select_from(Category))).scalar()
     categories = (await db.execute(select(Category).offset(skip).limit(limit))).scalars().all()
     return {"items": categories, "total": total, "skip": skip, "limit": limit}
@@ -50,7 +50,6 @@ async def get_item_stats(db: AsyncSession = Depends(get_db)):
     if cached:
         return ItemStatsResponse(**cached)
 
-    from sqlalchemy import func
     total = (await db.execute(select(func.count()).select_from(Item))).scalar()
 
     by_user_raw = (await db.execute(select(Item.user_id, func.count(Item.id)).group_by(Item.user_id))).all()

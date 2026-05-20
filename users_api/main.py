@@ -18,6 +18,8 @@ from sqlalchemy import text
 from src.auth import get_password_hash, verify_jwt
 from src.users.models import User
 from src.users.router import router
+from shared.schemas.auth import TokenResponse
+import uvicorn
 
 setup_tracing(service_name="users-api")
 
@@ -147,9 +149,8 @@ async def get_service_token_fallback() -> str:
             )
             if res_meta.status_code == 200:
                 id_token = res_meta.text
-                res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token})
+                res = await client.post(f"{users_api_url}/auth/service-account/login", json={"id_token": id_token}, timeout=10.0)
                 if res.status_code == 200:
-                    from shared.schemas.auth import TokenResponse
                     data = TokenResponse.model_validate(res.json())
                     return data.access_token
     except Exception:
@@ -182,9 +183,8 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
 # (register_global_exception_handler(app, service_name="users-api"))
 
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
-    import httpx
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://users_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
@@ -213,12 +213,11 @@ async def proxy_mcp(path: str, request: Request):
             return Response(content=str(e), status_code=502)
 
 
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp_fallback(path: str, request: Request):
     """Fallback route for double-slash /mcp/ paths (nginx normalisation workaround)."""
     return await proxy_mcp(path, request)
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

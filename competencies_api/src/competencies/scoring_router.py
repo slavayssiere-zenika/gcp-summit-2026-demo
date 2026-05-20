@@ -33,6 +33,12 @@ from src.competencies.ai_scoring import _bulk_scoring_all_bg
 from src.competencies.bulk_task_state import bulk_scoring_manager
 from src.competencies.models import CompetencyEvaluation, user_competency
 from src.competencies.scheduler_control import set_scoring_scheduler_enabled
+import json
+import re
+
+from google import genai
+from google.cloud import storage as gcs_storage
+from shared.schemas.auth import TokenResponse
 from src.competencies.scoring_service import (
     BATCH_GCS_BUCKET,
     GCP_PROJECT_ID,
@@ -129,7 +135,6 @@ async def trigger_bulk_scoring_all(
                 headers={"Authorization": auth_header},
             )
             if svc_res.status_code == 200:
-                from shared.schemas.auth import TokenResponse
 
                 data = TokenResponse.model_validate(svc_res.json())
                 svc_token = data.access_token
@@ -243,7 +248,6 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
     Background task : lit les résultats GCS d'un job Vertex terminé et les écrit en DB.
     Appelé par /bulk-scoring-all/resume quand le Cloud Run redémarre après scale-to-zero.
     """
-    from google.cloud import storage as gcs_storage
 
     await bulk_scoring_manager.update_progress(
         status="applying",
@@ -271,8 +275,6 @@ async def _resume_apply_bg(batch_job_id: str, dest_uri: str) -> None:
     # Reconstruit un index minimal depuis les lignes GCS (pas de scoring_index disponible)
     # On parse directement les ids embedés dans les clés "score-{user_id}-{comp_id}"
     results = []
-    import json
-    import re
 
     for line in raw_lines:
         if not line.strip():
@@ -367,7 +369,6 @@ async def resume_bulk_scoring(
 
     # Poll Vertex AI
     try:
-        from google import genai
 
         vertex_client = genai.Client(
             vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION

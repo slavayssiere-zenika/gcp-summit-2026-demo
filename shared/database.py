@@ -123,5 +123,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     # Pas de finally: await db.close() — async with SessionLocal() gere deja le cycle
     # de vie via __aexit__ + asyncio.shield(). Un double-close cause IllegalStateChangeError
     # sous charge concurrente avec SQLAlchemy 2.x + Python 3.13.
+    # Pour resoudre le bug du cycle de vie sous pytest/asyncio, on intercepte les exceptions
+    # et on close explicitement.
     async with SessionLocal() as db:
-        yield db
+        try:
+            yield db
+        except Exception:
+            await db.close()
+            raise

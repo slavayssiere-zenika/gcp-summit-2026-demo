@@ -108,6 +108,7 @@ onUnmounted(() => {
 
 <template>
   <div id="main-app">
+    <a href="#main-content" class="skip-link">{{ t('nav.skip_to_content') || 'Aller au contenu principal' }}</a>
     <ToastNotification />
     <!-- Tour guidé onboarding — Teleport vers body -->
     <OnboardingTour />
@@ -117,7 +118,7 @@ onUnmounted(() => {
         <div class="subtitle hide-on-mobile">Console Intelligent Agent</div>
       </div>
       
-      <button class="mobile-menu-btn" @click="toggleMobileMenu" v-if="authService.state.isAuthenticated">
+      <button class="mobile-menu-btn" @click="toggleMobileMenu" v-if="authService.state.isAuthenticated" aria-label="Menu">
         <X v-if="isMobileMenuOpen" size="24" />
         <Menu v-else size="24" />
       </button>
@@ -137,7 +138,7 @@ onUnmounted(() => {
 
           <!-- Hub RH (consultants, compétences) -->
           <div class="dropdown" v-if="isRh()">
-            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }">
+            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }" aria-label="Hub RH">
               <Users size="15" /> {{ t('nav.hub_rh') }} <ChevronDown size="13" />
             </button>
             <div class="dropdown-content">
@@ -286,7 +287,7 @@ onUnmounted(() => {
             <UserIcon size="15" />
             <span>{{ authService.state.user?.full_name }}</span>
           </RouterLink>
-          <button @click="handleLogout" class="logout-pill" :title="t('nav.logout')">
+          <button @click="handleLogout" class="logout-pill" :title="t('nav.logout')" :aria-label="t('nav.logout')">
             <LogOut size="15" />
           </button>
         </div>
@@ -299,7 +300,7 @@ onUnmounted(() => {
       <RouterLink to="/data-quality" class="data-quality-link">{{ t('nav.dq_detail') }}</RouterLink>
     </div>
 
-    <main class="content">
+    <main id="main-content" class="content">
       <RouterView />
     </main>
   </div>

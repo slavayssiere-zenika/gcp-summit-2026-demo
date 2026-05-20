@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: data quality statistics, taxonomy status, scoring status, drive ingestion stats)
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/ui/PageHeader.vue'
 import {

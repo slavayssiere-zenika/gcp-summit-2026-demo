@@ -16,6 +16,8 @@ from mcp_server import call_tool, list_tools
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from pydantic import BaseModel
 from shared.mcp_server_utils import setup_mcp_tracer_provider
+from mcp_server import get_infrastructure_topology
+from shared.auth.context import auth_header_var
 
 
 # La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py.
@@ -65,11 +67,10 @@ async def get_tools():
 async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 1, force: bool = False):
     """Native REST endpoint to fetch infrastructure topology from GCP Cloud Trace with Caching."""
     # Note: import kept here to avoid circular import between mcp_app and mcp_server at module level.
-    from mcp_server import get_infrastructure_topology
 
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/9")
     try:
-        r = redis.from_url(redis_url, socket_timeout=2.0)
+        r = redis.from_url(redis_url, socket_timeout=2.0)  # noqa: RedisSyncCache — SWR cache, fallback gracieux si Redis absent
         cache_key = f"cache:metrics:topology:{hours_lookback}"
         lock_key = f"lock:metrics:topology:{hours_lookback}"
 
@@ -126,7 +127,6 @@ async def get_topology(background_tasks: BackgroundTasks, hours_lookback: int = 
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from shared.auth.context import auth_header_var
         auth_header_var.set(auth_header)
 
     try:

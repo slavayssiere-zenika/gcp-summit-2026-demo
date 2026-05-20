@@ -193,6 +193,7 @@
             <div class="chat-input-row">
               <input
                 v-model="coachInput"
+                id="coach-input"
                 class="chat-input"
                 placeholder="Posez votre question…"
                 @keydown.enter.prevent="sendCoachMessage"

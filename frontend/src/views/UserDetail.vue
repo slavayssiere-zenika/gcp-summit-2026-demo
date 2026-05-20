@@ -16,6 +16,7 @@ import {
   GraduationCap
 } from 'lucide-vue-next'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: user details, CV profile, missions, categories)
 import CompetencyEvaluationPanel from '../components/CompetencyEvaluationPanel.vue'
 
 const route = useRoute()
@@ -235,7 +236,9 @@ watch(() => route.params.id, (newId, oldId) => {
          
          <div v-if="isMerging" class="merge-form fade-in">
             <div class="search-box">
+               <label for="merge-search-input" class="sr-only">Rechercher un profil à rattacher</label>
                <input 
+                  id="merge-search-input"
                   type="text" 
                   v-model="mergeSearchQuery" 
                   @input="searchMergeUsers" 
@@ -315,7 +318,7 @@ watch(() => route.params.id, (newId, oldId) => {
             <div class="info-item" v-if="cvProfiles && cvProfiles.length > 0" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #eee;">
               <label><UserIcon size="14" /> Documents Associés (CVs)</label>
               <div class="value" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem">
-                <template v-for="(cv, index) in cvProfiles" :key="index">
+                <template v-for="(cv, index) in cvProfiles" :key="cv.id || 'cv-' + index">
                   <a v-if="cv" :href="cv.source_url" target="_blank" class="importer-link" style="font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                     Lien Source vers le CV {{ index + 1 }}
                     <span v-if="cv.source_tag" style="background: rgba(227, 25, 55, 0.05); cursor: default; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; text-decoration: none !important;">{{ cv.source_tag }}</span>
@@ -383,7 +386,7 @@ watch(() => route.params.id, (newId, oldId) => {
             </div>
             
             <div v-else-if="missions && missions.length > 0" class="missions-list">
-              <div v-for="(mission, index) in missions" :key="index" class="mission-item">
+              <div v-for="(mission, index) in missions" :key="mission.id || 'mission-' + index" class="mission-item">
                 <template v-if="mission">
                   <div class="mission-header">
                     <h3>{{ mission.title }}</h3>
@@ -413,7 +416,7 @@ watch(() => route.params.id, (newId, oldId) => {
             <h2>{{ t('user.section_education') }}</h2>
           </div>
           <div class="education-list">
-            <div v-for="(edu, index) in educations" :key="index" class="education-item">
+            <div v-for="(edu, index) in educations" :key="edu.id || 'edu-' + index" class="education-item">
               <div class="edu-degree">{{ edu.degree || edu.diploma || 'Diplôme non précisé' }}</div>
               <div class="edu-school">{{ edu.school || edu.institution || edu.etablissement || '' }}</div>
               <div class="edu-year" v-if="edu.year || edu.graduation_year">{{ edu.year || edu.graduation_year }}</div>

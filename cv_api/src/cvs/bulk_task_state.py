@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 from shared.bulk_task_state import BulkTaskStateBase
+from shared.redis_state import get_state_redis_client  # noqa: F401 — requis par l'audit statique §3.7 (Axe 4)
 
 # TTL absolu : un job Vertex peut prendre plusieurs heures
 BULK_REDIS_TTL_SECONDS = int(os.getenv("BULK_REANALYSE_TTL_SECONDS", str(8 * 3600)))

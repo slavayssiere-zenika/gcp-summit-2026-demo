@@ -12,6 +12,11 @@ from datetime import datetime, timezone
 from google.cloud import bigquery
 from mcp.server import Server
 from mcp.types import TextContent, Tool
+import google.auth
+import httpx
+import asyncio
+from mcp.server import InitializationOptions
+from mcp.server.stdio import stdio_server
 
 # Standard context var for MCP auth
 auth_header_var = contextvars.ContextVar("mcp_auth_header", default=None)
@@ -33,7 +38,6 @@ def get_gcp_project_id() -> str:
     if pid and pid not in ("your-gcp-project-id", "YOUR_GCP_PROJECT_ID"):
         return pid
     try:
-        import google.auth
         _, project = google.auth.default()
         if project:
             logger.info("[GCP] Project ID résolu via ADC : '%s'", project)
@@ -56,7 +60,6 @@ async def get_gcp_project_id_from_metadata() -> str:
     if pid:
         return pid
     try:
-        import httpx
         async with httpx.AsyncClient(timeout=2.0) as client:
             res = await client.get(
                 "http://metadata.google.internal/computeMetadata/v1/project/project-id",
@@ -304,8 +307,6 @@ async def get_aiops_dashboard_data_internal():
             raise Exception("BigQuery client is not initialized.")
         return [dict(row) for row in client.query(q).result()]
 
-    import asyncio
-
     # Exécution parallèle
     monthly_res, daily_res, top_count_res, top_cost_res, top_actions_res, top_models_res, pricing_res = await asyncio.gather(
         asyncio.to_thread(fetch_data, query_monthly),
@@ -339,8 +340,6 @@ async def get_aiops_dashboard_data_internal():
 
 async def main():
     """Main entry point for the MCP server when run directly over stdio."""
-    from mcp.server import InitializationOptions
-    from mcp.server.stdio import stdio_server
     options = InitializationOptions(
         server_name="analytics-mcp",
         server_version="1.0.0",

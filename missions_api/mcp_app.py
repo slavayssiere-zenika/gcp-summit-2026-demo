@@ -11,6 +11,8 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from pydantic import BaseModel
+from shared.auth.context import auth_header_var
+from opentelemetry.propagate import inject
 
 app = FastAPI(title="CV Analysis MCP Sidecar")
 FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
@@ -33,7 +35,6 @@ async def get_tools():
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from shared.auth.context import auth_header_var
         auth_header_var.set(auth_header)
 
     try:
@@ -53,7 +54,6 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        from opentelemetry.propagate import inject
         inject(headers)
     except Exception:
         raise

@@ -166,12 +166,12 @@ async def handle_items_tool(name: str, arguments: dict, client, api_base_url: st
     if name == "list_items":
         skip = arguments.get("skip", 0)
         limit = arguments.get("limit", 10)
-        response = await client.get(f"{api_base_url}/", params={"skip": skip, "limit": limit})
+        response = await client.get(f"{api_base_url}/", params={"skip": skip, "limit": limit}, timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
     elif name == "get_item":
-        response = await client.get(f"{api_base_url}/{arguments['item_id']}/")
+        response = await client.get(f"{api_base_url}/{arguments['item_id']}/", timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -183,43 +183,43 @@ async def handle_items_tool(name: str, arguments: dict, client, api_base_url: st
             "category_ids": arguments.get("category_ids", []),
             "metadata_json": arguments.get("metadata_json")
         }
-        response = await client.post(f"{api_base_url}/", json=payload)
+        response = await client.post(f"{api_base_url}/", json=payload, timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
     elif name == "get_item_with_user":
-        item_response = await client.get(f"{api_base_url}/{arguments['item_id']}/")
+        item_response = await client.get(f"{api_base_url}/{arguments['item_id']}/", timeout=10.0)
         item_response.raise_for_status()
         item_data = item_response.json()
 
-        user_response = await client.get(f"{users_api_url.rstrip('/')}/{item_data.get('user_id')}")
+        user_response = await client.get(f"{users_api_url.rstrip('/')}/{item_data.get('user_id')}", timeout=10.0)
         if user_response.status_code == 200:
             item_data["user"] = user_response.json()
 
         return [TextContent(type="text", text=json.dumps(item_data))]
 
     elif name == "health_check":
-        response = await client.get(f"{api_base_url}/health")
+        response = await client.get(f"{api_base_url}/health", timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
     elif name == "update_item":
         item_id = arguments["item_id"]
         data = {k: v for k, v in arguments.items() if k not in ["item_id"] and v is not None}
-        response = await client.put(f"{api_base_url}/{item_id}", json=data)
+        response = await client.put(f"{api_base_url}/{item_id}", json=data, timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
     elif name == "delete_item":
         item_id = arguments["item_id"]
-        response = await client.delete(f"{api_base_url}/{item_id}")
+        response = await client.delete(f"{api_base_url}/{item_id}", timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text="Item deleted successfully")]
 
     elif name == "search_items":
         query = arguments.get("query", "")
         limit = arguments.get("limit", 10)
-        response = await client.get(f"{api_base_url}/search/query", params={"query": query, "limit": limit})
+        response = await client.get(f"{api_base_url}/search/query", params={"query": query, "limit": limit}, timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -228,15 +228,15 @@ async def handle_items_tool(name: str, arguments: dict, client, api_base_url: st
             user_id = int(arguments["user_id"])
         except Exception:
             return [TextContent(type="text", text=f"Error: user_id must be an integer, got {arguments.get('user_id')}")]
-        
-        response = await client.get(f"{api_base_url}/user/{user_id}", params={"skip": 0, "limit": 100})
+
+        response = await client.get(f"{api_base_url}/user/{user_id}", params={"skip": 0, "limit": 100}, timeout=10.0)
         response.raise_for_status()
         data = response.json()
-        
+
         return [TextContent(type="text", text=json.dumps(data))]
 
     elif name == "get_item_stats":
-        response = await client.get(f"{api_base_url}/stats")
+        response = await client.get(f"{api_base_url}/stats", timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -250,7 +250,7 @@ async def handle_items_tool(name: str, arguments: dict, client, api_base_url: st
 
     elif name == "delete_user_items":
         user_id = arguments["user_id"]
-        response = await client.delete(f"{api_base_url}/user/{user_id}/items")
+        response = await client.delete(f"{api_base_url}/user/{user_id}/items", timeout=10.0)
         response.raise_for_status()
         return [TextContent(type="text", text=f"All items deleted for user {user_id}")]
 

@@ -9,20 +9,21 @@ de `publisher.publish()` en cas d'erreur réseau.
 Note technique : pas d'image Testcontainers officielle pour Pub/Sub — on utilise
 DockerContainer directement avec l'image officielle Google Cloud SDK.
 """
+import logging
 import os
 import time
 
 import pytest
 from google.cloud import pubsub_v1
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 from testcontainers.core.container import DockerContainer
 from testcontainers.postgres import PostgresContainer
 
 PUBSUB_PROJECT = "test-project"
 PUBSUB_TOPIC = "cv-import-events"
 PUBSUB_SUBSCRIPTION = "cv-import-events-sub"
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
@@ -95,14 +96,14 @@ def pubsub_topic_and_sub(pubsub_emulator):
     # Créer le topic (idempotent)
     try:
         publisher.create_topic(request={"name": topic_path})
-    except Exception:
-        pass  # Déjà existant
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Pub/Sub topic already exists or creation failed (idempotent): %s", e)
 
     # Créer la souscription (idempotent)
     try:
         subscriber.create_subscription(request={"name": sub_path, "topic": topic_path})
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Pub/Sub subscription already exists or creation failed (idempotent): %s", e)
 
     subscriber.close()
 

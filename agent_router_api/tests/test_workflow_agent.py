@@ -85,12 +85,11 @@ class TestExtractDomain:
 class TestBuildWorkflowAgent:
     """Valide la structure du SequentialAgent WorkflowAgent."""
 
-    def test_creates_sequential_agent(self):
-        """build_workflow_agent() doit retourner un SequentialAgent."""
-        from google.adk.agents import SequentialAgent
-        from workflow_agent import build_workflow_agent
+    def test_creates_stategraph_agent(self):
+        """build_workflow_agent() doit retourner un StateGraphAgent."""
+        from workflow_agent import build_workflow_agent, StateGraphAgent
         wf = build_workflow_agent(_dummy_tool, _dummy_tool, _dummy_tool)
-        assert isinstance(wf, SequentialAgent)
+        assert isinstance(wf, StateGraphAgent)
 
     def test_workflow_name(self):
         """Le WorkflowAgent doit avoir le nom canonique Zenika."""
@@ -130,12 +129,12 @@ class TestBuildWorkflowAgent:
         assert router.name == "zenika_workflow_router"
 
     def test_router_has_all_tools(self):
-        """Le router doit recevoir les 3 outils A2A."""
+        """Le router doit recevoir les 4 outils A2A (incluant ask_mixed_agents)."""
         from workflow_agent import build_workflow_agent
         wf = build_workflow_agent(_dummy_tool, _dummy_tool, _dummy_tool)
         router = wf.sub_agents[1]
         # tools est une liste de callables ou FunctionTool wrappés
-        assert len(router.tools) == 3
+        assert len(router.tools) == 4
 
     def test_different_tools_passed_correctly(self):
         """Chaque outil A2A doit être distinct (hr, ops, missions)."""
@@ -149,7 +148,7 @@ class TestBuildWorkflowAgent:
         router = wf.sub_agents[1]
         tool_names = [getattr(t, "__name__", getattr(t, "name", "")) for t in router.tools]
         # Au moins un tool doit contenir "hr" ou "ops" dans son nom
-        assert any("hr" in name or "tool" in name for name in tool_names) or len(router.tools) == 3
+        assert any("hr" in name or "tool" in name for name in tool_names) or len(router.tools) == 4
 
 
 # ── Tests build_parallel_staffing_agent ──────────────────────────────────────

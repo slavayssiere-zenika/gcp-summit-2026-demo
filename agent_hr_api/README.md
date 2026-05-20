@@ -9,10 +9,10 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 336 | ✅ |
-| `conftest.py` | 22 | ✅ |
+| `main.py` | 335 | ✅ |
+| `conftest.py` | 21 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 315 | ✅ |
+| `agent.py` | 330 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

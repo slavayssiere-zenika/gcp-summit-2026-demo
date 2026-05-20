@@ -11,7 +11,6 @@ Contraintes :
   - Supporté sur : gemini-2.0-flash, gemini-2.5-flash, gemini-3.1-flash et variantes.
 
 Usage pattern :
-    from src.gemini_cache import get_or_create_prompt_cache, generate_with_cache
 
     cache_name = await get_or_create_prompt_cache(client, model, system_prompt, cache_key)
     response = await generate_with_cache(client, model, user_content, cache_name)
@@ -22,6 +21,8 @@ import os
 from typing import Optional
 
 from shared.cache import get_cache, set_cache, delete_cache
+from datetime import datetime, timezone
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ async def get_or_create_prompt_cache(
             existing = await client.aio.caches.get(name=cache_entry["name"])
             expire_time = existing.expire_time
             if expire_time:
-                from datetime import datetime, timezone
                 now = datetime.now(timezone.utc)
                 remaining_s = (expire_time - now).total_seconds()
                 if remaining_s > 300:
@@ -85,7 +85,6 @@ async def get_or_create_prompt_cache(
             await delete_cache(full_key)
 
     try:
-        from google.genai import types
 
         cache = await client.aio.caches.create(
             model=model,

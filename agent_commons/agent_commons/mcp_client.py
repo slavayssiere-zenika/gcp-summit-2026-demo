@@ -10,11 +10,10 @@ Key exports:
   - LONG_RUNNING_TOOLS : Set of tools that require a 120s timeout
 """
 
-import contextvars
 import logging
 import os
-import time
 import threading
+import time
 from typing import Any, List, Optional
 
 import httpx
@@ -23,6 +22,32 @@ from prometheus_client import Counter
 from pydantic import BaseModel, ValidationError
 
 from agent_commons.circuit_breaker import CircuitOpenError, get_circuit_breaker
+from agent_commons.guardrails_grounding import SUSPICIOUS_IDS, ID_ARG_KEYS
+from agent_commons.http_resilience import http_call_with_retry
+from shared.auth.context import auth_header_var
+
+
+class InvalidToolArgumentError(ValueError):
+    """Exception levée quand un argument de tool MCP est suspect ou fictif (Guardrail de Niveau 0)."""
+
+
+def validate_tool_arguments(tool_name: str, arguments: dict) -> None:
+    """Valide les arguments d'un outil pour intercepter les identifiants suspects ou inventés.
+
+    Lève InvalidToolArgumentError si un argument suspect est détecté.
+    """
+    for key, value in arguments.items():
+        if key.lower() not in ID_ARG_KEYS:
+            continue
+
+        str_val = str(value).strip().lower()
+        if str_val in SUSPICIOUS_IDS or (str_val.lstrip("-").isdigit() and int(str_val) <= 0):
+            raise InvalidToolArgumentError(
+                f"L'identifiant '{value}' fourni pour le paramètre '{key}' de l'outil '{tool_name}' est invalide. "
+                "Cet identifiant est fictif ou erroné (interception Guardrail de Niveau 0). "
+                "Veuillez utiliser un outil de recherche approprié (ex: search_users, list_missions, etc.) "
+                "pour trouver le véritable identifiant ou demander des clarifications à l'utilisateur."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +94,6 @@ except ValueError:
 # ---------------------------------------------------------------------------
 # Context variable — propagates Authorization header across async boundaries.
 # ---------------------------------------------------------------------------
-from shared.auth.context import auth_header_var
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +147,8 @@ class MCPHttpClient:
         auth = auth_header_var.get(None)
         if auth:
             headers["Authorization"] = auth
-        async with httpx.AsyncClient(headers=headers) as client:
-            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools")
+        async with httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools", timeout=10.0)
             res.raise_for_status()
             return res.json()
 
@@ -136,6 +160,7 @@ class MCPHttpClient:
         secondes (défaut : 5 échecs / 30s). Une CircuitOpenError est levée si le
         circuit est OPEN — l'agent doit la capturer et retourner une réponse dégradée.
         """
+        validate_tool_arguments(tool_name, arguments)
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info("[MCP-HTTP] Calling tool '%s' on %s with args: %s", tool_name, self.url, arguments)
         start_time = time.time()
@@ -147,14 +172,19 @@ class MCPHttpClient:
             headers["Authorization"] = auth
 
         async def _do_call() -> Any:
-            async with httpx.AsyncClient(headers=headers) as client:
-                timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
-                res = await client.post(
+            timeout = 120.0 if tool_name in LONG_RUNNING_TOOLS else 30.0
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=httpx.Timeout(timeout + 5.0, connect=5.0),
+            ) as client:
+                res = await http_call_with_retry(
+                    client,
+                    "post",
                     f"{self.url.rstrip('/')}/mcp/call",
                     json={"name": tool_name, "arguments": arguments},
                     timeout=timeout,
+                    log_prefix=f"[MCP-HTTP-RETRY][{tool_name}]",
                 )
-                res.raise_for_status()
                 try:
                     result = McpToolResult.model_validate(res.json())
                     result_data = result.result
@@ -212,6 +242,7 @@ class MCPSseClient:
             return [{"name": t.name, "description": t.description, "inputSchema": t.inputSchema} for t in res.tools]
 
     async def call_tool(self, tool_name: str, arguments: dict) -> Any:
+        validate_tool_arguments(tool_name, arguments)
         from contextlib import AsyncExitStack
 
         from mcp.client.session import ClientSession

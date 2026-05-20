@@ -1,3 +1,6 @@
+import json
+
+
 def extract_mid_parents(nodes: list[dict]) -> list[str]:
     parents: list[str] = []
     for n in nodes:
@@ -9,6 +12,7 @@ def extract_mid_parents(nodes: list[dict]) -> list[str]:
             parents.extend(extract_mid_parents(subs))
     return parents
 
+
 def _collect_leaves(nodes: list[dict], acc: list[str]) -> None:
     for n in nodes:
         subs: list = n.get("sub_competencies") or []
@@ -19,10 +23,12 @@ def _collect_leaves(nodes: list[dict], acc: list[str]) -> None:
         else:
             _collect_leaves(subs, acc)
 
+
 def extract_leaf_names(nodes: list[dict], max_leaves: int = 300) -> list[str]:
     acc: list[str] = []
     _collect_leaves(nodes, acc)
     return acc[:max_leaves]
+
 
 def _collect_all_known_names(nodes: list[dict]) -> set[str]:
     """Retourne les noms canoniques ET tous les aliases de TOUTES les compétences (feuilles et parents).
@@ -43,7 +49,7 @@ def _collect_all_known_names(nodes: list[dict]) -> set[str]:
                 a = alias.strip()
                 if a:
                     known.add(a.lower())
-            
+
             subs: list = n.get("sub_competencies") or []
             if subs:
                 _traverse(subs)
@@ -51,8 +57,8 @@ def _collect_all_known_names(nodes: list[dict]) -> set[str]:
     _traverse(nodes)
     return known
 
+
 def build_taxonomy_context(nodes: list[dict], max_leaves: int = 300) -> tuple[str, int, int]:
-    import json
     parent_categories = extract_mid_parents(nodes)
     leaf_names = extract_leaf_names(nodes, max_leaves=max_leaves)
     context = (
@@ -64,11 +70,13 @@ def build_taxonomy_context(nodes: list[dict], max_leaves: int = 300) -> tuple[st
     )
     return context, len(parent_categories), len(leaf_names)
 
+
 def find_domains_for_skills(skills: list[str], nodes: list[dict]) -> list[str]:
     if not skills or not nodes:
         return []
     domains = set()
     skills_lower = {s.lower() for s in skills}
+
     def _search(current_nodes: list[dict], current_domain: str | None = None) -> None:
         for node in current_nodes:
             node_name = node.get("name", "")

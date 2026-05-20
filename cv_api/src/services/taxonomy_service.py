@@ -28,6 +28,8 @@ from src.gemini_cache import get_or_create_prompt_cache
 from src.gemini_retry import generate_content_with_retry
 from src.services.config import COMPETENCIES_API_URL, PROMPTS_API_URL
 from src.services.finops import log_finops
+from sqlalchemy.future import select as sa_select
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,6 @@ async def get_existing_competencies(auth_header: str) -> list[str]:
     Returns:
         Liste de noms de compétences (strings). Vide si l'API est indisponible.
     """
-    from sqlalchemy.future import select as sa_select
 
     try:
         async with httpx.AsyncClient(timeout=45.0) as http_client:
@@ -166,7 +167,6 @@ async def run_taxonomy_step(
         genai_client: Client GenAI initialisé.
         target_pillar: Pilier ciblé pour l'étape "reduce" (None = tous).
     """
-    from google.genai import types
 
     try:
         if not genai_client:

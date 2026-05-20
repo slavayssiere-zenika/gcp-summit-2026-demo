@@ -18,15 +18,17 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from src.prompts import router
 from src.prompts.router import verify_jwt
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+try:
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    _CLOUD_TRACE_AVAILABLE = True
+except ImportError:
+    _CLOUD_TRACE_AVAILABLE = False
+
+_trace_exporter_type = os.getenv("TRACE_EXPORTER", "grpc")
+if _trace_exporter_type == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -38,7 +40,7 @@ provider = TracerProvider(
     }),
     sampler=sampler
 )
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp" and _CLOUD_TRACE_AVAILABLE:
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
@@ -114,8 +116,8 @@ async def get_spec():
 # Rule §3 (AGENTS.md): Toute logique métier expose un proxy vers son MCP sidecar
 
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://prompts_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"

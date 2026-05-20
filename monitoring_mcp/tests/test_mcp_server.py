@@ -182,7 +182,7 @@ async def test_execute_read_only_query_select_ok(mocker):
     mock_engine.connect.return_value = mock_conn
     mock_engine.dispose = AsyncMock()
 
-    mocker.patch("sqlalchemy.ext.asyncio.create_async_engine", return_value=mock_engine)
+    mocker.patch("tools.data_tools.create_async_engine", return_value=mock_engine)
 
     result = await call_tool("execute_read_only_query", {"query": "SELECT id, name FROM users LIMIT 10"})
     assert len(result) == 1

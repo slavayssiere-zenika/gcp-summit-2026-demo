@@ -14,6 +14,9 @@ import os
 import httpx
 from shared.auth.context import auth_header_var
 from opentelemetry.propagate import inject
+import redis as redis_lib
+from google.cloud import bigquery
+from .infra_tools import list_gcp_services_internal
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +71,6 @@ async def check_component_health_internal(component_name: str) -> dict:
     try:
         # 1. Redis Check
         if "redis" in component_name.lower():
-            import redis as redis_lib
             redis_url = os.getenv("REDIS_URL", "redis://redis:6379/13")
             try:
                 r = redis_lib.from_url(redis_url, socket_timeout=2.0)
@@ -80,7 +82,6 @@ async def check_component_health_internal(component_name: str) -> dict:
         # 2. BigQuery / AlloyDB Check
         if any(k in component_name.lower() for k in ["bigquery", "alloydb"]):
             try:
-                from google.cloud import bigquery
                 project_id = os.getenv("GCP_PROJECT_ID", "")
                 bq_client = bigquery.Client(project=project_id)
                 bq_client.list_datasets(max_results=1)
@@ -97,7 +98,7 @@ async def check_component_health_internal(component_name: str) -> dict:
             url = f"http://api.internal.zenika{target_path}health"
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    res = await client.get(url)
+                    res = await client.get(url, timeout=10.0)
                     if res.status_code == 200:
                         return {"status": "healthy", "component": component_name, "url": url, "code": 200}
                     else:
@@ -106,7 +107,6 @@ async def check_component_health_internal(component_name: str) -> dict:
                 return {"status": "unreachable", "component": component_name, "url": url, "error": str(he)}
 
         # 4. Fallback GCP discovery
-        from .infra_tools import list_gcp_services_internal
         services = await list_gcp_services_internal()
         if any(s["name"] == component_name for s in services if isinstance(s, dict)):
             return {"status": "unknown", "component": component_name, "message": "Service exists in GCP but ILB mapping is missing."}  # noqa: E501
@@ -126,7 +126,6 @@ async def check_all_components_health_internal() -> list:
         Liste de résultats check_component_health pour chaque composant.
     """
     try:
-        from .infra_tools import list_gcp_services_internal
 
         gcp_services = await list_gcp_services_internal()
         is_valid_list = (
@@ -175,7 +174,7 @@ async def get_ingestion_pipeline_status_internal() -> dict:
             headers["Authorization"] = auth
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(f"{drive_api_url.rstrip('/')}/status", headers=headers)
+            res = await client.get(f"{drive_api_url.rstrip('/')}/status", headers=headers, timeout=10.0)
             res.raise_for_status()
             data = res.json()
 

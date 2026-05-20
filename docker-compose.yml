@@ -861,7 +861,8 @@ services:
     volumes:
       - ./locust/data:/data:ro
     environment:
-      - MOCK_LLM_LATENCY_MAX_S=3
+      - MOCK_LLM_LATENCY_MAX_S=3          # Latence simulée pour generateContent (inférence LLM)
+      - MOCK_LLM_EMBED_LATENCY_MAX_S=0    # Embeddings servis en O(1) depuis pool pré-généré → 0s
       - MOCK_LLM_EMBEDDING_DIM=3072
       - MOCK_DATA_FILE=/data/mock_cv_pool.json
     profiles:

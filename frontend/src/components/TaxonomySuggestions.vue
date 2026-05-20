@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: taxonomy suggestions details)
 import { Network, CheckCircle, XCircle, AlignLeft, Tag, Search, X } from 'lucide-vue-next'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Suggestion {
@@ -169,6 +171,15 @@ onMounted(() => {
   fetchSuggestions()
   fetchAllCompetencies()
 })
+
+// ── Focus Trap pour la modale alias (WCAG 2.1 AA — 2.1.2) ───────────────
+// Teleport vers <body> n'affecte pas le composable : il cible l'élément DOM réel.
+const { trapRef: aliasTrapRef, activateTrap: activateAliasTrap, deactivateTrap: deactivateAliasTrap } = useFocusTrap()
+
+watch(aliasModal, (open) => {
+  if (open) activateAliasTrap()
+  else deactivateAliasTrap()
+})
 </script>
 
 <template>
@@ -241,7 +252,7 @@ onMounted(() => {
   <!-- ── Modale : Ajouter comme alias ──────────────────────────────────── -->
   <Teleport to="body">
     <div v-if="aliasModal" class="modal-backdrop" @click.self="closeAliasModal" role="dialog" aria-modal="true" aria-labelledby="alias-modal-title">
-      <div class="modal-box">
+      <div class="modal-box" :ref="(el) => { if (el) aliasTrapRef.value = el as HTMLElement }">
         <div class="modal-header">
           <div class="modal-title-group">
             <Tag size="18" class="modal-icon" />

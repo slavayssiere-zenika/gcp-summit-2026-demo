@@ -5,6 +5,7 @@ import os
 
 from google.cloud import pubsub_v1
 from opentelemetry.propagate import inject
+import google.auth
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ def _resolve_project_id() -> str:
     if pid and pid not in ("your-gcp-project-id", "YOUR_GCP_PROJECT_ID"):
         return pid
     try:
-        import google.auth
         _, project = google.auth.default()
         if project:
             logger.info("[PubSub/users] Project ID résolu via ADC : '%s'", project)

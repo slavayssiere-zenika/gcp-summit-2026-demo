@@ -51,7 +51,7 @@ const runAnalysis = async () => {
         <p>{{ t('admin_finops.scanner_desc') }}</p>
       </div>
       
-      <button class="run-btn" @click="runAnalysis" :disabled="isAnalyzing">
+      <button class="run-btn" @click="runAnalysis" :disabled="isAnalyzing" aria-label="Lancer le diagnostic FinOps">
         <Loader2 v-if="isAnalyzing" size="20" class="spin" />
         <PlayCircle v-else size="20" />
         {{ isAnalyzing ? 'Analyse en cours...' : 'Lancer le diagnostic FinOps' }}

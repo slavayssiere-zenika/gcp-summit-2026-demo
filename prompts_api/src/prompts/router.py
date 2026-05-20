@@ -11,6 +11,9 @@ from .analyzer import (generate_error_correction_prompt, generate_test_cases,
                        improve_prompt_with_gemini, run_promptfoo_analysis)
 from .auth import verify_jwt
 from .schemas import PaginatedPromptsResponse
+from sqlalchemy import func
+import hashlib
+import google.auth
 
 
 def verify_admin(payload: dict = Depends(verify_jwt)):
@@ -89,7 +92,6 @@ async def list_prompts(
     admin: dict = Depends(verify_admin),
 ):
     """Liste tous les prompts avec pagination. Réservé aux admins."""
-    from sqlalchemy import func
     total = (await db.execute(select(func.count()).select_from(models.Prompt))).scalar_one()
     prompts = (await db.execute(select(models.Prompt).offset(skip).limit(limit))).scalars().all()
     return PaginatedPromptsResponse(prompts=prompts, total=total, skip=skip, limit=limit)
@@ -196,7 +198,6 @@ async def report_error_for_prompt(
     db: AsyncSession = Depends(get_db),
     token_payload: dict = Depends(verify_jwt)
 ):
-    import hashlib
     try:
         stmt = select(models.Prompt).where(models.Prompt.key == "prompts_api.error_correction")
         result = await db.execute(stmt)
@@ -218,7 +219,6 @@ async def report_error_for_prompt(
 
         # Récupération dynamique du Project ID
         try:
-            import google.auth
             _, project_id = google.auth.default()
         except Exception:
             project_id = "unknown-project"

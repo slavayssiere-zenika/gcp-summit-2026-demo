@@ -1,8 +1,10 @@
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock, mock_open
-from fastapi.testclient import TestClient
-from mcp_app import app
 import json
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from mcp_app import app
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -62,7 +64,9 @@ def test_execute_tool(mock_call_tool, override_verify_jwt):
     mock_res.model_dump.return_value = {"text": "success"}
     mock_call_tool.return_value = [mock_res]
 
-    response = client.post("/mcp/call", json={"name": "test_tool", "arguments": {}}, headers={"Authorization": "Bearer token"})
+    response = client.post(
+        "/mcp/call", json={"name": "test_tool", "arguments": {}}, headers={"Authorization": "Bearer token"}
+    )
     assert response.status_code == 200
     assert response.json()["result"][0]["text"] == "success"
 
@@ -71,7 +75,9 @@ def test_execute_tool(mock_call_tool, override_verify_jwt):
 def test_execute_tool_error(mock_call_tool, override_verify_jwt):
     mock_call_tool.side_effect = ValueError("test error")
 
-    response = client.post("/mcp/call", json={"name": "test_tool", "arguments": {}}, headers={"Authorization": "Bearer token"})
+    response = client.post(
+        "/mcp/call", json={"name": "test_tool", "arguments": {}}, headers={"Authorization": "Bearer token"}
+    )
     assert response.status_code == 500
 
 
@@ -87,7 +93,7 @@ def test_get_topology_cache_hit(mock_redis_from_url, override_verify_jwt):
 
 
 @patch('redis.from_url')
-@patch('mcp_server.get_infrastructure_topology', new_callable=AsyncMock)
+@patch('mcp_app.get_infrastructure_topology', new_callable=AsyncMock)
 def test_get_topology_no_cache(mock_get_infra, mock_redis_from_url, override_verify_jwt):
     mock_redis = MagicMock()
     mock_redis.get.return_value = None

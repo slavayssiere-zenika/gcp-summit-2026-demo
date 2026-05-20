@@ -4,13 +4,13 @@ import re
 
 import httpx
 from google.genai import types
-
 try:
     import docx
 except ImportError:
     docx = None
 
 logger = logging.getLogger(__name__)
+
 
 async def extract_document_contents(url: str, file_bytes: bytes, file_mime: str, description: str, headers: dict, http_client: httpx.AsyncClient) -> tuple[list, str]:
     """
@@ -31,9 +31,9 @@ async def extract_document_contents(url: str, file_bytes: bytes, file_mime: str,
                 fetch_url = url
         else:
             fetch_url = url
-            
+
         req_heads = headers.copy()
-        doc_res = await http_client.get(fetch_url, headers=req_heads, follow_redirects=True)
+        doc_res = await http_client.get(fetch_url, headers=req_heads, follow_redirects=True, timeout=10.0)
         if doc_res.status_code == 200:
             gemini_contents.append(f"Mission Text Document from URL: \n{doc_res.text}")
             if not final_description:
@@ -51,7 +51,7 @@ async def extract_document_contents(url: str, file_bytes: bytes, file_mime: str,
             # On extrait le texte brut via python-docx et on l'injecte comme contenu texte.
             if docx is None:
                 raise RuntimeError("python-docx is not installed, cannot process DOCX files")
-                
+
             try:
                 doc = docx.Document(io.BytesIO(file_bytes))
                 docx_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())

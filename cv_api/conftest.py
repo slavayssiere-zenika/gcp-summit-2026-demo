@@ -18,7 +18,6 @@ _MONOREPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _MONOREPO_ROOT not in sys.path:
     sys.path.insert(0, _MONOREPO_ROOT)
 
-
 # CRITICAL: Variables d'environnement AVANT tout import qui les utilise au niveau module
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./cv_test.db"
 os.environ["SECRET_KEY"] = "testsecret"
@@ -36,7 +35,7 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
     with patch("redis.asyncio.from_url", return_value=_mock_redis):
         from main import app  # noqa: E402
         from shared.database import get_db  # noqa: E402
-    from shared.auth.jwt import verify_jwt  # noqa: E402
+        from shared.auth.jwt import verify_jwt  # noqa: E402
 
 
 # ── Overrides globaux ──────────────────────────────────────────────────────────

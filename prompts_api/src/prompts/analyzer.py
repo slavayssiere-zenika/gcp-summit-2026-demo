@@ -6,6 +6,8 @@ import tempfile
 from google import genai
 from google.genai import types
 from src.gemini_retry import generate_content_with_retry
+import yaml
+import asyncio
 
 
 def get_genai_client():
@@ -14,10 +16,11 @@ def get_genai_client():
         raise ValueError("GOOGLE_API_KEY environment variable is missing.")
     return genai.Client(api_key=api_key)
 
+
 async def generate_test_cases(prompt_value: str) -> list:
     """Uses Gemini to generate synthetic test cases for a given prompt."""
     client = get_genai_client()
-    
+
     system_instruction = """
     You are an AI testing expert. Generate 3 diverse test cases for the following system prompt.
     For each test case, provide an input 'user_query' that a user might ask, and a 'rubric' that describes what a successful response should look like according to the system prompt's rules.
@@ -27,7 +30,7 @@ async def generate_test_cases(prompt_value: str) -> list:
         ...
     ]
     """
-    
+
     response = await generate_content_with_retry(
         client,
         model=os.getenv('GEMINI_MODEL'),
@@ -38,12 +41,13 @@ async def generate_test_cases(prompt_value: str) -> list:
             temperature=0.7
         )
     )
-    
+
     try:
         return json.loads(response.text)
     except Exception as e:
         print(f"Error parsing Gemini response: {e}")
         return []
+
 
 async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
     """Generates promptfooconfig, runs eval, and returns the result."""
@@ -52,9 +56,9 @@ async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
         with open(prompt_file, "w") as f:
             # We wrap the prompt in a structure promptfoo can use
             f.write(prompt_value + "\n\nUser: {{user_query}}")
-            
+
         config_file = os.path.join(tmpdir, "promptfooconfig.yaml")
-        
+
         tests_yaml = []
         for tc in test_cases:
             rubric = tc.get("rubric", "The output is helpful and follows instructions.")
@@ -69,36 +73,35 @@ async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
                     }
                 ]
             })
-            
+
         config = {
             "prompts": ["prompt.txt"],
             "providers": [f"google:{os.getenv('GEMINI_MODEL')}"],
             "tests": tests_yaml
         }
-        
-        import yaml
+
         with open(config_file, "w") as f:
             yaml.dump(config, f)
-            
+
         output_file = os.path.join(tmpdir, "output.json")
-        
+
         # Run promptfoo
         try:
             # promptfoo requires standard environment variables for Google
             env = os.environ.copy()
             # Disable telemetry for cleaner logs
             env["PROMPTFOO_DISABLE_TELEMETRY"] = "1"
-            
-            import asyncio
+
             result = await asyncio.to_thread(subprocess.run,
-                ["promptfoo", "eval", "-c", config_file, "-o", output_file, "--no-progress-bar", "--no-table"],
-                cwd=tmpdir,
-                env=env,
-                check=False, 
-                capture_output=True,
-                text=True
-            )
-            
+                                             ["promptfoo", "eval", "-c", config_file, "-o",
+                                                 output_file, "--no-progress-bar", "--no-table"],
+                                             cwd=tmpdir,
+                                             env=env,
+                                             check=False,
+                                             capture_output=True,
+                                             text=True
+                                             )
+
             if os.path.exists(output_file):
                 with open(output_file, "r") as f:
                     return json.load(f)
@@ -108,14 +111,15 @@ async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:
                     "stdout": result.stdout,
                     "stderr": result.stderr
                 }
-                
+
         except Exception as e:
             return {"error": str(e)}
+
 
 async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> str:
     """Uses Gemini to suggest a better prompt based on evaluation."""
     client = get_genai_client()
-    
+
     # Extract failing tests or feedback from promptfoo eval output
     failures = []
     if "results" in eval_data and eval_data["results"]:
@@ -125,17 +129,17 @@ async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> s
                     "input": res.get("vars", {}).get("user_query", ""),
                     "reason": res.get("error") or "Failed llm-rubric check"
                 })
-                
+
     feedback_text = "The prompt performed perfectly in tests." if not failures else f"The prompt failed on these cases: {json.dumps(failures)}"
-                
+
     system_instruction = """
     You are an Expert Prompt Engineer. Your task is to greatly improve the given system prompt.
     Make it more robust, precise, and less prone to edge cases.
     Output ONLY the improved prompt text. No markdown blocks, no chat, just the raw prompt.
     """
-    
+
     prompt = f"Original Prompt:\n{original_prompt}\n\nFeedback from Evaluation:\n{feedback_text}\n\nPlease provide the improved prompt."
-    
+
     response = await generate_content_with_retry(
         client,
         model=os.environ['GEMINI_PRO_MODEL'],
@@ -145,24 +149,25 @@ async def improve_prompt_with_gemini(original_prompt: str, eval_data: dict) -> s
             temperature=0.4
         )
     )
-    
+
     # Clean up response if it wraps in markdown
     improved = response.text.strip()
     if improved.startswith("```"):
         lines = improved.split("\n")
         if len(lines) > 2:
             improved = "\n".join(lines[1:-1])
-            
+
     return improved
+
 
 async def generate_error_correction_prompt(error_report, system_instruction: str) -> str:
     """Uses Gemini to generate a system prompt directive to avoid a specific error."""
     client = get_genai_client()
-    
+
     context_text = f"\\nContext:\\n{error_report.context}" if error_report.context else ""
     context_text = f"\nContext:\n{error_report.context}" if error_report.context else ""
     prompt = f"Service: {error_report.service_name}\nError Message: {error_report.error_message}{context_text}\n\nPlease generate the defensive prompt rule."
-    
+
     response = await generate_content_with_retry(
         client,
         model=os.environ['GEMINI_PRO_MODEL'],
@@ -172,11 +177,11 @@ async def generate_error_correction_prompt(error_report, system_instruction: str
             temperature=0.2
         )
     )
-    
+
     improved = response.text.strip()
     if improved.startswith("```"):
         lines = improved.split("\n")
         if len(lines) > 2:
             improved = "\n".join(lines[1:-1])
-            
+
     return improved

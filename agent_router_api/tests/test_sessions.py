@@ -12,7 +12,7 @@ Couverture :
   - Zero-trust     : toutes les routes exigent un JWT valide
 """
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,23 +38,26 @@ def get_auth_token(sub: str = "user@zenika.com") -> str:
 # ---------------------------------------------------------------------------
 
 class FakeRedis:
-    """Redis synchrone ultra-minimal pour les tests des helpers."""
+    """Redis async ultra-minimal pour les tests des helpers (mimique redis.asyncio)."""
 
     def __init__(self, initial: dict | None = None):
         self._store: dict = dict(initial or {})
 
-    def get(self, key: str):
+    async def get(self, key: str):
         val = self._store.get(key)
         return val.encode() if isinstance(val, str) else val
 
-    def set(self, key: str, value, ex=None):
+    async def set(self, key: str, value, ex=None):
         self._store[key] = value
 
-    def exists(self, key: str) -> int:
+    async def exists(self, key: str) -> int:
         return 1 if key in self._store else 0
 
-    def delete(self, key: str):
+    async def delete(self, key: str):
         self._store.pop(key, None)
+
+    async def close(self):
+        pass
 
 
 def _sessions_json(sessions: list) -> bytes:
@@ -67,70 +70,78 @@ def _sessions_json(sessions: list) -> bytes:
 
 
 class TestLoadSessions:
-    def test_returns_empty_when_no_key(self, mocker):
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_key(self, mocker):
         fake_r = FakeRedis()
         mocker.patch("router._get_redis", return_value=fake_r)
         from router import _load_sessions
-        assert _load_sessions("user@test.com") == []
+        assert await _load_sessions("user@test.com") == []
 
-    def test_returns_parsed_list(self, mocker):
+    @pytest.mark.asyncio
+    async def test_returns_parsed_list(self, mocker):
         sessions = [{"id": "u1", "name": "Défaut", "created_at": "2026-01-01T00:00:00+00:00"}]
         fake_r = FakeRedis({"chat:sessions:u1": json.dumps(sessions)})
         mocker.patch("router._get_redis", return_value=fake_r)
         from router import _load_sessions
-        result = _load_sessions("u1")
+        result = await _load_sessions("u1")
         assert result == sessions
 
-    def test_returns_empty_on_redis_error(self, mocker):
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_redis_error(self, mocker):
         bad_r = MagicMock()
         bad_r.get.side_effect = Exception("Redis down")
         mocker.patch("router._get_redis", return_value=bad_r)
         from router import _load_sessions
-        assert _load_sessions("u1") == []
+        assert await _load_sessions("u1") == []
 
 
 class TestSaveSessions:
-    def test_serializes_to_json(self, mocker):
+    @pytest.mark.asyncio
+    async def test_serializes_to_json(self, mocker):
         fake_r = FakeRedis()
         mocker.patch("router._get_redis", return_value=fake_r)
         from router import _save_sessions
         sessions = [{"id": "u1:abc", "name": "Test", "created_at": "2026-01-01T00:00:00+00:00"}]
-        _save_sessions("u1", sessions)
+        await _save_sessions("u1", sessions)
         stored = json.loads(fake_r._store["chat:sessions:u1"])
         assert stored == sessions
 
-    def test_silent_on_redis_error(self, mocker):
+    @pytest.mark.asyncio
+    async def test_silent_on_redis_error(self, mocker):
         bad_r = MagicMock()
         bad_r.set.side_effect = Exception("Redis down")
         mocker.patch("router._get_redis", return_value=bad_r)
         from router import _save_sessions
         # Ne doit pas lever d'exception
-        _save_sessions("u1", [])
+        await _save_sessions("u1", [])
 
 
 class TestMigrateLegacySession:
-    def test_migrates_when_legacy_key_exists(self, mocker):
+    @pytest.mark.asyncio
+    async def test_migrates_when_legacy_key_exists(self, mocker):
         fake_r = FakeRedis({"adk:sessions:u@test.com": b"pickled_data"})
         mocker.patch("router._get_redis", return_value=fake_r)
         from router import _migrate_legacy_session
-        result = _migrate_legacy_session("u@test.com", [])
+        result = await _migrate_legacy_session("u@test.com", [])
         assert len(result) == 1
         assert result[0]["id"] == "u@test.com"
         assert result[0]["name"] == "Défaut"
 
-    def test_no_migration_when_no_legacy_key(self, mocker):
+    @pytest.mark.asyncio
+    async def test_no_migration_when_no_legacy_key(self, mocker):
         fake_r = FakeRedis()
         mocker.patch("router._get_redis", return_value=fake_r)
         from router import _migrate_legacy_session
-        result = _migrate_legacy_session("u@test.com", [])
+        result = await _migrate_legacy_session("u@test.com", [])
         assert result == []
 
-    def test_returns_input_list_on_redis_error(self, mocker):
+    @pytest.mark.asyncio
+    async def test_returns_input_list_on_redis_error(self, mocker):
         bad_r = MagicMock()
         bad_r.exists.side_effect = Exception("Redis down")
         mocker.patch("router._get_redis", return_value=bad_r)
         from router import _migrate_legacy_session
-        result = _migrate_legacy_session("u@test.com", [])
+        result = await _migrate_legacy_session("u@test.com", [])
         assert result == []
 
 

@@ -12,6 +12,7 @@ from src.drive_service import DriveService
 from src.models import DriveSyncStatus
 from src.schemas import FolderCreate, FolderResponse, FolderStats, FolderUpdate, PaginatedFoldersResponse
 from src.services.folder_service import FolderService
+from shared.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,6 @@ async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSessio
     SANS repasser les statuts en PENDING pour les fichiers déjà importés et non modifiés.
     """
     async def run_rebuild():
-        from shared.database import SessionLocal
         try:
             await set_cache("drive:sync:rebuild_running", "1", 1800)  # 30 min max
             async with SessionLocal() as session:

@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
 
@@ -26,8 +28,6 @@ class User(Base):
     merged_into_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     is_anonymous = Column(Boolean, default=False, nullable=False)
 
-    from sqlalchemy import JSON
-    from sqlalchemy.dialects.postgresql import JSONB
     unavailability_periods = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
 
 

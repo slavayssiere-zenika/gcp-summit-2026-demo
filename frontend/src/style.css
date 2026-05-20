@@ -6,7 +6,6 @@
   /* Surface Colors */
   --color-surface-base: #ffffff;
   --color-surface-hover: #f1f5f9;
-  --bg-app-gradient: linear-gradient(135deg, #f8f9ff 0%, #f1f4f9 100%);
   --background-alt: #f8f9fa;
   
   /* Text Colors */
@@ -20,8 +19,6 @@
   /* Spacing */
   --space-2: 0.5rem;
   --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
 
   /* Borders & Radius */
   --border-subtle: 1px solid #e2e8f0;
@@ -45,7 +42,6 @@
   --text-light: #64748b;
   --text-color: #1e293b;
   --primary-color: var(--zenika-red);
-  --primary-light: #f87171;
   --bg-color: var(--bg-gradient);
 
   font-family: var(--font-family-base);
@@ -125,17 +121,9 @@ a {
 }
 
 /* Responsive Breakpoints & Utilities */
-@media (max-width: 1024px) {
-  :root {
-    --space-8: 1.5rem;
-  }
-}
-
 @media (max-width: 768px) {
   :root {
     --space-4: 0.75rem;
-    --space-6: 1rem;
-    --space-8: 1rem;
   }
   
   html {
@@ -143,6 +131,18 @@ a {
   }
   
   .hide-on-mobile {
-    display: none !important;
+    display: none !important; /* exception: utility class requires !important override */
+  }
+}
+
+/* ── Accessibilité : Mouvements réduits (WCAG 2.3.3) ── */
+/* Désactive les animations et transitions pour les utilisateurs ayant configuré
+   « Réduire les animations » dans les préférences de leur système d'exploitation. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms /* exception: prefers-reduced-motion requires !important to override scoped animations */ !important;
+    animation-iteration-count: 1 /* exception: prefers-reduced-motion requires !important to override scoped animations */ !important;
+    transition-duration: 0.01ms /* exception: prefers-reduced-motion requires !important to override scoped animations */ !important;
+    scroll-behavior: auto /* exception: prefers-reduced-motion requires !important to override scoped scroll-behavior */ !important;
   }
 }

@@ -1,4 +1,6 @@
 """Consumer DTO for authentication (users_api responses)."""
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -7,3 +9,5 @@ class TokenResponse(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+    username: Optional[str] = None
+    role: Optional[str] = None

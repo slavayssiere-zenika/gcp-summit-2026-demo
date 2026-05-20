@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.google_auth import get_google_access_token, get_google_oidc_id_token, get_m2m_jwt_token
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
+import google.auth as _google_auth
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,6 @@ def _resolve_gcp_project_id() -> str:
         return env_val
 
     try:
-        import google.auth as _google_auth
         _, project_id = _google_auth.default()
         if project_id:
             logger.info(f"[PubSub] GCP project ID résolu via ADC : '{project_id}'")

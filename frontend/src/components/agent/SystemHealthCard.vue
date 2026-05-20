@@ -105,7 +105,7 @@ const formatComponentName = (name: string) => {
     <div class="components-grid">
       <div
         v-for="(comp, idx) in components"
-        :key="idx"
+        :key="comp.component || 'comp-' + idx"
         class="component-card"
         :class="getStatusColor(comp.status)"
       >

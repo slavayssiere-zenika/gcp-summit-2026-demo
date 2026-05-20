@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from google.cloud import pubsub_v1
 
 from src.services.data_quality_service import compute_data_quality_report
+import shared.database as _db_module  # Import tardif : évite circular import au toplevel
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,6 @@ async def publish_data_quality_snapshot(
         if db is None:
             # Appelé depuis un asyncio.Task (ex: post-batch) sans session HTTP FastAPI.
             # On ouvre notre propre session DB pour les requêtes SQL.
-            import database as _db_module  # Import tardif : évite circular import au toplevel
             async with _db_module.SessionLocal() as own_db:
                 report = await compute_data_quality_report(own_db, auth_header)
         else:

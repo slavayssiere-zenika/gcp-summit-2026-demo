@@ -107,12 +107,14 @@ function formatDate(iso: string): string {
         <!-- Mode édition inline -->
         <template v-if="editingId === session.id">
           <input
+            :id="'session-edit-input-' + session.id"
             v-model="editingName"
             class="session-name-input"
             @keydown="handleEditKeydown($event, session.id)"
             @click.stop
             autofocus
             maxlength="40"
+            aria-label="Nom de la session"
           />
           <div class="session-edit-actions">
             <button class="icon-btn confirm" @click.stop="confirmEdit(session.id)" title="Valider">
@@ -350,6 +352,11 @@ function formatDate(iso: string): string {
   background: white;
   outline: none;
   min-width: 0;
+}
+
+/* Compensation focus clavier WCAG 2.1 AA */
+.session-name-input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(227, 25, 55, 0.25);
 }
 
 .session-edit-actions {

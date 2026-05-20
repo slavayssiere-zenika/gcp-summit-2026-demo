@@ -188,8 +188,9 @@ _SEEDED_READY = bool(_CV_PROFILE_USER_IDS)  # True = pas besoin de bootstrap API
 
 # ── Classe 1 : Navigation utilisateur classique ───────────────────────────────
 
-# LOCUST_SCENARIO=navigation -> ZenikaPerfUser uniquement (stress test navigation pure, 500 users).
+# LOCUST_SCENARIO=navigation  -> ZenikaPerfUser uniquement (stress test 500 users).
 # LOCUST_SCENARIO=full (defaut) -> ZenikaPerfUser (poids 3) + CVIngestionPipelineUser (poids 1).
+# LOCUST_SCENARIO=ingestion    -> CVIngestionPipelineUser uniquement, s'arrête quand CV_TARGET atteint.
 _SCENARIO = os.getenv("LOCUST_SCENARIO", "full")
 
 
@@ -198,9 +199,11 @@ class ZenikaPerfUser(HttpUser):
     Simule un utilisateur standard naviguant sur la plateforme.
     Charge : lecture des listes (users, items, compétences, missions).
     En mode navigation (LOCUST_SCENARIO=navigation) : seule classe active (500 users).
+    Désactivé en mode ingestion (weight=0).
     """
-    weight = 1 if _SCENARIO == "navigation" else 3  # 75 % du trafic total
+    weight = 0 if _SCENARIO in ("navigation", "ingestion") else 3  # 75 % du trafic en mode full
     wait_time = between(1, 3)
+    _bootstrapped_globally = False
 
     def on_start(self):
         self.users_api = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -211,58 +214,121 @@ class ZenikaPerfUser(HttpUser):
         self.drive_api = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
         self.prompts_api = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
         self._login()
-        # Si seeded_ids.json est charge, les pools sont deja remplis au niveau module
-        # → pas besoin d appel API au demarrage (evite le burst initial)
-        if not _SEEDED_READY:
-            if not _CV_PROFILE_USER_IDS:
-                self._bootstrap_cv_pool()
-            if not _MISSION_IDS:
-                self._bootstrap_mission_pool()
 
-    def _bootstrap_cv_pool(self) -> None:
-        """Charge les user_ids ayant un profil CV depuis GET /cv/users/tags/map.
+        # Intercept requests to refresh token and update headers dynamically
+        original_request = self.client.request
 
-        Appele une seule fois au premier on_start pour eviter les 404
-        sur GET /cv/user/{id} et /cv/user/{id}/missions.
-        """
-        try:
-            res = self.client.get(
-                f"{self.cv_api}/users/tags/map",
-                headers=self.headers,
-                name="[Bootstrap] GET /cv/users/tags/map",
-            )
-            if res.status_code == 200:
-                uid_map = res.json()
-                for uid_str in uid_map.keys():
-                    try:
-                        _CV_PROFILE_USER_IDS.append(int(uid_str))
-                    except ValueError:
-                        pass
-                print(f"[Bootstrap] {len(_CV_PROFILE_USER_IDS)} users avec profil CV charges.")
-        except Exception as e:
-            print(f"[Bootstrap] Erreur chargement pool CV: {e}")
+        def custom_request(*args, **kwargs):
+            url = args[1] if len(args) > 1 else kwargs.get("url", "")
+            if "/login" not in str(url):
+                self._ensure_fresh_token()
+                if "headers" in kwargs and self.headers:
+                    kwargs["headers"] = self.headers
+            return original_request(*args, **kwargs)
+        self.client.request = custom_request
 
-    def _bootstrap_mission_pool(self) -> None:
-        """Charge les IDs de missions depuis GET /missions/.
+        # Dynamic bootstrapping if seeded_ids.json is empty/missing
+        self._bootstrap_all_pools()
 
-        Appele une seule fois au premier on_start pour eviter les 404
-        sur GET /missions/{id}. Skip si aucune mission disponible.
-        """
-        try:
-            res = self.client.get(
-                f"{self.missions_api}/missions/?skip=0&limit=50",
-                headers=self.headers,
-                name="[Bootstrap] GET /missions/",
-            )
-            if res.status_code == 200:
-                data = res.json()
-                for mission in data.get("items", []):
-                    mid = mission.get("id")
-                    if mid:
-                        _MISSION_IDS.append(int(mid))
-                print(f"[Bootstrap] {len(_MISSION_IDS)} missions chargees.")
-        except Exception as e:
-            print(f"[Bootstrap] Erreur chargement pool missions: {e}")
+    def _bootstrap_all_pools(self) -> None:
+        """Dynamically bootstraps all list IDs from the APIs if seeded_ids.json is missing or empty."""
+        global _CREATED_USER_IDS, _CV_PROFILE_USER_IDS, _MISSION_IDS, _CATEGORY_IDS, _ITEM_IDS
+        global _CV_PROFILE_USER_IDS_SET
+
+        if getattr(self.__class__, "_bootstrapped_globally", False) or _SEEDED_READY:
+            return
+
+        self.__class__._bootstrapped_globally = True
+        print("[Bootstrap] seeded_ids.json was empty/missing. Starting dynamic API-driven bootstrapping...")
+
+        # 1. Bootstrap users
+        if not _CREATED_USER_IDS:
+            try:
+                res = self.client.get(
+                    f"{self.users_api}/?skip=0&limit=100",
+                    headers=self.headers,
+                    name="[Bootstrap] GET /users/",
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    items = data.get("items", [])
+                    _CREATED_USER_IDS = [int(u["id"]) for u in items if "id" in u]
+                    print(f"[Bootstrap] Loaded {len(_CREATED_USER_IDS)} user IDs from users_api.")
+            except Exception as e:
+                print(f"[Bootstrap] Error loading user IDs from users_api: {e}")
+
+        # 2. Bootstrap CV profile user IDs
+        if not _CV_PROFILE_USER_IDS:
+            try:
+                res = self.client.get(
+                    f"{self.cv_api}/users/tags/map",
+                    headers=self.headers,
+                    name="[Bootstrap] GET /cv/users/tags/map",
+                )
+                if res.status_code == 200:
+                    uid_map = res.json()
+                    for uid_str in uid_map.keys():
+                        try:
+                            _CV_PROFILE_USER_IDS.append(int(uid_str))
+                        except ValueError:
+                            pass
+                    print(f"[Bootstrap] Loaded {len(_CV_PROFILE_USER_IDS)} users with CV profile from cv_api.")
+            except Exception as e:
+                print(f"[Bootstrap] Error loading CV profiles from cv_api: {e}")
+
+            if not _CV_PROFILE_USER_IDS and _CREATED_USER_IDS:
+                _CV_PROFILE_USER_IDS = _CREATED_USER_IDS[:]
+                print(f"[Bootstrap] Fallback: Copied {len(_CV_PROFILE_USER_IDS)} standard user IDs to CV profiles.")
+
+        _CV_PROFILE_USER_IDS_SET = set(_CV_PROFILE_USER_IDS)
+
+        # 3. Bootstrap missions
+        if not _MISSION_IDS:
+            try:
+                res = self.client.get(
+                    f"{self.missions_api}/missions/?skip=0&limit=100",
+                    headers=self.headers,
+                    name="[Bootstrap] GET /missions/",
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    items = data.get("items", [])
+                    _MISSION_IDS = [int(m["id"]) for m in items if "id" in m]
+                    print(f"[Bootstrap] Loaded {len(_MISSION_IDS)} mission IDs from missions_api.")
+            except Exception as e:
+                print(f"[Bootstrap] Error loading mission IDs from missions_api: {e}")
+
+        # 4. Bootstrap items
+        if not _ITEM_IDS:
+            try:
+                res = self.client.get(
+                    f"{self.items_api}/?skip=0&limit=100",
+                    headers=self.headers,
+                    name="[Bootstrap] GET /items/",
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    items = data.get("items", [])
+                    _ITEM_IDS = [int(i["id"]) for i in items if "id" in i]
+                    print(f"[Bootstrap] Loaded {len(_ITEM_IDS)} item IDs from items_api.")
+            except Exception as e:
+                print(f"[Bootstrap] Error loading item IDs from items_api: {e}")
+
+        # 5. Bootstrap categories
+        if not _CATEGORY_IDS:
+            try:
+                res = self.client.get(
+                    f"{self.items_api}/categories?skip=0&limit=100",
+                    headers=self.headers,
+                    name="[Bootstrap] GET /categories",
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    items = data.get("items", [])
+                    _CATEGORY_IDS = [int(c["id"]) for c in items if "id" in c]
+                    print(f"[Bootstrap] Loaded {len(_CATEGORY_IDS)} category IDs from items_api.")
+            except Exception as e:
+                print(f"[Bootstrap] Error loading category IDs from items_api: {e}")
 
     # Duree avant expiration a partir de laquelle on renouvelle le token (secondes).
     # 720s = 12 min → refresh avant les 15 min de TTL prod, safe pour les tests.
@@ -286,8 +352,10 @@ class ZenikaPerfUser(HttpUser):
 
     def _ensure_fresh_token(self):
         """Re-login proactif si le token approche de son expiration."""
+        ttl_seconds = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")) * 60
+        threshold = max(10, int(ttl_seconds * 0.8))
         age = time.monotonic() - getattr(self, "_token_issued_at", 0.0)
-        if not self.token or age >= self._TOKEN_REFRESH_THRESHOLD:
+        if not self.token or age >= threshold:
             self._login()
 
     # --- Users API ---
@@ -344,8 +412,9 @@ class ZenikaPerfUser(HttpUser):
     # --- CV API ---
     @task(1)
     def get_cv_user_missions(self):
-        # _CV_PROFILE_USER_IDS garantit un user avec profil CV reel -> zero 404
-        user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
+        if not _CV_PROFILE_USER_IDS:
+            return
+        user_id = random.choice(_CV_PROFILE_USER_IDS)
         self.client.get(
             f"{self.cv_api}/user/{user_id}/missions",
             headers=self.headers,
@@ -354,7 +423,9 @@ class ZenikaPerfUser(HttpUser):
 
     @task(1)
     def get_cv_user_details(self):
-        user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
+        if not _CV_PROFILE_USER_IDS:
+            return
+        user_id = random.choice(_CV_PROFILE_USER_IDS)
         with self.client.get(
             f"{self.cv_api}/user/{user_id}",
             headers=self.headers,
@@ -483,7 +554,9 @@ class ZenikaPerfUser(HttpUser):
     @task(1)
     def get_user_by_id(self):
         """GET /users/{user_id} — lecture simple PostgreSQL."""
-        user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
+        if not _CREATED_USER_IDS:
+            return
+        user_id = random.choice(_CREATED_USER_IDS)
         with self.client.get(
             f"{self.users_api}/{user_id}",
             headers=self.headers,
@@ -530,7 +603,9 @@ class ZenikaPerfUser(HttpUser):
     @task(1)
     def get_item_by_id(self):
         """GET /items/{item_id} — lecture item PostgreSQL par PK."""
-        item_id = random.choice(_ITEM_IDS) if _ITEM_IDS else random.randint(1, 200)
+        if not _ITEM_IDS:
+            return
+        item_id = random.choice(_ITEM_IDS)
         with self.client.get(
             f"{self.items_api}/{item_id}",
             headers=self.headers,
@@ -547,7 +622,9 @@ class ZenikaPerfUser(HttpUser):
     @task(1)
     def get_items_by_user(self):
         """GET /items/user/{user_id} — items d un consultant PostgreSQL."""
-        user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
+        if not _CV_PROFILE_USER_IDS:
+            return
+        user_id = random.choice(_CV_PROFILE_USER_IDS)
         self.client.get(
             f"{self.items_api}/user/{user_id}",
             headers=self.headers,
@@ -593,7 +670,9 @@ class ZenikaPerfUser(HttpUser):
     @task(1)
     def get_cv_user_full_details(self):
         """GET /cv/user/{id}/details — profil CV complet avec scoring PostgreSQL."""
-        user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
+        if not _CV_PROFILE_USER_IDS:
+            return
+        user_id = random.choice(_CV_PROFILE_USER_IDS)
         self.client.get(
             f"{self.cv_api}/user/{user_id}/details",
             headers=self.headers,
@@ -688,7 +767,9 @@ class ZenikaPerfUser(HttpUser):
     @task(1)
     def get_user_active_missions(self):
         """GET /missions/user/{user_id}/active — missions actives d un consultant."""
-        user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
+        if not _CV_PROFILE_USER_IDS:
+            return
+        user_id = random.choice(_CV_PROFILE_USER_IDS)
         self.client.get(
             f"{self.missions_api}/missions/user/{user_id}/active",
             headers=self.headers,
@@ -736,12 +817,14 @@ class CVIngestionPipelineUser(HttpUser):
     que le système tient 3000 CVs (30 compétences + 50 missions chacun)
     sans dégradation de latence ni erreur de pool DB.
     """
-    weight = 0 if _SCENARIO == "navigation" else 1  # 25% trafic en mode full, desactive en navigation
+    weight = 0 if _SCENARIO == "navigation" else 1  # 25% en mode full, 100% en mode ingestion, 0% en navigation
     wait_time = between(0.5, 1.5)
 
     # Compteur de CVs simulés partagé entre instances (approximatif)
     _cv_count: int = 0
-    CV_TARGET: int = 3000  # Objectif : 3000 CVs ingérés
+    # Objectif affiché dans les logs — ajusté par local_up.py via LOCUST_CV_TARGET.
+    # Défaut 3000 = objectif stress 5 min / 30 workers. Réduire à ~100 pour --perf 1 min.
+    CV_TARGET: int = int(os.getenv("LOCUST_CV_TARGET", "3000"))
 
     def on_start(self):
         self.users_api = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -754,6 +837,18 @@ class CVIngestionPipelineUser(HttpUser):
         self._comp_ids: list[int] = []
         self._cat_ids: list[int] = []   # IDs categories pour POST /items/bulk
         self._user_ids_created: list[int] = []
+
+        # Intercept requests to refresh token and update headers dynamically
+        original_request = self.client.request
+
+        def custom_request(*args, **kwargs):
+            url = args[1] if len(args) > 1 else kwargs.get("url", "")
+            if "/login" not in str(url):
+                self._ensure_fresh_token()
+                if "headers" in kwargs and self.headers:
+                    kwargs["headers"] = self.headers
+            return original_request(*args, **kwargs)
+        self.client.request = custom_request
 
     def _login(self):
         res = self.client.post(
@@ -773,9 +868,10 @@ class CVIngestionPipelineUser(HttpUser):
 
     def _ensure_fresh_token(self):
         """Re-login proactif si le token approche de son expiration."""
-        ttl_seconds = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15)) * 60
+        ttl_seconds = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")) * 60
+        threshold = max(10, int(ttl_seconds * 0.8))
         age = time.monotonic() - getattr(self, "_token_issued_at", 0.0)
-        if not self.token or age >= ttl_seconds - 180:
+        if not self.token or age >= threshold:
             self._login()
 
     def _fetch_competency_ids(self) -> list[int]:
@@ -1033,7 +1129,12 @@ class CVIngestionPipelineUser(HttpUser):
         # Etape 4 : Validation lecture du profil (CV si mock actif)
         self._read_profile(user_id, cv_imported=cv_imported)
 
-        # Etape 5 : Analytics (1 fois sur 10)
+        # Etape 5 : Analytics + progression (1 fois sur 10)
         if cv_num % 10 == 0:
             self._read_analytics()
             print(f"  📊 [{cv_num}/{self.CV_TARGET}] CVs ingeres simules")
+
+        # Auto-stop en mode ingestion : quitte quand CV_TARGET atteint
+        if _SCENARIO == "ingestion" and cv_num >= self.CV_TARGET:
+            print(f"  ✅ Objectif atteint : {cv_num} CVs ingeres. Arret du runner.")
+            self.environment.runner.quit()

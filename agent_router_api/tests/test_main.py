@@ -204,7 +204,7 @@ async def test_run_agent_query_adk_session_corruption_returns_structured_respons
 
     mock_runner.run_async = corrupt_run_async
 
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.Runner", return_value=mock_runner)
     mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
 
     mock_session_svc = AsyncMock()
@@ -253,7 +253,7 @@ async def test_run_agent_query_other_value_error_is_logged(mocker):
         yield
 
     mock_runner.run_async = other_error_run_async
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.Runner", return_value=mock_runner)
     mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
 
     mock_session_svc = AsyncMock()
@@ -281,14 +281,16 @@ async def test_run_agent_query_normal_execution_unaffected(mocker):
     mock_event = MagicMock()
     mock_event.content = MagicMock()
     mock_event.content.role = "model"
-    mock_event.content.parts = [MagicMock(text="Réponse normale", thought=None, tool_call=None, function_call=None, function_response=None)]
+    mock_event.content.parts = [MagicMock(
+        text="Réponse normale", thought=None, tool_call=None, function_call=None, function_response=None
+    )]
     mock_event.response = None
 
     async def normal_run_async(*args, **kwargs):
         yield mock_event
 
     mock_runner.run_async = normal_run_async
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.Runner", return_value=mock_runner)
     mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
 
     mock_session_svc = AsyncMock()
@@ -330,7 +332,7 @@ async def test_run_agent_query_null_role_execution_unaffected(mocker):
         yield mock_event
 
     mock_runner.run_async = none_role_run_async
-    mocker.patch("google.adk.runners.Runner", return_value=mock_runner)
+    mocker.patch("agent.Runner", return_value=mock_runner)
     mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="gemini-2.0-flash")))
 
     mock_session_svc = AsyncMock()

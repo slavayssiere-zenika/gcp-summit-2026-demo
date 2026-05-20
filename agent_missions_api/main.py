@@ -26,6 +26,9 @@ from shared.auth.jwt import ALGORITHM  # noqa: F401
 from shared.auth.jwt import verify_jwt_bearer, verify_jwt_request as verify_jwt
 from shared.fastapi_utils import instrument_app, setup_tracing
 from shared.observability import setup_logging
+from agent_commons.session import RedisSessionService
+from agent import _MISSIONS_CLIENTS_MAP, _MISSIONS_TOOLS_CACHE
+from agent_commons.mcp_proxy import get_cached_tools
 
 # Exposé pour les tests (import 'from main import SECRET_KEY')
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -48,7 +51,6 @@ _session_service = None
 def get_session_service():
     global _session_service
     if _session_service is None:
-        from agent_commons.session import RedisSessionService
         _session_service = RedisSessionService(
             redis_key_prefix="adk:missions:sessions",
             redis_url=os.getenv("REDIS_URL", "redis://redis:6379/12"),
@@ -61,9 +63,7 @@ def get_session_service():
 async def lifespan(app: FastAPI):
     logger.info("[MISSIONS] 🚀 Starting agent_missions_api %s", APP_VERSION)
     try:
-        from agent import _MISSIONS_CLIENTS_MAP, _MISSIONS_TOOLS_CACHE
 
-        from agent_commons.mcp_proxy import get_cached_tools
         tools = await get_cached_tools(_MISSIONS_CLIENTS_MAP, "[MISSIONS]", ttl=300, _cache=_MISSIONS_TOOLS_CACHE)
         logger.info("[MISSIONS] ✅ Pre-warmed %d MCP tools at startup.", len(tools))
     except Exception as e:

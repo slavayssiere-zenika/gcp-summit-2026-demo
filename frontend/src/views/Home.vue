@@ -235,7 +235,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-for="(msg, index) in chatStore.messages" :key="index" :class="['message', msg.role]">
+      <div v-for="(msg, index) in chatStore.messages" :key="msg.id || index" :class="['message', msg.role]">
         <div v-if="msg.role === 'assistant'" class="assistant-content">
           <!-- FinOps Cost Display (Floating Badge) -->
           <div class="usage-container">
@@ -247,12 +247,14 @@ onUnmounted(() => {
             <button 
               :class="['tab-btn', { active: msg.activeTab === 'preview' }]" 
               @click="msg.activeTab = 'preview'"
+              :aria-label="t('chat.tab_preview')"
             >
               <Eye size="14" /> {{ t('chat.tab_preview') }}
             </button>
             <button 
               :class="['tab-btn', { active: msg.activeTab === 'expert' }]" 
               @click="msg.activeTab = 'expert'"
+              :aria-label="t('chat.tab_expert')"
             >
               <Cpu size="14" /> {{ t('chat.tab_expert') }}
             </button>
@@ -306,7 +308,7 @@ onUnmounted(() => {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(row, idx) in getPaginatedData(msg)" :key="idx" @click="row.id || row.user_id ? goToUser(row.id || row.user_id) : null" :class="{ 'clickable-row': row.id || row.user_id }">
+                    <tr v-for="(row, idx) in getPaginatedData(msg)" :key="row.id || row.user_id || row.email || row.name || idx" @click="row.id || row.user_id ? goToUser(row.id || row.user_id) : null" :class="{ 'clickable-row': row.id || row.user_id }">
                       <td v-for="key in Object.keys(msg.parsedData[0]).filter(k => !k.startsWith('_'))" :key="key">{{ row[key] }}</td>
                     </tr>
                   </tbody>
@@ -323,7 +325,7 @@ onUnmounted(() => {
 
               <!-- ui://consultants / ui://consultant -->
               <div v-else-if="(msg.displayType === 'consultants' || msg.displayType === 'consultant') && msg.parsedData && msg.parsedData.length > 0" class="consultant-list">
-                <ConsultantCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :consultant="obj" />
+                <ConsultantCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :consultant="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
                   <span class="show-more-count">Showing {{ getPaginatedData(msg).length }} of {{ msg.parsedData.length }}</span>
                   <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
@@ -332,7 +334,7 @@ onUnmounted(() => {
 
               <!-- ui://candidates / ui://candidate -->
               <div v-else-if="(msg.displayType === 'candidates' || msg.displayType === 'candidate') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :profile="obj" />
+                <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :profile="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
                   <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
                   <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
@@ -341,7 +343,7 @@ onUnmounted(() => {
 
               <!-- ui://profile / ui://profiles (profil enrichi unique via get_candidate_rag_context) -->
               <div v-else-if="(msg.displayType === 'profile' || msg.displayType === 'profiles') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :profile="obj" />
+                <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :profile="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
                   <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
                   <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
@@ -350,7 +352,7 @@ onUnmounted(() => {
 
               <!-- ui://missions / ui://mission -->
               <div v-else-if="(msg.displayType === 'missions' || msg.displayType === 'mission') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <MissionCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :mission="obj" />
+                <MissionCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.title || idx" :mission="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
                   <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
                   <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
@@ -359,7 +361,7 @@ onUnmounted(() => {
 
               <!-- ui://availabilities / ui://availability -->
               <div v-else-if="(msg.displayType === 'availabilities' || msg.displayType === 'availability') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <ConsultantAvailabilityCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :availability="obj" />
+                <ConsultantAvailabilityCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :availability="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
                   <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
                   <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
@@ -368,7 +370,7 @@ onUnmounted(() => {
 
               <!-- ui://items / ui://item -->
               <div v-else-if="(msg.displayType === 'items' || msg.displayType === 'item') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
-                <ItemCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :item="obj" />
+                <ItemCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.name || idx" :item="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
                   <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
                   <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
@@ -399,7 +401,7 @@ onUnmounted(() => {
 
               <div v-else-if="msg.displayType === 'cards' && msg.parsedData && msg.parsedData.length > 0"
                    :class="msg.parsedData.every((o: any) => isUserObj(o)) ? 'consultant-list' : 'generic-grid'">
-                <template v-for="(obj, idx) in getPaginatedData(msg)" :key="idx">
+                <template v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || obj.title || obj.name || idx">
                   <MissionCard v-if="isMissionObj(obj)" :mission="obj" />
                   <ConsultantCard v-else-if="isUserObj(obj)" :consultant="obj" />
                   <CandidateProfileCard v-else-if="isProfileObj(obj)" :profile="obj" />
@@ -422,7 +424,7 @@ onUnmounted(() => {
                         <strong>{{ key }}:</strong> 
                         <span v-if="!Array.isArray(obj[key]) && typeof obj[key] !== 'object'">{{ obj[key] }}</span>
                         <div v-else class="categories-tags" style="display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                          <span v-for="(item, i) in (Array.isArray(obj[key]) ? obj[key] : [obj[key]])" :key="i" class="tag">
+                          <span v-for="(item, i) in (Array.isArray(obj[key]) ? obj[key] : [obj[key]])" :key="(item && typeof item === 'object' ? (item.id || item.name) : item) || i" class="tag">
                             {{ (item && typeof item === 'object') ? (item.name || item.id || '[Object]') : item }}
                           </span>
                         </div>
@@ -449,7 +451,7 @@ onUnmounted(() => {
                 </div>
                 <div class="tree-content">
                   <div v-for="(node, idx) in (Array.isArray(msg.parsedData) ? msg.parsedData : Object.entries(msg.parsedData).map(([k, v]) => ({ name: k, ...v })))" 
-                       :key="idx" 
+                       :key="node.id || node.name || idx" 
                        style="margin-bottom: 8px;"
                   >
                     <CompetencyNode :node="node" :depth="0" />
@@ -519,19 +521,22 @@ onUnmounted(() => {
 
     <div class="input-area">
       <div class="input-container">
+        <label for="chat-textarea" class="sr-only">{{ t('chat.placeholder') }}</label>
         <textarea 
+          id="chat-textarea"
           ref="textareaRef"
           v-model="userInput" 
           @keydown.enter.exact.prevent="sendQuery()"
           @input="adjustTextareaHeight"
           :placeholder="t('chat.placeholder')"
+          :aria-label="t('chat.placeholder')"
           autocomplete="off"
           rows="1"
         ></textarea>
-        <BaseButton @click="resetHistory" variant="ghost" :title="t('chat.reset_history')" class="reset-history-btn">
+        <BaseButton @click="resetHistory" variant="ghost" :title="t('chat.reset_history')" :aria-label="t('chat.reset_history')" class="reset-history-btn">
           <Trash2 size="18" />
         </BaseButton>
-        <BaseButton @click="sendQuery()" :loading="chatStore.isTyping">{{ t('chat.send') }}</BaseButton>
+        <BaseButton @click="sendQuery()" :loading="chatStore.isTyping" :aria-label="t('chat.send')">{{ t('chat.send') }}</BaseButton>
       </div>
     </div>
   </div>
@@ -939,6 +944,13 @@ textarea {
   max-height: 200px;
   line-height: 1.5;
   overflow-y: auto;
+}
+
+/* Compensation focus clavier WCAG 2.1 AA — :focus-visible cible uniquement la navigation clavier */
+textarea:focus-visible {
+  outline: 2px solid rgba(227, 25, 55, 0.5);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .usage-container {

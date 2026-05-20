@@ -9,9 +9,9 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 130 | ✅ |
+| `main.py` | 132 | ✅ |
 | `mcp_server.py` | 298 | ✅ |
-| `conftest.py` | 39 | ✅ |
+| `conftest.py` | 40 | ✅ |
 | `metrics.py` | 3 | ✅ |
 | `src/missions/analysis_router.py` | 201 | ✅ |
 | `src/missions/crud_router.py` | 208 | ✅ |

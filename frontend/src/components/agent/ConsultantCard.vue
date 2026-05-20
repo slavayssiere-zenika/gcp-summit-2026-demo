@@ -39,6 +39,8 @@ const goToProfile = () => {
         :src="consultant.picture_url"
         :alt="consultant.full_name || consultant.username"
         class="avatar-img"
+        width="36"
+        height="36"
         @error="($event.target as HTMLImageElement).style.display='none'"
       />
       <span v-else>{{ getInitials(consultant.full_name || consultant.username) }}</span>

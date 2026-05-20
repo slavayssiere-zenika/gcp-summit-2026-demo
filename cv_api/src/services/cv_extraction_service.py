@@ -13,6 +13,9 @@ from src.gemini_retry import generate_content_with_retry
 from src.services.config import COMPETENCIES_API_URL, PROMPTS_API_URL
 from src.services.utils import _CV_RESPONSE_SCHEMA, build_taxonomy_context
 from shared.cache import get_cache, set_cache
+from io import BytesIO
+import docx as python_docx
+from shared.schemas.pagination import PaginationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +91,6 @@ class CVExtractionService:
                         ),
                     )
 
-                from io import BytesIO
-                import docx as python_docx
                 doc = python_docx.Document(BytesIO(resp.content))
 
                 # Extraction paragraphes (corps du CV)
@@ -155,7 +156,7 @@ class CVExtractionService:
             req_headers["Authorization"] = f"Bearer {google_token}"
 
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            resp = await http_client.get(url, headers=req_headers, follow_redirects=True)
+            resp = await http_client.get(url, headers=req_headers, follow_redirects=True, timeout=10.0)
             if resp.status_code in (401, 403):
                 raise HTTPException(
                     status_code=400,
@@ -212,7 +213,6 @@ class CVExtractionService:
                         )
                         if page_res.status_code != 200:
                             break
-                        from shared.schemas.pagination import PaginationResponse
                         data = PaginationResponse[dict].model_validate(page_res.json())
                         page_items = data.items
                         items.extend(page_items)

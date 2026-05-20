@@ -32,6 +32,7 @@ from src.competencies.helpers import (
 )
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from src.competencies.schemas import TreeImportRequest
+from src.competencies.schemas import MergeInstruction
 
 logger = logging.getLogger(__name__)
 CACHE_TTL = 60
@@ -81,7 +82,6 @@ async def bulk_import_tree(
                 and "merge_from" in data
                 and isinstance(data["merge_from"], list)
             ):
-                from src.competencies.schemas import MergeInstruction
 
                 merge_from_list = [
                     str(m).strip() for m in data["merge_from"] if str(m).strip()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: user duplicates list/action)
 import { useI18n } from 'vue-i18n'
 import { AlertTriangle, Users, CheckCircle2, RotateCw, GitMerge, Search, Wand2, ShieldCheck } from 'lucide-vue-next'
 import { authService } from '../services/auth'
@@ -339,7 +340,7 @@ onMounted(() => {
       <button class="tab-btn" :class="{ active: activeTab === 'anonymes' }" @click="activeTab = 'anonymes'">
         Profils Anonymes
       </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'remediation' }" @click="activeTab = 'remediation'">
+      <button class="tab-btn" :class="{ active: activeTab === 'remediation' }" @click="activeTab = 'remediation'" aria-label="Remédiation Auto">
         <Wand2 size="14" style="display:inline;vertical-align:middle;margin-right:5px" />
         Remédiation Auto
       </button>
@@ -348,7 +349,7 @@ onMounted(() => {
     <div v-if="activeTab === 'doublons'" class="glass-panel mt-4">
       <div class="panel-header d-flex-between">
         <h3>Doublons Détectés ({{ duplicates.length }})</h3>
-        <button @click="fetchDuplicates" class="action-btn-secondary" :disabled="isLoading">
+        <button @click="fetchDuplicates" class="action-btn-secondary" :disabled="isLoading" aria-label="Rafraîchir les doublons">
           <RotateCw :class="{ 'spin': isLoading }" size="16" /> Rafraîchir
         </button>
       </div>
@@ -358,7 +359,7 @@ onMounted(() => {
         <p>{{ t('admin_dedup.no_duplicate') }}</p>
       </div>
 
-      <div v-for="(candidate, index) in duplicates" :key="index" class="duplicate-card">
+      <div v-for="(candidate, index) in duplicates" :key="'dup-' + index" class="duplicate-card">
         <h4 class="dup-title">{{ t('admin_dedup.candidates_title') }}</h4>
         <div class="users-grid">
            <div v-for="user in candidate.users" :key="user.id" class="user-item">
@@ -403,7 +404,7 @@ onMounted(() => {
     <div v-if="activeTab === 'anonymes'" class="glass-panel mt-4">
       <div class="panel-header d-flex-between">
         <h3>Profils Anonymes ({{ anonymousUsers.length }})</h3>
-        <button @click="fetchAnonymousUsers" class="action-btn-secondary" :disabled="isLoadingAnon">
+        <button @click="fetchAnonymousUsers" class="action-btn-secondary" :disabled="isLoadingAnon" aria-label="Rafraîchir les profils anonymes">
           <RotateCw :class="{ 'spin': isLoadingAnon }" size="16" /> Rafraîchir
         </button>
       </div>
@@ -426,19 +427,15 @@ onMounted(() => {
                    v-if="selectedAnonForMerge !== user.id">
              Désanonymiser
            </button>
-           <button class="action-btn-secondary" @click="selectedAnonForMerge = null" v-else>
-             Annuler
-           </button>
          </div>
-
          <!-- Search block for merge -->
          <div v-if="selectedAnonForMerge === user.id" class="merge-controls mt-4" style="flex-direction: column; align-items: stretch;">
             <div style="display: flex; gap: 1.5rem; align-items: flex-end;">
                 <div class="control-group" style="flex: 2;">
-                   <label>1. Chercher un vrai profil existant (Cible) :</label>
+                   <label for="anon-merge-search-query">1. Chercher un vrai profil existant (Cible) :</label>
                    <div style="display: flex; gap: 10px;">
-                     <input type="text" v-model="anonMergeSearchQuery" :placeholder="t('admin_dedup.anon_search_placeholder')" class="form-select" @keyup.enter="searchAnonMergeUsers" style="flex:1;">
-                     <button @click="searchAnonMergeUsers" class="action-btn-secondary" :disabled="isSearchingAnonMerge">
+                     <input id="anon-merge-search-query" type="text" v-model="anonMergeSearchQuery" :placeholder="t('admin_dedup.anon_search_placeholder')" class="form-select" @keyup.enter="searchAnonMergeUsers" style="flex:1;">
+                     <button @click="searchAnonMergeUsers" class="action-btn-secondary" :disabled="isSearchingAnonMerge" aria-label="Rechercher des profils cibles">
                        <Search size="16" />
                      </button>
                    </div>
@@ -462,13 +459,13 @@ onMounted(() => {
             <hr style="margin: 1rem 0; border: none; border-top: 1px dashed rgba(227, 25, 55, 0.2);" />
             
             <div class="control-group">
-               <label>Ou transformer ce profil anonyme en nouveau collaborateur complet :</label>
+               <label for="anon-create-first-name">Ou transformer ce profil anonyme en nouveau collaborateur complet :</label>
                <div style="display: flex; gap: 10px; align-items: flex-end;">
-                  <div style="flex:1;"><input type="text" v-model="createAnonForm.first_name" :placeholder="t('admin_dedup.placeholder_firstname')" class="form-select" style="width:100%;"></div>
-                  <div style="flex:1;"><input type="text" v-model="createAnonForm.last_name" :placeholder="t('admin_dedup.placeholder_lastname')" class="form-select" style="width:100%;"></div>
-                  <div style="flex:1;"><input type="email" v-model="createAnonForm.email" :placeholder="t('admin_dedup.placeholder_email')" class="form-select" style="width:100%;"></div>
+                  <div style="flex:1;"><input id="anon-create-first-name" type="text" v-model="createAnonForm.first_name" :placeholder="t('admin_dedup.placeholder_firstname')" class="form-select" style="width:100%;" aria-label="Prénom"></div>
+                  <div style="flex:1;"><input id="anon-create-last-name" type="text" v-model="createAnonForm.last_name" :placeholder="t('admin_dedup.placeholder_lastname')" class="form-select" style="width:100%;" aria-label="Nom de famille"></div>
+                  <div style="flex:1;"><input id="anon-create-email" type="email" v-model="createAnonForm.email" :placeholder="t('admin_dedup.placeholder_email')" class="form-select" style="width:100%;" aria-label="Adresse email"></div>
                  <button @click="transformAnonToUser(user.id)" class="action-btn validate-btn" 
-                         :disabled="!createAnonForm.first_name || !createAnonForm.last_name || !createAnonForm.email || isLoading">
+                          :disabled="!createAnonForm.first_name || !createAnonForm.last_name || !createAnonForm.email || isLoading">
                     Créer Profil
                  </button>
                </div>
@@ -504,6 +501,7 @@ onMounted(() => {
             @click="runDryRun"
             :disabled="isAnalyzing"
             style="margin-top:10px"
+            aria-label="Lancer l'analyse des profils"
           >
             <RotateCw size="14" :class="{ spin: isAnalyzing }" />
             {{ isAnalyzing ? 'Analyse en cours…' : 'Lancer l\'analyse' }}
@@ -542,7 +540,7 @@ onMounted(() => {
                     <td>{{ c.full_name || '—' }}</td>
                     <td>
                       <div style="display: flex; gap: 8px;">
-                        <button class="action-btn-secondary" @click="remediateSingle(c.id)" :disabled="isApplyingSingle === c.id">
+                        <button class="action-btn-secondary" @click="remediateSingle(c.id)" :disabled="isApplyingSingle === c.id" aria-label="Désanonymiser ce profil">
                           <RotateCw v-if="isApplyingSingle === c.id" class="spin" size="14" />
                           Désanonymiser
                         </button>
@@ -559,10 +557,10 @@ onMounted(() => {
                       <div class="merge-controls" style="flex-direction: column; align-items: stretch; background: transparent; border: none; padding: 0;">
                         <div style="display: flex; gap: 1.5rem; align-items: flex-end;">
                             <div class="control-group" style="flex: 2;">
-                               <label>1. Chercher un profil maître (Cible) :</label>
+                               <label for="remediation-merge-search-query">1. Chercher un profil maître (Cible) :</label>
                                <div style="display: flex; gap: 10px;">
-                                  <input type="text" v-model="remediationMergeSearchQuery" :placeholder="t('admin_dedup.anon_search_placeholder')" class="form-select" @keyup.enter="searchRemediationMergeUsers" style="flex:1;">
-                                 <button @click="searchRemediationMergeUsers" class="action-btn-secondary" :disabled="isSearchingRemediationMerge">
+                                  <input id="remediation-merge-search-query" type="text" v-model="remediationMergeSearchQuery" :placeholder="t('admin_dedup.anon_search_placeholder')" class="form-select" @keyup.enter="searchRemediationMergeUsers" style="flex:1;">
+                                 <button @click="searchRemediationMergeUsers" class="action-btn-secondary" :disabled="isSearchingRemediationMerge" aria-label="Rechercher un profil maître">
                                    <Search size="16" />
                                  </button>
                                </div>
@@ -604,6 +602,7 @@ onMounted(() => {
                 @click="runApply"
                 :disabled="isApplying || remediationApplied"
                 style="margin-top:10px; background: #7c3aed; box-shadow: 0 4px 12px rgba(124,58,237,0.25);"
+                aria-label="Appliquer la correction automatique"
               >
                 <Wand2 size="14" :class="{ spin: isApplying }" />
                 {{ isApplying ? 'Correction en cours…' : remediationApplied ? '✓ Correction lancée' : `Corriger ${remediationCount} profil(s)` }}

@@ -12,6 +12,7 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
+from shared.auth.context import auth_header_var
 
 app = FastAPI(title="CV Analysis MCP Sidecar")
 
@@ -35,7 +36,6 @@ async def get_tools():
 async def execute_tool(request: ToolCallRequest, http_request: Request):
     auth_header = http_request.headers.get("Authorization")
     if auth_header:
-        from shared.auth.context import auth_header_var
         auth_header_var.set(auth_header)
 
     try:

@@ -9,6 +9,8 @@ import logging
 
 from tenacity import (AsyncRetrying, before_sleep_log, retry_if_exception,
                       stop_after_attempt, wait_exponential)
+from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
+from google.genai import errors as genai_errors
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +27,12 @@ def _is_retryable(exc: BaseException) -> bool:
         return True
     # google.api_core (présent via google-genai)
     try:
-        from google.api_core.exceptions import (ResourceExhausted,
-                                                ServiceUnavailable)
         if isinstance(exc, (ResourceExhausted, ServiceUnavailable)):
             return True
     except ImportError:
         pass
     # google.genai.errors (SDK >=1.x)
     try:
-        from google.genai import errors as genai_errors
         if hasattr(genai_errors, "ServerError") and isinstance(exc, genai_errors.ServerError):
             return True
         if hasattr(genai_errors, "ClientError") and isinstance(exc, genai_errors.ClientError):

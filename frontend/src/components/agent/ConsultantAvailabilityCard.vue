@@ -60,7 +60,7 @@ const formatPeriod = (period: any) => {
         <div class="detail-section" v-if="availability.active_missions && availability.active_missions.length > 0">
           <h4><Briefcase size="14" /> Missions Actives</h4>
           <ul class="tag-list">
-            <li v-for="(mission, idx) in availability.active_missions" :key="idx" class="tag mission-tag">
+            <li v-for="(mission, idx) in availability.active_missions" :key="mission.mission_id || idx" class="tag mission-tag">
               Mission #{{ mission.mission_id }} ({{ mission.workload_percentage }}% - {{ mission.status }})
             </li>
           </ul>
@@ -69,7 +69,7 @@ const formatPeriod = (period: any) => {
         <div class="detail-section" v-if="availability.unavailability_periods && availability.unavailability_periods.length > 0">
           <h4><CalendarX size="14" /> Indisponibilités</h4>
           <ul class="tag-list">
-            <li v-for="(period, idx) in availability.unavailability_periods" :key="idx" class="tag period-tag">
+            <li v-for="(period, idx) in availability.unavailability_periods" :key="period.start_date || idx" class="tag period-tag">
               {{ period.type || 'Absence' }}: {{ formatPeriod(period) }}
             </li>
           </ul>

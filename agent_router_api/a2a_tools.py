@@ -16,6 +16,7 @@ Ce module expose :
   - ROUTER_TOOLS          : liste des outils à passer à Agent(tools=...)
 """
 
+import sys
 import asyncio
 import json
 import logging
@@ -226,7 +227,7 @@ async def _call_sub_agent(
 
         try:
             async with httpx.AsyncClient(timeout=timeout, headers=headers, auth=A2aRequestInterceptor()) as client:
-                res = await client.post(f"{url.rstrip('/')}/a2a/query", json={"query": query, "user_id": user_id})
+                res = await client.post(f"{url.rstrip('/')}/a2a/query", json={"query": query, "user_id": user_id}, timeout=10.0)
 
             if res.status_code in _NON_RETRYABLE_4XX:
                 # Fail-fast : erreur client, inutile de retenter
@@ -443,6 +444,81 @@ async def ask_missions_agent(query: str, user_id: str = "") -> dict:
     })}
 
 
+async def ask_mixed_agents(query: str, user_id: str = "") -> dict:
+    """
+    Délègue une requête mixte simultanément à l'Agent RH (Talent & Compétences)
+    et à l'Agent Ops (FinOps, Système & Missions).
+    Utiliser cet outil UNIQUEMENT si la requête de l'utilisateur est mixte et requiert
+    l'expertise combinée de l'Agent RH et de l'Agent Ops
+    (ex: "Trouve un expert Python et regarde si la mission BNP est en cours").
+
+    Args:
+        query (str): La requête mixte à transmettre aux deux agents.
+        user_id (str): L'identifiant de l'utilisateur (email JWT). Laissé vide — résolu depuis le token.
+    """
+    effective_user_id = user_id or user_id_var.get("anonymous")
+    logger.info(f"[A2A] Dispatching mixed query to HR and Ops Agents concurrently: {query[:50]}...")
+
+    hr_task = asyncio.create_task(ask_hr_agent(query, effective_user_id))
+    ops_task = asyncio.create_task(ask_ops_agent(query, effective_user_id))
+
+    hr_res, ops_res = await asyncio.gather(hr_task, ops_task, return_exceptions=True)
+
+    # Process potential exceptions (errors in tasks)
+    hr_dict = {}
+    if isinstance(hr_res, Exception):
+        logger.error(f"[A2A] Error in HR task during mixed execution: {hr_res}")
+        hr_dict = {
+            "agent": "hr_agent",
+            "response": f"❌ Erreur lors de l'appel à l'agent RH : {hr_res}",
+            "confidence": 0.0,
+        }
+    else:
+        try:
+            hr_dict = json.loads(hr_res.get("result", "{}"))
+        except Exception as e:
+            logger.error(f"[A2A] Failed to parse HR result: {e}")
+            hr_dict = {"agent": "hr_agent", "response": "❌ Erreur de format réponse agent RH", "confidence": 0.0}
+
+    ops_dict = {}
+    if isinstance(ops_res, Exception):
+        logger.error(f"[A2A] Error in Ops task during mixed execution: {ops_res}")
+        ops_dict = {
+            "agent": "ops_agent",
+            "response": f"❌ Erreur lors de l'appel à l'agent Ops : {ops_res}",
+            "confidence": 0.0,
+        }
+    else:
+        try:
+            ops_dict = json.loads(ops_res.get("result", "{}"))
+        except Exception as e:
+            logger.error(f"[A2A] Failed to parse Ops result: {e}")
+            ops_dict = {"agent": "ops_agent", "response": "❌ Erreur de format réponse agent Ops", "confidence": 0.0}
+
+    response_combined = (
+        f"**[Résultat Agent RH (RH & Talents)]** :\n{hr_dict.get('response', '')}\n\n"
+        f"**[Résultat Agent Ops (Ops & Missions)]** :\n{ops_dict.get('response', '')}"
+    )
+
+    combined_thoughts = []
+    if hr_dict.get("thoughts"):
+        combined_thoughts.append(f"[HR] {hr_dict.get('thoughts')}")
+    if ops_dict.get("thoughts"):
+        combined_thoughts.append(f"[Ops] {ops_dict.get('thoughts')}")
+
+    # Compute a combined confidence score (average of both confidences)
+    hr_conf = hr_dict.get("confidence", 1.0)
+    ops_conf = ops_dict.get("confidence", 1.0)
+    combined_confidence = round((hr_conf + ops_conf) / 2.0, 2)
+
+    return {"result": json.dumps({
+        "agent": "mixed_agents",
+        "response": response_combined,
+        "thoughts": "\n".join(combined_thoughts),
+        "confidence": combined_confidence,
+    })}
+
+
 # ── A2A v2 — Service Discovery ────────────────────────────────────────────────
 # Registre statique des sous-agents avec leur URL de base.
 # Alimenté par les variables d'environnement (configurées dans docker-compose / Cloud Run).
@@ -487,7 +563,7 @@ async def discover_sub_agents(force_refresh: bool = False) -> dict[str, dict]:
         discovery_url = f"{base_url.rstrip('/')}/.well-known/agent.json"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                res = await client.get(discovery_url)
+                res = await client.get(discovery_url, timeout=10.0)
                 res.raise_for_status()
                 card = res.json()
                 await set_cache(f"agent_card:{agent_name}", card, _AGENT_CARD_CACHE_TTL_S)
@@ -595,7 +671,6 @@ def enrich_tool_docstrings(cards: dict[str, dict]) -> None:
     Args:
         cards: Dict ``{agent_name: agent_card_dict}`` retourné par discover_sub_agents().
     """
-    import sys
     current_module = sys.modules[__name__]
 
     for fn_name, agent_name in _TOOL_AGENT_MAP.items():
@@ -621,4 +696,4 @@ def enrich_tool_docstrings(cards: dict[str, dict]) -> None:
 
 
 # Liste des outils exposés au Router LLM
-ROUTER_TOOLS = [ask_hr_agent, ask_ops_agent, ask_missions_agent, render_ui_widgets]
+ROUTER_TOOLS = [ask_hr_agent, ask_ops_agent, ask_missions_agent, ask_mixed_agents, render_ui_widgets]

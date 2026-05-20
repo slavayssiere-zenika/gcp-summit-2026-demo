@@ -45,6 +45,7 @@ from src.competencies.helpers import (
     serialize_competency,
 )
 from src.competencies.models import Competency, user_competency
+from sqlalchemy import or_
 from src.competencies.schemas import (
     CompetencyCount,
     CompetencyCreate,
@@ -108,7 +109,6 @@ async def search_competencies(
     db: AsyncSession = Depends(get_db),
 ):
     """Recherche full-text sur le nom et les aliases de compétences."""
-    from sqlalchemy import or_
 
     cache_key = f"competencies:search:{query}:{limit}"
     cached = await get_cache(cache_key)
@@ -254,8 +254,14 @@ async def update_competency(
     competency_id: int,
     competency_update: CompetencyUpdate,
     db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Met à jour une compétence (détection de conflits grammaticaux)."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account"):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : privilèges admin/rh/service_account requis.",
+        )
     db_comp = (
         (await db.execute(select(Competency).filter(Competency.id == competency_id)))
         .scalars()

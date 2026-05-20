@@ -25,7 +25,8 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.propagate import inject
 from pydantic import BaseModel
 from shared.mcp_server_utils import setup_mcp_tracer_provider
-
+import time
+from mcp_server import FINOPS_DATASET_ID
 logger = logging.getLogger(__name__)
 
 # La vérification Zero-Trust et la purge de SECRET_KEY est déléguée à auth.py.
@@ -78,7 +79,7 @@ async def get_aiops_metrics(background_tasks: BackgroundTasks, force: bool = Fal
     """
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/7")
     try:
-        r = redis.from_url(redis_url, socket_timeout=2.0)
+        r = redis.from_url(redis_url, socket_timeout=2.0)  # noqa: RedisSyncCache — SWR cache, fallback gracieux si Redis absent
         cache_key = "cache:metrics:aiops"
         lock_key = "lock:metrics:aiops"
 
@@ -223,13 +224,9 @@ async def health():
 @app.get("/ready")
 @app.get("/api/ready")
 async def ready(response: Response):
-    import asyncio
-    import time
     start_time = time.time()
     logger.info("[HealthCheck] Started BQ health check.")
     try:
-        from mcp_server import FINOPS_DATASET_ID
-        from mcp_server import client as bq_client
         if bq_client:
             # Perform a deep check of BigQuery connectivity without blocking the event loop
             # and by using the environment-injected Dataset ID instead of a hardcoded string.

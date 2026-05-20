@@ -9,10 +9,10 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 372 | ✅ |
-| `conftest.py` | 22 | ✅ |
+| `main.py` | 375 | ✅ |
+| `conftest.py` | 21 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 280 | ✅ |
+| `agent.py` | 299 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

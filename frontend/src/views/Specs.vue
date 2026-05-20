@@ -98,6 +98,7 @@ onMounted(() => {
         class="tab-btn"
         :class="{ active: activeTabId === tab.id }"
         @click="selectTab(tab.id)"
+        :aria-label="'Afficher les spécifications de ' + tab.name"
       >
         <component :is="tab.icon" size="18" class="tab-icon" />
         {{ tab.name }}

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: competencies search/tree)
 import CompetencyNode from '../components/CompetencyNode.vue'
 import StarRating from '../components/StarRating.vue'
 import { Network, RefreshCw, User, X, ExternalLink, Users, BarChart2, Brain, UserCheck, Search } from 'lucide-vue-next'
@@ -236,7 +237,7 @@ onMounted(() => { fetchCompetencies() })
         <div class="actions">
           <div class="search-box">
             <Search size="16" class="search-icon" />
-            <input type="text" v-model="searchQuery" :placeholder="t('competencies.search_placeholder')" />
+            <input id="competency-search-input" type="text" v-model="searchQuery" :placeholder="t('competencies.search_placeholder')" aria-label="Rechercher une compétence" />
             <X size="14" class="clear-search" v-if="searchQuery" @click="searchQuery = ''" />
           </div>
           <button class="icon-btn" @click="fetchCompetencies" :disabled="loading" :title="t('competencies.refresh_title')" :aria-label="t('competencies.refresh_title')">
@@ -349,7 +350,7 @@ onMounted(() => { fetchCompetencies() })
 
               <div v-for="user in associatedUsers" :key="user.id" class="user-card">
                 <div class="user-avatar">
-                  <img v-if="user.picture_url" :src="user.picture_url" :alt="user.full_name">
+                  <img v-if="user.picture_url" :src="user.picture_url" :alt="user.full_name" width="40" height="40">
                   <User v-else size="18" />
                 </div>
                 <div class="user-info">

@@ -28,7 +28,10 @@ from agent_commons.session import (RedisSessionService,
                                    store_missions_context)
 from agent_commons.ui_tools import render_ui_widgets
 from shared.schemas.staffing import MissionAnalysis
-from agent_commons.prompt_loader import fetch_agent_prompt
+from agent_commons.prompt_loader import (
+    fetch_agent_prompt,
+    get_or_create_gemini_context_cache,
+)
 
 
 app_logger = logging.getLogger(__name__)
@@ -121,6 +124,19 @@ async def create_agent(session_id: str | None = None) -> Agent:
     else:
         app_logger.info("[MISSIONS] Creating Agent with %d tools...", len(MISSIONS_TOOLS))
 
+    # ── Context Caching Gemini ────────────────────────────────────────────────
+    cache_name = await get_or_create_gemini_context_cache(
+        prompt_key="agent_missions_api.system_instruction",
+        prompt_text=instruction_text,
+        model=model,
+        agent_prefix="[MISSIONS]",
+    )
+
+    cached_content = None
+    if cache_name:
+        cached_content = cache_name
+        instruction_text = None
+
     agent = Agent(
         name="assistant_zenika_missions",
         model=model,
@@ -131,6 +147,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
             tool_config=types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="AUTO")
             ),
+            cached_content=cached_content,
         ),
         instruction=instruction_text,
         description="Le module spécialisé dans la gestion des missions client et le staffing de consultants.",
@@ -322,9 +339,12 @@ async def _maybe_trigger_hitl(
 
         # Import local pour éviter la dépendance circulaire au module level
         # (agent.py est importé par main.py qui définit hitl_create_entry)
-        from main import hitl_create_entry  # noqa: PLC0415
 
-        result = hitl_create_entry(
+        # Import local depuis hitl_router pour éviter la dépendance circulaire
+        # (agent.py est importé par main.py → on ne peut pas importer main au niveau module)
+        from hitl_router import hitl_create_entry  # noqa: PLC0415
+
+        result = await hitl_create_entry(
             mission_title=missions_result.get("mission_title", "Mission inconnue"),
             reason=missions_result.get("approval_reason") or (
                 f"Urgence '{missions_result.get('urgency_level', 'unknown')}' "

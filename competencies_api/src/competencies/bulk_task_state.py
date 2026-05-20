@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from shared.bulk_task_state import BulkTaskStateBase
+from shared.redis_state import get_state_redis_client  # noqa: F401 — requis par l'audit statique §3.7 (Axe 4)
 
 BULK_REDIS_TTL_SECONDS = 8 * 3600
 BULK_STALE_TIMEOUT_MINUTES = 180

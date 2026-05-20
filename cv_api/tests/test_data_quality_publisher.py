@@ -62,9 +62,9 @@ async def test_publish_success_with_db():
     mock_future.result.return_value = "msg-id-abc"
 
     with patch.dict("os.environ", {"DATA_QUALITY_PUBSUB_TOPIC": "projects/p/topics/dq"}), \
-         patch("src.services.data_quality_publisher.compute_data_quality_report",
-               new_callable=AsyncMock, return_value=SAMPLE_REPORT) as mock_compute, \
-         patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls:
+            patch("src.services.data_quality_publisher.compute_data_quality_report",
+                  new_callable=AsyncMock, return_value=SAMPLE_REPORT) as mock_compute, \
+            patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls:
 
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -106,10 +106,10 @@ async def test_publish_success_with_db_none():
     mock_db_module.SessionLocal.return_value = mock_session_ctx
 
     with patch.dict("os.environ", {"DATA_QUALITY_PUBSUB_TOPIC": "projects/p/topics/dq"}), \
-         patch("src.services.data_quality_publisher.compute_data_quality_report",
-               new_callable=AsyncMock, return_value=SAMPLE_REPORT) as mock_compute, \
-         patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls, \
-         patch.dict("sys.modules", {"database": mock_db_module}):
+            patch("src.services.data_quality_publisher.compute_data_quality_report",
+                  new_callable=AsyncMock, return_value=SAMPLE_REPORT) as mock_compute, \
+            patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls, \
+            patch("src.services.data_quality_publisher._db_module", mock_db_module):
 
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -146,9 +146,9 @@ async def test_publish_pubsub_error_does_not_raise():
     mock_future.result.side_effect = Exception("Pub/Sub unavailable")
 
     with patch.dict("os.environ", {"DATA_QUALITY_PUBSUB_TOPIC": "projects/p/topics/dq"}), \
-         patch("src.services.data_quality_publisher.compute_data_quality_report",
-               new_callable=AsyncMock, return_value=SAMPLE_REPORT), \
-         patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls:
+            patch("src.services.data_quality_publisher.compute_data_quality_report",
+                  new_callable=AsyncMock, return_value=SAMPLE_REPORT), \
+            patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls:
 
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -165,8 +165,8 @@ async def test_publish_pubsub_error_does_not_raise():
 async def test_publish_compute_error_does_not_raise():
     """Une erreur dans compute_data_quality_report est gérée gracieusement."""
     with patch.dict("os.environ", {"DATA_QUALITY_PUBSUB_TOPIC": "projects/p/topics/dq"}), \
-         patch("src.services.data_quality_publisher.compute_data_quality_report",
-               new_callable=AsyncMock, side_effect=Exception("DB unavailable")):
+        patch("src.services.data_quality_publisher.compute_data_quality_report",
+              new_callable=AsyncMock, side_effect=Exception("DB unavailable")):
 
         from src.services.data_quality_publisher import publish_data_quality_snapshot
         result = await publish_data_quality_snapshot(AsyncMock(), "Bearer tok")
@@ -182,9 +182,9 @@ async def test_payload_triggers_propagated():
     mock_future.result.return_value = "msg-id-trigger"
 
     with patch.dict("os.environ", {"DATA_QUALITY_PUBSUB_TOPIC": "projects/p/topics/dq"}), \
-         patch("src.services.data_quality_publisher.compute_data_quality_report",
-               new_callable=AsyncMock, return_value=SAMPLE_REPORT), \
-         patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls:
+            patch("src.services.data_quality_publisher.compute_data_quality_report",
+                  new_callable=AsyncMock, return_value=SAMPLE_REPORT), \
+            patch("src.services.data_quality_publisher.pubsub_v1.PublisherClient") as mock_client_cls:
 
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client

@@ -15,12 +15,12 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
         if name == "list_users":
             skip = arguments.get("skip", 0)
             limit = arguments.get("limit", 10)
-            response = await client.get(f"{API_BASE_URL}/", params={"skip": skip, "limit": limit})
+            response = await client.get(f"{API_BASE_URL}/", params={"skip": skip, "limit": limit}, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "get_user":
-            response = await client.get(f"{API_BASE_URL}/{arguments['user_id']}/")
+            response = await client.get(f"{API_BASE_URL}/{arguments['user_id']}/", timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -28,7 +28,7 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
             user_ids = arguments.get("user_ids", [])
             if not user_ids:
                 return [TextContent(type="text", text="[]")]
-            response = await client.post(f"{API_BASE_URL}/bulk", json=user_ids)
+            response = await client.post(f"{API_BASE_URL}/bulk", json=user_ids, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
@@ -39,30 +39,30 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
                 "password": arguments.get("password", ""),
                 "full_name": arguments.get("full_name"),
                 "is_anonymous": arguments.get("is_anonymous", False)
-            })
+            }, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "update_user":
             data = {k: v for k, v in arguments.items() if k != "user_id" and v is not None}
-            response = await client.put(f"{API_BASE_URL}/{arguments['user_id']}", json=data)
+            response = await client.put(f"{API_BASE_URL}/{arguments['user_id']}", json=data, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "delete_user":
-            response = await client.delete(f"{API_BASE_URL}/{arguments['user_id']}")
+            response = await client.delete(f"{API_BASE_URL}/{arguments['user_id']}", timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps({"message": "User deleted successfully"}))]
 
         elif name == "health_check":
-            response = await client.get(f"{API_BASE_URL}/health")
+            response = await client.get(f"{API_BASE_URL}/health", timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "search_users":
             query = arguments.get("query", "")
             limit = arguments.get("limit", 10)
-            response = await client.get(f"{API_BASE_URL}/search", params={"query": query, "limit": limit})
+            response = await client.get(f"{API_BASE_URL}/search", params={"query": query, "limit": limit}, timeout=10.0)
             response.raise_for_status()
             data = response.json()
             if not data:
@@ -73,36 +73,36 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
         elif name == "toggle_user_status":
             user_id = arguments["user_id"]
             is_active = arguments["is_active"]
-            response = await client.put(f"{API_BASE_URL}/{user_id}", json={"is_active": is_active})
+            response = await client.put(f"{API_BASE_URL}/{user_id}", json={"is_active": is_active}, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "get_user_stats":
-            response = await client.get(f"{API_BASE_URL}/stats")
+            response = await client.get(f"{API_BASE_URL}/stats", timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "get_user_duplicates":
-            response = await client.get(f"{API_BASE_URL}/duplicates")
+            response = await client.get(f"{API_BASE_URL}/duplicates", timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "merge_users":
             source_id = arguments["source_id"]
             target_id = arguments["target_id"]
-            response = await client.post(f"{API_BASE_URL}/merge", json={"source_id": source_id, "target_id": target_id})
+            response = await client.post(f"{API_BASE_URL}/merge", json={"source_id": source_id, "target_id": target_id}, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "search_anonymous_users":
             limit = arguments.get("limit", 10)
-            response = await client.get(f"{API_BASE_URL}/search", params={"is_anonymous": True, "limit": limit})
+            response = await client.get(f"{API_BASE_URL}/search", params={"is_anonymous": True, "limit": limit}, timeout=10.0)
             response.raise_for_status()
             return [TextContent(type="text", text=json.dumps(response.json()))]
 
         elif name == "get_user_availability":
             user_id = arguments['user_id']
-            response = await client.get(f"{API_BASE_URL}/{user_id}")
+            response = await client.get(f"{API_BASE_URL}/{user_id}", timeout=10.0)
             response.raise_for_status()
             user_data = response.json()
             unavailability_periods = user_data.get("unavailability_periods", [])

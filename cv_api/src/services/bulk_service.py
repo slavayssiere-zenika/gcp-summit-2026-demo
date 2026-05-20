@@ -36,6 +36,8 @@ from src.services.bulk_helpers import (  # noqa: F401 — ré-exportation pour r
 from src.services.retry_service import bg_retry_apply  # noqa: F401
 from src.services.search_service import scale_bulk_dependencies
 from src.services.semaphores import _items_delete_sem, acquire_shielded  # noqa: F401 — partagé avec retry_service
+import random
+
 from src.services.utils import (_CV_RESPONSE_SCHEMA, _build_distilled_content,
                                 _clean_llm_json, _coerce_to_str,
                                 build_taxonomy_context)
@@ -280,7 +282,6 @@ async def bg_bulk_reanalyse(service_token: str, cv_ids_filter: list[int] | None 
             Jitter aléatoire : évite le thundering herd quand plusieurs instances
             retentent simultanément après un pic d'import massif.
             """
-            import random
             for attempt in range(4):
                 try:
                     resp = await getattr(hc, method)(url, **kwargs)

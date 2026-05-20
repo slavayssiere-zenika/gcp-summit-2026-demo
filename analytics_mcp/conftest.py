@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 import os
 import sys
+from mcp_app import app
 
 # Assure que la racine du monorepo est dans sys.path pour résoudre `shared/`
 _MONOREPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,7 +21,7 @@ os.environ["GCP_PROJECT_ID"] = "test-project"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     with patch("mcp_server.client", MagicMock()):
-        from mcp_app import app
+        pass
 
 
 def override_verify_jwt():

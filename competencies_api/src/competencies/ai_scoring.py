@@ -32,6 +32,7 @@ from src.competencies.helpers import (
 )
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from shared.schemas.missions import MissionsResponse
+from datetime import date as _date
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,6 @@ async def _compute_ai_score(
             sy = int(str(start)[:4])
             sm = int(str(start)[5:7]) if len(str(start)) >= 7 else 1
             if str(end).lower() in ("present", "en cours", "current"):
-                from datetime import date as _date
 
                 ey, em = _date.today().year, _date.today().month
             else:

@@ -8,6 +8,8 @@ from shared.fastapi_utils import instrument_app
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from shared.auth.jwt import verify_jwt
 from src.router import public_router, router
+import httpx
+import uvicorn
 
 
 @asynccontextmanager
@@ -37,10 +39,9 @@ os.environ.pop("SECRET_KEY", None)  # Purge post-démarrage (anti prompt-injecti
 protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
-    import httpx
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://drive_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
@@ -105,5 +106,4 @@ app.include_router(protected_router)
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8006)

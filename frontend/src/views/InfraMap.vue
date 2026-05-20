@@ -174,7 +174,7 @@ onMounted(() => {
             <option :value="24">{{ t('inframap.option_24h') }}</option>
           </select>
         </div>
-        <button @click="fetchTopology" class="refresh-btn" :disabled="loading">
+        <button @click="fetchTopology" class="refresh-btn" :disabled="loading" aria-label="Rafraîchir la topologie">
           <RefreshCw size="18" :class="{ spin: loading }" />
           Rafraîchir
         </button>

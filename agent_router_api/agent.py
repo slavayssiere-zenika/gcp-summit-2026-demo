@@ -30,6 +30,10 @@ from opentelemetry.propagate import inject
 from prompt_loader import _fetch_prompt_cached, build_instruction_text  # noqa: F401
 # ADK v1.28+ WorkflowAgent — SequentialAgent + ParallelAgent (opt-in via ENABLE_WORKFLOW_AGENT)
 from workflow_agent import build_workflow_agent
+from agent_commons.session import RedisSessionService
+from workflow_agent import ask_missions_agent_with_hr_alignment
+import uuid
+from google.adk.runners import Runner
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +44,6 @@ _session_service = None
 def get_session_service():
     global _session_service
     if _session_service is None:
-        from agent_commons.session import RedisSessionService
         _session_service = RedisSessionService(
             redis_url=os.getenv("REDIS_URL", "redis://redis:6379/2"),
             redis_key_prefix="adk:sessions"
@@ -63,13 +66,16 @@ async def create_agent(session_id: str | None = None, preferred_language: str = 
 
     model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.5-flash"))
 
-    # ADK v1.28+ WorkflowAgent — SequentialAgent déterministe (opt-in via ENABLE_WORKFLOW_AGENT)
+    # ADK v1.28+ WorkflowAgent — Graphe d'États déterministe (opt-in via ENABLE_WORKFLOW_AGENT)
     if os.getenv("ENABLE_WORKFLOW_AGENT", "false").lower() == "true":
-        logger.info("[Router] Mode WorkflowAgent activé (SequentialAgent classifier + router).")
+        logger.info("[Router] Mode WorkflowAgent activé (StateGraphAgent classifier + router).")
+        # Conserver le nom et la docstring d'origine pour que le LLM sache l'invoquer normalement
+        ask_missions_agent_with_hr_alignment.__name__ = "ask_missions_agent"
+        ask_missions_agent_with_hr_alignment.__doc__ = ask_missions_agent.__doc__
         return build_workflow_agent(
             hr_tool=ask_hr_agent,
             ops_tool=ask_ops_agent,
-            missions_tool=ask_missions_agent,
+            missions_tool=ask_missions_agent_with_hr_alignment,
         )
 
     return Agent(
@@ -104,9 +110,6 @@ async def run_agent_query(
     Sans ce paramètre, auth_header_var peut être None dans ask_missions_agent,
     provocant un 401 lors de l'appel A2A interne.
     """
-    import uuid
-
-    from google.adk.runners import Runner
 
     # Fix JWT propagation [STAFF-007] — re-setter auth_header_var dans CE contexte asyncio
     if auth_token:

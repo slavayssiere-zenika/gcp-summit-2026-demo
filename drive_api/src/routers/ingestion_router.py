@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth.jwt import verify_jwt
 from src.drive_service import DriveService
 from src.services.ingestion_kpi_service import IngestionKpiService
+from shared.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ async def ingestion_batch_retry(
     result = await service.batch_retry(force=force)
 
     async def run_sync_after_retry():
-        from shared.database import SessionLocal
         async with SessionLocal() as session:
             try:
                 d_service = DriveService(session)
@@ -100,7 +100,6 @@ async def quality_gate_batch(
     total_queued = result["total_queued"]
 
     async def run_sync_after_gate():
-        from shared.database import SessionLocal
         async with SessionLocal() as session:
             try:
                 d_service = DriveService(session)

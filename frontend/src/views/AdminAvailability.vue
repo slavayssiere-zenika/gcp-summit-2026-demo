@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useI18n } from 'vue-i18n'
 import { Calendar, CalendarDays } from 'lucide-vue-next'
 import PageHeader from '../components/ui/PageHeader.vue'
+import { parsePaginated } from '../utils/apiContract'
 
 const { t } = useI18n()
 
@@ -16,7 +17,8 @@ const fetchUsers = async () => {
         const response = await axios.get('/api/users/?limit=100', {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
-        users.value = response.data.items.filter((u: any) => u.unavailability_periods && u.unavailability_periods.length > 0)
+        const page = parsePaginated<any>(response.data, 'users', '/api/users/?limit=100')
+        users.value = page.items.filter((u: any) => u.unavailability_periods && u.unavailability_periods.length > 0)
     } catch(err) {
         console.error(err)
     } finally {

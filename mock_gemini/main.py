@@ -11,8 +11,11 @@ Implémente les endpoints REST consommés par le SDK côté cv_api :
 Comportement :
   - Charge mock_responses.json au démarrage (pool de 20 CV extractions + vecteurs)
   - Sélectionne une réponse par hash MD5 du texte d'entrée (prédictif / reproductible)
-  - Injecte un délai uniforme aléatoire [0, MOCK_LLM_LATENCY_MAX_S] secondes
+  - Deux latences distinctes :
+      MOCK_LLM_LATENCY_MAX_S      → generateContent (simulation d'inférence LLM, défaut 3s)
+      MOCK_LLM_EMBED_LATENCY_MAX_S → embedContent/batchEmbedContents (lookup O(1), défaut 0s)
   - Embedding dimension : MOCK_LLM_EMBEDDING_DIM (défaut 3072, aligné sur gemini-embedding-001)
+  - 256 vecteurs unitaires pré-générés au démarrage → réponse embedding en O(1) par hash MD5
 """
 
 import asyncio
@@ -33,7 +36,11 @@ logger = logging.getLogger("mock_gemini")
 logging.basicConfig(level=logging.INFO)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
+# Latence pour generateContent (simulation d'inférence LLM)
 LATENCY_MAX_S: float = float(os.getenv("MOCK_LLM_LATENCY_MAX_S", "3"))
+# Latence pour embedContent / batchEmbedContents (lookup O(1) dans le pool pré-généré)
+# Défaut 0s : les vecteurs sont servis depuis le pool en mémoire, aucune raison d'attendre.
+EMBED_LATENCY_MAX_S: float = float(os.getenv("MOCK_LLM_EMBED_LATENCY_MAX_S", "0"))
 EMBEDDING_DIM: int = int(os.getenv("MOCK_LLM_EMBEDDING_DIM", "3072"))
 DATA_FILE: Path = Path(os.getenv("MOCK_DATA_FILE", "/data/mock_responses.json"))
 
@@ -49,27 +56,27 @@ def _load_pool() -> None:
     - Liste : [extraction1, extraction2, ...]  (format compact — mock_cv_pool.json)
     """
     global _POOL
-    if DATA_FILE.exists():
-        try:
-            with DATA_FILE.open() as f:
-                raw = json.load(f)
-            if isinstance(raw, list):
-                # Format liste : traiter comme cv_extractions directement
-                _POOL = {"cv_extractions": raw, "embeddings_pool": []}
-            elif isinstance(raw, dict):
-                _POOL = raw
-            else:
-                logger.warning("[mock_gemini] Format JSON inattendu (%s) — pool vide", type(raw))
-                return
-            logger.info(
-                "[mock_gemini] Pool chargé : %d CV, %d vecteurs",
-                len(_POOL.get("cv_extractions", [])),
-                len(_POOL.get("embeddings_pool", [])),
-            )
-        except Exception as e:
-            logger.warning("[mock_gemini] Impossible de charger %s : %s — pool vide", DATA_FILE, e)
-    else:
-        logger.warning("[mock_gemini] %s introuvable — réponses synthétiques utilisées", DATA_FILE)
+    if not DATA_FILE.exists():
+        raise FileNotFoundError(f"[mock_gemini] Critical: JSON pool file {DATA_FILE} is missing!")
+
+    try:
+        with DATA_FILE.open(encoding="utf-8") as f:
+            raw = json.load(f)
+        if isinstance(raw, list):
+            # Format liste : traiter comme cv_extractions directement
+            _POOL = {"cv_extractions": raw, "embeddings_pool": []}
+        elif isinstance(raw, dict):
+            _POOL = raw
+        else:
+            raise ValueError(f"[mock_gemini] Format JSON inattendu : {type(raw)}")
+        logger.info(
+            "[mock_gemini] Pool chargé : %d CV, %d vecteurs",
+            len(_POOL.get("cv_extractions", [])),
+            len(_POOL.get("embeddings_pool", [])),
+        )
+    except Exception as e:
+        logger.error("[mock_gemini] Échec critique du chargement de %s : %s", DATA_FILE, e)
+        raise
 
 
 def _pick_by_hash(pool: list, text: str):
@@ -78,6 +85,22 @@ def _pick_by_hash(pool: list, text: str):
         return None
     idx = int(hashlib.md5(text.encode()).hexdigest(), 16) % len(pool)
     return pool[idx]
+
+
+# Pool de vecteurs aléatoires pré-générés pour éviter les calculs CPU intensifs en cours de test
+_PREGENERATED_VECTORS: list[list[float]] = []
+
+
+def _pregenerate_vectors(count: int = 256, dim: int = 3072) -> None:
+    """Pré-génère un ensemble de vecteurs unitaires pour éviter les boucles CPU-bound sous charge."""
+    logger.info("[mock_gemini] Pré-génération de %d vecteurs de dimension %d...", count, dim)
+    random.seed(42)  # Fixer le seed pour avoir des vecteurs reproductibles au démarrage
+    for _ in range(count):
+        v = [random.gauss(0, 1) for _ in range(dim)]
+        norm = math.sqrt(sum(x * x for x in v)) or 1.0
+        _PREGENERATED_VECTORS.append([x / norm for x in v])
+    random.seed()  # reset seed
+    logger.info("[mock_gemini] Pré-génération de %d vecteurs terminée.", count)
 
 
 def _random_unit_vector(dim: int) -> list[float]:
@@ -93,26 +116,37 @@ def _get_embedding(text: str) -> list[float]:
     vec = _pick_by_hash(pool, text)
     if vec and len(vec) == EMBEDDING_DIM:
         return vec
-    # Génère un vecteur synthétique reproductible via seed fixé sur le hash
+    # Si le pool d'embeddings est vide ou incomplet, retourner un vecteur pré-généré déterministe
+    if _PREGENERATED_VECTORS:
+        idx = int(hashlib.md5(text.encode()).hexdigest(), 16) % len(_PREGENERATED_VECTORS)
+        return _PREGENERATED_VECTORS[idx]
+    # Fallback de sécurité (normalement jamais atteint)
     random.seed(int(hashlib.md5(text.encode()).hexdigest(), 16))
     result = _random_unit_vector(EMBEDDING_DIM)
     random.seed()
     return result
 
 
-async def _inject_latency() -> None:
-    """Délai aléatoire uniforme [0, LATENCY_MAX_S] pour simuler le temps LLM."""
-    if LATENCY_MAX_S > 0:
-        await asyncio.sleep(random.uniform(0, LATENCY_MAX_S))
+async def _inject_latency(max_s: float | None = None) -> None:
+    """Délai aléatoire uniforme [0, max_s] pour simuler le temps de réponse.
+
+    - generateContent  → max_s=LATENCY_MAX_S  (défaut 3s, simule l'inférence LLM)
+    - embedContent     → max_s=EMBED_LATENCY_MAX_S (défaut 0s, lookup O(1) depuis pool)
+    """
+    effective = LATENCY_MAX_S if max_s is None else max_s
+    if effective > 0:
+        await asyncio.sleep(random.uniform(0, effective))
 
 
 # ── Application ───────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _load_pool()
+    _pregenerate_vectors(count=256, dim=EMBEDDING_DIM)
     logger.info(
-        "[mock_gemini] Démarré — LATENCY_MAX_S=%.1f, EMBEDDING_DIM=%d",
+        "[mock_gemini] Démarré — LATENCY_MAX_S=%.1fs / EMBED_LATENCY_MAX_S=%.1fs / EMBEDDING_DIM=%d",
         LATENCY_MAX_S,
+        EMBED_LATENCY_MAX_S,
         EMBEDDING_DIM,
     )
     yield
@@ -221,7 +255,8 @@ async def generate_content(version: str, model_id: str, request: Request):
 # ── embedContent ───────────────────────────────────────────────────────────────
 @app.post("/{version}/models/{model_id}:embedContent")
 async def embed_content(version: str, model_id: str, request: Request):
-    await _inject_latency()
+    # Latence embedding : 0s par défaut (lookup O(1) depuis pool pré-généré)
+    await _inject_latency(max_s=EMBED_LATENCY_MAX_S)
 
     body = await request.json()
     text = ""
@@ -235,7 +270,8 @@ async def embed_content(version: str, model_id: str, request: Request):
 # ── batchEmbedContents ─────────────────────────────────────────────────────────
 @app.post("/{version}/models/{model_id}:batchEmbedContents")
 async def batch_embed_contents(version: str, model_id: str, request: Request):
-    await _inject_latency()
+    # Latence embedding : 0s par défaut (lookups O(1) depuis pool pré-généré)
+    await _inject_latency(max_s=EMBED_LATENCY_MAX_S)
 
     body = await request.json()
     embeddings = []

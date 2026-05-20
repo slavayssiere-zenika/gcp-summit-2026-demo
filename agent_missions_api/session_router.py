@@ -15,6 +15,7 @@ from agent_commons.metadata import extract_metadata_from_session
 from fastapi import APIRouter, Depends, HTTPException
 
 from shared.auth.jwt import verify_jwt_request as verify_jwt
+from agent import get_session_service
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,6 @@ session_router = APIRouter(dependencies=[Depends(verify_jwt)])
 
 def _get_session_service():
     """Lazy singleton — importe get_session_service depuis main pour éviter les cycles."""
-    from main import get_session_service
     return get_session_service()
 
 

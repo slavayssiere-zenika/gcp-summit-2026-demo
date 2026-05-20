@@ -19,8 +19,8 @@ from src.services.bulk_service import (_acquire_service_token,
 from src.services.embedding_service import (
     reindex_mission_chunks_bg,
 )
-from src.services.taxonomy_service import (fetch_prompt,
-                                           get_existing_competencies)
+from src.services.data_quality_service import CACHE_TTL_SECONDS, compute_data_quality_report
+from src.services.taxonomy_service import fetch_prompt, get_existing_competencies
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -194,8 +194,6 @@ async def get_data_quality_report(
     Retourne un score 0-100 et un grade A-D.
     Cache in-process 30s (aligné sur le polling frontend).
     """
-    from src.services.data_quality_service import (CACHE_TTL_SECONDS,
-                                                   compute_data_quality_report)
 
     try:
         cached_report = await get_cache("cv_api:data_quality")

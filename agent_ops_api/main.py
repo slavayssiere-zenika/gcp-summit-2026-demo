@@ -35,21 +35,24 @@ from agent_commons.exception_handler import make_global_exception_handler
 from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 
 import os as _os
+
+try:
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    _CLOUD_TRACE_AVAILABLE = True
+except ImportError:
+    _CLOUD_TRACE_AVAILABLE = False
+
+_trace_exporter_type = os.getenv("TRACE_EXPORTER", "grpc")
+if _trace_exporter_type == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+else:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
 SECRET_KEY = _os.getenv("SECRET_KEY", "")
 
 warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*")
 
 security = HTTPBearer()
-
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -61,7 +64,7 @@ provider = TracerProvider(
     }),
     sampler=sampler
 )
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp" and _CLOUD_TRACE_AVAILABLE:
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(

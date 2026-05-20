@@ -21,6 +21,8 @@ from src.gemini_retry import (embed_content_with_retry,
                               generate_content_with_retry)
 
 from shared.cache import get_cache, set_cache
+from .document_extractor import extract_document_contents
+from metrics import MISSIONS_CREATED_TOTAL  # noqa: F402
 
 
 async def get_cached_prompt(http_client: httpx.AsyncClient, prompt_key: str, headers: dict) -> str:
@@ -87,7 +89,6 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
             base_staffing_prompt = await get_cached_prompt(http_client, "missions_api.staffing_heuristics", headers)
 
             # Preparation du contenu multimodal
-            from .document_extractor import extract_document_contents
             gemini_contents, final_description = await extract_document_contents(
                 url, file_bytes, file_mime, description, headers, http_client
             )
@@ -174,7 +175,8 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                             "output_tokens": usage.candidates_token_count
                         }
                     },
-                    headers=headers
+                    headers=headers,
+                    timeout=10.0,
                 )
             await fast_log_finops("RAG_Mission_Extraction", model_extract, res_extract.usage_metadata)
 
@@ -230,7 +232,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                 payload["skills"] = extracted_competencies
 
             logger.info("Recherche CV_API avec requête POST intégrale")
-            cv_res = await http_client.post(f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers)
+            cv_res = await http_client.post(f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers, timeout=10.0)
             is_fallback = False
             if cv_res.status_code == 200:
                 is_fallback = (cv_res.headers.get("X-Fallback-Full-Scan", "false").lower() == "true")
@@ -247,8 +249,9 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     u_id = p.get("user_id")
                     try:
                         u_res, cv_details_res = await asyncio.gather(
-                            http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers),
-                            http_client.get(f"{CV_API_URL.rstrip('/')}/user/{u_id}/details", headers=headers),
+                            http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers, timeout=10.0),
+                            http_client.get(f"{CV_API_URL.rstrip('/')}/user/{u_id}/details",
+                                            headers=headers, timeout=10.0),
                         )
                     except Exception as e:
                         logger.warning(f"Enrichissement candidat {u_id} échoué: {e}")
@@ -385,7 +388,6 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         await db.commit()
                         await db.refresh(existing_mission)
                         await task_manager.update_status_success(task_id, existing_mission.id)
-                        from metrics import MISSIONS_CREATED_TOTAL  # noqa: F402
                         MISSIONS_CREATED_TOTAL.labels(status="reanalyze_success").inc()
                         break
 
@@ -415,12 +417,10 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                 await db.commit()
                 await db.refresh(new_mission)
                 await task_manager.update_status_success(task_id, new_mission.id)
-                from metrics import MISSIONS_CREATED_TOTAL  # noqa: F402
                 MISSIONS_CREATED_TOTAL.labels(status="success").inc()
                 break
 
     except Exception as e:
         logger.error(f"Erreur task {task_id}: {traceback.format_exc()}")
         await task_manager.update_status_failed(task_id, str(e))
-        from metrics import MISSIONS_CREATED_TOTAL
         MISSIONS_CREATED_TOTAL.labels(status="staffing_failed").inc()

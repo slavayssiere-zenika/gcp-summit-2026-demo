@@ -22,8 +22,8 @@ from src.cvs.routers._shared import (DRIVE_API_URL, USERS_API_URL)
 from src.cvs.schemas import RankedExperienceResponse
 from src.services.bulk_service import bg_retry_apply
 from src.services.embedding_service import reindex_embeddings_bg
-from src.services.taxonomy_service import (fetch_prompt,
-                                           get_existing_competencies)
+from shared.schemas.auth import TokenResponse
+from src.services.taxonomy_service import fetch_prompt, get_existing_competencies
 
 _fetch_prompt = fetch_prompt
 _get_existing_competencies = get_existing_competencies
@@ -230,7 +230,7 @@ async def get_reanalyze_status(
         headers_internal: dict = {}
         inject(headers_internal)
         async with httpx.AsyncClient(timeout=10.0) as http_client:
-            res = await http_client.get(drive_url, params=params, headers=headers_internal)
+            res = await http_client.get(drive_url, params=params, headers=headers_internal, timeout=10.0)
             if res.status_code == 200:
                 return res.json()
             return {"status": "unavailable", "message": f"drive_api /status HTTP {res.status_code}"}
@@ -329,7 +329,7 @@ async def reanalyze_cvs(
         if tag:
             reset_url += f"?tag={tag}"
         async with httpx.AsyncClient(timeout=5.0) as http_client:
-            await http_client.post(reset_url, headers=headers)
+            await http_client.post(reset_url, headers=headers, timeout=10.0)
     except Exception as e:
         logger.warning(f"[reanalyze] Failed to trigger drive_api reset-sync: {e}")
 
@@ -364,7 +364,6 @@ async def reanalyze_cvs(
                 timeout=10.0
             )
             if svc_res.status_code == 200:
-                from shared.schemas.auth import TokenResponse
                 data = TokenResponse.model_validate(svc_res.json())
                 svc_token = data.access_token
                 effective_headers = {"Authorization": f"Bearer {svc_token}"}

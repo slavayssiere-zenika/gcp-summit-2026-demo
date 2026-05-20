@@ -170,7 +170,7 @@ const advanced = [
       </div>
 
       <div class="examples-grid">
-        <div v-for="(ex, idx) in section.examples" :key="idx" class="example-card">
+        <div v-for="(ex, idx) in section.examples" :key="ex.label || idx" class="example-card">
           <div class="example-label">
             <ChevronRight size="13" />
             {{ ex.label }}

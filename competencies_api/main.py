@@ -11,8 +11,8 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from shared.auth.jwt import verify_jwt
-from src.competencies.router import (analytics_scheduler_router, public_router,
-                                     router)
+import uvicorn
+from src.competencies.router import analytics_scheduler_router, public_router, router
 
 setup_tracing(service_name="competencies-api")
 
@@ -71,8 +71,8 @@ app.include_router(analytics_scheduler_router)  # OIDC Cloud Scheduler — sans 
 app.include_router(router)
 
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://competencies_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
@@ -101,5 +101,4 @@ async def proxy_mcp(path: str, request: Request):
             return Response(content=str(e), status_code=502)
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8003)

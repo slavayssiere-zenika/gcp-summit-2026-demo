@@ -1,13 +1,15 @@
-from fakeredis import aioredis
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy import create_engine
-from fastapi.testclient import TestClient
-import pytest
-import fakeredis
-from unittest.mock import MagicMock, patch
+import asyncio
 import os
 import sys
+from unittest.mock import MagicMock, patch
+
+import fakeredis
+import pytest
+from fakeredis import aioredis
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 # Assure que la racine du monorepo est dans sys.path pour résoudre `shared/`
 _MONOREPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,18 +23,16 @@ os.environ["USERS_API_URL"] = "http://users_api:8000"
 os.environ["SECRET_KEY"] = "testsecret"
 
 _fake_redis_server = fakeredis.FakeServer()
-_fake_redis_client = aioredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
+_fake_redis_client = aioredis.FakeRedis(server=_fake_redis_server, db=3, decode_responses=True)
 
 # Mock OTel AVANT l'import de main
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+    import shared.cache as _cache_module  # noqa: E402
     from shared.database import engine, get_db
     from main import app
     from shared.auth.jwt import verify_jwt
     from src.competencies.models import Base
-
-# Injecte le client fakeredis dans le module cache (lazy init)
-import shared.cache as _cache_module  # noqa: E402
-_cache_module._redis_pool = _fake_redis_client
+    _cache_module._redis_pool = _fake_redis_client
 
 
 if engine:
@@ -77,6 +77,5 @@ def client():
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
-    import asyncio
-    asyncio.run(_fake_redis_client.flushall())
+    asyncio.run(_fake_redis_client.flushdb())
     yield

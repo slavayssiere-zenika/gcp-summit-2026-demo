@@ -23,6 +23,7 @@ try:
     from google.adk.integrations.agent_registry import AgentRegistry
     _AGENT_REGISTRY_AVAILABLE = True
 except ImportError:
+    AgentRegistry = None  # type: ignore[assignment,misc]
     _AGENT_REGISTRY_AVAILABLE = False
     app_logger = None  # sera initialisé plus bas
 
@@ -38,7 +39,10 @@ from agent_commons.runner import run_agent_and_collect
 from agent_commons.session import RedisSessionService
 from agent_commons.ui_tools import render_ui_widgets
 from shared.schemas.staffing import MissionAnalysis
-from agent_commons.prompt_loader import fetch_agent_prompt
+from agent_commons.prompt_loader import (
+    fetch_agent_prompt,
+    get_or_create_gemini_context_cache,
+)
 
 
 app_logger = logging.getLogger(__name__)
@@ -151,6 +155,20 @@ async def create_agent(session_id: str | None = None) -> Agent:
         OPS_TOOLS.append(cloudtrace_toolset)
 
     app_logger.info("[Ops] Creating Agent with %d tools...", len(OPS_TOOLS))
+
+    # ── Context Caching Gemini ────────────────────────────────────────────────
+    cache_name = await get_or_create_gemini_context_cache(
+        prompt_key="agent_ops_api.system_instruction",
+        prompt_text=instruction_text,
+        model=model,
+        agent_prefix="[Ops]",
+    )
+
+    cached_content = None
+    if cache_name:
+        cached_content = cache_name
+        instruction_text = None
+
     agent = Agent(
         name="assistant_zenika_ops",
         model=model,
@@ -161,6 +179,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
             http_options=types.HttpOptions(
                 retry_options=types.HttpRetryOptions(initial_delay=1, attempts=2),
             ),
+            cached_content=cached_content,
         ),
         instruction=instruction_text,
         description="Le module spécialisé dans les Opérations, FinOps, Log Monitoring.",

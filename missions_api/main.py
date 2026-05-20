@@ -15,15 +15,19 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 from shared.auth.jwt import verify_jwt
 from src.missions.router import public_router, router
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+import httpx
+import uvicorn
+try:
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    _CLOUD_TRACE_AVAILABLE = True
+except ImportError:
+    _CLOUD_TRACE_AVAILABLE = False
+
+_trace_exporter_type = os.getenv("TRACE_EXPORTER", "grpc")
+if _trace_exporter_type == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
 
 sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
@@ -35,7 +39,7 @@ provider = TracerProvider(
     }),
     sampler=sampler
 )
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+if os.getenv("TRACE_EXPORTER", "grpc") == "gcp" and _CLOUD_TRACE_AVAILABLE:
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
@@ -91,10 +95,9 @@ app.include_router(public_router)
 app.include_router(router)
 
 
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)])
+@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
 async def proxy_mcp(path: str, request: Request):
-    import httpx
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://missions_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"
     if request.url.query:
@@ -126,5 +129,4 @@ app.include_router(protected_router)
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8009)

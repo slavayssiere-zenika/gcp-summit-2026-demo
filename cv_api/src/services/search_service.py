@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials
 from google.cloud import run_v2 as cloudrun_v2
 from pydantic import ValidationError
+from sqlalchemy import text
 from shared.schemas.pagination import PaginationResponse
 from metrics import CV_MISSING_EMBEDDINGS, CV_SEARCH_THRESHOLD_FILTERED, CV_SEARCH_RESULT_SCORE
 from opentelemetry.propagate import inject
@@ -34,6 +35,8 @@ from src.services.config import (BULK_SCALE_SERVICES, CLOUDRUN_WORKSPACE,
                                  COMPETENCIES_API_URL, GCP_PROJECT_ID,
                                  USERS_API_URL, VERTEX_LOCATION)
 from src.services.finops import log_finops
+from google.genai import types
+from src.cvs.models import CVMissionEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +100,6 @@ async def execute_search(
         HTTPException 404 si aucun candidat n'est trouvé.
         HTTPException 500 si le client GenAI n'est pas configuré.
     """
-    from google.genai import types
 
     if not genai_client:
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")
@@ -371,9 +373,6 @@ async def execute_search_chunked(
     Activé via la variable d'env RAG_CHUNKED_SEARCH=true.
     Fallback automatique sur execute_search() si la table est vide.
     """
-    from sqlalchemy import func, text
-
-    from src.cvs.models import CVMissionEmbedding
 
     if not genai_client:
         raise HTTPException(status_code=500, detail="GenAI Client not configured.")

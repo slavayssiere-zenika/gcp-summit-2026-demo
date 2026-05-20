@@ -15,18 +15,22 @@
       <!-- Toolbar: Search & Filters -->
       <div class="toolbar">
         <div class="search-box">
+          <label for="user-search-input" class="sr-only">{{ $t('admin_users.search_placeholder') }}</label>
           <Search class="search-icon" size="18" />
           <input 
+            id="user-search-input"
             type="text" 
             v-model="searchQuery" 
             :placeholder="$t('admin_users.search_placeholder')" 
+            :aria-label="$t('admin_users.search_placeholder')"
           />
         </div>
         
         <div class="filters">
           <div class="filter-group">
+            <label for="agency-filter" class="sr-only">{{ $t('admin_users.filter_all_agencies') }}</label>
             <Filter size="16" class="filter-icon" />
-            <select v-model="selectedAgency" class="filter-select">
+            <select id="agency-filter" v-model="selectedAgency" class="filter-select" :aria-label="$t('admin_users.filter_all_agencies')">
               <option value="">{{ $t('admin_users.filter_all_agencies') }}</option>
               <option v-for="agency in availableAgencies" :key="agency" :value="agency">
                 {{ agency }}
@@ -35,8 +39,9 @@
           </div>
           
           <div class="filter-group">
+            <label for="role-filter" class="sr-only">{{ $t('admin_users.filter_all_roles') }}</label>
             <Shield size="16" class="filter-icon" />
-            <select v-model="selectedRole" class="filter-select">
+            <select id="role-filter" v-model="selectedRole" class="filter-select" :aria-label="$t('admin_users.filter_all_roles')">
               <option value="">{{ $t('admin_users.filter_all_roles') }}</option>
               <option value="admin">{{ $t('admin_users.role_admin') }}</option>
               <option value="rh">{{ $t('admin_users.role_rh') }}</option>
@@ -46,7 +51,7 @@
           </div>
         </div>
 
-        <button class="action-btn-small" @click="fetchUsers" :disabled="isLoading">
+        <button class="action-btn-small" @click="fetchUsers" :disabled="isLoading" aria-label="Rafraîchir la liste">
           <RefreshCw :class="{ spin: isLoading }" size="16" />
         </button>
       </div>
@@ -72,7 +77,7 @@
                 <td>
                   <div class="user-profile">
                     <div class="avatar">
-                      <img v-if="user.picture_url" :src="user.picture_url" alt="" />
+                      <img v-if="user.picture_url" :src="user.picture_url" alt="" width="40" height="40" />
                       <span v-else>{{ getInitials(user.full_name || user.username) }}</span>
                     </div>
                     <div class="user-info">
@@ -106,16 +111,17 @@
                 <td class="actions-col">
                   <div class="quick-actions">
                     <div class="role-selector">
-                      <button @click="setRole(user, 'user')" class="btn-mini" :class="{ 'active': user.role === 'user' }" title="Utilisateur" :disabled="isUpdating === user.id">U</button>
-                      <button @click="setRole(user, 'rh')" class="btn-mini btn-rh" :class="{ 'active': user.role === 'rh' }" title="RH" :disabled="isUpdating === user.id">RH</button>
-                      <button @click="setRole(user, 'commercial')" class="btn-mini btn-commercial" :class="{ 'active': user.role === 'commercial' }" title="Commercial" :disabled="isUpdating === user.id">CO</button>
-                      <button @click="setRole(user, 'admin')" class="btn-mini btn-admin" :class="{ 'active': user.role === 'admin' }" title="Administrateur" :disabled="isUpdating === user.id">AD</button>
+                      <button @click="setRole(user, 'user')" class="btn-mini" :class="{ 'active': user.role === 'user' }" title="Utilisateur" aria-label="Attribuer le rôle Utilisateur" :disabled="isUpdating === user.id">U</button>
+                      <button @click="setRole(user, 'rh')" class="btn-mini btn-rh" :class="{ 'active': user.role === 'rh' }" title="RH" aria-label="Attribuer le rôle RH" :disabled="isUpdating === user.id">RH</button>
+                      <button @click="setRole(user, 'commercial')" class="btn-mini btn-commercial" :class="{ 'active': user.role === 'commercial' }" title="Commercial" aria-label="Attribuer le rôle Commercial" :disabled="isUpdating === user.id">CO</button>
+                      <button @click="setRole(user, 'admin')" class="btn-mini btn-admin" :class="{ 'active': user.role === 'admin' }" title="Administrateur" aria-label="Attribuer le rôle Administrateur" :disabled="isUpdating === user.id">AD</button>
                     </div>
                     <button 
                       @click="toggleStatus(user)" 
                       class="btn-icon" 
                       :class="user.is_active ? 'btn-danger' : 'btn-success'"
                       :title="user.is_active ? $t('admin_users.btn_deactivate') : $t('admin_users.btn_activate')"
+                      :aria-label="user.is_active ? $t('admin_users.btn_deactivate') : $t('admin_users.btn_activate')"
                       :disabled="isUpdating === user.id"
                     >
                       <UserX v-if="user.is_active" size="16" />
@@ -151,9 +157,9 @@
           {{ $t('admin_users.pagination_info', { from: (currentPage - 1) * itemsPerPage + 1, to: Math.min(currentPage * itemsPerPage, filteredUsers.length), total: filteredUsers.length }) }}
         </span>
         <div class="pagination-buttons">
-          <button @click="currentPage--" :disabled="currentPage === 1" class="page-btn"><ChevronLeft size="16" /></button>
+          <button @click="currentPage--" :disabled="currentPage === 1" class="page-btn" aria-label="Page précédente"><ChevronLeft size="16" /></button>
           <span class="page-current">{{ $t('admin_users.page_info', { current: currentPage, total: totalPages }) }}</span>
-          <button @click="currentPage++" :disabled="currentPage === totalPages" class="page-btn"><ChevronRight size="16" /></button>
+          <button @click="currentPage++" :disabled="currentPage === totalPages" class="page-btn" aria-label="Page suivante"><ChevronRight size="16" /></button>
         </div>
       </div>
 
@@ -171,6 +177,7 @@ import {
   Search, Filter, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import PageHeader from '../components/ui/PageHeader.vue'
+import { parsePaginated } from '../utils/apiContract'
 
 const { t: $t } = useI18n()
 const users = ref<any[]>([])
@@ -199,11 +206,12 @@ const fetchUsers = async () => {
     
     while (hasMore) {
       const response = await axios.get(`/auth/?skip=${skip}&limit=${limit}`)
-      if (response.data && response.data.items) {
-        allUsers = [...allUsers, ...response.data.items]
-        total = response.data.total || allUsers.length
+      const page = parsePaginated<any>(response.data, 'users', `/auth/?skip=${skip}`)
+      if (page.items.length > 0 || skip === 0) {
+        allUsers = [...allUsers, ...page.items]
+        total = page.total
         
-        if (allUsers.length >= total || response.data.items.length < limit) {
+        if (allUsers.length >= total || page.items.length < limit) {
           hasMore = false
         } else {
           skip += limit

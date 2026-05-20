@@ -136,7 +136,7 @@ class TestExceptionHandlerTokenEdgeCases:
             raise ValueError("erreur")
 
         with patch("shared.exception_handler._report_to_prompts_api", new=AsyncMock()) as mock_report, \
-             patch("shared.exception_handler._get_service_token_fallback", new=AsyncMock()) as mock_fb:
+                patch("shared.exception_handler._get_service_token_fallback", new=AsyncMock()) as mock_fb:
             with TestClient(app, raise_server_exceptions=False) as client:
                 token = jwt.encode({"sub": "u"}, SECRET_KEY, algorithm=ALGORITHM)
                 client.get("/boom", headers={"Authorization": f"Bearer {token}"})
@@ -174,7 +174,7 @@ class TestExceptionHandlerTokenEdgeCases:
         from shared.exception_handler import _report_to_prompts_api
         sent_headers = {}
         with patch("shared.exception_handler.httpx.AsyncClient") as mock_cls, \
-             patch("shared.exception_handler.inject"):
+                patch("shared.exception_handler.inject"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
@@ -382,7 +382,7 @@ class TestDatabaseEdgeCasesUncovered:
             import database as db
             importlib.reload(db)
             with patch("database.create_async_engine", side_effect=mock_engine), \
-                 patch("database.sessionmaker"):
+                    patch("database.sessionmaker"):
                 await db.init_db_connector()
 
         # Doit utiliser la branche directe (non-IAM) car ALLOYDB_INSTANCE_URI vide
@@ -392,12 +392,9 @@ class TestDatabaseEdgeCasesUncovered:
     async def test_get_db_session_closed_on_exception(self):
         """get_db() avec exception dans le body : comportement documenté.
 
-        Quand une exception est levée dans le corps du générateur FastAPI,
-        Python envoie throw() au générateur. Le finally de get_db() exécute
-        db.close() mais l'async with reçoit l'exception transformée.
-
-        Ce test vérifie que l'exception se propage et que le contexte manager
-        est bien quitté (via __aexit__).
+        Simule le comportement de FastAPI qui propage une exception vers le
+        générateur via athrow(). Le try/except de get_db() attrape l'exception
+        et appelle db.close() avant de propager l'erreur.
         """
         import database as db
         aexit_called = []
@@ -411,28 +408,26 @@ class TestDatabaseEdgeCasesUncovered:
             async def __aexit__(self, *args):
                 aexit_called.append(args)
                 await mock_session.close()
-                return False  # Ne supprime pas l'exception
+                return False
 
         original = db.SessionLocal
         db.SessionLocal = MagicMock(return_value=FakeContextManager())
 
+        gen = db.get_db()
         try:
-            async for session in db.get_db():
-                raise ValueError("erreur dans le body")
-        except (ValueError, Exception):
+            # On avance le générateur pour yield la session
+            await gen.__anext__()
+            # On lance l'exception dans le générateur via athrow
+            await gen.athrow(ValueError("erreur dans le body"))
+        except ValueError:
             pass
         finally:
+            await gen.aclose()
             db.SessionLocal = original
 
-        # BUG RÉVÉLÉ : __aexit__ n'est PAS appelé quand une exception traverse
-        # le générateur async get_db() dans le contexte pytest asyncio strict.
-        # Cela indique un risque de fuite de ressource (session non fermée).
-        # Ce test DOCUMENTE le comportement actuel — il faudrait ajouter un try/except
-        # dans get_db() pour garantir la fermeture même sans async with.
-        # Comportement actuel : 0 (bug), comportement attendu : 1
-        assert len(aexit_called) == 0, (
-            f"COMPORTEMENT MODIFIÉ : __aexit__ est maintenant appelé {len(aexit_called)} fois. "
-            "Mettre à jour ce test si le bug est corrigé."
+        # Vérifie que le context manager a été proprement quitté et fermé
+        assert len(aexit_called) == 1, (
+            f"COMPORTEMENT INATTENDU : __aexit__ a été appelé {len(aexit_called)} fois au lieu de 1."
         )
 
     @pytest.mark.asyncio
@@ -663,13 +658,24 @@ class TestPaginationResponseEdgeCases:
             pass
 
     def test_pagination_response_large_skip_limit(self):
-        """PaginationResponse avec skip/limit très grands → accepté (pas de contrainte max)."""
+        """PaginationResponse avec skip très grand est accepté, mais limit > 500 est rejeté (ValidationError)."""
         from shared.schemas.pagination import PaginationResponse
+        from pydantic import ValidationError
+
+        # skip très grand est toujours valide
         r = PaginationResponse[dict].model_validate({
             "items": [],
             "total": 0,
             "skip": 999999,
-            "limit": 100000,
+            "limit": 500,
         })
         assert r.skip == 999999
-        assert r.limit == 100000
+
+        # limit = 100000 doit être rejeté (max 500)
+        with pytest.raises(ValidationError):
+            PaginationResponse[dict].model_validate({
+                "items": [],
+                "total": 0,
+                "skip": 0,
+                "limit": 100000,
+            })

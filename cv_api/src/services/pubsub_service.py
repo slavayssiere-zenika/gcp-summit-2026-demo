@@ -17,6 +17,9 @@ import src.services.config as _svc_config
 import os as _os
 from src.cvs.models import CVProfile
 from src.services.cv_import_service import process_cv_core
+from src.services.cv_storage_service import CVStorageService
+from shared.auth.jwt import VerifyOIDC
+from shared.schemas.auth import TokenResponse
 
 _AUTH_SECRET_KEY = _os.getenv('SECRET_KEY', '')
 
@@ -58,7 +61,7 @@ class PubsubService:
                 if user_id:
                     try:
                         async with httpx.AsyncClient(timeout=10.0) as http_client:
-                            u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=bg_headers)
+                            u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=bg_headers, timeout=10.0)
                             if u_res.status_code == 200:
                                 user_data = u_res.json()
                                 if user_data.get("role") != "admin":
@@ -148,7 +151,6 @@ class PubsubService:
             )
 
             # ── Étape 2 : Compétences + Missions (awaité — résultat récupéré) ────
-            from src.services.cv_storage_service import CVStorageService
             bg_errors = await CVStorageService.bg_process_competencies_and_missions(
                 result.user_id, result.structured_cv, bg_headers, bg_url
             )
@@ -251,7 +253,6 @@ class PubsubService:
         """
 
         # ── 1. Validation OIDC ───────────────────────────────────────────────
-        from shared.auth.jwt import VerifyOIDC
         verify_oidc = VerifyOIDC(audience_env_var="PUBSUB_CV_IMPORT_AUDIENCE")
         await verify_oidc(request)
 
@@ -299,7 +300,6 @@ class PubsubService:
                         json={"id_token": oidc_token},
                     )
                     if oidc_res.status_code == 200:
-                        from shared.schemas.auth import TokenResponse
                         data = TokenResponse.model_validate(oidc_res.json())
                         jwt_token = data.access_token
                         logger.info(
@@ -334,7 +334,6 @@ class PubsubService:
                             headers={"Authorization": f"Bearer {jwt_token}"},
                         )
                         if svc_res.status_code == 200:
-                            from shared.schemas.auth import TokenResponse
                             data = TokenResponse.model_validate(svc_res.json())
                             jwt_token = data.access_token
                             logger.info(

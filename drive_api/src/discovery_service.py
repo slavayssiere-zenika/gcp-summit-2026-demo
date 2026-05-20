@@ -9,6 +9,7 @@ from shared.cache import delete_cache, get_cache, set_cache
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.services.google_api_client import DriveApiClient
 from src.services.tree_resolution import TreeResolver
+import asyncio as _asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,6 @@ class DiscoveryService:
                         subfolders_in_page += 1
 
                         # Remplacement du pipeline() sync par deux set_cache() async en gather
-                        import asyncio as _asyncio
                         await _asyncio.gather(
                             set_cache(f"drive:graph:{file_id}", folder_id, 86400 * 30),
                             set_cache(f"drive:name:{file_id}", name, 86400 * 30),

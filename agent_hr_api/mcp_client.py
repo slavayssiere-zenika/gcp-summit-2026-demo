@@ -11,6 +11,11 @@ from pydantic import ValidationError
 # McpToolResult est défini localement dans agent_commons.mcp_client (copie de shared/schemas/mcp.py)
 # Le Dockerfile n'inclut PAS shared/ dans les images agents — uniquement agent_commons/.
 from agent_commons.mcp_client import McpToolResult
+import time
+from contextlib import AsyncExitStack
+from mcp.client.session import ClientSession
+from mcp.client.sse import sse_client
+import os
 
 auth_header_var = contextvars.ContextVar("auth_header", default=None)
 
@@ -49,12 +54,11 @@ class MCPHttpClient:
         if auth:
             headers["Authorization"] = auth
         async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
-            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools")
+            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools", timeout=10.0)
             res.raise_for_status()
             return res.json()
 
     async def call_tool(self, tool_name: str, arguments: dict) -> List[Any]:
-        import time
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info(f"[MCP-HTTP] Calling tool '{tool_name}' on {self.url} with args: {arguments}")
         start_time = time.time()
@@ -102,10 +106,6 @@ class MCPSseClient:
         self.url = url
 
     async def list_tools(self) -> List[Any]:
-        from contextlib import AsyncExitStack
-
-        from mcp.client.session import ClientSession
-        from mcp.client.sse import sse_client
 
         async with AsyncExitStack() as stack:
             streams = await stack.enter_async_context(sse_client(self.url))
@@ -115,11 +115,7 @@ class MCPSseClient:
             return [{"name": t.name, "description": t.description, "inputSchema": t.inputSchema} for t in res.tools]
 
     async def call_tool(self, tool_name: str, arguments: dict) -> List[Any]:
-        import time
-        from contextlib import AsyncExitStack
 
-        from mcp.client.session import ClientSession
-        from mcp.client.sse import sse_client
         AGENT_TOOL_CALLS_TOTAL.labels(tool_name=tool_name).inc()
         logger.info(f"[MCP-SSE] Calling tool '{tool_name}' on {self.url} with args: {arguments}")
         start_time = time.time()
@@ -168,7 +164,6 @@ _mcp_lock = threading.Lock()
 def init_mcp_clients():
     global users_mcp_client, items_mcp_client, competencies_mcp_client  # noqa: E501
     global cv_mcp_client, drive_mcp_client, missions_mcp_client, analytics_mcp_client
-    import os
 
     users_url = os.getenv("USERS_MCP_URL", os.getenv("USERS_API_URL", "http://users_mcp:8000"))
     items_url = os.getenv("ITEMS_MCP_URL", os.getenv("ITEMS_API_URL", "http://items_mcp:8000"))

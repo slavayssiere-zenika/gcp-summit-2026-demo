@@ -15,11 +15,14 @@ Usage :
 """
 import argparse
 import csv
+import json
 import os
+import random
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 # seed_data.py est dans le même dossier scripts/
@@ -84,12 +87,28 @@ MCP_SIDECAR_ALIASES: dict = {
 # Mode perf standard (--perf)
 LOCUST_USERS = 50
 LOCUST_SPAWN_RATE = 10
-LOCUST_DURATION = "1m"
+LOCUST_DURATION = "3m"  # 3 min : couverture suffisante pour valider les latences P95
+# 13 workers ingestion × 180s / ~3s par pipeline (latence 1s) = ~780 CVs théoriques en 3 min
+# Objectif affiché : conservatif (incl. overhead pipeline)
+LOCUST_CV_TARGET_PERF = 120
+LOCUST_MOCK_LATENCY_PERF = "1"  # 1s en perf : feedback rapide
 
-# Mode stress (--stress) : montee progressive vers 500 users, navigation pure sans ingestion CV
+# Phase d ingestion dédiée (--full, phase 2)
+LOCUST_INGESTION_USERS = 30      # 30 workers d ingestion en parallèle
+LOCUST_INGESTION_SPAWN = 5       # montée progressive
+# Safety timeout : auto-stop bien avant via CV_TARGET
+LOCUST_INGESTION_TIMEOUT = "20m"
+LOCUST_CV_TARGET_INGESTION = 3000  # Arrêt automatique quand 3000 CVs ingeres
+LOCUST_MOCK_LATENCY_INGESTION = "1"  # 1s pour maximiser le débit d ingestion
+
+# Mode stress (--stress) : montée progressive vers 500 users, navigation pure sans ingestion CV
 LOCUST_STRESS_USERS = 500
 LOCUST_STRESS_SPAWN_RATE = 5   # 5/s -> 500 users atteints apres ~100s
 LOCUST_STRESS_DURATION = "5m"
+# 30 workers ingestion × 5min / ~6s par pipeline = ~1500 CVs, objectif 3000 avec latence 1s
+LOCUST_CV_TARGET_STRESS = 3000
+# Latence mock LLM réaliste en stress : simule la production (3s)
+LOCUST_MOCK_LATENCY_STRESS = "3"
 # Distributed : 1 master + N workers. Regle : 1 worker par 170 users.
 # 500 / 170 ≈ 3 workers. Machine 12 CPUs, services ~6 CPUs → 3 workers sans contention.
 LOCUST_STRESS_WORKERS = 3
@@ -217,15 +236,19 @@ def ensure_frontend(force: bool = False) -> None:
         [GCLOUD_BIN, "storage", "ls", f"gs://{FRONTEND_BUCKET}/"],
         capture_output=True, text=True, check=True,
     )
-    archives = sorted(line.strip() for line in result.stdout.splitlines() if line.strip().endswith(".tar.gz"))
+    archives = sorted(line.strip() for line in result.stdout.splitlines(
+    ) if line.strip().endswith(".tar.gz"))
     if not archives:
         print("  ⚠️  Aucune archive trouvée dans le bucket GCS. Frontend ignoré.")
         return
-    latest_gcs = archives[-1]  # ex: gs://z-gcp-summit-frontend/frontend-20260516141607-v0.1.1.tar.gz
-    latest_name = latest_gcs.split("/")[-1]  # ex: frontend-20260516141607-v0.1.1.tar.gz
+    # ex: gs://z-gcp-summit-frontend/frontend-20260516141607-v0.1.1.tar.gz
+    latest_gcs = archives[-1]
+    # ex: frontend-20260516141607-v0.1.1.tar.gz
+    latest_name = latest_gcs.split("/")[-1]
 
     # 2. Version locale
-    local_version = FRONTEND_VERSION_FILE.read_text().strip() if FRONTEND_VERSION_FILE.exists() else ""
+    local_version = FRONTEND_VERSION_FILE.read_text(
+    ).strip() if FRONTEND_VERSION_FILE.exists() else ""
 
     if not force and local_version == latest_name and FRONTEND_DIST.exists():
         print(f"  ✅ Frontend à jour ({latest_name}) — skip download.")
@@ -265,12 +288,93 @@ def compose_up(services: list) -> None:
 
 # ── Perf : Seed + Locust ──────────────────────────────────────────────────────
 
-def run_seed(perf: bool = False) -> None:
+def _should_skip_seed(
+    users_url: str = "http://localhost:8000",
+    threshold: float = 0.80,
+) -> bool:
+    """Retourne True si le seed peut être ignoré — vérifie la DB via l'API.
+
+    Stratégie (fail-safe à 2 niveaux) :
+      1. Tentative de login admin (admin@zenika.com / admin).
+         Si échec → la table users est vide ou le service ne répond pas → seed requis.
+      2. Lecture de seeded_ids.json + probe aléatoire de 10 user IDs avec le JWT.
+         Si ≥ threshold (80%) répondent HTTP 200 → données confirmées → seed ignoré.
+
+    Cette probe est la seule preuve fiable que la DB est peuplée : le fichier
+    seeded_ids.json est persistant sur le filesystem et peut exister même après
+    une purge du volume Docker.
+    """
+    # Étape 1 : login admin pour obtenir un JWT
+    try:
+        req = urllib.request.Request(
+            f"{users_url}/login",
+            data=json.dumps({"email": "admin@zenika.com",
+                            "password": "admin"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            if r.status != 200:
+                print(f"  🔄 Login admin HTTP {r.status} — seed requis.")
+                return False
+            token = json.loads(r.read()).get("access_token", "")
+    except Exception as e:
+        print(
+            f"  🔄 Login admin échoué ({e}) — service indisponible ou DB vide — seed requis.")
+        return False
+
+    # Étape 2 : vérifier la présence des users seedés
+    seeded_path = ROOT / "locust" / "data" / "seeded_ids.json"
+    if not seeded_path.exists():
+        print("  ℹ️  seeded_ids.json absent — login admin OK mais pas de référentiel — seed requis.")
+        return False
+
+    try:
+        with seeded_path.open() as f:
+            ids = json.load(f)
+        user_ids = ids.get("user_ids", [])
+    except Exception as e:
+        print(f"  ⚠️  Lecture seeded_ids.json échouée ({e}) — seed requis.")
+        return False
+
+    if not user_ids:
+        print("  ℹ️  seeded_ids.json vide (pas d'IDs) — seed requis.")
+        return False
+
+    sample = random.sample(user_ids, min(10, len(user_ids)))
+    auth_header = f"Bearer {token}"
+    ok, total = 0, len(sample)
+    for uid in sample:
+        try:
+            req = urllib.request.Request(
+                f"{users_url}/users/{uid}",
+                headers={"Authorization": auth_header},
+            )
+            with urllib.request.urlopen(req, timeout=3) as r:
+                if r.status == 200:
+                    ok += 1
+        except Exception:
+            pass
+
+    ratio = ok / total if total > 0 else 0
+    if ratio >= threshold:
+        print(
+            f"  ⏭️  DB confirmée ({ok}/{total} users OK ≥ {threshold*100:.0f}%) — seed ignoré.")
+        return True
+    print(
+        f"  🔄 DB incomplète ({ok}/{total} users OK < {threshold*100:.0f}%) — seed requis.")
+    return False
+
+
+def run_seed(perf: bool = False, skip_if_present: bool = False) -> None:
     """
     Exécute le seed des données en important seed_data directement.
     - perf=False : 12 users, 50 items (mode développement)
     - perf=True  : 400 users, 2000 items (mode test de charge)
+    - skip_if_present=True : probe l'API (login admin + spot-check users) avant de seeder.
     """
+    if skip_if_present and _should_skip_seed():
+        return
     label = "perf (400 users, 2000 items)" if perf else "standard (12 users, 50 items)"
     print(f"\n📦 Ingestion des données [{label}]...")
     seed_data.main(perf=perf)
@@ -293,7 +397,8 @@ def _locust_base_args(users: int, spawn: int, duration: str, scenario: str,
     return [
         "-f", "/locust/locustfile.py",
         start_mode,
-        "--autoquit", "5",   # quitte 5s apres la fin du test (requis avec --autostart)
+        # quitte 5s apres la fin du test (requis avec --autostart)
+        "--autoquit", "5",
         "-u", str(users),
         "-r", str(spawn),
         "-t", duration,
@@ -303,51 +408,67 @@ def _locust_base_args(users: int, spawn: int, duration: str, scenario: str,
     ]
 
 
-def _run_locust_standalone(users: int, spawn: int, duration: str, scenario: str) -> bool:
+def _run_locust_standalone(users: int, spawn: int, duration: str, scenario: str,
+                           cv_target: int = LOCUST_CV_TARGET_PERF,
+                           mock_latency: str = LOCUST_MOCK_LATENCY_PERF) -> bool:
     """Mode standalone (--perf, 50 users) : 1 seul process Locust, web UI sur :8089."""
     cmd = [
         "docker-compose", "--profile", "perf",
         "run", "--rm",
         "-p", "8089:8089",
         "-e", f"LOCUST_SCENARIO={scenario}",
+        "-e", f"LOCUST_CV_TARGET={cv_target}",
+        "-e", f"MOCK_LLM_LATENCY_MAX_S={mock_latency}",
         "locust",
-    ] + _locust_base_args(users, spawn, duration, scenario, autostart=True)
+    ] + _locust_base_args(users, spawn, duration, scenario, autostart=True,
+                          cv_target=cv_target, mock_latency=mock_latency)
     print("  🟡 Web UI disponible sur http://localhost:8089")
+    print(f"  ℹ️  CV_TARGET={cv_target} | Mock LLM latency={mock_latency}s")
     result = subprocess.run(cmd, cwd=ROOT)
     if result.returncode not in (0, 1):
-        print(f"  ❌ Locust standalone echoue (code {result.returncode}) — fail-fast.")
+        print(
+            f"  ❌ Locust standalone echoue (code {result.returncode}) — fail-fast.")
         return False
     print("  ✅ Test Locust standalone termine.")
     return True
 
 
-def _run_locust_distributed(users: int, spawn: int, duration: str, scenario: str) -> bool:
+def _run_locust_distributed(users: int, spawn: int, duration: str, scenario: str,
+                            cv_target: int = LOCUST_CV_TARGET_STRESS,
+                            mock_latency: str = LOCUST_MOCK_LATENCY_STRESS) -> bool:
     """Mode distributed (--stress, 500 users) : 1 master + LOCUST_STRESS_WORKERS workers.
 
     Architecture :
-      - Master demarre via "docker-compose up -d locust-master" avec container_name=locust-master.
-        Hostname DNS fixe → workers peuvent resoudre "locust-master" sur monitoring_net.
-      - Workers demarres en background (docker-compose up --scale N).
-      - Script attend l exit du master via "docker wait locust-master" (bloquant).
-      - Workers stoppes apres exit du master.
-    Rapport HTML genere par le master dans /locust/results/perf_report.html.
+      - Master démarré via "docker-compose up -d locust-master" avec container_name=locust-master.
+        Hostname DNS fixe → workers peuvent résoudre "locust-master" sur monitoring_net.
+      - Workers démarrés en background (docker-compose up --scale N).
+      - Script attend l'exit du master via "docker wait locust-master" (bloquant).
+      - Workers stoppés après exit du master.
+    Rapport HTML généré par le master dans /locust/results/perf_report.html.
     """
     n_workers = LOCUST_STRESS_WORKERS
     print("  🔨 Build images locust-master/worker (cache Docker si inchange)...")
-    run(["docker-compose", "--profile", "perf-stress", "build", "locust-master", "locust-worker"], cwd=ROOT)
+    run(["docker-compose", "--profile", "perf-stress",
+        "build", "locust-master", "locust-worker"], cwd=ROOT)
 
-    # Nettoyage preventif du master precedent (container_name fixe → conflit si existe deja)
+    # Nettoyage préventif du master précédent (container_name fixe → conflit si existe déjà)
     subprocess.run(
         ["docker", "rm", "-f", "locust-master"],
         cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
 
-    # Master : run -d avec port 8089 expose + --autostart (web UI accessible en temps reel)
-    master_args = _locust_base_args(users, spawn, duration, scenario, autostart=True) + [
+    # Master : run -d avec port 8089 exposé + --autostart (web UI accessible en temps réel)
+    master_args = _locust_base_args(users, spawn, duration, scenario, autostart=True,
+                                    cv_target=cv_target, mock_latency=mock_latency) + [
         "--master",
         f"--expect-workers={n_workers}",
     ]
-    env_args = ["-e", f"LOCUST_SCENARIO={scenario}"]
+    env_args = [
+        "-e", f"LOCUST_SCENARIO={scenario}",
+        "-e", f"LOCUST_CV_TARGET={cv_target}",
+        "-e", f"MOCK_LLM_LATENCY_MAX_S={mock_latency}",
+    ]
+    print(f"  ℹ️  CV_TARGET={cv_target} | Mock LLM latency={mock_latency}s")
     run(
         [
             "docker-compose", "--profile", "perf-stress",
@@ -358,11 +479,11 @@ def _run_locust_distributed(users: int, spawn: int, duration: str, scenario: str
         ] + master_args,
         cwd=ROOT,
     )
-    print("  🟡 Master demarre. Web UI disponible sur http://localhost:8089")
-    print(f"     Demarrage {n_workers} workers...")
+    print("  🟡 Master démarré. Web UI disponible sur http://localhost:8089")
+    print(f"     Démarrage {n_workers} workers...")
 
-    # Workers : up --scale (se connectent a locust-master par DNS container_name)
-    # Workers : up -d (detache) — sans --no-deps car depends_on est retire du compose
+    # Workers : up --scale (se connectent à locust-master par DNS container_name)
+    # Passer les mêmes env vars aux workers via --env pour cohérence du CV_TARGET
     run(
         [
             "docker-compose", "--profile", "perf-stress",
@@ -371,36 +492,120 @@ def _run_locust_distributed(users: int, spawn: int, duration: str, scenario: str
         ],
         cwd=ROOT,
     )
-    time.sleep(8)  # Workers : ~3s demarrage + ~5s connexion au master avant autostart
-    print(f"  🔥 Test en cours ({n_workers} workers connectes au master)...")
+    # Workers : ~3s démarrage + ~5s connexion au master avant autostart
+    time.sleep(8)
+    print(f"  🔥 Test en cours ({n_workers} workers connectés au master)...")
 
     # Attente bloquante de la fin du master
-    wait_result = subprocess.run(["docker", "wait", "locust-master"], cwd=ROOT, capture_output=True, text=True)
-    exit_code = int(wait_result.stdout.strip()) if wait_result.stdout.strip().isdigit() else 2
+    wait_result = subprocess.run(
+        ["docker", "wait", "locust-master"], cwd=ROOT, capture_output=True, text=True)
+    exit_code = int(wait_result.stdout.strip()
+                    ) if wait_result.stdout.strip().isdigit() else 2
 
-    print("  🛑 Arret des workers...")
+    print("  🛑 Arrêt des workers...")
     subprocess.run(
         ["docker-compose", "--profile", "perf-stress", "stop", "locust-worker"],
         cwd=ROOT, stdout=subprocess.DEVNULL,
     )
-    # Copier les resultats depuis le master avant de le supprimer
+    # Copier les résultats depuis le master avant de le supprimer
     subprocess.run(
         ["docker", "cp", "locust-master:/locust/results/.", str(RESULTS_DIR)],
         cwd=ROOT,
     )
-    subprocess.run(["docker", "rm", "-f", "locust-master"], cwd=ROOT, stdout=subprocess.DEVNULL)
+    subprocess.run(["docker", "rm", "-f", "locust-master"],
+                   cwd=ROOT, stdout=subprocess.DEVNULL)
 
     if exit_code not in (0, 1):
-        print(f"  ❌ Locust master echoue (code {exit_code}) — fail-fast.")
+        print(f"  ❌ Locust master échoué (code {exit_code}) — fail-fast.")
         return False
-    print(f"  ✅ Test Locust distribue termine ({n_workers} workers).")
+    print(f"  ✅ Test Locust distribué terminé ({n_workers} workers).")
     return True
 
 
-def run_locust(stress: bool = False) -> bool:
-    """Lance Locust : standalone (--perf, 50 users) ou distribue (--stress, 500 users).
+def _run_locust_ingestion() -> bool:
+    """Phase d'ingestion d\u00e9di\u00e9e (scenario=ingestion) : 30 workers, auto-stop \u00e0 CV_TARGET.
 
-    Les deux modes generent :
+    Lance uniquement CVIngestionPipelineUser. Le runner s'arr\u00eate automatiquement
+    via environment.runner.quit() dans locustfile.py quand CV_TARGET est atteint.
+    Safety timeout : LOCUST_INGESTION_TIMEOUT (20 min) pour \u00e9viter les boucles infinies.
+    """
+    print(
+        f"\\n\ud83d\udce5 Phase ingestion : {LOCUST_INGESTION_USERS} workers \u2192 {LOCUST_CV_TARGET_INGESTION} CVs")
+    print(
+        f"  \u2139\ufe0f  Mock LLM latency={LOCUST_MOCK_LATENCY_INGESTION}s | Timeout safety={LOCUST_INGESTION_TIMEOUT}")
+    _build_locust_image()
+    cmd = [
+        "docker-compose", "--profile", "perf",
+        "run", "--rm",
+        "-p", "8089:8089",
+        "-e", "LOCUST_SCENARIO=ingestion",
+        "-e", f"LOCUST_CV_TARGET={LOCUST_CV_TARGET_INGESTION}",
+        "-e", f"MOCK_LLM_LATENCY_MAX_S={LOCUST_MOCK_LATENCY_INGESTION}",
+        "locust",
+    ] + _locust_base_args(
+        LOCUST_INGESTION_USERS, LOCUST_INGESTION_SPAWN, LOCUST_INGESTION_TIMEOUT,
+        "ingestion", autostart=True,
+        cv_target=LOCUST_CV_TARGET_INGESTION,
+        mock_latency=LOCUST_MOCK_LATENCY_INGESTION,
+    )
+    result = subprocess.run(cmd, cwd=ROOT)
+    if result.returncode not in (0, 1):
+        print(
+            f"  \u274c Phase ingestion \u00e9chou\u00e9e (code {result.returncode}) \u2014 fail-fast.")
+        return False
+    print("  \u2705 Phase ingestion termin\u00e9e.")
+    return True
+
+
+def run_full_suite() -> None:
+    """Encha\u00eene les 3 phases du cycle complet de test :
+
+    Phase 1 \u2014 Perf standard    : 50 users, 3 min, sc\u00e9nario full (nav + ingestion partielle)
+    Phase 2 \u2014 Ingestion d\u00e9di\u00e9e : 30 workers, auto-stop \u00e0 3000 CVs (~10-15 min \u00e0 1s latence)
+    Phase 3 \u2014 Stress           : 500 users, 5 min, navigation pure (ZenikaPerfUser uniquement)
+    """
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    sep = "=" * 70
+
+    print(f"\\n{sep}")
+    print("PHASE 1/3 \u2014 Perf standard (50 users / 3 min)")
+    print(sep)
+    _build_locust_image()
+    ok1 = _run_locust_standalone(
+        LOCUST_USERS, LOCUST_SPAWN_RATE, LOCUST_DURATION, "full",
+        cv_target=LOCUST_CV_TARGET_PERF, mock_latency=LOCUST_MOCK_LATENCY_PERF,
+    )
+    if ok1:
+        display_results()
+    else:
+        print("  \u26d4 Phase 1 \u00e9chou\u00e9e \u2014 abandon du cycle complet.")
+        return
+
+    print(f"\\n{sep}")
+    print(
+        f"PHASE 2/3 \u2014 Ingestion d\u00e9di\u00e9e ({LOCUST_CV_TARGET_INGESTION} CVs)")
+    print(sep)
+    ok2 = _run_locust_ingestion()
+    if not ok2:
+        print("  \u26a0\ufe0f  Phase 2 \u00e9chou\u00e9e \u2014 on continue quand m\u00eame vers le stress test.")
+
+    print(f"\\n{sep}")
+    print("PHASE 3/3 \u2014 Stress test (500 users / 5 min)")
+    print(sep)
+    ok3 = _run_locust_distributed(
+        LOCUST_STRESS_USERS, LOCUST_STRESS_SPAWN_RATE, LOCUST_STRESS_DURATION, "navigation",
+        cv_target=LOCUST_CV_TARGET_STRESS, mock_latency=LOCUST_MOCK_LATENCY_STRESS,
+    )
+    if ok3:
+        display_results()
+    else:
+        print("  \u26d4 Phase 3 (stress) \u00e9chou\u00e9e.")
+
+
+def run_locust(stress: bool = False) -> bool:
+    """Lance Locust : standalone (--perf, 50 users) ou distribué (--stress, 500 users).
+
+    Les deux modes génèrent :
       - CSV : /locust/results/perf_stats_*.csv
       - HTML : /locust/results/perf_report.html (graphiques latence/throughput)
     """
@@ -408,16 +613,24 @@ def run_locust(stress: bool = False) -> bool:
     if stress:
         users, spawn, duration = LOCUST_STRESS_USERS, LOCUST_STRESS_SPAWN_RATE, LOCUST_STRESS_DURATION
         scenario = "navigation"
-        label = f"STRESS distribue {users} users ({LOCUST_STRESS_WORKERS} workers), {duration}"
+        label = f"STRESS distribué {users} users ({LOCUST_STRESS_WORKERS} workers), {duration}"
         print(f"\n🔥 Lancement Locust ({label})...")
-        return _run_locust_distributed(users, spawn, duration, scenario)
+        return _run_locust_distributed(
+            users, spawn, duration, scenario,
+            cv_target=LOCUST_CV_TARGET_STRESS,
+            mock_latency=LOCUST_MOCK_LATENCY_STRESS,
+        )
     else:
         users, spawn, duration = LOCUST_USERS, LOCUST_SPAWN_RATE, LOCUST_DURATION
         scenario = "full"
         label = f"{users} users standalone, {duration}"
         print(f"\n🔥 Lancement Locust ({label})...")
         _build_locust_image()
-        return _run_locust_standalone(users, spawn, duration, scenario)
+        return _run_locust_standalone(
+            users, spawn, duration, scenario,
+            cv_target=LOCUST_CV_TARGET_PERF,
+            mock_latency=LOCUST_MOCK_LATENCY_PERF,
+        )
 
 
 def display_results() -> None:
@@ -441,7 +654,8 @@ def display_results() -> None:
     agg_rows = [r for r in rows if r.get("Name") == "Aggregated"]
 
     col_w = [38, 8, 8, 10, 10, 10, 10, 8]
-    headers = ["Endpoint", "Req/s", "Fail%", "Median(ms)", "95%(ms)", "99%(ms)", "Max(ms)", "Errors"]
+    headers = ["Endpoint", "Req/s", "Fail%",
+               "Median(ms)", "95%(ms)", "99%(ms)", "Max(ms)", "Errors"]
     print("".join(h.ljust(col_w[i]) for i, h in enumerate(headers)))
     print("-" * sum(col_w))
 
@@ -500,9 +714,12 @@ def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) ->
     sep = "=" * 80
     now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    conn_refused = [f for f in failures if "ConnectionRefused" in f.get("Error", "")]
-    not_found = [f for f in failures if "404" in f.get("Error", "") or "Not Found" in f.get("Error", "")]
-    other_errors = [f for f in failures if f not in conn_refused and f not in not_found]
+    conn_refused = [
+        f for f in failures if "ConnectionRefused" in f.get("Error", "")]
+    not_found = [f for f in failures if "404" in f.get(
+        "Error", "") or "Not Found" in f.get("Error", "")]
+    other_errors = [
+        f for f in failures if f not in conn_refused and f not in not_found]
 
     crit_latency, warn_latency = [], []
     for r in detail_rows:
@@ -524,7 +741,8 @@ def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) ->
     total_req = agg.get("Request Count", "?")
     total_fail = agg.get("Failure Count", "?")
     rps = agg.get("Requests/s", "?")
-    fail_icon = "[CRIT]" if fail_pct >= _FAIL_CRIT_PCT else ("[WARN]" if fail_pct >= _FAIL_WARN_PCT else "[OK]")
+    fail_icon = "[CRIT]" if fail_pct >= _FAIL_CRIT_PCT else (
+        "[WARN]" if fail_pct >= _FAIL_WARN_PCT else "[OK]")
 
     print(f"\n{sep}")
     print("RAPPORT D ANALYSE -- copiable en Markdown")
@@ -535,35 +753,40 @@ def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) ->
     print("|---|---|")
     print(f"| Requetes totales  | {total_req} |")
     print(f"| Requetes/s        | {rps} |")
-    print(f"| Echecs            | {total_fail} ({fail_pct:.1f}%) {fail_icon} |")
+    print(
+        f"| Echecs            | {total_fail} ({fail_pct:.1f}%) {fail_icon} |")
     print(f"| Duree / Users     | {LOCUST_DURATION} / {LOCUST_USERS} users |")
 
     if conn_refused:
         print("\n### [CRIT] Services injoignables (ConnectionRefused)\n")
         print("> Cause : reseau Docker manquant ou service non demarre.\n")
         for f in conn_refused:
-            print(f"- **{f.get(chr(78)+'ame', '?')}** -- {f.get('Occurrences', '?')} echecs")
+            print(
+                f"- **{f.get(chr(78)+'ame', '?')}** -- {f.get('Occurrences', '?')} echecs")
             print(f"  - Erreur : `{f.get('Error', '?')}`")
             print("  - Action : docker-compose logs <service> + verifier monitoring_net")
 
     if not_found:
         print("\n### [WARN] Erreurs 404\n")
         for f in not_found:
-            print(f"- **{f.get('Name', '?')}** -- {f.get('Occurrences', '?')} fois")
+            print(
+                f"- **{f.get('Name', '?')}** -- {f.get('Occurrences', '?')} fois")
         print("\n> Les user_id aleatoires 1-400 n ont pas tous un profil dans cv_api.")
         print("> Action : utiliser les IDs reellement crees par le seed.")
 
     if other_errors:
         print("\n### [CRIT] Autres erreurs HTTP\n")
         for f in other_errors:
-            print(f"- **{f.get('Name', '?')}** -> `{f.get('Error', '?')}` ({f.get('Occurrences', '?')} fois)")
+            print(
+                f"- **{f.get('Name', '?')}** -> `{f.get('Error', '?')}` ({f.get('Occurrences', '?')} fois)")
 
     if crit_latency:
         print("\n### [CRIT] Latences critiques (P95 > 5s)\n")
         for name, p95 in sorted(crit_latency, key=lambda x: x[1], reverse=True):
             print(f"- **{name}** -> P95 = **{p95} ms**")
             if "items" in name.lower():
-                print("  - Cause probable : scan full-table -- index manquant sur user_id/category_ids")
+                print(
+                    "  - Cause probable : scan full-table -- index manquant sur user_id/category_ids")
                 print("  - Action : EXPLAIN ANALYZE + ajout d index B-tree ou GIN")
             elif "users" in name.lower():
                 print("  - Cause probable : N+1 resolution permissions ou cache absent")
@@ -583,18 +806,22 @@ def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) ->
     print("\n### Actions prioritaires\n")
     prio = 1
     if conn_refused:
-        svcs = sorted({f.get("Name", "").split("[")[-1].split("]")[0] for f in conn_refused})
-        print(f"{prio}. **Reseau Docker** : ajouter `network: monitoring_net` au service locust")
+        svcs = sorted({f.get("Name", "").split(
+            "[")[-1].split("]")[0] for f in conn_refused})
+        print(
+            f"{prio}. **Reseau Docker** : ajouter `network: monitoring_net` au service locust")
         print(f"   Services touches : {', '.join(svcs)}")
         prio += 1
     for name, p95 in sorted(crit_latency, key=lambda x: x[1], reverse=True):
-        print(f"{prio}. **Optimiser `{name}`** (P95={p95}ms) -- voir diagnostics ci-dessus")
+        print(
+            f"{prio}. **Optimiser `{name}`** (P95={p95}ms) -- voir diagnostics ci-dessus")
         prio += 1
     if not_found:
         print(f"{prio}. **Corriger les 404 CV** : utiliser user_id du pool seed")
         prio += 1
     if fail_pct >= _FAIL_WARN_PCT:
-        print(f"{prio}. **Taux echec global {fail_pct:.1f}%** -- voir erreurs ci-dessus")
+        print(
+            f"{prio}. **Taux echec global {fail_pct:.1f}%** -- voir erreurs ci-dessus")
         prio += 1
     if prio == 1:
         print("Aucun point bloquant detecte.")
@@ -614,7 +841,16 @@ def main() -> None:
     )
     parser.add_argument(
         "--perf", action="store_true",
-        help="Enchâîne seed perf (400 users) + Locust + affichage des résultats.",
+        help="Seed perf (skip si DB peuplee) + Locust 50 users 3 min.",
+    )
+    parser.add_argument(
+        "--full", action="store_true",
+        help=(
+            "Cycle complet en 3 phases : "
+            "(1) Perf 50 users 3 min — "
+            "(2) Ingestion 3000 CVs (auto-stop) — "
+            "(3) Stress 500 users 5 min."
+        ),
     )
     parser.add_argument(
         "--seed", action="store_true",
@@ -632,8 +868,12 @@ def main() -> None:
         "--stress", action="store_true",
         help=(
             "Mode stress : 500 users progressifs sur 5 min, navigation pure (ZenikaPerfUser). "
-            "Seed perf lancé avant le test. Pas d ingestion CV."
+            "Seed perf lance avant le test (skip si DB peuplee)."
         ),
+    )
+    parser.add_argument(
+        "--erase", action="store_true",
+        help="Force le reseed complet meme si la DB est deja peuplee (probe API ignoree).",
     )
     parsed = parser.parse_args()
 
@@ -649,15 +889,20 @@ def main() -> None:
     ensure_frontend(force=not parsed.no_pull)
     compose_up(parsed.service or [])
 
-    if parsed.perf or parsed.stress:
+    if parsed.full or parsed.perf or parsed.stress:
         print("\n⏳ Attente du démarrage des services (15s)...")
         time.sleep(15)
-        run_seed(perf=True)
-        locust_ok = run_locust(stress=parsed.stress)
-        if locust_ok:
-            display_results()
+        run_seed(perf=True, skip_if_present=not parsed.erase)
+
+        if parsed.full:
+            run_full_suite()
         else:
-            print("\n⛔ Locust a echoue — resultats precedents non affiches (fail-fast).")
+            locust_ok = run_locust(stress=parsed.stress)
+            if locust_ok:
+                display_results()
+            else:
+                print(
+                    "\n⛔ Locust a echoue — resultats precedents non affiches (fail-fast).")
 
     print("\n✨ local_up.py terminé.")
 

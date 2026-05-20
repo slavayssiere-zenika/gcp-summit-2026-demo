@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// Note: parsePaginated is not needed here as endpoints stats and folder-kpis are not paginated lists.
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import { useI18n } from 'vue-i18n'
@@ -207,6 +208,7 @@ const runSync = async () => {
         class="tab-btn"
         :class="{ active: activeTab === 'overview' }"
         @click="activeTab = 'overview'"
+        :title="t('admin_drive.tab_overview')"
       >
         <Activity size="15" />
         {{ t('admin_drive.tab_overview') }}
@@ -216,6 +218,7 @@ const runSync = async () => {
         class="tab-btn"
         :class="{ active: activeTab === 'errors' }"
         @click="activeTab = 'errors'"
+        :title="t('admin_drive.tab_errors')"
       >
         <XCircle size="15" />
         {{ t('admin_drive.tab_errors') }}
@@ -226,6 +229,7 @@ const runSync = async () => {
         class="tab-btn"
         :class="{ active: activeTab === 'drive' }"
         @click="activeTab = 'drive'"
+        :title="t('admin_drive.tab_drive')"
       >
         <FolderOpen size="15" />
         {{ t('admin_drive.tab_drive') }}

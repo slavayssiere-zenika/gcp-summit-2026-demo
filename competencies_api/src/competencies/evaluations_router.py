@@ -30,6 +30,8 @@ from src.competencies.ai_scoring import (
     _serialize_evaluation,
 )
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
+from shared.database import SessionLocal
+from shared.schemas.auth import TokenResponse
 from src.competencies.schemas import (
     AiScoreAllResponse,
     BatchEvaluationRequest,
@@ -48,9 +50,16 @@ router = APIRouter(prefix="", tags=["evaluations"], dependencies=[Depends(verify
 
 @router.post("/evaluations/batch/search", response_model=BatchEvaluationResponse)
 async def search_batch_evaluations(
-    request: BatchEvaluationRequest, db: AsyncSession = Depends(get_db)
+    request: BatchEvaluationRequest,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Récupère en masse les évaluations pour un utilisateur et une liste de compétences."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(request.user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     if not request.competency_ids:
         return BatchEvaluationResponse(evaluations={})
 
@@ -95,9 +104,16 @@ async def search_batch_evaluations(
 
 @router.post("/evaluations/batch/users", response_model=BatchEvaluationResponse)
 async def search_batch_users_evaluations(
-    request: BatchUsersEvaluationRequest, db: AsyncSession = Depends(get_db)
+    request: BatchUsersEvaluationRequest,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Récupère en masse les évaluations pour une compétence et une liste d'utilisateurs."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account"):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : privilèges admin/rh/service_account requis.",
+        )
     if not request.user_ids:
         return BatchEvaluationResponse(evaluations={})
 
@@ -154,8 +170,14 @@ async def list_user_evaluations(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(500, ge=1, le=1000),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Liste toutes les evaluations (feuilles uniquement) pour un utilisateur."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
 
     leaf_ids = (
         (
@@ -231,9 +253,17 @@ async def list_user_evaluations(
     response_model=CompetencyEvaluationResponse,
 )
 async def get_user_competency_evaluation(
-    user_id: int, competency_id: int, db: AsyncSession = Depends(get_db)
+    user_id: int,
+    competency_id: int,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Evaluation d'une competence specifique pour un utilisateur."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     comp = (
         (await db.execute(select(Competency).where(Competency.id == competency_id)))
         .scalars()
@@ -272,8 +302,14 @@ async def set_user_competency_score(
     competency_id: int,
     body: UserScoreRequest,
     db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Saisie de la note manuelle du consultant pour une competence."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     comp = (
         (await db.execute(select(Competency).where(Competency.id == competency_id)))
         .scalars()
@@ -300,6 +336,7 @@ async def trigger_ai_score_single(
     user_id: int,
     competency_id: int,
     request: Request,
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Declenche le calcul IA pour une competence specifique.
 
@@ -308,7 +345,11 @@ async def trigger_ai_score_single(
     de la lecture initiale, relâchée avant l'appel IA (potentiellement long : 5-15s),
     puis réacquise pour la seule écriture du résultat.
     """
-    from shared.database import SessionLocal
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
 
     # Phase 1 : lecture courte — vérifier que la compétence existe
     async with SessionLocal() as db:
@@ -354,12 +395,18 @@ async def trigger_ai_score_all(
     background_tasks: BackgroundTasks,
     only_missing: bool = Query(False),
     db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Declenche le calcul IA pour toutes les competences feuilles d'un utilisateur (BackgroundTask).
 
     Obtient un service token longue durée via /internal/service-token avant de lancer la tâche
     pour éviter l'expiration du JWT en mid-flight (règle AGENTS.md §4).
     """
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     auth_header = request.headers.get("Authorization", "")
     user_comp_subq = (
         select(user_competency.c.competency_id)
@@ -411,7 +458,6 @@ async def trigger_ai_score_all(
                 headers={"Authorization": auth_header},
             )
             if svc_res.status_code == 200:
-                from shared.schemas.auth import TokenResponse
 
                 data = TokenResponse.model_validate(svc_res.json())
                 service_token = data.access_token

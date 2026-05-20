@@ -3,6 +3,8 @@
 import json
 import httpx
 from mcp.types import TextContent
+import asyncio
+
 
 async def handle_analyze_cv(client: httpx.AsyncClient, arguments: dict, headers: dict, api_base_url: str) -> list[TextContent]:
     url = arguments.get("url")
@@ -12,8 +14,10 @@ async def handle_analyze_cv(client: httpx.AsyncClient, arguments: dict, headers:
         return [TextContent(type="text", text="Error: Missing url argument.")]
     try:
         payload = {"url": url}
-        if source_tag: payload["source_tag"] = source_tag
-        if folder_name: payload["folder_name"] = folder_name
+        if source_tag:
+            payload["source_tag"] = source_tag
+        if folder_name:
+            payload["folder_name"] = folder_name
         response = await client.post(f"{api_base_url}/import", json=payload, headers=headers, timeout=60.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
@@ -24,11 +28,12 @@ async def handle_analyze_cv(client: httpx.AsyncClient, arguments: dict, headers:
     except Exception as e:
         return [TextContent(type="text", text=f"Request failed: {str(e)}")]
 
+
 async def handle_get_cv_status_bulk(client: httpx.AsyncClient, arguments: dict, headers: dict, api_base_url: str) -> list[TextContent]:
     user_ids = arguments.get("user_ids", [])
     if not user_ids:
         return [TextContent(type="text", text="[]")]
-    import asyncio
+
     async def check_cv(uid):
         try:
             res = await client.get(f"{api_base_url}/{uid}", headers=headers, timeout=5.0)
@@ -37,6 +42,7 @@ async def handle_get_cv_status_bulk(client: httpx.AsyncClient, arguments: dict, 
             return {"user_id": uid, "has_cv": False}
     results = await asyncio.gather(*(check_cv(uid) for uid in user_ids))
     return [TextContent(type="text", text=json.dumps(results))]
+
 
 async def handle_get_user_cv(client: httpx.AsyncClient, arguments: dict, headers: dict, api_base_url: str) -> list[TextContent]:
     user_id = arguments.get("user_id")
@@ -55,6 +61,7 @@ async def handle_get_user_cv(client: httpx.AsyncClient, arguments: dict, headers
     except Exception as e:
         return [TextContent(type="text", text=f"Request failed: {str(e)}")]
 
+
 async def handle_get_user_missions(client: httpx.AsyncClient, arguments: dict, headers: dict, api_base_url: str) -> list[TextContent]:
     user_id = arguments.get("user_id")
     skip = arguments.get("skip", 0)
@@ -69,6 +76,7 @@ async def handle_get_user_missions(client: httpx.AsyncClient, arguments: dict, h
         return [TextContent(type="text", text=f"API Error {e.response.status_code}: {e.response.text}")]
     except Exception as e:
         return [TextContent(type="text", text=f"Request failed: {str(e)}")]
+
 
 async def handle_get_candidate_rag_context(client: httpx.AsyncClient, arguments: dict, headers: dict, api_base_url: str) -> list[TextContent]:
     user_id = arguments.get("user_id")

@@ -64,7 +64,7 @@ async def remediate_legacy_errors(
                 # 1. Vérifier les compétences assignées
                 nb_assigned = 0
                 try:
-                    res = await client.get(f"{COMPETENCIES_API}/user/{user_id}", headers=headers)
+                    res = await client.get(f"{COMPETENCIES_API}/user/{user_id}", headers=headers, timeout=10.0)
                     if res.status_code == 200:
                         data = res.json()
                         # /user/{id} retourne PaginationResponse : {items: [...], total: N}

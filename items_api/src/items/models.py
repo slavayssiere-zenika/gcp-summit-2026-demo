@@ -3,6 +3,8 @@ from datetime import datetime
 from sqlalchemy import (Column, DateTime, ForeignKey, Integer, String, Table,
                         UniqueConstraint)
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
 
@@ -34,8 +36,6 @@ class Item(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     user_id = Column(Integer, nullable=False, index=True)
-    from sqlalchemy import JSON
-    from sqlalchemy.dialects.postgresql import JSONB
     metadata_json = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

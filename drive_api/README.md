@@ -11,11 +11,11 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 |---|---|---|
 | `main.py` | 109 | ✅ |
 | `mcp_server.py` | 381 | ✅ |
-| `conftest.py` | 71 | ✅ |
-| `src/routers/dlq_router.py` | 400 | ✅ |
+| `conftest.py` | 75 | ✅ |
+| `src/routers/dlq_router.py` | 398 | ✅ |
 | `src/routers/files_router.py` | 397 | ✅ |
 | `src/routers/folders_router.py` | 107 | ✅ |
-| `src/routers/ingestion_router.py` | 125 | ✅ |
+| `src/routers/ingestion_router.py` | 124 | ✅ |
 | `src/routers/sync_router.py` | 181 | ✅ |
 
 ## Variables d'environnement

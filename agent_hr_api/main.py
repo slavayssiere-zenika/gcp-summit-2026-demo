@@ -32,6 +32,7 @@ from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 
 # Exposé pour les tests (import 'from main import SECRET_KEY, ALGORITHM')
 import os as _os
+from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter  # noqa: F401
 SECRET_KEY = _os.getenv("SECRET_KEY", "")
 
 
@@ -40,11 +41,9 @@ warnings.filterwarnings("ignore", message=".*authlib.jose module is deprecated.*
 security = HTTPBearer()
 
 
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter  # noqa: F401
-
-tracer = trace.get_tracer(__name__)
 setup_mcp_tracer_provider("agent-hr-api")
+tracer = trace.get_tracer(__name__)
+
 
 app_logger = logging.getLogger(__name__)
 

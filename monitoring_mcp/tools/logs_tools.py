@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from google.cloud import logging_v2 as logging_cloud
+from .infra_tools import list_gcp_services_internal
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,6 @@ async def get_service_logs_internal(
         Liste de dicts {timestamp, severity, cloud_run_service, message}.
     """
     try:
-        from .infra_tools import list_gcp_services_internal
 
         services = await list_gcp_services_internal()
         valid_services = [s["name"] for s in services if isinstance(s, dict) and "name" in s]
@@ -198,9 +198,11 @@ async def get_recent_500_errors_internal(limit: int = 10, hours_lookback: int = 
             if hasattr(entry, "http_request") and entry.http_request:
                 hr = entry.http_request
                 if isinstance(hr, dict):
-                    req_info = {"method": hr.get("requestMethod", ""), "url": hr.get("requestUrl", ""), "status": hr.get("status", 0)}
+                    req_info = {"method": hr.get("requestMethod", ""), "url": hr.get(
+                        "requestUrl", ""), "status": hr.get("status", 0)}
                 else:
-                    req_info = {"method": getattr(hr, "requestMethod", ""), "url": getattr(hr, "requestUrl", ""), "status": getattr(hr, "status", 0)}
+                    req_info = {"method": getattr(hr, "requestMethod", ""), "url": getattr(
+                        hr, "requestUrl", ""), "status": getattr(hr, "status", 0)}
 
             logs.append({
                 "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,

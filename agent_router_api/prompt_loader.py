@@ -54,7 +54,7 @@ async def _fetch_prompt_cached(cache_key: str, url: str, headers: dict) -> str |
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             inject(headers)
-            res = await client.get(url, headers=headers)
+            res = await client.get(url, headers=headers, timeout=10.0)
             if res.status_code == 200:
                 try:
                     data = _PromptValue.model_validate(res.json())

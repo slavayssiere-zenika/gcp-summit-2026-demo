@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from shared.auth.jwt import verify_jwt_request as verify_jwt
+import redis.asyncio as _redis
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,6 @@ def _decrypt_hitl(blob: str) -> dict:
 
 def _get_hitl_redis():
     """Lazy singleton Redis client for HITL (same DB as Missions sessions)."""
-    import redis as _redis
     return _redis.from_url(_HITL_REDIS_URL, decode_responses=True)
 
 
@@ -140,7 +140,7 @@ def _verify_manager(payload: dict = Depends(verify_jwt)) -> dict:
 
 # ── Fonction pure partagée ────────────────────────────────────────────────────
 
-def hitl_create_entry(
+async def hitl_create_entry(
     mission_title: str,
     reason: str,
     candidates: list | None = None,
@@ -182,7 +182,8 @@ def hitl_create_entry(
     }
 
     r = _get_hitl_redis()
-    r.setex(f"hitl:{hitl_id}:pending", _HITL_PENDING_TTL, _encrypt_hitl(payload_data))
+    await r.setex(f"hitl:{hitl_id}:pending", _HITL_PENDING_TTL, _encrypt_hitl(payload_data))
+    await r.close()
     logger.info("[HITL] Demande créée hitl_id=%s mission='%s'", hitl_id, mission_title)
     return {"hitl_id": hitl_id, "expires_at": expires_at, "success": True}
 
@@ -206,8 +207,9 @@ async def hitl_respond(
     try:
         r = _get_hitl_redis()
         pending_key = f"hitl:{request.hitl_id}:pending"
-        pending_raw = r.get(pending_key)
+        pending_raw = await r.get(pending_key)
         if pending_raw is None:
+            await r.close()
             raise HTTPException(
                 status_code=404,
                 detail=f"Demande HITL '{request.hitl_id}' introuvable ou expirée.",
@@ -217,6 +219,7 @@ async def hitl_respond(
         try:
             _decrypt_hitl(pending_raw)  # Vérification d'intégrité + existence
         except Exception:
+            await r.close()
             logger.warning("[HITL] Pending hitl_id=%s : blob invalide ou clé incorrecte", request.hitl_id)
             raise HTTPException(
                 status_code=404,
@@ -229,12 +232,13 @@ async def hitl_respond(
             "comment": request.comment,
             "decided_at": datetime.now(timezone.utc).isoformat(),
         }
-        r.setex(
+        await r.setex(
             f"hitl:{request.hitl_id}:response",
             _HITL_RESPONSE_TTL,
             _encrypt_hitl(response_payload),
         )
-        r.delete(pending_key)
+        await r.delete(pending_key)
+        await r.close()
 
         logger.info(
             "[HITL] Decision '%s' enregistrée pour hitl_id=%s",
@@ -257,16 +261,17 @@ async def hitl_pending():
     """Liste les demandes HITL en attente pour l'utilisateur courant."""
     try:
         r = _get_hitl_redis()
-        keys = r.keys("hitl:*:pending")
+        keys = await r.keys("hitl:*:pending")
         pending = []
         for key in keys:
-            raw = r.get(key)
+            raw = await r.get(key)
             if raw:
                 try:
                     data = _decrypt_hitl(raw)
                     pending.append(data)
                 except Exception as dec_err:
                     logger.warning("[HITL] Clé %s — déchiffrement échoué : %s", key, dec_err)
+        await r.close()
         return {"pending": pending, "count": len(pending)}
     except Exception as e:
         logger.error("[HITL] Erreur hitl_pending: %s", e, exc_info=True)
@@ -282,7 +287,7 @@ async def hitl_create(request: HitlCreateRequest):
     Pour un appel interne depuis agent.py, utiliser directement hitl_create_entry().
     """
     try:
-        return hitl_create_entry(
+        return await hitl_create_entry(
             mission_title=request.mission_title,
             reason=request.reason,
             candidates=request.candidates,

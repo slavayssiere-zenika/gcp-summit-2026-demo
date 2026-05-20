@@ -35,7 +35,7 @@ describe('MissionsList.vue', () => {
   })
 
   it('doit afficher la liste des missions après chargement', async () => {
-    ;(axios.get as any).mockResolvedValueOnce({ data: fakeMissions })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: fakeMissions, total: fakeMissions.length, skip: 0, limit: 50 } })
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
 
@@ -46,7 +46,7 @@ describe('MissionsList.vue', () => {
   })
 
   it('doit afficher l\'état vide si aucune mission', async () => {
-    ;(axios.get as any).mockResolvedValueOnce({ data: [] })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: [], total: 0, skip: 0, limit: 50 } })
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
 
@@ -55,7 +55,7 @@ describe('MissionsList.vue', () => {
   })
 
   it('doit filtrer par statut au clic sur un onglet', async () => {
-    ;(axios.get as any).mockResolvedValueOnce({ data: fakeMissions })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: fakeMissions, total: fakeMissions.length, skip: 0, limit: 50 } })
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
 
@@ -72,7 +72,7 @@ describe('MissionsList.vue', () => {
   })
 
   it('doit afficher un message si aucune mission pour le filtre sélectionné', async () => {
-    ;(axios.get as any).mockResolvedValueOnce({ data: fakeMissions })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: fakeMissions, total: fakeMissions.length, skip: 0, limit: 50 } })
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
 
@@ -85,7 +85,7 @@ describe('MissionsList.vue', () => {
   })
 
   it('doit naviguer vers la mission au clic sur une card', async () => {
-    ;(axios.get as any).mockResolvedValueOnce({ data: fakeMissions })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: fakeMissions, total: fakeMissions.length, skip: 0, limit: 50 } })
     const pushSpy = vi.spyOn(router, 'push')
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
@@ -95,7 +95,7 @@ describe('MissionsList.vue', () => {
   })
 
   it('doit naviguer vers /missions/new au clic sur Nouvelle Mission', async () => {
-    ;(axios.get as any).mockResolvedValueOnce({ data: fakeMissions })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: fakeMissions, total: fakeMissions.length, skip: 0, limit: 50 } })
     const pushSpy = vi.spyOn(router, 'push')
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
@@ -107,7 +107,7 @@ describe('MissionsList.vue', () => {
   it('doit afficher les skills (max 3 + badge +N)', async () => {
     const missions = [{ id: 1, title: 'Full Stack', description: 'Desc', status: 'STAFFED',
       extracted_competencies: ['Java', 'Python', 'React', 'Docker'], proposed_team: [] }]
-    ;(axios.get as any).mockResolvedValueOnce({ data: missions })
+    ;(axios.get as any).mockResolvedValueOnce({ data: { items: missions, total: missions.length, skip: 0, limit: 50 } })
     const wrapper = mount(MissionsList, { global: { plugins: [router] } })
     await flushPromises()
 

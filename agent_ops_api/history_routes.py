@@ -5,7 +5,6 @@ Extrait de main.py pour respecter la contrainte de modularité 400 lignes.
 Ce module crée un APIRouter protégé par JWT à enregistrer dans main.py.
 
 Usage dans main.py :
-    from history_routes import history_router
     app.include_router(history_router)
 """
 import logging
@@ -17,6 +16,7 @@ import jwt
 
 from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from agent_commons.metadata import extract_metadata_from_session
+
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,10 @@ def _parse_session_history(session) -> list[dict]:
     for msg in history:
         if isinstance(msg, dict):
             msg.pop("_full_text_progress", None)
-            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and not msg.get("data"):
+            is_empty = (
+                not msg.get("content") and not msg.get("steps") and not msg.get("data")
+            )
+            if msg.get("role") == "assistant" and is_empty:
                 continue
             final.append(msg)
 

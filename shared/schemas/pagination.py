@@ -1,7 +1,6 @@
-"""Generic paginated response — mirrors the PaginationResponse envelope used by all APIs."""
 from typing import Generic, List, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
@@ -15,6 +14,6 @@ class PaginationResponse(BaseModel, Generic[T]):
     """
 
     items: List[T]
-    total: int
-    skip: int = 0
-    limit: int = 50
+    total: int = Field(..., ge=0)
+    skip: int = Field(0, ge=0)
+    limit: int = Field(50, ge=1, le=500)

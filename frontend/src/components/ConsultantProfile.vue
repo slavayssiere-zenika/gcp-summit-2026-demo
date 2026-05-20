@@ -135,7 +135,7 @@ const goToProfile = () => {
               Historique de missions non disponible.
             </div>
             <div v-else class="missions-mini-list">
-              <div v-for="(mission, index) in missions" :key="index" class="mission-mini-item">
+              <div v-for="(mission, index) in missions" :key="mission.id || mission.title || index" class="mission-mini-item">
                 <div class="m-header">
                   <strong>{{ mission.title }}</strong>
                   <span class="m-company">{{ mission.company || 'Zenika' }}</span>
@@ -159,7 +159,7 @@ const goToProfile = () => {
         </div>
 
         <div class="profile-footer">
-          <button @click="goToProfile" class="action-btn primary">
+          <button @click="goToProfile" class="action-btn primary" aria-label="Voir le profil complet">
             <ExternalLink size="16" />
             Voir le profil complet
           </button>

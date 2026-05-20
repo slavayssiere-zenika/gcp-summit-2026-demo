@@ -22,6 +22,7 @@ from shared.auth.jwt import verify_jwt
 from src.competencies.helpers import get_user_from_api, serialize_competency
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
 from src.competencies.schemas import CompetencyResponse, PaginationResponse
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 CACHE_TTL = 60
@@ -57,7 +58,10 @@ class UserMergeRequest(BaseModel):
 
 @router.post("/user/{user_id}/assign/bulk", status_code=200)
 async def assign_competencies_bulk(
-    user_id: int, request: Request, db: AsyncSession = Depends(get_db)
+    user_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Assigne en masse une liste de compétences à un utilisateur (idempotent via ON CONFLICT DO NOTHING).
 
@@ -65,6 +69,11 @@ async def assign_competencies_bulk(
     ce qui permet aux appelants (cv_storage_service, bulk_service) de retenter
     avec backoff exponentiel au lieu de récupérer un 500 pool overflow non retriable.
     """
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     sem = _get_assign_sem()
     if sem.locked():
         # Tous les slots occupés : signalé 429 AVANT d'acquérir une connexion DB
@@ -118,8 +127,14 @@ async def assign_competency_to_user(
     competency_id: int,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Assigne une compétence unique à un utilisateur (idempotent)."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     await get_user_from_api(user_id, request)
     comp = (
         (await db.execute(select(Competency).where(Competency.id == competency_id)))
@@ -161,9 +176,17 @@ async def clear_user_evaluations(
 
 @router.delete("/user/{user_id}/remove/{competency_id}", status_code=204)
 async def remove_competency_from_user(
-    user_id: int, competency_id: int, db: AsyncSession = Depends(get_db)
+    user_id: int,
+    competency_id: int,
+    db: AsyncSession = Depends(get_db),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Supprime l'assignation d'une compétence pour un utilisateur."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     await db.execute(
         user_competency.delete().where(
             user_competency.c.user_id == user_id,
@@ -181,14 +204,18 @@ async def list_user_competencies(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    jwt_payload: dict = Depends(verify_jwt),
 ):
     """Retourne toutes les compétences assignées à un utilisateur."""
+    if jwt_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(jwt_payload.get("sub")):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé : opération non autorisée pour cet utilisateur.",
+        )
     cache_key = f"competencies:user:{user_id}:list:skip:{skip}:limit:{limit}"
     cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
-
-    from sqlalchemy import func
 
     total = (
         await db.execute(

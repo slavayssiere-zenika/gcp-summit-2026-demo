@@ -7,14 +7,16 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.semconv.resource import ResourceAttributes
 
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+try:
     from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    _CLOUD_TRACE_AVAILABLE = True
+except ImportError:
+    _CLOUD_TRACE_AVAILABLE = False
+
+if os.getenv("TRACE_EXPORTER", "grpc") == "http":
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
 
 def setup_telemetry():
@@ -27,10 +29,13 @@ def setup_telemetry():
         }),
         sampler=sampler
     )
-    if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
+    trace_exporter_type = os.getenv("TRACE_EXPORTER", "grpc")
+    if trace_exporter_type == "gcp" and _CLOUD_TRACE_AVAILABLE:
         provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
+    elif trace_exporter_type == "http":
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     else:
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
     trace.set_tracer_provider(provider)
 
     return trace.get_tracer("agent_router_api.main")

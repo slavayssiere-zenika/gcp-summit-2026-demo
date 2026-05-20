@@ -10,6 +10,10 @@ Tools exposés :
 import logging
 import os
 from datetime import datetime
+import redis
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+from google.cloud import pubsub_v1
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +28,9 @@ async def get_redis_invalidation_state_internal(pattern: str = "*") -> dict:
         Dict {status, matched_keys_count, keys_sample, redis_url}.
     """
     try:
-        import redis
 
         redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-        r = redis.from_url(redis_url, socket_timeout=2.0)
+        r = redis.from_url(redis_url, socket_timeout=2.0)  # noqa: RedisSyncCache — outil d'inspection synchrone (non-mutant)
 
         keys = []
         # FIX Gap 2: cursor doit être int 0, pas la string "0".
@@ -70,8 +73,6 @@ async def execute_read_only_query_internal(query: str, db_name: str = "zenika") 
         return {"error": "Only read-only SELECT queries are allowed."}
 
     try:
-        from sqlalchemy import text
-        from sqlalchemy.ext.asyncio import create_async_engine
 
         db_url = os.getenv("DATABASE_URL", f"postgresql+asyncpg://postgres:postgres@alloydb:5432/{db_name}")
         engine = create_async_engine(db_url)
@@ -101,7 +102,6 @@ async def inspect_pubsub_dlq_internal(subscription_id: str = "cv-ingestion-dlq-s
         Dict {status, messages, count} ou {error}.
     """
     try:
-        from google.cloud import pubsub_v1
 
         project_id = os.getenv("GCP_PROJECT_ID", "")
         subscriber = pubsub_v1.SubscriberClient()

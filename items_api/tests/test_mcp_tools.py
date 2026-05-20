@@ -181,7 +181,8 @@ def test_mcp_app_call_success(mocker):
     mock_call_tool = mocker.patch("mcp_app.call_tool", new_callable=AsyncMock)
     mock_call_tool.return_value = [TextContent(type="text", text='{"status": "ok"}')]
 
-    resp = client.post("/mcp/call", json={"name": "health_check", "arguments": {}}, headers={"Authorization": "Bearer x"})
+    resp = client.post("/mcp/call", json={"name": "health_check", "arguments": {}},
+                       headers={"Authorization": "Bearer x"})
     assert resp.status_code == 200
     assert "status" in resp.json()["result"][0]["text"]
 
@@ -206,7 +207,7 @@ async def test_mcp_server_main(mocker):
     mock_context.user = None
     mock_context.__aenter__ = AsyncMock(return_value=("r", "w"))
     mock_context.__aexit__ = AsyncMock(return_value=None)
-    mocker.patch("mcp.server.stdio.stdio_server", return_value=mock_context)
+    mocker.patch("mcp_server.stdio_server", return_value=mock_context)
 
     mock_run = mocker.patch("mcp_server.server.run", new_callable=AsyncMock)
     await main()

@@ -139,13 +139,12 @@ class TestWorkflowAgentConstruction:
 class TestWorkflowAgentStructure:
     """Valide les invariants architecturaux sans appels LLM."""
 
-    def test_workflow_agent_is_sequential(self, workflow_module, mock_tools):
-        """L'agent principal doit être un SequentialAgent (pipeline déterministe)."""
-        from google.adk.agents import SequentialAgent
+    def test_workflow_agent_is_stategraph(self, workflow_module, mock_tools):
+        """L'agent principal doit être un StateGraphAgent (orchestration en graphe)."""
         hr_tool, ops_tool, missions_tool = mock_tools
         agent = workflow_module.build_workflow_agent(hr_tool, ops_tool, missions_tool)
-        assert isinstance(agent, SequentialAgent), (
-            f"build_workflow_agent() doit retourner un SequentialAgent, "
+        assert type(agent).__name__ == "StateGraphAgent", (
+            f"build_workflow_agent() doit retourner un StateGraphAgent, "
             f"got {type(agent).__name__}"
         )
 
@@ -195,8 +194,8 @@ class TestWorkflowAgentStructure:
     def test_workflow_agent_model_config_present(self, workflow_module):
         """Les constantes de config modèle doivent être présentes dans le module."""
         assert hasattr(workflow_module, "CLASSIFIER_MODEL_ENV") or \
-               hasattr(workflow_module, "WORKFLOW_CLASSIFIER_INSTRUCTIONS") or \
-               hasattr(workflow_module, "build_workflow_agent"), (
+            hasattr(workflow_module, "WORKFLOW_CLASSIFIER_INSTRUCTIONS") or \
+            hasattr(workflow_module, "build_workflow_agent"), (
             "Le module workflow_agent doit exposer ses constantes de configuration."
         )
 

@@ -32,7 +32,7 @@
       <div v-else class="steps-timeline">
         <div
           v-for="(step, idx) in message.steps"
-          :key="idx"
+          :key="(step.tool || step.type || 'step') + '-' + idx"
           :class="['step-card', stepClass(step), { open: openSteps.has(idx) }]"
         >
           <!-- ── Step Header (toujours visible) ── -->

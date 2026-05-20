@@ -27,7 +27,7 @@ async def test_mcp_http_client_list_tools(mock_httpx):
     result = await client.list_tools()
 
     assert result[0]["name"] == "toolxyz"
-    mock_httpx.get.assert_called_with("http://fake.url/mcp/tools")
+    mock_httpx.get.assert_called_with("http://fake.url/mcp/tools", timeout=10.0)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { Briefcase, ChevronLeft, ArrowRight, Loader2, User as UserIcon, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Target, History, ChevronDown, XCircle, Send, Trophy, TrendingDown, Ban, FileText, Trash2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ConsultantProfile from '@/components/ConsultantProfile.vue'
 import { authService } from '@/services/auth'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 
 const props = defineProps<{
   id: string
@@ -244,6 +245,29 @@ const openHistory = async () => {
   }
 }
 
+// ── Focus Traps (WCAG 2.1 AA — 2.1.2) ────────────────────────────────
+const {
+  trapRef: reasonTrapRef,
+  activateTrap: activateReasonTrap,
+  deactivateTrap: deactivateReasonTrap
+} = useFocusTrap()
+
+const {
+  trapRef: historyTrapRef,
+  activateTrap: activateHistoryTrap,
+  deactivateTrap: deactivateHistoryTrap
+} = useFocusTrap()
+
+watch(showReasonModal, (open) => {
+  if (open) activateReasonTrap()
+  else deactivateReasonTrap()
+})
+
+watch(showHistoryModal, (open) => {
+  if (open) activateHistoryTrap()
+  else deactivateHistoryTrap()
+})
+
 const statusText = computed(() => {
   if (pollCounter.value < 2) return "Ingestion documentaire (OCR/Parsing)..."
   if (pollCounter.value < 5) return "Extraction sémantique Gemini..."
@@ -271,29 +295,29 @@ const statusText = computed(() => {
 
       <div class="form-card">
         <div class="form-group">
-          <label>{{ t('missions.field_title') }}</label>
-          <input type="text" v-model="draftTitle" :placeholder="t('missions.field_title_placeholder')" />
+          <label for="mission-title">{{ t('missions.field_title') }}</label>
+          <input id="mission-title" type="text" v-model="draftTitle" :placeholder="t('missions.field_title_placeholder')" />
         </div>
         
         <div class="source-grid">
           <div class="form-group source-item">
-            <label>1. Fichier PDF / Word</label>
-            <input type="file" @change="handleFileUpload" accept=".pdf,.doc,.docx" class="file-input" />
+            <label for="mission-file">1. Fichier PDF / Word</label>
+            <input id="mission-file" type="file" @change="handleFileUpload" accept=".pdf,.doc,.docx" class="file-input" />
           </div>
           
           <div class="form-group source-item">
-            <label>2. Ou Lien Google Docs / Web</label>
-            <input type="url" v-model="draftUrl" :placeholder="t('missions.field_url_placeholder')" />
+            <label for="mission-url">2. Ou Lien Google Docs / Web</label>
+            <input id="mission-url" type="url" v-model="draftUrl" :placeholder="t('missions.field_url_placeholder')" />
           </div>
         </div>
 
         <div class="form-group">
-          <label>3. Ou Texte libre / Compléments</label>
-          <textarea v-model="draftDescription" rows="5" :placeholder="t('missions.field_desc_placeholder')"></textarea>
+          <label for="mission-desc">3. Ou Texte libre / Compléments</label>
+          <textarea id="mission-desc" v-model="draftDescription" rows="5" :placeholder="t('missions.field_desc_placeholder')"></textarea>
         </div>
         
         <div class="form-actions">
-          <button @click="analyzeMission" :disabled="!draftTitle || loading" class="submit-btn" :class="{ 'loading': loading }">
+          <button @click="analyzeMission" :disabled="!draftTitle || loading" class="submit-btn" :class="{ 'loading': loading }" :aria-label="t('missions.launch_btn')">
             <template v-if="!loading">{{ t('missions.launch_btn') }} <ArrowRight size="18" /></template>
             <template v-else><Loader2 class="spin" size="18" /> {{ statusText }}</template>
           </button>
@@ -356,14 +380,15 @@ const statusText = computed(() => {
 
       <!-- ── Reason Modal ── -->
       <div v-if="showReasonModal" class="modal-overlay" @click.self="showReasonModal = false">
-        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Motif du changement de statut">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Motif du changement de statut"
+          :ref="(el) => { if (el) reasonTrapRef.value = el as HTMLElement }">
           <h3>{{ t('missions.confirm_status_title') }}</h3>
           <p>{{ t('missions.confirm_status_body') }} <strong class="status-badge" :class="STATUS_CONFIG[selectedNewStatus]?.cssClass">{{ STATUS_CONFIG[selectedNewStatus]?.label }}</strong></p>
           <label for="status-reason">{{ t('missions.reason_label') }}</label>
           <textarea id="status-reason" v-model="statusReason" rows="3" :placeholder="t('missions.reason_placeholder')"></textarea>
           <div class="modal-actions">
             <button class="btn-cancel" @click="showReasonModal = false">{{ t('missions.cancel') }}</button>
-            <button class="btn-confirm" @click="confirmStatusUpdate" :disabled="updatingStatus">
+            <button class="btn-confirm" @click="confirmStatusUpdate" :disabled="updatingStatus" aria-label="Confirmer le changement de statut">
               <Loader2 v-if="updatingStatus" class="spin" size="14" /> Confirmer
             </button>
           </div>
@@ -372,7 +397,8 @@ const statusText = computed(() => {
 
       <!-- ── History Modal ── -->
       <div v-if="showHistoryModal" class="modal-overlay" @click.self="showHistoryModal = false">
-        <div class="modal-card modal-wide" role="dialog" aria-modal="true" aria-label="Historique des statuts">
+        <div class="modal-card modal-wide" role="dialog" aria-modal="true" aria-label="Historique des statuts"
+          :ref="(el) => { if (el) historyTrapRef.value = el as HTMLElement }">
           <div class="modal-header">
             <h3><History size="18" /> Historique des statuts</h3>
             <button class="btn-close" @click="showHistoryModal = false" aria-label="Fermer">✕</button>
@@ -475,7 +501,7 @@ const statusText = computed(() => {
             <div class="card-header highlight">
               <h3><Users size="20" /> Équipe Proposée</h3>
               <div style="display: flex; gap: 12px; align-items: center;">
-                 <button @click="reanalyzeMission" :disabled="pollingTask" class="reanalyze-btn">
+                 <button @click="reanalyzeMission" :disabled="pollingTask" class="reanalyze-btn" :aria-label="t('missions.relaunch_ia')">
                     <template v-if="!pollingTask">{{ t('missions.relaunch_ia') }}</template>
                     <template v-else><Loader2 class="spin" size="14" style="margin: 0; color: inherit;" /> En cours...</template>
                  </button>

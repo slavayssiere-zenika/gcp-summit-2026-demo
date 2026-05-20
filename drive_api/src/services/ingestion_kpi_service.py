@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.cache import delete_cache, get_cache
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.routers.files_router import _compute_kpi_metric, _reset_errors_to_pending
+import asyncio as _asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -308,7 +309,6 @@ class IngestionKpiService:
 
         if all_fixed_ids:
             try:
-                import asyncio as _asyncio
                 await _asyncio.gather(*[
                     delete_cache(f"drive:file:known:{fid}")
                     for fid in all_fixed_ids

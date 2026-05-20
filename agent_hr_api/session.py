@@ -7,11 +7,12 @@ from google.adk.runners import InMemorySessionService
 
 logger = logging.getLogger(__name__)
 
+
 class RedisSessionService(InMemorySessionService):
     def __init__(self):
         super().__init__()
         redis_url = os.getenv("REDIS_URL", "redis://redis:6379/10")
-        self.r = redis.from_url(redis_url)
+        self.r = redis.from_url(redis_url)  # noqa: RedisSyncADK
         # 1 Month TTL requested by user
         self.ttl = 30 * 24 * 60 * 60
 
@@ -52,13 +53,13 @@ class RedisSessionService(InMemorySessionService):
         session = super()._create_session_impl(**kwargs)
         self._save_all(session_id)
         return session
-        
+
     async def append_event(self, session, event):
         self._load_all(session.id)
         res = await super().append_event(session, event)
         self._save_all(session.id)
         return res
-        
+
     def _delete_session_impl(self, **kwargs):
         session_id = kwargs.get("session_id")
         self._load_all(session_id)

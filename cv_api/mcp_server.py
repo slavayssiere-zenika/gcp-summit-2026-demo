@@ -27,6 +27,8 @@ from mcp.types import TextContent, Tool
 from opentelemetry.propagate import inject
 from shared.mcp_server_utils import setup_mcp_tracer_provider
 from shared.auth.context import auth_header_var
+from mcp.server.stdio import stdio_server
+from mcp.server import InitializationOptions
 
 API_BASE_URL = os.getenv("CV_API_URL", "http://localhost:8004")
 
@@ -574,8 +576,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     """Main entry point for the MCP server when run as a script."""
-    from mcp.server.stdio import stdio_server
-    from mcp.server import InitializationOptions
     options = InitializationOptions(
         server_name="cv-api",
         server_version="1.0.0",

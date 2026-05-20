@@ -143,8 +143,8 @@ async def test_delete_folder(mock_delete_cache, service, mock_db):
 
 
 @pytest.mark.asyncio
-@patch('shared.cache.clear_namespace', new_callable=AsyncMock)
-@patch('shared.cache.delete_cache', new_callable=AsyncMock)
+@patch('src.services.folder_service.clear_namespace', new_callable=AsyncMock)
+@patch('src.services.folder_service.delete_cache', new_callable=AsyncMock)
 async def test_invalidate_drive_cache(mock_delete_cache, mock_clear_namespace):
     mock_clear_namespace.side_effect = [1, 1, 0]
 

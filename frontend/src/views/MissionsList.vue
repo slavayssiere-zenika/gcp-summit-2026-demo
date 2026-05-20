@@ -5,6 +5,7 @@ import { Briefcase, Plus, Users, Loader2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { parsePaginated } from '../utils/apiContract'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -42,10 +43,9 @@ const countByStatus = (status: string) => {
 const fetchMissions = async () => {
   try {
     const response = await axios.get('/api/missions/missions')
-    const data = response.data
-    // API retourne désormais {items: [...], total: N, skip: 0, limit: 50}
-    missions.value = Array.isArray(data) ? data : (data.items ?? data.missions ?? [])
-    totalMissions.value = data.total ?? missions.value.length
+    const page = parsePaginated<any>(response.data, 'missions', '/api/missions/missions')
+    missions.value = page.items
+    totalMissions.value = page.total
   } catch (error) {
     console.error('Erreur chargement missions:', error)
   } finally {
@@ -75,7 +75,7 @@ const newMission = () => {
           <p>{{ t('missions.list_subtitle') }}</p>
         </div>
       </div>
-      <button @click="newMission" class="action-btn">
+      <button @click="newMission" class="action-btn" :aria-label="t('missions.detail_title')">
         <Plus size="18" /> {{ t('missions.detail_title').split(' ')[0] }}
       </button>
     </div>

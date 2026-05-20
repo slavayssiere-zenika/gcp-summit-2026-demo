@@ -13,6 +13,7 @@ from src.cvs.schemas import CVProfileResponse, CVFullProfileResponse
 
 logger = logging.getLogger(__name__)
 
+
 class ProfileService:
     @staticmethod
     async def get_users_by_tag(tag: str, skip: int, limit: int, headers_downstream: dict, db: AsyncSession) -> tuple[int, List[CVProfileResponse]]:
@@ -30,14 +31,14 @@ class ProfileService:
                 if p.user_id not in seen_users:
                     seen_users.add(p.user_id)
                     unique_profiles.append(p)
-        
+
         user_ids = list(seen_users)
         user_enrich_map = {}
 
         async with httpx.AsyncClient(timeout=10.0) as http_client:
             for u_id in user_ids:
                 try:
-                    u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers_downstream)
+                    u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{u_id}", headers=headers_downstream, timeout=10.0)
                     if u_res.status_code == 200:
                         try:
                             u_data = UserItem.model_validate(u_res.json())
@@ -75,7 +76,7 @@ class ProfileService:
         is_anon = False
         async with httpx.AsyncClient(timeout=5.0) as http_client:
             try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream, timeout=10.0)
                 if u_res.status_code == 200:
                     try:
                         u_data = UserItem.model_validate(u_res.json())
@@ -144,7 +145,7 @@ class ProfileService:
 
         async with httpx.AsyncClient(timeout=5.0) as http_client:
             try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream)
+                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream, timeout=10.0)
                 if u_res.status_code == 200:
                     try:
                         u_data = UserItem.model_validate(u_res.json())
@@ -232,7 +233,8 @@ class ProfileService:
                 for user in page.items:
                     email = getattr(user, "email", "") or ""
                     if email and "@anonymous.zenika.com" not in email.lower():
-                        candidates.append({"id": user.id, "email": email, "full_name": getattr(user, "full_name", None)})
+                        candidates.append({"id": user.id, "email": email,
+                                          "full_name": getattr(user, "full_name", None)})
 
                 if len(page.items) < limit:
                     break

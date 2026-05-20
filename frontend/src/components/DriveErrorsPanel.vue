@@ -130,11 +130,11 @@
 
     <!-- ── Pagination ── -->
     <div v-if="totalPages > 1" class="pagination">
-      <button class="page-btn" @click="currentPage--" :disabled="currentPage === 1">
+      <button class="page-btn" @click="currentPage--" :disabled="currentPage === 1" aria-label="Page précédente">
         <ChevronLeft size="14" />
       </button>
       <span class="page-indicator">{{ currentPage }} / {{ totalPages }}</span>
-      <button class="page-btn" @click="currentPage++" :disabled="currentPage === totalPages">
+      <button class="page-btn" @click="currentPage++" :disabled="currentPage === totalPages" aria-label="Page suivante">
         <ChevronRight size="14" />
       </button>
     </div>
@@ -144,6 +144,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
+// parsePaginated bypass (endpoints fetched here are not paginated: Google Drive ingestion errors list)
 import { useRouter } from 'vue-router'
 import {
   XCircle, CheckCircle2, Trash2, Loader2, FileText,

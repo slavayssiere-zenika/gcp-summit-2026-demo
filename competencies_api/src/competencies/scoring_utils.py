@@ -12,6 +12,7 @@ import os
 import re
 from datetime import datetime, timezone
 from typing import Optional
+from datetime import date as _date
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,6 @@ def _estimate_duration_from_dates(
         sy = int(str(start)[:4])
         sm = int(str(start)[5:7]) if len(str(start)) >= 7 else 1
         if str(end).lower() in ("present", "en cours", "current"):
-            from datetime import date as _date
 
             ey, em = _date.today().year, _date.today().month
         else:

@@ -12,6 +12,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from pydantic import BaseModel
+from opentelemetry.propagate import inject
 
 app = FastAPI(title="Drive MCP Sidecar (HTTP Standard)")
 
@@ -41,7 +42,6 @@ async def execute_tool(request: ToolCallRequest, http_request: Request):
         result = await call_tool(request.name, request.arguments)
         return {"result": [r.model_dump() for r in result]}
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -55,7 +55,6 @@ async def report_exception_to_prompts_api(service_name: str, error_msg: str, tra
     prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        from opentelemetry.propagate import inject
         inject(headers)
     except Exception:
         raise
