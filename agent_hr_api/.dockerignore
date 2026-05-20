@@ -20,3 +20,4 @@ Dockerfile
 id_rsa*
 *.p12
 secrets.sh
+debug_*.py

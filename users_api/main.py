@@ -12,43 +12,14 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
-from shared.fastapi_utils import instrument_app
+from shared.fastapi_utils import instrument_app, setup_tracing
 from shared.observability import setup_logging
 from sqlalchemy import text
 from src.auth import get_password_hash, verify_jwt
 from src.users.models import User
 from src.users.router import router
 
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "users-api",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
-        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
-trace.set_tracer_provider(provider)
+setup_tracing(service_name="users-api")
 
 tracer = trace.get_tracer(__name__)
 

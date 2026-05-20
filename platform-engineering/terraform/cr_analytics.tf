@@ -69,6 +69,10 @@ resource "google_cloud_run_v2_service" "analytics_mcp" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/7"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "analytics_mcp"
+      }
+      env {
         name  = "ROOT_PATH"
         value = ""
       }

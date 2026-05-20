@@ -732,6 +732,285 @@ grep -rn 'monkeypatch\.setattr.*"auth\.' */tests/ --include="*.py" 2>/dev/null \
 > Toute duplication jugée légitime doit être annotée `# Duplication intentionnelle — <raison>` pour être tracée et exclue des futures analyses.
 
 
+#### 3.7. Hardening Mémoire \u0026 État Résiduel — Sémaphores, Redis, Pool DB, State Machines (NOUVEAU — post-mortem 2026-05-19)
+
+> **Contexte** : lors des stress tests à 500 utilisateurs, des latences résiduelles persistaient après le pic de charge — uniquement résorbables par un redémarrage du container. L'audit a identifié 4 sources d'état non-déterministe persistant en mémoire entre les requêtes : sémaphores globaux corrompus par `CancelledError`, clients Redis synchrones bloquant l'event loop, connexions DB mal recyclées, et machines à état Redis avec des clients ad-hoc non routés.
+
+**Axe 1 — Sémaphores globaux : risque de deadlock par CancelledError**
+
+Un sémaphore module-level (global) persiste toute la vie du processus. Si une coroutine est annulée pendant `sem.acquire()` (timeout client, `CancelledError` FastAPI), le compteur est décrémenté sans que le `release()` ne soit jamais appelé → deadlock définitif jusqu'au prochain redémarrage.
+
+- [ ] **Zéro `async with sem:` sur un sémaphore global** : Tout sémaphore défini au **niveau module** doit utiliser `acquire_shielded()` de `shared/semaphore_utils.py`. Les sémaphores locaux (créés à l'intérieur d'une fonction) sont exemptés.
+
+// turbo
+```bash
+echo "=== Sémaphores globaux sans acquire_shielded ==="
+# 1. Détecter les sémaphores définis au niveau module (hors fonction)
+echo "--- Déclarations module-level ---"
+grep -rn "asyncio\.Semaphore(" */src/ agent_*/src/ shared/ --include="*.py" 2>/dev/null \
+  | grep -v ".venv" | grep -v "# Local" | grep -v "test_"
+
+# 2. Détecter les usages directs de 'async with sem:' ou 'async with _*SEM:'
+echo "--- Usages direct async with sem (candidats à migrer vers acquire_shielded) ---"
+grep -rn "async with _[A-Za-z_]*[Ss][Ee][Mm]" */src/ agent_*/src/ --include="*.py" 2>/dev/null \
+  | grep -v "acquire_shielded" | grep -v ".venv" | grep -v "# Local"
+
+# 3. Vérifier la présence de shared/semaphore_utils.py (module de protection)
+echo "--- Présence de shared/semaphore_utils.py ---"
+[ -f "shared/semaphore_utils.py" ] \
+  && grep -n "acquire_shielded\|asyncio.shield" shared/semaphore_utils.py \
+  || echo "❌ ABSENT — créer shared/semaphore_utils.py avec acquire_shielded()"
+
+# 4. Vérifier que chaque usage de sémaphore global utilise acquire_shielded
+echo "--- Services conformes (utilisant acquire_shielded) ---"
+grep -rn "acquire_shielded" */src/ agent_*/src/ --include="*.py" 2>/dev/null | grep -v ".venv"
+```
+
+Pattern obligatoire (issu de `shared/semaphore_utils.py`) :
+```python
+# shared/semaphore_utils.py — à utiliser pour TOUS les sémaphores globaux
+from contextlib import asynccontextmanager
+import asyncio
+
+@asynccontextmanager
+async def acquire_shielded(sem: asyncio.Semaphore):
+    """
+    Acquiert un sémaphore de façon blindée contre CancelledError.
+    Garantit que release() est toujours appelé même si la coroutine parente
+    est annulée pendant l'attente → prévient le deadlock sur les sémaphores persistants.
+    """
+    await asyncio.shield(sem.acquire())
+    try:
+        yield
+    finally:
+        sem.release()
+
+# ✅ Usage obligatoire pour tout sémaphore module-level
+async with acquire_shielded(_MY_GLOBAL_SEM):
+    ...  # logique protégée
+
+# ❌ INTERDIT pour les sémaphores globaux — risque de deadlock
+async with _MY_GLOBAL_SEM:
+    ...
+```
+
+Violations à signaler :
+- ❌ `async with _BULK_SEM:` sans `acquire_shielded` → deadlock potentiel sous annulation de requête
+- ❌ Sémaphore global initialisé à `None` (lazy init) sans protection → race condition au démarrage
+- ✅ Exemption : sémaphore créé `asyncio.Semaphore(N)` **dans le corps d'une fonction** (non persistent)
+
+---
+
+**Axe 2 — Clients Redis synchrones bloquant l'event loop asyncio**
+
+Appeler `redis.Redis(...)` (client synchrone) depuis une coroutine asyncio bloque le thread de l'event loop pour toute la durée de l'I/O réseau. Sous charge, cela désactive effectivement la concurrence asyncio du service.
+
+- [ ] **Zéro client Redis synchrone dans les services async** : Tout appel `redis.from_url()`, `redis.Redis()`, `redis.StrictRedis()` est interdit dans les services FastAPI. Seul `shared/cache.py` (async via `aioredis`) et `shared/redis_state.py` (machines à état) sont autorisés.
+
+// turbo
+```bash
+echo "=== Clients Redis synchrones (bloquants) ==="
+# 1. Détecter les imports redis synchrones (hors shared/)
+grep -rn "import redis$\|from redis import\|redis\.Redis(\|redis\.from_url(\|redis\.StrictRedis(" \
+  */src/ */main.py agent_*/src/ --include="*.py" 2>/dev/null \
+  | grep -v ".venv" | grep -v "shared/" | grep -v "redis.asyncio" \
+  | grep -v "fakeredis" | grep -v "test_"
+
+# 2. Détecter les get_redis() résiduels (pattern pré-migration)
+echo "--- Appels get_redis() résiduels ---"
+grep -rn "get_redis()\|self\.redis\." \
+  */src/ agent_*/src/ --include="*.py" 2>/dev/null \
+  | grep -v ".venv" | grep -v "shared/"
+
+# 3. Détecter les .pipeline() synchrones dans une coroutine (signal fort)
+echo "--- Usages de .pipeline() synchrone dans des coroutines (doit être absent) ---"
+grep -rn "\.pipeline()\|pipe\.execute()" \
+  */src/ agent_*/src/ --include="*.py" 2>/dev/null \
+  | grep -v ".venv"
+
+# 4. Vérifier que shared/redis_state.py existe et utilise aioredis
+echo "--- shared/redis_state.py (source de vérité pour les state machines) ---"
+[ -f "shared/redis_state.py" ] \
+  && grep -n "get_state_redis_client\|asyncio\|aioredis" shared/redis_state.py | head -10 \
+  || echo "❌ ABSENT — créer shared/redis_state.py"
+
+# 5. Vérifier que shared/cache.py n'expose pas de client synchrone
+echo "--- shared/cache.py — présence du client async ---"
+grep -n "aioredis\|asyncio\|async def" shared/cache.py 2>/dev/null | head -5 \
+  || echo "⚠️ shared/cache.py introuvable ou non-async"
+```
+
+Violations à signaler :
+- ❌ `from src.redis_client import get_redis` dans un fichier de service → migrer vers `shared.cache`
+- ❌ `redis.pipeline().execute()` dans une coroutine → remplacer par `asyncio.gather(*[set_cache(...) for ...])`
+- ❌ `self.redis.get(...)` dans une classe de service → migrer vers `await get_cache(...)`
+- ✅ Exemption : `fakeredis` dans les tests (`test_*.py`)
+
+---
+
+**Axe 3 — Pool SQLAlchemy : connexions dégradées post-pic de charge**
+
+Un `pool_recycle` trop long (défaut 1800s) maintient des connexions TCP TCP half-open en erreur après un pic de charge. Un `pool_reset_on_return` absent laisse des transactions BEGIN non commitées dans le pool → erreur au prochain usage.
+
+- [ ] **`pool_recycle ≤ 300s`** et **`pool_reset_on_return="rollback"`** dans `shared/database.py`.
+
+// turbo
+```bash
+echo "=== Audit pool SQLAlchemy (shared/database.py) ==="
+# 1. Vérifier pool_recycle
+echo "--- pool_recycle (cible : <= 300 ou variable env DB_POOL_RECYCLE) ---"
+grep -n "pool_recycle" shared/database.py 2>/dev/null \
+  || echo "❌ pool_recycle ABSENT — valeur par défaut SQLAlchemy = 1800s (trop élevé)"
+
+# 2. Vérifier pool_reset_on_return
+echo "--- pool_reset_on_return (cible : 'rollback') ---"
+grep -n "pool_reset_on_return" shared/database.py 2>/dev/null \
+  || echo "❌ pool_reset_on_return ABSENT — transactions orphelines non nettoyées au retour dans le pool"
+
+# 3. Vérifier pool_pre_ping
+echo "--- pool_pre_ping (cible : True) ---"
+grep -n "pool_pre_ping" shared/database.py 2>/dev/null \
+  || echo "⚠️ pool_pre_ping ABSENT — connexions TCP mortes non détectées avant usage"
+
+# 4. Afficher le bloc complet pool_params pour contrôle humain
+echo "--- Bloc pool_params actuel ---"
+grep -A 15 "pool_params" shared/database.py 2>/dev/null | head -20
+```
+
+Pattern obligatoire dans `shared/database.py` :
+```python
+pool_params = {
+    "pool_pre_ping": True,
+    # 5min (configurable via DB_POOL_RECYCLE) — recyclage agressif des
+    # connexions dégradées après un pic de charge. 1800s par défaut = trop long.
+    "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", 300)),
+    "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
+    "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
+    "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", 5)),
+    # Rollback explicite à chaque retour de connexion au pool : nettoie les
+    # transactions BEGIN non commitées laissées par des exceptions non gérées.
+    "pool_reset_on_return": "rollback",
+}
+```
+
+Violations à signaler :
+- ❌ `pool_recycle` absent ou > 300 → connexions TCP half-open maintenues trop longtemps
+- ❌ `pool_reset_on_return` absent → risk de transaction imbriquée corrompue dans le pool
+- ❌ `pool_pre_ping` absent → connexion TCP morte utilisée → erreur au premier `execute()`
+
+---
+
+**Axe 4 — Machines à état Redis : clients directs hors routing `SERVICE_NAME`**
+
+Les classes de gestion de tâches asynchrones (`*TaskState`, `*TaskManager`) qui créent leur propre client Redis (`redis.asyncio.from_url(...)` hardcodé) contournent le routing par `SERVICE_NAME`, violent l'isolation des bases Redis, et créent des connexions non mutualisées.
+
+- [ ] **Toute machine à état Redis utilise `shared/redis_state.py`** (jamais un client direct).
+
+// turbo
+```bash
+echo "=== Machines à état Redis — audit des clients directs ==="
+# 1. Détecter les from_url() hardcodés dans des classes *State ou *Manager
+grep -rn "redis\.asyncio\.from_url\|aioredis\.from_url\|redis\.from_url" \
+  */src/ agent_*/src/ --include="*.py" 2>/dev/null \
+  | grep -v ".venv" | grep -v "shared/"
+
+# 2. Détecter les fichiers *task_state.py et *bulk_task_state.py
+echo "--- Fichiers state machine détectés ---"
+find */src/ agent_*/src/ -name "*task_state.py" -o -name "*bulk_task_state.py" 2>/dev/null \
+  | grep -v ".venv"
+
+# 3. Vérifier que ces fichiers importent shared.redis_state et non redis directement
+echo "--- Import shared.redis_state dans les state machines ---"
+for f in $(find */src/ agent_*/src/ -name "*task_state.py" -o -name "*bulk_task_state.py" 2>/dev/null); do
+  if grep -q "get_state_redis_client" "$f"; then
+    echo "  ✅ $f"
+  else
+    echo "  ❌ $f — n'utilise pas shared.redis_state"
+    grep -n "redis" "$f" | head -5
+  fi
+done
+
+# 4. Vérifier que shared/redis_state.py documente le mapping SERVICE_NAME → DB_NUMBER
+echo "--- Mapping SERVICE_NAME → DB dans shared/redis_state.py ---"
+grep -n "SERVICE_NAME\|DB_NUMBER\|_SERVICE_DB_MAP" shared/redis_state.py 2>/dev/null | head -10
+```
+
+Pattern obligatoire (issu de `shared/redis_state.py`) :
+```python
+# shared/redis_state.py — client Redis isolé pour les machines à état.
+# DISTINCT de shared/cache.py (cache applicatif TTL court) :
+# - shared/cache.py  : opérations GET/SET/DEL avec TTL, accès concurrent multi-routes
+# - shared/redis_state.py : état persistant de tâches longues (bulk, reanalyse),
+#   atomique (GET-Modify-SET), isolé par service via _SERVICE_DB_MAP
+
+import redis.asyncio as aioredis
+
+_SERVICE_DB_MAP = {
+    "cv_api": 2,
+    "missions_api": 3,
+    "competencies_api": 4,
+    # Ajouter chaque nouveau service ici avec son numéro de base dédié
+}
+
+def get_state_redis_client() -> aioredis.Redis:
+    """Retourne un client Redis async routé selon SERVICE_NAME."""
+    service_name = os.getenv("SERVICE_NAME", "")
+    db_number = _SERVICE_DB_MAP.get(service_name, 0)
+    redis_url = _build_redis_url(db_number)
+    return aioredis.from_url(redis_url, decode_responses=True)
+```
+
+Violations à signaler :
+- ❌ `redis.asyncio.from_url("redis://redis:6379/0")` hardcodé dans un `*TaskState` → migrer vers `get_state_redis_client()`
+- ❌ `*TaskState` important `os.getenv("REDIS_URL")` directement → contourne le routing `SERVICE_NAME`
+- ❌ Absence de `shared/redis_state.py` → les state machines n'ont pas de client standardisé
+
+---
+
+**Synthèse — commande de détection rapide (tous les axes)**
+
+// turbo
+```bash
+echo "====== HARDENING MÉMOIRE — SYNTHÈSE RAPIDE ======"
+
+echo ""
+echo "[1] Sémaphores globaux sans acquire_shielded"
+SEM_VIOLATIONS=$(grep -rn "async with _[A-Za-z_]*[Ss][Ee][Mm]" */src/ agent_*/src/ \
+  --include="*.py" 2>/dev/null | grep -v "acquire_shielded" | grep -v ".venv" | wc -l | tr -d ' ')
+[ "$SEM_VIOLATIONS" -eq 0 ] \
+  && echo "  ✅ Aucun usage direct de sémaphore global détecté" \
+  || echo "  ❌ $SEM_VIOLATIONS occurrence(s) — migrer vers acquire_shielded()"
+
+echo ""
+echo "[2] Clients Redis synchrones (bloquants)"
+SYNC_REDIS=$(grep -rn "get_redis()\|redis\.Redis(\|redis\.from_url(\|\.pipeline()\." \
+  */src/ agent_*/src/ --include="*.py" 2>/dev/null \
+  | grep -v ".venv" | grep -v "shared/" | grep -v "test_" | wc -l | tr -d ' ')
+[ "$SYNC_REDIS" -eq 0 ] \
+  && echo "  ✅ Aucun client Redis synchrone détecté hors shared/" \
+  || echo "  ❌ $SYNC_REDIS occurrence(s) — migrer vers shared.cache ou shared.redis_state"
+
+echo ""
+echo "[3] Pool SQLAlchemy"
+[ -f "shared/database.py" ] || { echo "  ⚠️ shared/database.py introuvable"; }
+RECYCLE=$(grep -c "pool_recycle" shared/database.py 2>/dev/null || echo 0)
+RESET=$(grep -c "pool_reset_on_return" shared/database.py 2>/dev/null || echo 0)
+[ "$RECYCLE" -gt 0 ] && echo "  ✅ pool_recycle configuré" || echo "  ❌ pool_recycle ABSENT"
+[ "$RESET" -gt 0 ] && echo "  ✅ pool_reset_on_return configuré" || echo "  ❌ pool_reset_on_return ABSENT"
+
+echo ""
+echo "[4] State machines Redis — clients directs"
+STATE_VIOLATIONS=$(for f in $(find */src/ agent_*/src/ -name "*task_state.py" -o -name "*bulk_task_state.py" 2>/dev/null); do
+  grep -q "get_state_redis_client" "$f" || echo "VIOLATION: $f"
+done | wc -l | tr -d ' ')
+[ "$STATE_VIOLATIONS" -eq 0 ] \
+  && echo "  ✅ Toutes les state machines utilisent shared.redis_state" \
+  || echo "  ❌ $STATE_VIOLATIONS state machine(s) avec client Redis direct"
+
+echo ""
+echo "====== FIN HARDENING MÉMOIRE ======"
+```
+
 ### Étape 4 : Analyse de la couverture des tests aux limites (edge-cases)
 
 Pour chaque conteneur, vérifier que les "edge-cases" (cas limites, sécurité, résilience) sont bien testés. Un conteneur sans fichiers de tests spécifiques aux limites (`test_edge_cases.py`, `test_zero_trust.py`, `test_jwt*.py`, etc.) doit être signalé.
@@ -794,3 +1073,22 @@ Le rapport doit inclure une **section dédiée à la résilience des appels exte
   - 🟠 **Majeur** : appel sans retry sur une ressource externe instable (ex: Vertex AI, Pub/Sub)
   - 🟡 **Mineur** : appel best-effort sans retry mais avec log (ex: FinOps reporting)
 - Le **pattern de correction recommandé** pour chaque violation (tenacity, asyncio.wait_for, raise_for_status)
+
+Le rapport doit inclure une **section dédiée au hardening mémoire & état résiduel** (issue de l'Étape 3.7) avec :
+- La **matrice de conformité par axe** (tableau 4 colonnes : Axe · Service · Statut · Action) :
+
+  | Axe | Service | Statut | Action |
+  |-----|---------|--------|--------|
+  | Sémaphores globaux (`acquire_shielded`) | `cv_api`, `items_api`, `competencies_api` | ✅ / ❌ | Migrer vers `acquire_shielded()` |
+  | Redis synchrone (bloquant) | `drive_api`, … | ✅ / ❌ | Migrer vers `shared.cache` |
+  | Pool SQLAlchemy (`pool_recycle`, `pool_reset_on_return`) | `shared/database.py` | ✅ / ❌ | Mettre à jour `pool_params` |
+  | State machines Redis (`shared.redis_state`) | `cv_api`, `missions_api`, `competencies_api` | ✅ / ❌ | Utiliser `get_state_redis_client()` |
+
+- La **liste des fichiers non conformes** avec la ligne exacte de la violation
+- Les **modules partagés requis** (`shared/semaphore_utils.py`, `shared/redis_state.py`) et leur statut (présent / absent)
+- L'**impact observé en production** : latence résiduelle post-pic, erreurs disparaissant au redémarrage, connexions pool half-open
+- La **priorisation des corrections** :
+  - 🔴 **Bloquant** : sémaphore global sans `acquire_shielded` sur un chemin critique (ingestion, bulk) → deadlock potentiel sans redémarrage
+  - 🟠 **Majeur** : client Redis synchrone dans l'event loop → dégradation silencieuse de la concurrence sous charge
+  - 🟡 **Mineur** : `pool_recycle` ou `pool_reset_on_return` absents → latence résiduelle post-pic (observable mais non bloquant)
+

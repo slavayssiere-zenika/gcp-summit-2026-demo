@@ -13,15 +13,16 @@ Fonctions exportées :
 import asyncio
 import logging
 import os
-from datetime import datetime, timedelta, timezone
 
 import httpx
 from opentelemetry.propagate import inject
+from shared.semaphore_utils import acquire_shielded
 from shared.schemas.pagination import PaginationResponse
 from src.services.config import (
-    _CV_CACHE, COMPETENCIES_API_URL, ITEMS_API_URL,
+    COMPETENCIES_API_URL, ITEMS_API_URL,
     PROMPTS_API_URL, USERS_API_URL,
 )
+from shared.cache import get_cache, set_cache
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,9 @@ async def _acquire_service_token(auth_header: str) -> str:
 
 
 async def _get_cv_extraction_prompt() -> str:
-    now = datetime.now(timezone.utc)
-    cached = _CV_CACHE.get("prompt", {})
-    if cached.get("value") and now < cached.get("expires", datetime.min.replace(tzinfo=timezone.utc)):
-        return cached["value"]
+    cached_prompt = await get_cache("cv_api:prompt")
+    if cached_prompt:
+        return cached_prompt
     try:
         async with httpx.AsyncClient(timeout=10.0) as hc:
             res = await hc.get(f"{PROMPTS_API_URL.rstrip('/')}/prompts/cv_api.extract_cv_info")
@@ -59,7 +59,7 @@ async def _get_cv_extraction_prompt() -> str:
                 data = PromptResp.model_validate(res.json())
                 prompt = data.value
                 if prompt:
-                    _CV_CACHE["prompt"] = {"value": prompt, "expires": now + timedelta(minutes=30)}
+                    await set_cache("cv_api:prompt", prompt, 30 * 60)
                     return prompt
     except Exception as e:
         logger.warning(f"[bulk_reanalyse] prompts_api indisponible: {e}")
@@ -67,7 +67,7 @@ async def _get_cv_extraction_prompt() -> str:
         if os.path.exists(candidate):
             with open(candidate, "r", encoding="utf-8") as f:
                 prompt = f.read()
-            _CV_CACHE["prompt"] = {"value": prompt, "expires": now + timedelta(minutes=30)}
+            await set_cache("cv_api:prompt", prompt, 30 * 60)
             return prompt
     logger.error("[bulk_reanalyse] CRITIQUE : aucun prompt CV disponible")
     return ""
@@ -86,7 +86,7 @@ async def _resolve_competency_ids(
       2. Si non trouvé → crée via POST / (get-or-create idempotent)
     Retourne les IDs résolus (les échecs sont logés et ignorés).
     """
-    _sem = sem or asyncio.Semaphore(10)
+    _sem = sem or asyncio.Semaphore(10)  # Local — créé dans le corps de la fonction, non persistant entre requêtes.
 
     def _normalize(s: str) -> str:
         return s.strip().lower().replace("-", " ").replace("_", " ")
@@ -98,7 +98,7 @@ async def _resolve_competency_ids(
         if not comp.get("practiced", True):
             return None  # Compétence non pratiquée : on n'assigne pas
         n_norm = _normalize(name)
-        async with _sem:
+        async with acquire_shielded(_sem):  # Protection CancelledError — sémaphore potentiellement injecté module-level
             try:
                 res = await hc.get(
                     f"{COMPETENCIES_API_URL.rstrip('/')}/search",

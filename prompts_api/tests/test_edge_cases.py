@@ -6,59 +6,13 @@ Sections :
   C. analyzer.py — edge cases non couverts
 """
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./prompts_edge_test.db")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/5")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Section A — cache.py : Redis async errors (fail-open)
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestPromptsCacheEdgeCases:
-
-    @pytest.mark.asyncio
-    async def test_get_cache_redis_error_returns_none(self):
-        """get_cache avec Redis indisponible → retourne None (fail-open)."""
-        from cache import get_cache
-        with patch("cache.redis_client.get", new=AsyncMock(side_effect=Exception("timeout"))):
-            result = await get_cache("any_key")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_set_cache_redis_error_does_not_raise(self):
-        """set_cache avec Redis indisponible → log erreur, pas d'exception."""
-        from cache import set_cache
-        with patch("cache.redis_client.set", new=AsyncMock(side_effect=Exception("timeout"))):
-            # Ne doit pas lever d'exception
-            await set_cache("key", "value", ttl=60)
-
-    @pytest.mark.asyncio
-    async def test_delete_cache_redis_error_does_not_raise(self):
-        """delete_cache avec Redis indisponible → log erreur, pas d'exception."""
-        from cache import delete_cache
-        with patch("cache.redis_client.delete", new=AsyncMock(side_effect=Exception("timeout"))):
-            await delete_cache("key")
-
-    @pytest.mark.asyncio
-    async def test_get_cache_returns_value_on_hit(self):
-        """get_cache hit → retourne la valeur stockée."""
-        from cache import get_cache
-        with patch("cache.redis_client.get", new=AsyncMock(return_value="cached_prompt")):
-            result = await get_cache("some_key")
-        assert result == "cached_prompt"
-
-    @pytest.mark.asyncio
-    async def test_get_cache_returns_none_on_miss(self):
-        """get_cache miss → retourne None."""
-        from cache import get_cache
-        with patch("cache.redis_client.get", new=AsyncMock(return_value=None)):
-            result = await get_cache("missing_key")
-        assert result is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

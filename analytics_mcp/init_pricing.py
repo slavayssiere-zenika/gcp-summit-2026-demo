@@ -25,15 +25,16 @@ def get_gcp_project_id() -> str:
 # Descriptions and field modes are owned by Terraform (bigquery.tf).
 # This script only upserts rows; it must NOT recreate the table schema.
 PRICING_ROWS = [
-    ("gemini-3.1-pro-preview",        0.00000125,  0.00000375),
-    ("gemini-3-pro-preview",           0.00000125,  0.00000375),
-    ("gemini-2.5-pro",                 0.00000125,  0.00000375),
-    ("gemini-1.5-pro",                 0.00000125,  0.00000375),
-    ("gemini-embedding-001",           0.00000000,  0.00000000),
-    ("gemini-3.1-flash-lite-preview",  0.000000075, 0.00000030),
-    ("gemini-3-flash-preview",         0.000000075, 0.00000030),
-    ("gemini-2.5-flash",               0.000000075, 0.00000030),
-    ("gemini-1.5-flash",               0.000000075, 0.00000030),
+    ("gemini-3.5-flash", 0.00000150, 0.00000900),
+    ("gemini-3.1-pro-preview", 0.00000125, 0.00000375),
+    ("gemini-3-pro-preview", 0.00000125, 0.00000375),
+    ("gemini-2.5-pro", 0.00000125, 0.00000375),
+    ("gemini-1.5-pro", 0.00000125, 0.00000375),
+    ("gemini-embedding-001", 0.00000000, 0.00000000),
+    ("gemini-3.1-flash-lite-preview", 0.000000075, 0.00000030),
+    ("gemini-3-flash-preview", 0.000000075, 0.00000030),
+    ("gemini-2.5-flash", 0.000000075, 0.00000030),
+    ("gemini-1.5-flash", 0.000000075, 0.00000030),
 ]
 
 

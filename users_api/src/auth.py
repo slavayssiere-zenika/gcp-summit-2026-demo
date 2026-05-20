@@ -9,10 +9,15 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 from jwt.exceptions import InvalidTokenError
 import bcrypt
+from shared.cache import key_exists as _cache_key_exists
 
 # Pool de threads dedie au bcrypt (CPU-bound) — evite de bloquer la boucle asyncio.
 # bcrypt avec work_factor=12 prend ~200-400ms CPU par operation.
-_BCRYPT_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="bcrypt")
+# os.cpu_count() evite la file d'attente sous charge concurrente (ex: 500u stress test).
+_BCRYPT_EXECUTOR = ThreadPoolExecutor(
+    max_workers=os.cpu_count() or 4,
+    thread_name_prefix="bcrypt",
+)
 
 # Configuration for JWT
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -82,19 +87,16 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
 security = HTTPBearer(auto_error=False)
 
 
-def _is_user_blacklisted(username: str) -> bool:
-    """Vérifie si un utilisateur est blacklisté (suspendu) en Redis (F-05)."""
-    try:
-        import os as _os
+async def _is_user_blacklisted(username: str) -> bool:
+    """Vérifie si un utilisateur est blacklisté (suspendu) en Redis (F-05).
 
-        import redis as _redis
-        _r = _redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
-        return _r.exists(f"jwt:blacklist:user:{username}") > 0
-    except Exception:
-        return False  # Fail-open si Redis indisponible (évite le blocage total)
+    Délègue à shared.cache.key_exists() — client asyncio partagé, pool géré centralement.
+    Fail-open : retourne False si Redis est indisponible (évite le blocage total).
+    """
+    return await _cache_key_exists(f"jwt:blacklist:user:{username}")
 
 
-def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
+async def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     # 1. Try token from Authorization header if present
     if credentials:
         try:
@@ -106,7 +108,7 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
             # Vérification blacklist Redis (compte suspendu)
             username = payload.get("sub")
             try:
-                if username and _is_user_blacklisted(username):
+                if username and await _is_user_blacklisted(username):
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Compte suspendu — accès révoqué",
@@ -146,7 +148,7 @@ def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCredenti
         # Vérification blacklist Redis (compte suspendu)
         username = payload.get("sub")
         try:
-            if username and _is_user_blacklisted(username):
+            if username and await _is_user_blacklisted(username):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Compte suspendu — accès révoqué",

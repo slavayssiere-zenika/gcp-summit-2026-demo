@@ -1,3 +1,4 @@
+from fakeredis import aioredis
 import os
 from unittest.mock import MagicMock, patch
 
@@ -14,9 +15,8 @@ os.environ["ITEMS_API_URL"] = "http://items-api:8001"
 os.environ["USERS_API_URL"] = "http://users-api:8000"
 os.environ["SECRET_KEY"] = "testsecret"
 
-# Prépare le serveur FakeRedis partagé (réutilisé par reset_client après import)
 _fake_redis_server = fakeredis.FakeServer()
-_fake_redis_client = fakeredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
+_fake_redis_client = aioredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
 
 # Mock OTel AVANT l'import de main (nécessaire car OTel s'init au niveau module)
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
@@ -26,8 +26,8 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
     from src.items.models import Base
 
 # Injecte le client fakeredis dans le module cache (lazy init)
-import cache as _cache_module  # noqa: E402
-_cache_module._client = _fake_redis_client
+import shared.cache as _cache_module  # noqa: E402
+_cache_module._redis_pool = _fake_redis_client
 
 if engine:
     engine.dispose()
@@ -67,9 +67,10 @@ app.dependency_overrides[verify_jwt] = override_verify_jwt
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
-    import cache as _cache_module
-    if _cache_module._client:
-        _cache_module._client.flushall()
+    import shared.cache as _cache_module
+    if _cache_module._redis_pool:
+        import asyncio
+        asyncio.run(_cache_module._redis_pool.flushall())
     yield
 
 

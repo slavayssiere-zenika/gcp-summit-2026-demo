@@ -2,9 +2,8 @@ import json
 import os
 from datetime import datetime, timedelta
 
-import redis.asyncio as redis
+from shared.redis_state import get_state_redis_client
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/4")
 # Si la tâche n'a pas été mise à jour depuis ce délai, elle est considérée comme morte (crash/timeout)
 REANALYSIS_STALE_TIMEOUT_MINUTES = int(os.getenv("REANALYSIS_STALE_TIMEOUT_MINUTES", "30"))
 # TTL de sécurité absolu sur la clé Redis (4h) : garantit le nettoyage même sans mise à jour
@@ -12,8 +11,9 @@ REANALYSIS_REDIS_TTL_SECONDS = int(os.getenv("REANALYSIS_REDIS_TTL_SECONDS", str
 
 
 class ReanalysisTaskState:
-    def __init__(self, redis_url: str = REDIS_URL):
-        self._redis = redis.from_url(redis_url, decode_responses=True)
+    def __init__(self):
+        # Client Redis partagé via shared.redis_state (URL résolue via SERVICE_NAME → DB mapping).
+        self._redis = get_state_redis_client()
         self._key_prefix = "reanalyze_task"
         self._latest_key = f"{self._key_prefix}:latest"
 
@@ -125,8 +125,9 @@ task_state_manager = ReanalysisTaskState()
 
 
 class TreeTaskState:
-    def __init__(self, redis_url: str = REDIS_URL):
-        self._redis = redis.from_url(redis_url, decode_responses=True)
+    def __init__(self):
+        # Client Redis partagé via shared.redis_state (URL résolue via SERVICE_NAME → DB mapping).
+        self._redis = get_state_redis_client()
         self._key_prefix = "recalc_tree_task"
         self._latest_key = f"{self._key_prefix}:latest"
         self._ttl = 7 * 24 * 3600  # TTL absolu 7 jours (au lieu de 4h) pour faciliter les reprises lendemain

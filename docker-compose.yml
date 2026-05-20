@@ -50,7 +50,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=users_api
+      - SERVICE_NAME=users_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/users
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
@@ -88,7 +88,6 @@ services:
       - USERS_API_URL=http://users_api:8000
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=users_mcp
     depends_on:
       - users_api
     networks:
@@ -105,7 +104,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=items_api
+      - SERVICE_NAME=items_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/items
       - REDIS_URL=redis://redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
@@ -140,7 +139,6 @@ services:
       - ITEMS_API_URL=http://items_api:8001
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=items_mcp
     depends_on:
       - items_api
     networks:
@@ -157,7 +155,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=competencies_api
+      - SERVICE_NAME=competencies_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/competencies
       - REDIS_URL=redis://redis:6379/3
       - USERS_API_URL=http://users_api:8000
@@ -190,7 +188,6 @@ services:
       - COMPETENCIES_API_URL=http://competencies_api:8003
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=competencies_mcp
     depends_on:
       - competencies_api
     networks:
@@ -206,13 +203,15 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=cv_api
+      - SERVICE_NAME=cv_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/cv
       - REDIS_URL=redis://redis:6379/4
       - USERS_API_URL=http://users_api:8000
       - COMPETENCIES_API_URL=http://competencies_api:8003
       - PROMPTS_API_URL=http://prompts_api:8000
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_API_BASE_URL=${GEMINI_API_BASE_URL:-}
+      - VERTEX_API_BASE_URL=${VERTEX_API_BASE_URL:-}
       - GEMINI_CV_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - SECRET_KEY=${SECRET_KEY}
@@ -242,14 +241,13 @@ services:
       - CV_API_URL=http://cv_api:8004
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=cv_mcp
     depends_on:
       - cv_api
     networks:
       - monitoring_net
 
   missions_api:
-    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/missions_api:latest
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/missions_api:latest
     container_name: missions_api
     hostname: missions_api
     ports:
@@ -257,13 +255,18 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=missions_api
+      - SERVICE_NAME=missions_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/missions
       - REDIS_URL=redis://redis:6379/8
       - USERS_API_URL=http://users_api:8000
       - CV_API_URL=http://cv_api:8004
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/missions-api
+      # P1 perf : pool DB insuffisant à 500 users (QueuePool limit 20+40 encore épuisé sous stress).
+      # Local : 1 instance → 90 connexions max. Prd : 4 instances × 30 = 120 → marge AlloyDB 400.
+      # À valider via --perf puis reporter dans cr_missions.tf si les TimeoutError disparaissent.
+      - DB_POOL_SIZE=30
+      - DB_MAX_OVERFLOW=60
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -277,7 +280,7 @@ services:
           - missions_api
 
   missions_mcp:
-    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/missions_api:latest
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/missions_api:latest
     container_name: missions_mcp
     hostname: missions_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -285,14 +288,13 @@ services:
       - MISSIONS_API_URL=http://missions_api:8009
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=missions_mcp
     depends_on:
       - missions_api
     networks:
       - monitoring_net
 
   drive_api:
-    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/drive_api:latest
     container_name: drive_api
     hostname: drive_api
     ports:
@@ -300,7 +302,7 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=drive_api
+      - SERVICE_NAME=drive_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/drive
       - REDIS_URL=redis://redis:6379/6
       - USERS_API_URL=http://users_api:8000
@@ -320,7 +322,7 @@ services:
           - drive_api
 
   drive_mcp:
-    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services/drive_api:latest
+    image: europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/drive_api:latest
     container_name: drive_mcp
     hostname: drive_mcp
     command: ["python", "/app/mcp_app.py"]
@@ -328,7 +330,6 @@ services:
       - DRIVE_API_URL=http://drive_api:8006
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=drive_mcp
       - PORT=8000
     depends_on:
       - drive_api
@@ -349,7 +350,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=analytics-mcp
+      - SERVICE_NAME=analytics_mcp
       - REDIS_URL=redis://redis:6379/7
     networks:
       - monitoring_net
@@ -366,7 +367,7 @@ services:
       - GCP_PROJECT_ID=slavayssiere-zenika
       - MCP_PORT=8010
       - SECRET_KEY=${SECRET_KEY}
-      - OTEL_SERVICE_NAME=monitoring-mcp
+      - SERVICE_NAME=monitoring_mcp
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - REDIS_URL=redis://redis:6379/9
@@ -383,7 +384,7 @@ services:
     ports:
       - "8002:8080"
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GEMINI_ROUTER_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
@@ -394,9 +395,9 @@ services:
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/2
+      - SERVICE_NAME=agent_router_api
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=agent-router-api
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/api
     depends_on:
@@ -429,7 +430,6 @@ services:
       - PROMPTS_API_URL=http://prompts_api:8000
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=prompts_mcp
     depends_on:
       prompts_api:
         condition: service_started
@@ -445,7 +445,7 @@ services:
     container_name: agent_hr_api
     hostname: agent_hr_api
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GEMINI_HR_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - USERS_API_URL=http://users_api:8000
@@ -464,9 +464,10 @@ services:
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/10
+      - SERVICE_NAME=agent_hr_api
+      - ENABLE_OUTPUT_SCHEMA=false  # Passer à 'true' pour activer output_schema Pydantic (StaffingResponse)
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=agent-hr-api
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       db_migrations:
@@ -498,7 +499,7 @@ services:
     container_name: agent_ops_api
     hostname: agent_ops_api
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GEMINI_OPS_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
@@ -508,9 +509,10 @@ services:
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - LOKI_MCP_URL=http://loki_mcp:8080/sse
       - REDIS_URL=redis://redis:6379/11
+      - SERVICE_NAME=agent_ops_api
+      - ENABLE_OUTPUT_SCHEMA=false  # Passer à 'true' pour activer output_schema Pydantic (MissionAnalysis)
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=agent-ops-api
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       db_migrations:
@@ -532,7 +534,7 @@ services:
     container_name: agent_missions_api
     hostname: agent_missions_api
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GEMINI_MISSIONS_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
@@ -545,9 +547,10 @@ services:
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - MONITORING_MCP_URL=http://monitoring_mcp:8010
       - REDIS_URL=redis://redis:6379/12
+      - SERVICE_NAME=agent_missions_api
+      - ENABLE_OUTPUT_SCHEMA=false  # Passer à 'true' pour activer output_schema Pydantic (MissionAnalysis)
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=agent-missions-api
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       db_migrations:
@@ -760,10 +763,10 @@ services:
     environment:
       - TRACE_EXPORTER=http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=prompts_api
+      - SERVICE_NAME=prompts_api
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/prompts
       - REDIS_URL=redis://redis:6379/5
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/prompts-api
     depends_on:
@@ -844,6 +847,26 @@ services:
       - perf-stress
     # Pas de depends_on : le master est deja lance manuellement via docker-compose run -d
     # avant le demarrage des workers. L ordre est gere par le script local_up.py.
+    networks:
+      - monitoring_net
+
+  mock_gemini:
+    build:
+      context: ./mock_gemini
+      dockerfile: Dockerfile
+    container_name: mock_gemini
+    hostname: mock_gemini
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./locust/data:/data:ro
+    environment:
+      - MOCK_LLM_LATENCY_MAX_S=3
+      - MOCK_LLM_EMBEDDING_DIM=3072
+      - MOCK_DATA_FILE=/data/mock_cv_pool.json
+    profiles:
+      - perf
+      - perf-stress
     networks:
       - monitoring_net
 

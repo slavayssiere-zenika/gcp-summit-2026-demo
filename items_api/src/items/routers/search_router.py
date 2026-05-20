@@ -3,8 +3,9 @@ import asyncio
 import os
 
 import httpx
-from cache import get_cache, set_cache
+from shared.cache import get_cache, set_cache
 from shared.database import get_db
+from shared.semaphore_utils import acquire_shielded
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path
 from opentelemetry.propagate import inject
 from sqlalchemy import func, or_
@@ -21,6 +22,7 @@ CACHE_TTL = 60
 
 # Semaphore identique a crud_router : evite la saturation du pool DB/HTTP
 # sous forte concurrence. Partage la meme valeur env DB_POOL_SIZE.
+# ⚠️ GLOBAL PERSISTANT : utiliser acquire_shielded(_ENRICH_SEM) (shared.semaphore_utils).
 _ENRICH_SEM = asyncio.Semaphore(int(os.getenv("DB_POOL_SIZE", 20)) * 3 // 4)
 
 
@@ -54,15 +56,15 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
     Meme pattern que crud_router.enrich_item : semaphore + cache Redis
     pour eviter N appels HTTP sequentiels vers users_api.
     """
-    async with _ENRICH_SEM:
+    async with acquire_shielded(_ENRICH_SEM):
         user_cache_key = f"items:user_info:{item.user_id}"
-        cached_user = get_cache(user_cache_key)
+        cached_user = await get_cache(user_cache_key)
         if cached_user:
             user = UserInfo(**cached_user)
         else:
             try:
                 user = await get_user_from_api(item.user_id, request)
-                set_cache(user_cache_key, user.model_dump(), 120)  # TTL 120s
+                await set_cache(user_cache_key, user.model_dump(), 120)  # TTL 120s
             except HTTPException:
                 user = None
     return ItemResponse(
@@ -93,7 +95,7 @@ async def search_items(
     allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
     cache_key = f"items:search:{query}:{limit}:auth_{allowed_ids_str}:enrich_{include_user}"
 
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -131,7 +133,7 @@ async def search_items(
         enriched_items = [ItemResponse.model_validate(item, from_attributes=True) for item in items]
 
     result = PaginationResponse(items=[i.model_dump() for i in enriched_items], total=total, skip=0, limit=limit)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 
@@ -149,7 +151,7 @@ async def list_user_items(
     allowed_ids_str = ",".join(map(str, sorted(allowed_ids)))
     cache_key = f"items:user:{user_id}:{skip}:{limit}:auth_{allowed_ids_str}:enrich_{include_user}"
 
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -182,5 +184,5 @@ async def list_user_items(
         enriched_items = [ItemResponse.model_validate(item, from_attributes=True) for item in items]
 
     result = PaginationResponse(items=[i.model_dump() for i in enriched_items], total=total, skip=skip, limit=limit)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result

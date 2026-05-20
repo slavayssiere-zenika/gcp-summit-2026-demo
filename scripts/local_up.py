@@ -29,7 +29,7 @@ import seed_data  # noqa: E402
 # ── Configuration (miroir de deploy.sh) ────────────────────────────────────────
 PROJECT_ID = "slavayssiere-sandbox-462015"
 REGION = "europe-west1"
-REGISTRY = "z-gcp-summit-services"
+REGISTRY = "z-gcp-summit-services-dev"
 AR_DOCKER_HOST = f"{REGION}-docker.pkg.dev"
 AR_REPO = f"{AR_DOCKER_HOST}/{PROJECT_ID}/{REGISTRY}"
 GCLOUD_BIN = os.getenv(

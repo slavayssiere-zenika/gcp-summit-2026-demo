@@ -39,52 +39,51 @@ a2a_metadata_var = contextvars.ContextVar("a2a_metadata", default=None)
 # ── Circuit-Breaker configuration ────────────────────────────────────────────
 # After CB_FAILURE_THRESHOLD consecutive failures on a given agent, the circuit
 # opens for CB_OPEN_DURATION_S seconds to avoid cascading timeout storms.
-# Uses an in-process dict as primary store (zero external dependency).
-# Redis is used as secondary store when available (cross-process consistency).
+# Uses Redis via shared.cache for cross-process consistency.
 
 CB_FAILURE_THRESHOLD: int = int(os.getenv("A2A_CB_FAILURE_THRESHOLD", "2"))
 CB_OPEN_DURATION_S: float = float(os.getenv("A2A_CB_OPEN_DURATION_S", "30"))
 
-# In-memory fallback store: {agent_name: {"failures": int, "open_until": float}}
-_cb_state: dict[str, dict] = {}
+from shared.cache import get_cache, set_cache  # noqa: E402
 
 
-def _is_circuit_open(agent_name: str) -> bool:
+async def _is_circuit_open(agent_name: str) -> bool:
     """Return True if the circuit-breaker for *agent_name* is currently open.
 
     A circuit is open when the agent has failed at least CB_FAILURE_THRESHOLD
     times in a row AND the cooldown period has not yet elapsed.
     Fail-open policy: if state is missing, the circuit is considered closed.
     """
-    state = _cb_state.get(agent_name)
+    state = await get_cache(f"cb:{agent_name}")
     if state is None:
         return False
     open_until = state.get("open_until", 0.0)
-    if open_until and time.monotonic() < open_until:
+    if open_until and time.time() < open_until:
         return True
     # Cooldown elapsed — auto-reset to half-open
-    if open_until and time.monotonic() >= open_until:
+    if open_until and time.time() >= open_until:
         state["failures"] = 0
         state["open_until"] = 0.0
+        await set_cache(f"cb:{agent_name}", state, 3600)
     return False
 
 
-def _record_failure(agent_name: str) -> None:
+async def _record_failure(agent_name: str) -> None:
     """Record a failure for *agent_name* and open the circuit if threshold is reached."""
-    state = _cb_state.setdefault(agent_name, {"failures": 0, "open_until": 0.0})
+    state = await get_cache(f"cb:{agent_name}") or {"failures": 0, "open_until": 0.0}
     state["failures"] = state.get("failures", 0) + 1
     if state["failures"] >= CB_FAILURE_THRESHOLD:
-        state["open_until"] = time.monotonic() + CB_OPEN_DURATION_S
+        state["open_until"] = time.time() + CB_OPEN_DURATION_S
         logger.warning(
             "[A2A:%s] 🔴 Circuit-breaker OPEN for %.0fs after %d failures.",
             agent_name, CB_OPEN_DURATION_S, state["failures"],
         )
+    await set_cache(f"cb:{agent_name}", state, 3600)
 
 
-def _record_success(agent_name: str) -> None:
+async def _record_success(agent_name: str) -> None:
     """Reset the circuit-breaker for *agent_name* after a successful call."""
-    if agent_name in _cb_state:
-        _cb_state[agent_name] = {"failures": 0, "open_until": 0.0}
+    await set_cache(f"cb:{agent_name}", {"failures": 0, "open_until": 0.0}, 3600)
 
 
 # ── Confidence scorer ─────────────────────────────────────────────────────────────
@@ -185,7 +184,7 @@ async def _call_sub_agent(
     - Retourne un dict avec ``degraded: True`` si toutes les tentatives échouent.
     """
     # Circuit-breaker check — fail fast if the agent is already in error state
-    if _is_circuit_open(agent_name):
+    if await _is_circuit_open(agent_name):
         logger.warning(
             "[A2A:%s] 🔴 Circuit-breaker OPEN — returning immediate degraded response.",
             agent_name,
@@ -268,7 +267,7 @@ async def _call_sub_agent(
             duration = time.monotonic() - start
             A2A_CALL_DURATION.labels(agent=agent_name).observe(duration)
             logger.info(f"[A2A:{agent_name}] Success in {duration:.2f}s (attempt #{attempt})")
-            _record_success(agent_name)
+            await _record_success(agent_name)
             return data
 
         except A2ASubAgentError as e:
@@ -295,7 +294,7 @@ async def _call_sub_agent(
     A2A_CALL_DURATION.labels(agent=agent_name).observe(time.monotonic() - start)
     reason = str(last_error)[:300]
     logger.error(f"[A2A:{agent_name}] All attempts failed. Returning degraded response. Reason: {reason}")
-    _record_failure(agent_name)
+    await _record_failure(agent_name)
     return {
         "response": (
             f"❌ Le sous-agent {agent_name} est temporairement indisponible. "
@@ -454,8 +453,7 @@ _SUB_AGENT_REGISTRY: dict[str, str] = {
 }
 
 # Cache TTL pour les AgentCards (évite les appels réseau redondants — 5 min)
-_AGENT_CARD_CACHE: dict[str, tuple[dict, float]] = {}
-_AGENT_CARD_CACHE_TTL_S: float = float(os.getenv("AGENT_CARD_CACHE_TTL_S", "300"))
+_AGENT_CARD_CACHE_TTL_S: int = int(os.getenv("AGENT_CARD_CACHE_TTL_S", "300"))
 
 
 async def discover_sub_agents(force_refresh: bool = False) -> dict[str, dict]:
@@ -476,18 +474,15 @@ async def discover_sub_agents(force_refresh: bool = False) -> dict[str, dict]:
         Dict ``{agent_name: agent_card_dict}`` pour chaque agent accessible.
         Les agents inaccessibles sont absents du dict (pas d'erreur levée — fail-soft).
     """
-    now = time.monotonic()
     result: dict[str, dict] = {}
 
     for agent_name, base_url in _SUB_AGENT_REGISTRY.items():
         if not force_refresh:
-            cached = _AGENT_CARD_CACHE.get(agent_name)
+            cached = await get_cache(f"agent_card:{agent_name}")
             if cached is not None:
-                card, expires_at = cached
-                if now < expires_at:
-                    result[agent_name] = card
-                    logger.debug("[A2A:discovery] Cache HIT for %s (expires in %.0fs)", agent_name, expires_at - now)
-                    continue
+                result[agent_name] = cached
+                logger.debug("[A2A:discovery] Cache HIT for %s", agent_name)
+                continue
 
         discovery_url = f"{base_url.rstrip('/')}/.well-known/agent.json"
         try:
@@ -495,7 +490,7 @@ async def discover_sub_agents(force_refresh: bool = False) -> dict[str, dict]:
                 res = await client.get(discovery_url)
                 res.raise_for_status()
                 card = res.json()
-                _AGENT_CARD_CACHE[agent_name] = (card, now + _AGENT_CARD_CACHE_TTL_S)
+                await set_cache(f"agent_card:{agent_name}", card, _AGENT_CARD_CACHE_TTL_S)
                 result[agent_name] = card
                 logger.info(
                     "[A2A:discovery] ✅ AgentCard fetched for %s — skills: %s",

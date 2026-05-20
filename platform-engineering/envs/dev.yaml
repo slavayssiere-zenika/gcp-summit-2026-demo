@@ -12,7 +12,7 @@ bq_location:               "europe-west1"  # Obligatoire depuis P2-2 (plus de d�
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version}
 # Les versions sont lues depuis les fichiers VERSION locaux (mis à jour par deploy.sh)
-image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services"
+image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 1
@@ -32,7 +32,7 @@ finops_anomaly_threshold: 500000
 # ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
 # Migration 2026-05-12 : gemini-3.1-flash-lite est passé GA (sans -preview).
 # gemini-3.1-pro reste en preview (pas de GA 3.1-pro disponible).
-gemini_router_model:       "gemini-3.1-pro-preview"         # Orchestrateur : raisonnement complexe (reste preview — pas de GA 3.1-pro)
+gemini_router_model:       "gemini-3.5-flash"               # Orchestrateur : raisonnement complexe GA (Gemini 3.5 Flash)
 gemini_hr_model:           "gemini-3.1-flash-lite"          # RH : RAG + MCP
 gemini_ops_model:          "gemini-3.1-flash-lite"          # Ops : SQL + logs
 gemini_missions_model:     "gemini-3.1-flash-lite"          # Missions : matching staffing
@@ -42,3 +42,4 @@ gemini_batch_model:        "gemini-3.1-flash-lite"          # Taxonomy Map+Sweep
 gemini_model:              "gemini-3.1-flash-lite"          # [LEGACY] fallback
 gemini_embedding_model:    "gemini-embedding-001"           # SEC-F06 Semantic Cache
 trace_sampling_rate: 1.0
+enable_output_schema: false  # Activer pour output_schema Pydantic (StaffingResponse/MissionAnalysis) comme source de vérité display_type

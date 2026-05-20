@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-05-18 09:07 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-20 06:46 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 
@@ -22,7 +22,7 @@
 
 | Paramètre | **DEV** | **PRD** | **UAT** |
 | --- | --- | --- | --- | --- |
-| `image_registry` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services` |
+| `image_registry` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` |
 
 ### 🚀 Cloud Run
 
@@ -47,7 +47,7 @@
 
 | Paramètre | **DEV** | **PRD** | **UAT** |
 | --- | --- | --- | --- | --- |
-| `gemini_router_model` | `gemini-3.1-pro-preview"` | `gemini-3.1-flash-lite"` | `gemini-3.1-pro-preview"` |
+| `gemini_router_model` | `gemini-3.5-flash"` | `gemini-3.5-flash"` | `gemini-3.1-pro-preview"` |
 | `gemini_hr_model` | `gemini-3.1-flash-lite"` | `gemini-3.1-flash-lite"` | `gemini-3.1-flash-lite"` |
 | `gemini_ops_model` | `gemini-3.1-flash-lite"` | `gemini-3.1-flash-lite"` | `gemini-3.1-flash-lite"` |
 | `gemini_missions_model` | `gemini-3.1-flash-lite"` | `gemini-3.1-flash-lite"` | `gemini-3.1-flash-lite"` |
@@ -65,7 +65,7 @@
 
 ## 🚀 Pipeline de Déploiement — `scripts/deploy.sh`
 
-> Dernière modification : `2026-05-16` · Cible : `slavayssiere-sandbox-462015` / `europe-west1` · Registre : `z-gcp-summit-services`
+> Dernière modification : `2026-05-18` · Cible : `slavayssiere-sandbox-462015` / `europe-west1` · Registre : `z-gcp-summit-services-dev`
 
 ### Utilisation
 

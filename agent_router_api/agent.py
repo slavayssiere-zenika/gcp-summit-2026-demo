@@ -14,13 +14,12 @@ import asyncio
 import json
 import logging
 import os
-import time
 
 import httpx  # noqa: F401,F811 — re-exported so tests can patch "agent.httpx.AsyncClient"
 from a2a_tools import (  # noqa: F401 — backward-compat re-exports for test patching
     ROUTER_TOOLS, A2aRequestInterceptor, A2ASubAgentError, _call_sub_agent,
     ask_hr_agent, ask_missions_agent, ask_ops_agent, a2a_metadata_var)
-from agent_commons.schemas import AgentQueryResponse, AgentStep, TokenUsage
+from agent_commons.schemas import AgentQueryResponse, TokenUsage
 from google.adk.agents import Agent
 from google.genai import types
 from mcp_client import auth_header_var, user_id_var
@@ -28,16 +27,12 @@ from mcp_client import auth_header_var, user_id_var
 from metrics import (A2A_CALL_DURATION, A2A_CALL_ERRORS_TOTAL,  # noqa: F401
                      A2A_CALL_RETRIES_TOTAL)
 from opentelemetry.propagate import inject
+from prompt_loader import _fetch_prompt_cached, build_instruction_text  # noqa: F401
+# ADK v1.28+ WorkflowAgent — SequentialAgent + ParallelAgent (opt-in via ENABLE_WORKFLOW_AGENT)
+from workflow_agent import build_workflow_agent
 
 logger = logging.getLogger(__name__)
 
-# ── System prompt cache (P1) ──────────────────────────────────────────────────
-# Évite 2 appels HTTP à prompts_api à chaque requête LLM (hotpath).
-# TTL configurable via PROMPT_CACHE_TTL_S (défaut : 60s).
-# Clés : "router" pour le prompt global, "user:{session_id}" pour les prompts utilisateur.
-_PROMPT_CACHE_TTL_S: float = float(os.getenv("PROMPT_CACHE_TTL_S", "60"))
-# {cache_key: (prompt_text, expires_at_monotonic)}
-_prompt_cache: dict[str, tuple[str, float]] = {}
 
 _session_service = None
 
@@ -45,116 +40,37 @@ _session_service = None
 def get_session_service():
     global _session_service
     if _session_service is None:
-        from session import RedisSessionService
-        _session_service = RedisSessionService()
+        from agent_commons.session import RedisSessionService
+        _session_service = RedisSessionService(
+            redis_url=os.getenv("REDIS_URL", "redis://redis:6379/2"),
+            redis_key_prefix="adk:sessions"
+        )
     return _session_service
-
-
-async def _fetch_prompt_cached(cache_key: str, url: str, headers: dict) -> str | None:
-    """Récupère un prompt depuis prompts_api avec cache TTL in-process.
-
-    Retourne le texte du prompt si disponible (cache chaud ou API réussie),
-    ou None si le cache est froid et l'API échoue.
-
-    Args:
-        cache_key: Clé de cache unique (ex: "router" ou "user:abc123").
-        url:       URL complète de l'endpoint prompts_api.
-        headers:   Headers HTTP à propager (Authorization + OTel).
-    """
-    now = time.monotonic()
-    cached = _prompt_cache.get(cache_key)
-    if cached is not None:
-        prompt_text, expires_at = cached
-        if now < expires_at:
-            logger.debug("[PromptCache] HIT key=%s (expires in %.1fs)", cache_key, expires_at - now)
-            return prompt_text
-        logger.debug("[PromptCache] EXPIRED key=%s", cache_key)
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(url, headers=headers)
-            if res.status_code == 200:
-                prompt_text = res.json().get("value", "")
-                if prompt_text:
-                    _prompt_cache[cache_key] = (prompt_text, now + _PROMPT_CACHE_TTL_S)
-                    logger.debug(
-                        "[PromptCache] STORED key=%s TTL=%.0fs",
-                        cache_key, _PROMPT_CACHE_TTL_S,
-                    )
-                    return prompt_text
-            else:
-                logger.warning(
-                    "[PromptCache] prompts_api returned HTTP %s for key=%s — using cached/default",
-                    res.status_code, cache_key,
-                )
-    except Exception as e:
-        logger.warning("[PromptCache] Fetch failed for key=%s: %s — using cached/default", cache_key, e)
-
-    # Stale-while-revalidate : retourner le cache expiré plutôt que rien
-    if cached is not None:
-        logger.warning("[PromptCache] Serving STALE cache for key=%s after fetch failure", cache_key)
-        return cached[0]
-
-    return None
 
 
 async def create_agent(session_id: str | None = None, preferred_language: str = "fr"):
     """Construit l'Agent ADK Router avec le prompt système récupéré depuis prompts_api.
 
-    Le system prompt global et le prompt utilisateur sont mis en cache in-process
-    avec un TTL de PROMPT_CACHE_TTL_S secondes (défaut : 60s) pour éviter
-    2 appels HTTP à chaque inférence LLM.
+    Délègue la construction du prompt à build_instruction_text() (prompt_loader.py)
+    pour respecter la limite de 400 lignes (Golden Rule §14).
     """
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    instruction_text = (
-        "Tu es l'Orchestrateur Principal de la plateforme Zenika, le 'Front-Desk'. "
-        "Ton rôle est de diriger la demande vers le hub approprié en utilisant tes outils "
-        "de délégation (A2A). Ne dis pas 'je vais interroger mon collègue', sois direct."
-    )
-
     auth_header = auth_header_var.get(None)
-    headers = {"Authorization": auth_header} if auth_header else {}
-
-    # ── Appel 1 : system prompt router (caché TTL 60s) ───────────────────────
-    router_prompt_url = f"{prompts_api_url.rstrip('/')}/agent_router_api.system_instruction/compiled"
-    fetched = await _fetch_prompt_cached("router", router_prompt_url, headers)
-    if fetched:
-        instruction_text = fetched
-
-    # ── Appel 2 : prompt utilisateur (caché par session_id, TTL 60s) ─────────
-    if session_id and session_id != "anon":
-        from pydantic import BaseModel, ValidationError
-
-        user_prompt_url = f"{prompts_api_url.rstrip('/')}/user_{session_id}"
-        user_prompt_raw = await _fetch_prompt_cached(f"user:{session_id}", user_prompt_url, headers)
-        if user_prompt_raw:
-            try:
-                class PromptResp(BaseModel):
-                    value: str
-
-                p_data = PromptResp.model_validate({"value": user_prompt_raw})
-                user_prompt = p_data.value
-            except ValidationError:
-                user_prompt = user_prompt_raw  # déjà une str valide depuis _fetch_prompt_cached
-            if user_prompt:
-                instruction_text += (
-                    f"\n\n--- INSTRUCTIONS UTILISATEUR ({session_id}) ---\n"
-                    f"{user_prompt}\n"
-                    "------------------------------------------------------------"
-                )
-
-    # ── Directive de langue (basée sur la préférence interface utilisateur) ────
-    LANGUAGE_DIRECTIVES: dict[str, str] = {
-        "fr": "Réponds TOUJOURS en français, quelle que soit la langue de la demande.",
-        "en": "Always respond in English, regardless of the language of the request.",
-    }
-    lang_directive = LANGUAGE_DIRECTIVES.get(
-        preferred_language[:2].lower(),
-        LANGUAGE_DIRECTIVES["fr"],
+    instruction_text = await build_instruction_text(
+        session_id=session_id,
+        auth_header=auth_header,
+        preferred_language=preferred_language,
     )
-    instruction_text = f"{lang_directive}\n\n{instruction_text}"
 
-    model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"))
+    model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.5-flash"))
+
+    # ADK v1.28+ WorkflowAgent — SequentialAgent déterministe (opt-in via ENABLE_WORKFLOW_AGENT)
+    if os.getenv("ENABLE_WORKFLOW_AGENT", "false").lower() == "true":
+        logger.info("[Router] Mode WorkflowAgent activé (SequentialAgent classifier + router).")
+        return build_workflow_agent(
+            hr_tool=ask_hr_agent,
+            ops_tool=ask_ops_agent,
+            missions_tool=ask_missions_agent,
+        )
 
     return Agent(
         name="assistant_zenika_router",
@@ -307,7 +223,7 @@ async def run_agent_query(
                                         "tool": f"{meta_agent_name}:GUARDRAIL",
                                         "args": {
                                             "message": f"[{meta_agent_name}] Aucun outil appelé. "
-                                                       "Réponse potentiellement hallucinée."
+                                            "Réponse potentiellement hallucinée."
                                         },
                                     })
 

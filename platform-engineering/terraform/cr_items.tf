@@ -82,6 +82,10 @@ resource "google_cloud_run_v2_service" "items_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/1"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "items_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }

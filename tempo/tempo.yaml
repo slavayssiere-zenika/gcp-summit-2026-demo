@@ -8,14 +8,16 @@ distributor:
     otlp:
       protocols:
         grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
           endpoint: "0.0.0.0:4318"
 
 ingester:
-  max_block_duration: 5m
+  max_block_duration: 10m
 
 compactor:
   compaction:
-    block_retention: 1h
+    block_retention: 4h
 
 storage:
   trace:
@@ -31,7 +33,8 @@ metrics_generator:
       source: tempo
       cluster: docker-compose
   processor:
-    local_blocks: {}
+    local_blocks:
+      max_block_duration: 1h
     service_graphs: {}
     span_metrics: {}
   storage:

@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from cache import delete_cache_pattern
+from shared.cache import clear_namespace
 from shared.database import get_db
 from fastapi import (
     APIRouter,
@@ -411,7 +411,7 @@ async def bulk_import_tree(
             status_code=500, detail=f"Erreur lors de l'import: {str(e)}"
         )
 
-    delete_cache_pattern("competencies:*")
+    await clear_namespace("competencies:")
     trigger_taxonomy_cache_invalidation(bg_tasks, request)
     return {
         "message": f"Taxonomie fusionnée avec succès !{' ' + str(len(merge_log)) + ' fusion(s).' if merge_log else ''}{' ' + str(len(sweep_log)) + ' sweep(s).' if sweep_log else ''}",  # noqa: E501
@@ -475,7 +475,7 @@ async def cleanup_orphan_competencies(
             total_deleted += len(orphans)
 
         if total_deleted > 0:
-            delete_cache_pattern("competencies:*")
+            await clear_namespace("competencies:")
             trigger_taxonomy_cache_invalidation(bg_tasks, request)
 
         return {"success": True, "deleted_count": total_deleted}

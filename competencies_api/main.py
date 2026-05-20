@@ -6,45 +6,15 @@ import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 # Sous-routers spécialisés (chargés depuis router.py dispatcher)
 # L'enregistrement effectif est délégué à router.py qui inclut chaque sous-module.
-from shared.fastapi_utils import instrument_app
-from opentelemetry import trace
+from shared.fastapi_utils import instrument_app, setup_tracing
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
 from shared.auth.jwt import verify_jwt
 from src.competencies.router import (analytics_scheduler_router, public_router,
                                      router)
 
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "competencies-api",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
-        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
-trace.set_tracer_provider(provider)
+setup_tracing(service_name="competencies-api")
 
 
 @asynccontextmanager
@@ -54,6 +24,12 @@ async def lifespan(app: FastAPI):
     yield
     await database.close_db_connector()
 
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(lifespan=lifespan, title="Competencies API", root_path=os.getenv("ROOT_PATH", ""))
 instrument_app(app, service_name="competencies-api")
 RedisInstrumentor().instrument()

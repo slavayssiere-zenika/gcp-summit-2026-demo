@@ -70,6 +70,10 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
         value = var.gemini_hr_model
       }
       env {
+        name  = "GEMINI_HR_MODEL"
+        value = var.gemini_hr_model
+      }
+      env {
         name  = "ROOT_PATH"
         value = "/agent-hr-api"
       }
@@ -129,6 +133,10 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
         value = "http://api.internal.zenika/api/missions/"
       }
       env {
+        name  = "DRIVE_MCP_URL"
+        value = "http://api.internal.zenika/api/drive/"
+      }
+      env {
         name  = "USE_GCP_LOGGING"
         value = "true"
       }
@@ -141,12 +149,20 @@ resource "google_cloud_run_v2_service" "agent_hr_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/10"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "agent_hr_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }
       env {
         name  = "TRACE_SAMPLING_RATE"
         value = var.trace_sampling_rate
+      }
+      env {
+        name  = "ENABLE_OUTPUT_SCHEMA"
+        value = var.enable_output_schema
       }
       env {
         name  = "APP_VERSION"

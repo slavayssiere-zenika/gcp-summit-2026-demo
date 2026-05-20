@@ -23,6 +23,7 @@ import SystemHealthCard from '@/components/agent/SystemHealthCard.vue'
 import CloudRunLogsViewer from '@/components/agent/CloudRunLogsViewer.vue'
 import DebugPromptCard from '@/components/agent/DebugPromptCard.vue'
 import CompetencyBadge from '@/components/agent/CompetencyBadge.vue'
+import HitlApproval from '@/components/agent/HitlApproval.vue'
 import CompetencyList from '@/components/agent/CompetencyList.vue'
 import EvaluationCard from '@/components/agent/EvaluationCard.vue'
 import EvaluationTable from '@/components/agent/EvaluationTable.vue'
@@ -129,6 +130,20 @@ const resetHistory = async () => {
 
 const goToUser = (id: number) => {
   router.push({ name: 'user-detail', params: { id: id.toString() } })
+}
+
+/**
+ * Phase 3 HITL — appelé par HitlApproval quand l'utilisateur valide/rejette.
+ * Met à jour le message du chat pour refléter la décision et effacer le widget.
+ */
+const onHitlResolved = (
+  msg: any,
+  payload: { hitl_id: string; decision: 'approved' | 'rejected'; comment: string },
+) => {
+  const label = payload.decision === 'approved' ? '✅ Staffing approuvé' : '❌ Staffing rejeté'
+  msg.content = `${msg.content}\n\n---\n**${label}** ${payload.comment ? `— ${payload.comment}` : ''}`
+  // Supprimer le widget HITL du message après décision
+  delete msg.hitlRequest
 }
 
 const getInitials = (name: string) => {
@@ -324,6 +339,15 @@ onUnmounted(() => {
                 </div>
               </div>
 
+              <!-- ui://profile / ui://profiles (profil enrichi unique via get_candidate_rag_context) -->
+              <div v-else-if="(msg.displayType === 'profile' || msg.displayType === 'profiles') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
+                <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :profile="obj" />
+                <div v-if="hasMoreItems(msg)" class="show-more-bar">
+                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                </div>
+              </div>
+
               <!-- ui://missions / ui://mission -->
               <div v-else-if="(msg.displayType === 'missions' || msg.displayType === 'mission') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
                 <MissionCard v-for="(obj, idx) in getPaginatedData(msg)" :key="idx" :mission="obj" />
@@ -458,6 +482,14 @@ onUnmounted(() => {
               :content="msg.debugPrompt"
               class="dashboard-content"
               @use-prompt="sendQuery"
+            />
+
+            <!-- Phase 3 HITL — Validation humaine (requires_human_approval=True) -->
+            <HitlApproval
+              v-if="msg.hitlRequest"
+              :request="msg.hitlRequest"
+              class="dashboard-content"
+              @resolved="(p) => onHitlResolved(msg, p)"
             />
 
             <!-- Tool Execution Fallback (When no business visual is shown) -->

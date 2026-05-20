@@ -1,7 +1,6 @@
 """bulk_router.py — Pipeline Bulk Reanalyse Vertex AI Batch."""
 import asyncio
 import logging
-from datetime import datetime, timezone
 
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 from shared.database import get_db
@@ -12,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from shared.auth.jwt import verify_jwt
+from shared.cache import get_cache, set_cache
 from src.cvs.bulk_task_state import bulk_reanalyse_manager
 from src.cvs.models import CVProfile
 from src.services.bulk_service import (_acquire_service_token,
@@ -88,7 +88,6 @@ async def start_bulk_reanalyse(
     }
 
 
-
 @router.get("/bulk-reanalyse/status")
 async def get_bulk_reanalyse_status(_: dict = Depends(verify_jwt)):
     """
@@ -113,9 +112,9 @@ async def get_bulk_reanalyse_status(_: dict = Depends(verify_jwt)):
             status["vertex_state"] = job.state.name if hasattr(job.state, "name") else str(job.state)
             if hasattr(job, "completion_stats") and job.completion_stats:
                 cs = job.completion_stats
-                ok   = int(getattr(cs, "success_count",    None) or getattr(cs, "successful_count", None) or 0)
+                ok = int(getattr(cs, "success_count",    None) or getattr(cs, "successful_count", None) or 0)
                 fail = int(getattr(cs, "failed_count",     None) or getattr(cs, "error_count",      None) or 0)
-                inc  = int(getattr(cs, "incomplete_count", None) or 0)
+                inc = int(getattr(cs, "incomplete_count", None) or 0)
                 total_raw = getattr(cs, "total_count", None)
                 total = int(total_raw) if total_raw is not None else (ok + fail + inc)
                 status["completion_stats"] = {
@@ -129,7 +128,6 @@ async def get_bulk_reanalyse_status(_: dict = Depends(verify_jwt)):
             status["vertex_poll_error"] = str(e)
 
     return status
-
 
 
 @router.post("/bulk-reanalyse/cancel", status_code=200)
@@ -167,7 +165,6 @@ async def cancel_bulk_reanalyse(user: dict = Depends(verify_jwt)):
     }
 
 
-
 @router.post("/bulk-reanalyse/reset", status_code=200)
 async def reset_bulk_reanalyse(user: dict = Depends(verify_jwt)):
     """
@@ -179,7 +176,6 @@ async def reset_bulk_reanalyse(user: dict = Depends(verify_jwt)):
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
     await bulk_reanalyse_manager.reset()
     return {"success": True, "message": "État Redis réinitialisé complètement."}
-
 
 
 # ── Data Quality Gate ─────────────────────────────────────────────────────────
@@ -198,34 +194,26 @@ async def get_data_quality_report(
     Retourne un score 0-100 et un grade A-D.
     Cache in-process 30s (aligné sur le polling frontend).
     """
-    from datetime import timedelta
-
-    from src.services.config import _CV_CACHE
     from src.services.data_quality_service import (CACHE_TTL_SECONDS,
                                                    compute_data_quality_report)
 
     try:
-        now = datetime.now(timezone.utc)
-        cached = _CV_CACHE["data_quality"]
-        if cached["value"] is not None and now < cached["expires"]:
-            return cached["value"]
+        cached_report = await get_cache("cv_api:data_quality")
+        if cached_report is not None:
+            return cached_report
 
         report = await compute_data_quality_report(
             db=db,
             auth_header=request.headers.get("Authorization", ""),
         )
 
-        _CV_CACHE["data_quality"]["value"] = report
-        _CV_CACHE["data_quality"]["expires"] = now + timedelta(seconds=CACHE_TTL_SECONDS)
+        await set_cache("cv_api:data_quality", report, ttl_seconds=CACHE_TTL_SECONDS)
 
         return report
 
     except Exception as e:
         logger.error(f"[data-quality] Erreur calcul rapport: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erreur calcul data quality: {e}")
-
-
-
 
 
 @router.post("/bulk-reanalyse/retry-apply", status_code=202)
@@ -267,9 +255,6 @@ async def retry_bulk_apply(
         "dest_uri": dest_uri,
         "message": "Retry apply démarré en arrière-plan. Suivre via GET /bulk-reanalyse/status.",
     }
-
-
-
 
 
 @router.post("/bulk-reanalyse/reindex-mission-chunks", status_code=202)

@@ -93,7 +93,7 @@ class TestDatabaseUrlRewrite:
 
         db = reload_db(DATABASE_URL="postgresql://user:pass@host/db", USE_IAM_AUTH="false")
         with patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             await db.init_db_connector()
 
         assert captured["url"].startswith("postgresql+asyncpg://")
@@ -111,7 +111,7 @@ class TestDatabaseUrlRewrite:
             USE_IAM_AUTH="false",
         )
         with patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             await db.init_db_connector()
 
         assert captured["url"] == "postgresql+asyncpg://user:pass@host/db"
@@ -138,7 +138,7 @@ class TestPoolParams:
         env.pop("DB_POOL_SIZE", None)
         db = reload_db(**env)
         with patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             await db.init_db_connector()
         assert captured["kwargs"].get("pool_size") == 10
 
@@ -148,7 +148,7 @@ class TestPoolParams:
         env = {"DATABASE_URL": "postgresql+asyncpg://u:p@h/db", "USE_IAM_AUTH": "false"}
         db = reload_db(**env)
         with patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             await db.init_db_connector()
         assert captured["kwargs"].get("max_overflow") == 20
 
@@ -159,8 +159,8 @@ class TestPoolParams:
         # Les getenv DB_POOL_SIZE/DB_MAX_OVERFLOW sont lus AU MOMENT de l'appel
         # → le patch doit entourer l'appel à init_db_connector
         with patch.dict(os.environ, {"DB_POOL_SIZE": "3", "DB_MAX_OVERFLOW": "7"}), \
-             patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.create_async_engine", side_effect=mock_create_engine), \
+                patch("database.sessionmaker"):
             await db.init_db_connector()
         assert captured["kwargs"].get("pool_size") == 3
         assert captured["kwargs"].get("max_overflow") == 7
@@ -170,18 +170,18 @@ class TestPoolParams:
         captured, mock_create_engine = self._capture_engine()
         db = reload_db(DATABASE_URL="postgresql+asyncpg://u:p@h/db", USE_IAM_AUTH="false")
         with patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             await db.init_db_connector()
         assert captured["kwargs"].get("pool_pre_ping") is True
 
     @pytest.mark.asyncio
-    async def test_pool_recycle_is_1800(self):
+    async def test_pool_recycle_is_300(self):
         captured, mock_create_engine = self._capture_engine()
         db = reload_db(DATABASE_URL="postgresql+asyncpg://u:p@h/db", USE_IAM_AUTH="false")
         with patch("database.create_async_engine", side_effect=mock_create_engine), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             await db.init_db_connector()
-        assert captured["kwargs"].get("pool_recycle") == 1800
+        assert captured["kwargs"].get("pool_recycle") == 300
 
 
 # ─── check_db_connection ─────────────────────────────────────────────────────

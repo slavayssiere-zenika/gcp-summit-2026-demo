@@ -8,3 +8,4 @@ psycopg2-binary
 testcontainers[postgres,redis]
 greenlet
 pytest-mock
+fakeredis

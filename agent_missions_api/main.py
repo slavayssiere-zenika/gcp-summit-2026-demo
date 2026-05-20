@@ -1,35 +1,31 @@
-from agent_commons.metadata import extract_metadata_from_session
-import json
 import logging
 import os
-import re
 import time
 from contextlib import asynccontextmanager
 
+import redis as _sync_redis  # noqa: F401 — compat import pour _get_hitl_redis
 import httpx  # noqa: F401
 import uvicorn
 from agent import MISSIONS_TOOLS, run_agent_query
 from agent_commons.a2a_utils import make_agent_card
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response  # noqa: F401
-from shared.fastapi_utils import instrument_app
-from shared.observability import setup_logging
-from metrics import QUERY_COUNT, QUERY_LATENCY
-from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.propagate import extract, inject  # noqa: F401
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import SpanKind
-from pydantic import BaseModel  # noqa: F401
-
 from agent_commons.exception_handler import make_global_exception_handler
-from shared.auth.jwt import ALGORITHM  # noqa: F401
-from shared.auth.jwt import verify_jwt_request as verify_jwt
 from agent_commons.mcp_client import auth_header_var  # noqa: F401
 from agent_commons.schemas import (A2ARequest, A2AResponse, QueryRequest)  # noqa: F401
+from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response  # noqa: F401
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from hitl_router import hitl_create_entry, hitl_router  # noqa: F401
+from metrics import QUERY_COUNT, QUERY_LATENCY
+from opentelemetry import trace
+from opentelemetry.propagate import extract, inject  # noqa: F401
+from opentelemetry.trace import SpanKind
+from pydantic import BaseModel  # noqa: F401
+from session_router import session_router
+from shared.auth.jwt import ALGORITHM  # noqa: F401
+from shared.auth.jwt import verify_jwt_bearer, verify_jwt_request as verify_jwt
+from shared.fastapi_utils import instrument_app, setup_tracing
+from shared.observability import setup_logging
 
 # Exposé pour les tests (import 'from main import SECRET_KEY')
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -38,39 +34,8 @@ logger = logging.getLogger(__name__)
 
 APP_VERSION = os.getenv("APP_VERSION", "v0.1.0")
 ROOT_PATH = os.getenv("ROOT_PATH", "")
-OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "agent-missions-api")
-TRACE_EXPORTER = os.getenv("TRACE_EXPORTER", "none")
 
 # JWT — validation de SECRET_KEY déléguée à shared.auth.jwt (fail-fast à l'import)
-
-
-# ── OTel Tracing — 3 modes : http (Tempo), gcp (Cloud Trace), none ────────────
-def setup_tracing(app: FastAPI) -> TracerProvider:
-    resource = Resource(attributes={"service.name": OTEL_SERVICE_NAME})
-    from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-    sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-    sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-    provider = TracerProvider(resource=resource, sampler=sampler)
-
-    if TRACE_EXPORTER == "http":
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-            OTLPSpanExporter
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-        logger.info("[MISSIONS] OTLP HTTP exporter (Tempo) configured.")
-    elif TRACE_EXPORTER == "gcp":
-        try:
-            from opentelemetry.exporter.cloud_trace import \
-                CloudTraceSpanExporter
-            provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-            logger.info("[MISSIONS] GCP Cloud Trace exporter configured.")
-        except Exception as e:
-            logger.warning("[MISSIONS] Could not init Cloud Trace exporter: %s", e)
-    else:
-        logger.info("[MISSIONS] No trace exporter configured (TRACE_EXPORTER=%s).", TRACE_EXPORTER)
-
-    trace.set_tracer_provider(provider)
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider, excluded_urls="health,ready,metrics,version")
-    return provider
 
 # ── Auth (JWT) — délégué à agent_commons.jwt_middleware.verify_jwt_request ──────
 # verify_jwt = verify_jwt_request importé en tête de fichier
@@ -108,6 +73,12 @@ async def lifespan(app: FastAPI):
 
 
 # ── FastAPI App ────────────────────────────────────────────────────────────────
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(
     title="Agent Missions API",
     description="Staffing Director — missions client & matching consultants (A2A Worker)",
@@ -134,14 +105,11 @@ app.add_middleware(
 instrument_app(
     app,
     service_name="agent-missions-api",
-    # setup_tracing() gère FastAPIInstrumentor avec tracer_provider custom
-    skip_otel_fastapi=True,
     register_exception_handler=False,
 )
-
-_tracer_provider = setup_tracing(app)
+setup_tracing(service_name="agent-missions-api", app_version=APP_VERSION)
 _tracer = trace.get_tracer("agent_missions_api")
-setup_logging()  # Initialisation du logging JSON structuré (hors lifespan pour être actif dès le boot)
+setup_logging()  # Initialisation du logging JSON structuré
 
 # ── Pydantic models — QueryRequest migré dans agent_commons.schemas ──────────
 
@@ -149,7 +117,7 @@ setup_logging()  # Initialisation du logging JSON structuré (hors lifespan pour
 # ── Public endpoints (no JWT) ──────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "agent_missions_api", "version": APP_VERSION}
+    return {"status": "healthy", "service": "agent_missions_api", "version": APP_VERSION}
 
 
 @app.get("/version")
@@ -282,7 +250,13 @@ async def _execute_query(request: QueryRequest, http_request: Request, payload: 
     except Exception as e:
         QUERY_COUNT.labels(agent="missions", status="error").inc()
         logger.error("[MISSIONS] Agent error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal agent error: {e}")  # noqa: E501
+        # ADK v2 — réponse dégradée plutôt qu'un HTTP 500 non géré.
+        # Bénéficie à /query et /a2a/query via ce handler partagé.
+        return A2AResponse(
+            response=f"⚠️ L'agent Missions a rencontré une erreur technique : {type(e).__name__}.",
+            source="error",
+            steps=[{"type": "warning", "tool": "_execute_query", "args": {"message": str(e)}}],
+        )
     finally:
         elapsed = time.time() - start_time
         QUERY_LATENCY.labels(agent="missions").observe(elapsed)
@@ -302,10 +276,12 @@ async def query_agent(request: A2ARequest, http_request: Request, payload: dict 
 async def a2a_query_agent(
     request: A2ARequest,
     http_request: Request,
-    payload: dict = Depends(verify_jwt),
+    auth: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    payload: dict = Depends(verify_jwt_bearer),
 ):
     """
-    Point d'entrée A2A — appelé exclusivement par agent_router_api.
+    Point d'entrée A2A — appelé exclusivement par agent_router_api (service-to-service).
+    Exige un Bearer token strict (via HTTPBearer) — pas de cookie accepté.
     Valide le payload entrant (A2ARequest) et la réponse (A2AResponse) via le contrat Pydantic ADR12-4.
     Rattache le span OTel au contexte de trace propagé par le Router.
     """
@@ -317,132 +293,7 @@ async def a2a_query_agent(
         return await _execute_query(request, http_request, payload)
 
 
-@protected_router.get("/history")
-async def get_history(payload: dict = Depends(verify_jwt)):
-    """Retourne l'historique de la session courante (par sub JWT)."""
-    session_id = payload.get("sub")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Token invalide — sub manquant")
-    user_id = session_id  # sub JWT = user_id pour la session ADK
-
-    session_service = get_session_service()
-    session = await session_service.get_session(
-        app_name="zenika_missions_assistant",
-        user_id=user_id,
-        session_id=session_id,
-    )
-    if not session:
-        return {"history": []}
-
-    history = []
-    current_assistant_msg = None
-
-    for event in getattr(session, "events", []):
-        author = getattr(event, "author", None)
-        content = getattr(event, "content", "")
-        role = getattr(content, "role", None) if content else None
-
-        author_val = (author or "").lower()
-        role_val = (role or "").lower()
-
-        is_assistant = any(x in ["assistant", "model", "assistant_zenika_missions"] for x in [author_val, role_val])
-        is_tool = any(x in ["tool", "function"] for x in [author_val, role_val])
-        is_user = "user" in [author_val, role_val] and not is_tool and not is_assistant
-
-        if hasattr(content, "parts"):
-            content_text = "".join(getattr(p, "text", "") or "" for p in (content.parts or []) if hasattr(p, "text"))
-        else:
-            content_text = str(content)
-
-        if is_user and content_text.strip():
-            history.append({"role": "user", "content": content_text})
-            current_assistant_msg = None
-
-        elif is_assistant and current_assistant_msg is None:
-            meta = extract_metadata_from_session(session)
-            current_assistant_msg = {
-                "role": "assistant",
-                "content": content_text,
-                "displayType": "text_only",
-                "data": meta.get("data"),
-                "parsedData": [],
-                "steps": meta.get("steps", []),
-                "thoughts": meta.get("thoughts", ""),
-                "rawResponse": content_text,
-                "activeTab": "preview",
-                "pagination": {"currentPage": 1, "itemsPerPage": 10},
-            }
-            history.append(current_assistant_msg)
-
-        if is_assistant and content_text and current_assistant_msg:
-            full_raw = current_assistant_msg.get("_full_text_progress", "") + content_text
-            current_assistant_msg["_full_text_progress"] = full_raw
-            current_assistant_msg["rawResponse"] = full_raw
-            try:
-                json_match = re.search(r'\{[\s\S]*\}', full_raw)
-                if json_match:
-                    json_obj = json.loads(json_match.group(0))
-                    if "reply" in json_obj and "display_type" in json_obj:
-                        reply = json_obj.get("reply", "")
-                        current_assistant_msg["content"] = full_raw.replace(json_match.group(0), reply).strip()
-                        current_assistant_msg["displayType"] = json_obj["display_type"]
-                        if json_obj.get("data"):
-                            current_assistant_msg["data"] = json_obj["data"]
-                    else:
-                        current_assistant_msg["content"] = full_raw
-                else:
-                    current_assistant_msg["content"] = full_raw
-            except Exception as e:
-                logger.debug("[history] JSON parse error in content: %s: %s", type(e).__name__, e)
-                current_assistant_msg["content"] = full_raw
-
-            if current_assistant_msg.get("data"):
-                d = current_assistant_msg["data"]
-                if isinstance(d, dict) and d.get("dataType") == "mission":
-                    current_assistant_msg["displayType"] = "cards"
-                elif current_assistant_msg["displayType"] == "text_only":
-                    current_assistant_msg["displayType"] = "cards"
-                if isinstance(d, dict) and "items" in d:
-                    current_assistant_msg["parsedData"] = d["items"]
-                elif isinstance(d, list):
-                    current_assistant_msg["parsedData"] = d
-                else:
-                    current_assistant_msg["parsedData"] = [d]
-
-    final_history = []
-    for msg in history:
-        if isinstance(msg, dict):
-            msg.pop("_full_text_progress", None)
-            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and \
-               not msg.get("data"):
-                continue
-            final_history.append(msg)
-
-    return {"history": final_history}
-
-
-@protected_router.delete("/history")
-async def delete_history(payload: dict = Depends(verify_jwt)):
-    """Efface la session Redis de l'utilisateur courant."""
-    session_id = payload.get("sub")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Token invalide — sub manquant")
-    user_id = session_id  # sub JWT = user_id pour la session ADK
-
-    session_service = get_session_service()
-    session = await session_service.get_session(
-        app_name="zenika_missions_assistant",
-        user_id=user_id,
-        session_id=session_id,
-    )
-    if session:
-        session_service._delete_session_impl(
-            app_name="zenika_missions_assistant",
-            user_id=user_id,
-            session_id=session_id,
-        )
-        return {"message": "Historique effacé"}
-    return {"message": "Pas d'historique"}
+app.include_router(session_router)
 
 
 @app.get("/spec")
@@ -472,8 +323,8 @@ async def mcp_registry(_payload: dict = Depends(verify_jwt)):
     }
 
 
+app.include_router(hitl_router)
 app.include_router(protected_router)
-
 
 app.add_exception_handler(Exception, make_global_exception_handler("agent_missions_api"))
 

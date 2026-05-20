@@ -16,14 +16,14 @@ Usage :
     # Depuis la racine du monorepo :
     RAG_EVAL_BASE_URL=https://api.dev.zenika.slavayssiere.fr/api/cv \\
     RAG_EVAL_TOKEN=$(python3 scripts/mcp_cli.py _get_token) \\
-    pytest cv_api/eval/test_rag_quality.py -v --tb=short
+    pytest cv_api/eval/rag_quality_eval.py -v --tb=short
 
     # En mode dry-run (sans expected_user_ids configurés) :
     RAG_EVAL_DRY_RUN=true \\
-    pytest cv_api/eval/test_rag_quality.py -v --tb=short
+    pytest cv_api/eval/rag_quality_eval.py -v --tb=short
 
     # Filtrer par tag :
-    pytest cv_api/eval/test_rag_quality.py -v -k "cloud or devops"
+    pytest cv_api/eval/rag_quality_eval.py -v -k "cloud or devops"
 
 Intégration CI/CD :
     Appelé optionnellement depuis scripts/deploy.sh après le déploiement de cv_api.

@@ -4,7 +4,7 @@ set -eo pipefail
 # Configuration
 PROJECT_ID="slavayssiere-sandbox-462015"
 REGION="europe-west1"
-REGISTRY="z-gcp-summit-services"
+REGISTRY="z-gcp-summit-services-dev"
 FRONTEND_BUCKET="z-gcp-summit-frontend"
 
 # Docker registry prefix
@@ -549,7 +549,7 @@ compute_service_hash() {
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
-    ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+    ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/env/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     ! -path "*/*.egg-info/*" \
@@ -573,7 +573,7 @@ save_shared_hash() {
       ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
       ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
       ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
-      ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+      ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/env/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
       ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
       ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
       ! -path "*/*.egg-info/*" \
@@ -595,7 +595,7 @@ check_shared_changed() {
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
-    ! -path "*/.venv/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+    ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/env/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     ! -path "*/*.egg-info/*" \
@@ -967,6 +967,7 @@ build_and_push_standard() {
       else
         echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
         DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
+        save_service_hash "$SERVICE"
       fi
     fi
   fi

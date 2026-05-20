@@ -1706,7 +1706,8 @@ def rag_calibrate(
         analytics_url = f"{analytics_url_base}/api/analytics/mcp/call"
         req_analytics = urllib.request.Request(
             analytics_url,
-            data=json.dumps({"name": "log_rag_quality_snapshot", "arguments": json.loads(snapshot_payload.decode())}).encode(),
+            data=json.dumps({"name": "log_rag_quality_snapshot",
+                            "arguments": json.loads(snapshot_payload.decode())}).encode(),
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"},
         )
         try:
@@ -1775,7 +1776,7 @@ def rag_run_eval(
         "RAG_EVAL_TOP_K": "5",
     }
     res = subprocess.run(
-        [test_env_pytest, "cv_api/eval/test_rag_quality.py",
+        [test_env_pytest, "cv_api/eval/rag_quality_eval.py",
          "-v", "--tb=line", "--no-header", "-q"],
         cwd=script_dir,
         env=env_vars,
@@ -1869,7 +1870,7 @@ def rag_run_eval(
 
         # Résumé global
         print(f"\n{sep}")
-        print("  Logs complets : pytest cv_api/eval/test_rag_quality.py -v --tb=short")
+        print("  Logs complets : pytest cv_api/eval/rag_quality_eval.py -v --tb=short")
         print(f"  Recalibrer    : python3 platform-engineering/manage_env.py rag-calibrate --env {env}")
 
         # ── Prompt Antigravity ─────────────────────────────────────────────────

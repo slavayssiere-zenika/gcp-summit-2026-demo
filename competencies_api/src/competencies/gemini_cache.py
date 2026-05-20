@@ -17,6 +17,7 @@ Contraintes :
 import logging
 import os
 from typing import Optional
+from shared.cache import get_cache, set_cache
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,7 @@ SCORING_SYSTEM_PROMPT = (
     "# noqa: E501"
 )
 
-# Cache en mémoire des CachedContent Gemini (clé = model_name)
-_CACHE_STORE: dict = {}
+# (Le cache redis remplacera l'ancien dictionnaire mémoire _CACHE_STORE)
 
 
 def _is_vertex_available(client) -> bool:
@@ -74,7 +74,8 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
         logger.debug("[gemini_cache] Context caching non disponible (API key mode) — skip")
         return None
 
-    cache_entry = _CACHE_STORE.get(model)
+    redis_key = f"competencies:gemini_cache:{model}"
+    cache_entry = await get_cache(redis_key)
 
     if cache_entry:
         # Vérification du TTL restant
@@ -97,7 +98,6 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
                 )
         except Exception as e:
             logger.warning("[gemini_cache] Cache introuvable ou expiré (%s) — recréation", e)
-            _CACHE_STORE.pop(model, None)
 
     # Création du CachedContent
     try:
@@ -111,7 +111,7 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
                 display_name=f"zenika-scoring-system-prompt-{model}",
             ),
         )
-        _CACHE_STORE[model] = {"name": cache.name}
+        await set_cache(redis_key, {"name": cache.name}, GEMINI_CACHE_TTL_S)
         logger.info(
             "[gemini_cache] ✅ CachedContent créé : '%s' (TTL=%ds, model=%s)",
             cache.name, GEMINI_CACHE_TTL_S, model

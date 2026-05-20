@@ -136,9 +136,10 @@ class TestBulkReanalyseTaskManager:
     async def test_watchdog_zombie_detection(self, mocker):
         """is_running() doit détecter une tâche zombie et retourner False."""
         from src.cvs.bulk_task_state import BulkReanalyseTaskManager
+        from datetime import timezone
         mgr = BulkReanalyseTaskManager()
         # Updated_at il y a 181 minutes → zombie (seuil = 180 min)
-        old_time = (datetime.now() - timedelta(minutes=181)).isoformat()
+        old_time = (datetime.now(timezone.utc) - timedelta(minutes=181)).isoformat()
         stored = {
             "status": "batch_running",
             "updated_at": old_time,

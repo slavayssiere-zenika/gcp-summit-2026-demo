@@ -5,6 +5,7 @@ from sqlalchemy import case, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.cache import delete_cache, get_cache, set_cache
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
 from src.services.google_api_client import DriveApiClient
 from src.services.tree_resolution import TreeResolver
@@ -20,20 +21,20 @@ _SUPPORTED_CV_MIME_TYPES: dict[str, str] = {
 
 
 class DiscoveryService:
-    def __init__(self, db: AsyncSession, drive, redis):
+    def __init__(self, db: AsyncSession, drive):
+        """DiscoveryService ne prend plus de redis en paramètre (partagé via shared.cache)."""
         self.db = db
-        self.redis = redis
         self.drive_api = DriveApiClient(drive)
-        self.tree_resolver = TreeResolver(db, self.drive_api, redis)
+        self.tree_resolver = TreeResolver(db, self.drive_api)
 
     def invalidate_roots_cache(self) -> None:
         self.tree_resolver.invalidate_roots_cache()
 
-    def _is_file_known(self, file_id: str) -> bool:
-        return bool(self.redis.get(f"drive:file:known:{file_id}"))
+    async def _is_file_known(self, file_id: str) -> bool:
+        return bool(await get_cache(f"drive:file:known:{file_id}"))
 
-    def _mark_file_known(self, file_id: str) -> None:
-        self.redis.set(f"drive:file:known:{file_id}", "IMPORTED_CV", ex=REDIS_TTL_KNOWN_FILE)
+    async def _mark_file_known(self, file_id: str) -> None:
+        await set_cache(f"drive:file:known:{file_id}", "IMPORTED_CV", REDIS_TTL_KNOWN_FILE)
 
     async def discover_files(self, force_full: bool = False) -> int:
         roots = await self.tree_resolver.load_roots()
@@ -122,7 +123,7 @@ class DiscoveryService:
                         excluded_list = [e.lower() for e in root.get("excluded_folders", [])]
                         if name.startswith("_") or name.upper().endswith("_OLD") or name.lower() in excluded_list:
                             logger.info(f"[Top-Down] Dossier '{name}' exclu. On ne descend pas dedans.")
-                            self.redis.set(f"drive:oos:{file_id}", "1", ex=86400 * 30)
+                            await set_cache(f"drive:oos:{file_id}", "1", 86400 * 30)
                             continue
 
                         queue.append({
@@ -132,10 +133,12 @@ class DiscoveryService:
                         })
                         subfolders_in_page += 1
 
-                        pipe = self.redis.pipeline()
-                        pipe.set(f"drive:graph:{file_id}", folder_id, ex=86400 * 30)
-                        pipe.set(f"drive:name:{file_id}", name, ex=86400 * 30)
-                        pipe.execute()
+                        # Remplacement du pipeline() sync par deux set_cache() async en gather
+                        import asyncio as _asyncio
+                        await _asyncio.gather(
+                            set_cache(f"drive:graph:{file_id}", folder_id, 86400 * 30),
+                            set_cache(f"drive:name:{file_id}", name, 86400 * 30),
+                        )
 
                     elif mime in _SUPPORTED_CV_MIME_TYPES:
                         file_type = _SUPPORTED_CV_MIME_TYPES[mime]
@@ -202,7 +205,7 @@ class DiscoveryService:
                             new_discoveries += 1
                             cvs_in_page += 1
 
-                            self._mark_file_known(file_id)
+                            await self._mark_file_known(file_id)
                             logger.debug(f"[Top-Down] '{name}' ({file_type}) enregistré (root: {root['tag']}).")
                         except Exception as e:
                             logger.error(f"[Top-Down] Erreur DB/parsing pour le fichier '{name}' ({file_id}): {e}")
@@ -270,7 +273,7 @@ class DiscoveryService:
                     is_trashed = file.get("trashed", False)
 
                     try:
-                        if self._is_file_known(file_id):
+                        if await self._is_file_known(file_id):
                             existing = (
                                 await self.db.execute(
                                     select(DriveSyncState).filter(
@@ -280,7 +283,7 @@ class DiscoveryService:
                             ).scalars().first()
                             if existing and existing.revision_id == version and existing.parent_folder_name:
                                 continue
-                            self.redis.delete(f"drive:file:known:{file_id}")
+                            await delete_cache(f"drive:file:known:{file_id}")
 
                         mod_time = datetime.fromisoformat(mod_time_str.replace("Z", "+00:00"))
 
@@ -370,7 +373,7 @@ class DiscoveryService:
                     break
 
         try:
-            self.redis.set("drive:sync:last_delta_run", datetime.now(timezone.utc).isoformat())
+            await set_cache("drive:sync:last_delta_run", datetime.now(timezone.utc).isoformat(), 86400)
         except Exception as e:
             logger.warning(f"[Bottom-Up] Impossible de mettre à jour drive:sync:last_delta_run dans Redis : {e}")
 

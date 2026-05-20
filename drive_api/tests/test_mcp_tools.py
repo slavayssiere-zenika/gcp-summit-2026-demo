@@ -112,7 +112,7 @@ async def test_get_drive_file_state(mock_httpx):
 @pytest.mark.asyncio
 async def test_update_drive_file(mock_httpx):
     """update_drive_file : vérifie le PUT /files/{id} vers drive_api."""
-    mock_httpx.put.return_value = _ok({"id": 42, "state": "PENDING"})
+    mock_httpx.patch.return_value = _ok({"id": 42, "state": "PENDING"})
     auth_header_var.set("Bearer token")
 
     result = await call_tool("update_drive_file", {"file_id": 42, "state": "PENDING"})
@@ -208,4 +208,5 @@ async def test_get_drive_status_api_error(mock_httpx):
     result = await call_tool("get_drive_status", {})
     # Doit retourner une erreur structurée, pas lever d'exception
     assert result[0].text
-    assert "success" in result[0].text.lower() or "error" in result[0].text.lower() or "Connection refused" in result[0].text
+    assert "success" in result[0].text.lower() or "error" in result[0].text.lower(
+    ) or "Connection refused" in result[0].text

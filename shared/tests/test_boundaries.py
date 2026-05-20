@@ -188,7 +188,7 @@ class TestDatabaseBoundaries:
             import database as db
             importlib.reload(db)
             with patch("database.create_async_engine", side_effect=mock_eng), \
-                 patch("database.sessionmaker"):
+                    patch("database.sessionmaker"):
                 with patch.dict(os.environ, {"DB_POOL_SIZE": "0"}):
                     await db.init_db_connector()
         assert captured["kwargs"].get("pool_size") == 0
@@ -202,7 +202,7 @@ class TestDatabaseBoundaries:
         importlib.reload(db)
 
         with patch("database.create_async_engine"), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             with patch.dict(os.environ, {
                 "DATABASE_URL": "postgresql+asyncpg://u:p@h/db",
                 "USE_IAM_AUTH": "false",
@@ -247,7 +247,7 @@ class TestDatabaseBoundaries:
         import database as db
         importlib.reload(db)
         with patch("database.create_async_engine", side_effect=mock_eng), \
-             patch("database.sessionmaker"):
+                patch("database.sessionmaker"):
             with patch.dict(os.environ, {
                 "DATABASE_URL": "postgresql+asyncpg://u:p@h/db",
                 "USE_IAM_AUTH": "false",
@@ -265,22 +265,28 @@ class TestMcpServerUtilsBoundaries:
 
     # ─── service_name vide / spéciaux ────────────────────────────────────────
 
-    def test_empty_service_name_replaced_by_otel_sdk(self):
-        """service_name='' → OTel SDK substitue 'unknown_service' (comportement SDK)."""
+    def test_empty_service_name_falls_through_to_env_fallback(self, monkeypatch):
+        """service_name='' est falsy → _resolve_mcp_service_name() utilise SERVICE_NAME ou 'unknown-mcp'.
+
+        Avant la refacto : OTel SDK substituait 'unknown_service' (comportement SDK opaque).
+        Maintenant : on contrôle explicitement le fallback via l'env var SERVICE_NAME.
+        """
         from unittest.mock import MagicMock, patch
         from mcp_server_utils import setup_mcp_tracer_provider
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
         captured = {}
 
         def cap(p):
             captured["provider"] = p
 
         with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=cap), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("")
 
-        # OTel SDK remplace '' par 'unknown_service' automatiquement
-        assert captured["provider"].resource.attributes["service.name"] == "unknown_service"
+        # "" est falsy → résolution via SERVICE_NAME → fallback "unknown-mcp"
+        assert captured["provider"].resource.attributes["service.name"] == "unknown-mcp"
 
     def test_service_name_with_special_chars(self):
         """service_name avec caractères spéciaux (tirets, points) → pas d'erreur."""
@@ -292,8 +298,8 @@ class TestMcpServerUtilsBoundaries:
             captured["provider"] = p
 
         with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=cap), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("my-service.v2/prod")
 
         assert captured["provider"].resource.attributes["service.name"] == "my-service.v2/prod"
@@ -306,9 +312,9 @@ class TestMcpServerUtilsBoundaries:
         from mcp_server_utils import setup_mcp_tracer_provider
 
         with patch.dict(os.environ, {"TRACE_SAMPLING_RATE": "1.5"}), \
-             patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.trace.set_tracer_provider"), \
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             # Ne doit pas lever d'exception (clampé à 1.0)
             setup_mcp_tracer_provider("svc")
 
@@ -318,9 +324,9 @@ class TestMcpServerUtilsBoundaries:
         from mcp_server_utils import setup_mcp_tracer_provider
 
         with patch.dict(os.environ, {"TRACE_SAMPLING_RATE": "-0.5"}), \
-             patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.trace.set_tracer_provider"), \
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("svc")
 
     def test_sampling_rate_invalid_string_raises(self):
@@ -329,9 +335,9 @@ class TestMcpServerUtilsBoundaries:
         from mcp_server_utils import setup_mcp_tracer_provider
 
         with patch.dict(os.environ, {"TRACE_SAMPLING_RATE": "not-a-float"}), \
-             patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.trace.set_tracer_provider"), \
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             with pytest.raises(ValueError):
                 setup_mcp_tracer_provider("svc")
 
@@ -446,8 +452,8 @@ class TestZeroTrustBoundaries:
         def health():
             return {}
 
-        # /health/ dans la whitelist → /health correspond car startswith("/health/") == False
-        # mais exact match "/health" == "/health/" == False → comportement documenté
+        # /health/ dans la whitelist → /health correspond car startswith("/health/") is False
+        # mais exact match "/health" == "/health/" is False → comportement documenté
         # Ce test vérifie le comportement ACTUEL (pas de match avec trailing slash)
         with pytest.raises(AssertionError):
             assert_zero_trust(app, {"/health/"})

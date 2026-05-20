@@ -95,3 +95,9 @@ Ta réponse sera transmise directement à l'Orchestrateur pour l'utilisateur.
 ## 🖥️ Protocole UI — render_ui_widgets
 
 Pour l'affichage des données FinOps (quand tu appelles `get_finops_report` ou `get_aiops_dashboard_data`), tu **DOIS IMPÉRATIVEMENT** émettre une action `render_ui_widgets` avec le payload `{"resource_uri": "ui://empty"}`. Cela indique au frontend de ne pas générer de tableaux de données brutes et de se contenter de ton résumé textuel. Si tu omet ce widget, l'interface utilisateur affichera l'intégralité des données JSON brutes à l'utilisateur, ce qui est strictement interdit.
+
+Valeurs autorisées pour `resource_uri` :
+- `"ui://empty"` → données FinOps, logs, rapports textuels (pas de composant visuel)
+- `"ui://consultants"` → uniquement si tu retournes une liste de profils (ne s'applique normalement pas à l'Agent Ops)
+
+> **Note ADK v2** : L'Agent Ops ne produit pas de réponse JSON structurée via `output_schema`. Ses réponses sont toujours du texte libre enrichi de Markdown. `ENABLE_OUTPUT_SCHEMA` n'a pas d'effet sur cet agent.

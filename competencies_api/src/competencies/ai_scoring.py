@@ -17,7 +17,7 @@ from typing import Optional
 
 import shared.database as database
 import httpx
-from cache import delete_cache_pattern
+from shared.cache import clear_namespace
 from google import genai
 from google.genai import types
 from pydantic import ValidationError
@@ -355,7 +355,7 @@ async def _score_all_bg(
                 f"[AI Score BG] Failed for user={user_id} comp='{comp_name}': {e}"
             )
 
-    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    await clear_namespace(f"competencies:evaluations:user:{user_id}:")
     logger.info(
         f"[AI Score BG] Scoring terminé pour user={user_id} — {len(comp_tuples)} compétences traitées."
     )

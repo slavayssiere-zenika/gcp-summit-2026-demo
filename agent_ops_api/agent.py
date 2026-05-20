@@ -11,11 +11,11 @@ import os
 import uuid
 from datetime import datetime as _dt, timezone
 
-import httpx
+
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.genai import types
-from opentelemetry.propagate import inject
+
 
 # AgentRegistry requis pour les MCP servers Vertex AI natifs (ex: Cloud Trace)
 # Dépendance optionnelle : nécessite google-adk[a2a] + google-cloud-iamconnectorcredentials
@@ -37,8 +37,19 @@ from agent_commons.metadata import extract_metadata_from_session
 from agent_commons.runner import run_agent_and_collect
 from agent_commons.session import RedisSessionService
 from agent_commons.ui_tools import render_ui_widgets
+from shared.schemas.staffing import MissionAnalysis
+from agent_commons.prompt_loader import fetch_agent_prompt
+
 
 app_logger = logging.getLogger(__name__)
+
+
+def _output_schema_kwargs() -> dict:
+    """Active output_schema=MissionAnalysis si ENABLE_OUTPUT_SCHEMA=true (opt-in)."""
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        return {"output_schema": MissionAnalysis, "output_key": "ops_result"}
+    return {}
+
 
 # MCP Server Cloud Trace natif Vertex AI (configuré via var d'env)
 CLOUDTRACE_MCP_SERVER = os.getenv(
@@ -92,26 +103,16 @@ def get_session_service() -> RedisSessionService:
 # ---------------------------------------------------------------------------
 async def create_agent(session_id: str | None = None) -> Agent:
     global OPS_TOOLS
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    instruction_text = (
+    _default = (
         "Tu es l'Agent Ops (Platform Engineering, FinOps & Sécurité) de la plateforme Zenika. "
         "Tu détiens l'expertise des logs et de l'infra."
     )
-    try:
-        auth_header = auth_header_var.get()
-        headers = {"Authorization": auth_header} if auth_header else {}
-        inject(headers)
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(
-                f"{prompts_api_url.rstrip('/')}/agent_ops_api.system_instruction/compiled",
-                headers=headers,
-            )
-            if res.status_code == 200:
-                instruction_text = res.json()["value"]
-            else:
-                instruction_text += "\n[Fallback Instruction]"
-    except Exception as e:
-        app_logger.warning("Error fetching system prompt for Ops: %s", e)
+    instruction_text = await fetch_agent_prompt(
+        prompt_key="agent_ops_api.system_instruction",
+        default_text=_default,
+        auth_header=auth_header_var.get(),
+        agent_prefix="[Ops]",
+    )
 
     # Injection de la date UTC pour les filtrages BigQuery temporels
     current_datetime_utc = _dt.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -164,6 +165,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
         instruction=instruction_text,
         description="Le module spécialisé dans les Opérations, FinOps, Log Monitoring.",
         tools=OPS_TOOLS,
+        **_output_schema_kwargs(),
     )
     app_logger.info("[Ops] Agent created successfully.")
     return agent
@@ -247,10 +249,27 @@ async def run_agent_query(
     # --- Guardrail P0-2 : métriques chiffrées sans données FinOps réelles ---
     response_text, steps = check_ops_metrics_guardrail(response_text, steps, "[Ops]")
 
+    # --- ENABLE_OUTPUT_SCHEMA : display_type depuis MissionAnalysis (source de vérité) ---
+    # Quand output_schema=MissionAnalysis est actif, le LLM renseigne display_type dans
+    # la réponse JSON structurée. On l'utilise en priorité sur render_ui_widgets.
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        try:
+            ops_result = getattr(updated_session, "state", {}).get("ops_result")
+            if ops_result and isinstance(ops_result, dict) and ops_result.get("display_type"):
+                schema_display_type = ops_result["display_type"]
+                if schema_display_type != display_type:
+                    app_logger.info(
+                        "[Ops] display_type override: render_ui_widgets=%r → output_schema=%r",
+                        display_type, schema_display_type,
+                    )
+                display_type = schema_display_type
+        except Exception as e:
+            app_logger.warning("[Ops] Impossible de lire ops_result.display_type : %s", e)
+
     return {
         "response": response_text,
         "data": last_tool_data,
-        "display_type": display_type,
+        "display_type": display_type,  # Pydantic (ENABLE_OUTPUT_SCHEMA) > render_ui_widgets
         "steps": steps,
         "thoughts": "\n".join(thoughts),
         "usage": {

@@ -30,14 +30,13 @@ from src.services.config import (
 from src.services.bulk_helpers import _post_missions_bulk, _resolve_competency_ids
 from src.services.finops import log_finops
 from src.services.search_service import scale_bulk_dependencies
-from src.services.semaphores import _items_delete_sem
+from src.services.semaphores import _items_delete_sem, acquire_shielded
 from src.services.utils import _build_distilled_content, _clean_llm_json, _coerce_to_str
 
 logger = logging.getLogger(__name__)
 
 
 async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
-
     """Rejoue uniquement la phase apply depuis les résultats GCS d'un batch Vertex existant.
 
     Contrairement à bg_bulk_reanalyse, cette fonction :
@@ -248,7 +247,7 @@ async def bg_retry_apply(service_token: str, dest_uri: str) -> None:
                                     json={"competency_ids": competency_ids},
                                     headers=req_headers, timeout=120.0,
                                 )
-                        async with _items_delete_sem:
+                        async with acquire_shielded(_items_delete_sem):
                             await _apply_with_retry(
                                 hc, "delete",
                                 f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items",

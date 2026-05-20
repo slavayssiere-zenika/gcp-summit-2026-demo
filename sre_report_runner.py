@@ -36,7 +36,7 @@ def fetch_error_prompts(token: str) -> list[dict]:
     resp = httpx.get(
         f"{BASE_URL}/api/prompts/",
         headers=_headers(token),
-        timeout=15.0,
+        timeout=60.0,
     )
     if resp.status_code == 401:
         # Token cache périmé → forcer un nouveau login
@@ -45,7 +45,7 @@ def fetch_error_prompts(token: str) -> list[dict]:
         TOKEN_CACHE.unlink(missing_ok=True)
         from mcp_cli import get_jwt as _get_fresh_jwt
         token = _get_fresh_jwt()
-        resp = httpx.get(f"{BASE_URL}/api/prompts/", headers=_headers(token), timeout=15.0)
+        resp = httpx.get(f"{BASE_URL}/api/prompts/", headers=_headers(token), timeout=60.0)
     if resp.status_code != 200:
         print(f"❌ GET /api/prompts/ → {resp.status_code}: {resp.text[:300]}", file=sys.stderr)
         sys.exit(1)

@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import List, Optional, Annotated
 
-from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
+from shared.cache import clear_namespace, delete_cache, get_cache, set_cache
 from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path, Body
 from metrics import USER_CREATIONS_TOTAL
@@ -58,7 +58,7 @@ async def list_users(
 ):
     caller_role = payload.get("role", "user")
     cache_key = f"users:list:{skip}:{limit}:{str(is_anonymous).lower()}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -78,7 +78,7 @@ async def list_users(
             item["email"] = None
 
     result = PaginationResponse(items=items, total=total, skip=skip, limit=limit)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 
@@ -86,11 +86,12 @@ async def list_users(
 async def search_users(
     query: str = Query(..., min_length=1),
     limit: int = Query(10, ge=1, le=100),
-    is_anonymous: Optional[bool] = Query(None, description="Filtrer par statut anonyme. None=tous, False=consultants réels, True=anonymes."),
+    is_anonymous: Optional[bool] = Query(
+        None, description="Filtrer par statut anonyme. None=tous, False=consultants réels, True=anonymes."),
     db: AsyncSession = Depends(get_db)
 ):
     cache_key = f"users:search:{query}:{limit}:{str(is_anonymous).lower()}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -113,7 +114,7 @@ async def search_users(
     users = (await db.execute(base_query.limit(limit))).scalars().all()
 
     result = PaginationResponse(items=[map_user_to_response(u) for u in users], total=total, skip=0, limit=limit)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 # Borne maximale pour les colonnes INT4 (PostgreSQL / SQLite)
@@ -146,13 +147,14 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db), payload: 
         raise HTTPException(status_code=401, detail="Token invalide")
 
     cache_key = f"users:me:{username}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return cached
 
     user = (await db.execute(select(User).filter(User.username == username))).scalars().first()
     if user is None:
-        raise HTTPException(status_code=401, detail="Utilisateur non répertorié ou compte inactif dans l'annuaire Zenika.")
+        raise HTTPException(
+            status_code=401, detail="Utilisateur non répertorié ou compte inactif dans l'annuaire Zenika.")
 
     result = map_user_to_response(user)
 
@@ -160,14 +162,14 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db), payload: 
     token = auth_header.split(" ")[1] if auth_header and " " in auth_header else request.cookies.get("access_token")
     result["access_token"] = token
 
-    set_cache(cache_key, result, 300)
+    await set_cache(cache_key, result, 300)
     return result
 
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: int = Path(..., gt=0, le=2_147_483_647), db: AsyncSession = Depends(get_db)):
     cache_key = f"users:{user_id}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return UserResponse(**cached)
 
@@ -176,7 +178,7 @@ async def get_user(user_id: int = Path(..., gt=0, le=2_147_483_647), db: AsyncSe
         raise HTTPException(status_code=404, detail=f"Collaborateur #{user_id} introuvable.")
 
     result = map_user_to_response(user)
-    set_cache(cache_key, result, CACHE_TTL)
+    await set_cache(cache_key, result, CACHE_TTL)
     return result
 
 
@@ -241,9 +243,9 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db), payl
             db.add(seb_user)
             await db.commit()
 
-    delete_cache_pattern("users:list:*")
-    delete_cache_pattern("users:search:*")
-    delete_cache_pattern("users:me:*")
+    await clear_namespace("users:list:")
+    await clear_namespace("users:search:")
+    await clear_namespace("users:me:")
     USER_CREATIONS_TOTAL.inc()
     return map_user_to_response(db_user)
 
@@ -285,10 +287,10 @@ async def update_user(user_id: int = Path(..., gt=0, le=2_147_483_647), user_upd
     await db.commit()
     await db.refresh(user)
 
-    delete_cache(f"users:{user_id}")
-    delete_cache_pattern("users:list:*")
-    delete_cache_pattern("users:search:*")
-    delete_cache_pattern("users:me:*")
+    await delete_cache(f"users:{user_id}")
+    await clear_namespace("users:list:")
+    await clear_namespace("users:search:")
+    await clear_namespace("users:me:")
     return map_user_to_response(user)
 
 
@@ -304,7 +306,7 @@ async def delete_user(user_id: int = Path(..., gt=0, le=2_147_483_647), db: Asyn
     await db.delete(user)
     await db.commit()
 
-    delete_cache(f"users:{user_id}")
-    delete_cache_pattern("users:list:*")
-    delete_cache_pattern("users:search:*")
-    delete_cache_pattern("users:me:*")
+    await delete_cache(f"users:{user_id}")
+    await clear_namespace("users:list:")
+    await clear_namespace("users:search:")
+    await clear_namespace("users:me:")

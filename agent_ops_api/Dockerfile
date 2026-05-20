@@ -24,6 +24,8 @@ COPY agent_ops_api/ .
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
 ENV GEMINI_MODEL=gemini-3.1-flash-lite-preview
+ENV GEMINI_OPS_MODEL=gemini-3.1-flash-lite-preview
+ENV ENABLE_OUTPUT_SCHEMA=false
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO

@@ -109,18 +109,4 @@ def test_isolation_between_tests_no_state_leak(client):
 # Redis réel
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_redis_client_connected_to_real_container():
-    """Valide que get_client() retourne un client Redis connecté au conteneur."""
-    import cache as _cache_module
-    c = _cache_module.get_client()
-    assert c is not None
-    assert c.ping(), "Le client Redis doit être connecté au conteneur Testcontainers"
-
-
-def test_cache_set_and_get_real_redis():
-    """Valide set_cache/get_cache sur vrai Redis."""
-    import cache as _cache_module
-    _cache_module.set_cache("test:user:1", {"id": 1, "email": "test@zenika.com"}, expire=30)
-    result = _cache_module.get_cache("test:user:1")
-    assert result is not None
-    assert result["email"] == "test@zenika.com"
+# Les tests de shared.cache sont traités au niveau du projet parent.

@@ -1,3 +1,7 @@
+from .task_state import task_manager
+from .models import Mission, MissionStatus, MissionStatusHistory
+from .helpers import (_collect_all_known_names, build_taxonomy_context,
+                      find_domains_for_skills)
 import asyncio
 import json
 import logging
@@ -16,11 +20,49 @@ from sqlalchemy import select
 from src.gemini_retry import (embed_content_with_retry,
                               generate_content_with_retry)
 
-from .cache import get_cached_prompt
-from .helpers import (_collect_all_known_names, build_taxonomy_context,
-                      find_domains_for_skills)
-from .models import Mission, MissionStatus, MissionStatusHistory
-from .task_state import task_manager
+from shared.cache import get_cache, set_cache
+
+
+async def get_cached_prompt(http_client: httpx.AsyncClient, prompt_key: str, headers: dict) -> str:
+    """Récupère le prompt depuis le cache Redis (TTL 60s) ou directement depuis PROMPTS_API."""
+    cache_key = f"mission_prompt_v1:{prompt_key}"
+
+    # 1. Vérification du cache
+    cached_val = await get_cache(cache_key)
+    if cached_val:
+        return cached_val
+
+    PROMPTS_API_URL = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    # 2. Requete distante si absent du cache
+    try:
+        res = await http_client.get(f"{PROMPTS_API_URL.rstrip('/')}/{prompt_key}", headers=headers, timeout=5.0)
+        res.raise_for_status()
+        prompt_val = res.json()["value"]
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Prompt {prompt_key} indisponible (404 ou erreur connexion: {e}). Fallback sur le ficher local.")
+        local_filename = None
+        if prompt_key == "missions_api.extract_mission_info":
+            local_filename = "extract_mission_info.txt"
+        elif prompt_key == "missions_api.staffing_heuristics":
+            local_filename = "staffing_heuristics.txt"
+
+        if local_filename and os.path.exists(local_filename):
+            try:
+                with open(local_filename, "r", encoding="utf-8") as f:
+                    prompt_val = f.read()
+            except Exception as file_ex:
+                logger.error(f"Echec de lecture du fallback {local_filename}: {file_ex}")
+                raise e
+        else:
+            logger.error(f"Cannot fetch generic prompt {prompt_key}: No fallback.")
+            raise e
+
+    # 3. Sauvegarde avec TTL (60s)
+    await set_cache(cache_key, prompt_val, 60)
+
+    return prompt_val
 
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GEMINI_API_KEY:

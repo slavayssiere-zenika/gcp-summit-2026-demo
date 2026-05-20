@@ -24,6 +24,8 @@ COPY agent_hr_api/ .
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
 ENV GEMINI_MODEL=gemini-3.1-flash-lite-preview
+ENV GEMINI_HR_MODEL=gemini-3.1-flash-lite-preview
+ENV ENABLE_OUTPUT_SCHEMA=false
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
@@ -37,16 +39,15 @@ ENV COMPETENCIES_API_URL=http://competencies_api:8003
 ENV CV_API_URL=http://cv_api:8004
 ENV MISSIONS_API_URL=http://missions_api:8009
 ENV PROMPTS_API_URL=http://prompts_api:8000
-ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
 # MCP Sidecars — internal, no JWT required on /mcp/tools and /mcp/call
+ENV ANALYTICS_MCP_URL=http://analytics_mcp:8080
+ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
 ENV USERS_MCP_URL=http://users_mcp:8000
 ENV ITEMS_MCP_URL=http://items_mcp:8000
 ENV COMPETENCIES_MCP_URL=http://competencies_mcp:8000
 ENV CV_MCP_URL=http://cv_mcp:8000
 ENV MISSIONS_MCP_URL=http://missions_mcp:8000
 ENV DRIVE_MCP_URL=http://drive_api:8080
-ENV LOKI_MCP_URL=http://loki:3100/mcp
-ENV MONITORING_MCP_URL=http://monitoring_mcp:8010
 EXPOSE 8080
 
 RUN useradd -m appuser && chown -R appuser /app

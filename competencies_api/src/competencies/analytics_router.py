@@ -15,7 +15,7 @@ from collections import defaultdict
 from typing import List, Optional
 
 import httpx
-from cache import get_cache, set_cache
+from shared.cache import get_cache, set_cache
 from shared.database import get_db
 from fastapi import APIRouter, Depends, Query, Request
 from opentelemetry.propagate import inject
@@ -149,7 +149,7 @@ async def get_agency_competency_coverage(
 ):
     """Heatmap compétences x agences — pour chaque paire (agence, compétence feuille), count + score IA moyen."""
     cache_key = f"competencies:analytics:agency-coverage:{min_count}:{limit}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return AgencyCompetencyCoverage(**cached)
 
@@ -241,7 +241,7 @@ async def get_agency_competency_coverage(
         total_consultants=len(agency_map),
         total_agencies=len(set(agency_map.values())),
     )
-    set_cache(cache_key, result.model_dump(), 300)
+    await set_cache(cache_key, result.model_dump(), 300)
     return result
 
 

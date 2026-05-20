@@ -9,10 +9,10 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 360 | ✅ |
+| `main.py` | 372 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 261 | ✅ |
+| `agent.py` | 280 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -22,6 +22,8 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 | `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `GEMINI_OPS_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `ENABLE_OUTPUT_SCHEMA` | Comportement | `false` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |

@@ -56,6 +56,12 @@ async def lifespan(app: FastAPI):
     print("Starting ADK Web Agent with Gemini...")
     yield
 
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(
     title="ADK HR Agent (A2A)",
     version="1.0.0",
@@ -248,7 +254,14 @@ async def a2a_query(request: A2ARequest, http_request: Request,
                 str(e) or repr(e),
                 exc_info=True,
             )
-            raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+            # ADK v2 — réponse dégradée plutôt qu'un HTTP 500 non géré.
+            # Le Router peut ainsi afficher un message d'erreur propre à l'utilisateur
+            # sans que la chaîne A2A ne s'effondre.
+            return A2AResponse(
+                response=f"⚠️ L'agent RH a rencontré une erreur technique : {type(e).__name__}.",
+                source="error",
+                steps=[{"type": "error", "tool": "a2a_handler", "args": {"message": str(e)}}],
+            )
 
 
 # NOTE: Les endpoints /login, /me, /logout ont été supprimés.

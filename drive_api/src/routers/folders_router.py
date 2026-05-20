@@ -7,13 +7,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth.jwt import verify_jwt
+from shared.cache import delete_cache, set_cache
 from src.drive_service import DriveService
 from src.models import DriveSyncStatus
 from src.schemas import FolderCreate, FolderResponse, FolderStats, FolderUpdate, PaginatedFoldersResponse
 from src.services.folder_service import FolderService
-from src.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
+
 
 def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
     """Guard : vérifie que l'appelant est administrateur."""
@@ -23,6 +24,7 @@ def _require_admin(token_payload: dict = Depends(verify_jwt)) -> dict:
             detail="Privilèges administrateur requis pour cette opération Drive."
         )
     return token_payload
+
 
 router = APIRouter(prefix="", tags=["Drive Folders"], dependencies=[Depends(verify_jwt)])
 
@@ -46,7 +48,7 @@ async def update_folder(folder_id: int, folder_update: FolderUpdate, db: AsyncSe
 async def list_folders(db: AsyncSession = Depends(get_db), skip: int = 0, limit: int = 50):
     service = FolderService(db)
     folders, stats_map, total = await service.list_folders_with_stats(skip, limit)
-    
+
     response_folders = []
     for f in folders:
         f_stats = stats_map.get(f.id, {})
@@ -61,7 +63,7 @@ async def list_folders(db: AsyncSession = Depends(get_db), skip: int = 0, limit:
         )
         f_response.stats.total_files = sum(f_stats.values())
         response_folders.append(f_response)
-        
+
     return {"items": response_folders, "total": total, "skip": skip, "limit": limit}
 
 
@@ -80,22 +82,21 @@ async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSessio
     """
     async def run_rebuild():
         from shared.database import SessionLocal
-        redis = get_redis()
         try:
-            redis.set("drive:sync:rebuild_running", "1", ex=1800) # 30 min max
+            await set_cache("drive:sync:rebuild_running", "1", 1800)  # 30 min max
             async with SessionLocal() as session:
                 service = DriveService(session)
                 await service.discover_files(force_full=True)
         finally:
-            redis.delete("drive:sync:rebuild_running")
-            
+            await delete_cache("drive:sync:rebuild_running")
+
     background_tasks.add_task(run_rebuild)
     return {"status": "success", "message": "Reconstruction de l'arbre lancée en arrière-plan"}
 
 
 @router.post("/folders/invalidate-cache")
 async def invalidate_drive_cache(_: dict = Depends(_require_admin)):
-    keys_deleted = FolderService.invalidate_drive_cache()
+    keys_deleted = await FolderService.invalidate_drive_cache()
     return {"status": "success", "keys_deleted": keys_deleted}
 
 

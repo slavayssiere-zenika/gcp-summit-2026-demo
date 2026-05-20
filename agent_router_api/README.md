@@ -9,10 +9,10 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 219 | ✅ |
+| `main.py` | 225 | ✅ |
 | `conftest.py` | 20 | ✅ |
 | `metrics.py` | 45 | ✅ |
-| `agent.py` | 474 | ⚠️ |
+| `agent.py` | 390 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -22,6 +22,9 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 | `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `GEMINI_ROUTER_MODEL` | Comportement | `gemini-3.5-flash` |
+| `GEMINI_HR_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `GEMINI_OPS_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |
@@ -41,6 +44,10 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 | `SEMANTIC_CACHE_THRESHOLD` | Comportement | `0.95` |
 | `SEMANTIC_CACHE_TTL` | Comportement | `900` |
 | `GEMINI_EMBEDDING_MODEL` | Comportement | `gemini-embedding-001` |
+| `A2A_CB_FAILURE_THRESHOLD` | Comportement | `5` |
+| `A2A_CB_OPEN_DURATION_S` | Comportement | `30` |
+| `AGENT_CARD_CACHE_TTL_S` | Comportement | `300` |
+| `PROMPT_CACHE_TTL_S` | Comportement | `3600` |
 
 ## Redis
 **DB 2** — namespace `session:*` (historique) + `semantic:*` (cache sémantique)

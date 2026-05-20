@@ -10,9 +10,9 @@ Règle AGENTS.md §4 : aucun modèle IA hardcodé — utiliser les variables d'e
 
 import logging
 import os
-from datetime import datetime, timezone
 
 from google import genai
+from google.genai.types import HttpOptions
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +39,36 @@ GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
 VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "europe-west1")
 BATCH_GCS_BUCKET = os.getenv("BATCH_GCS_BUCKET", "")
 
+# Redirection vers mock_gemini si GEMINI_API_BASE_URL est défini (mode perf local)
+GEMINI_API_BASE_URL: str = os.getenv("GEMINI_API_BASE_URL", "")
+_http_opts = HttpOptions(baseUrl=GEMINI_API_BASE_URL) if GEMINI_API_BASE_URL else None
 try:
-    if GEMINI_API_KEY:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+    if GEMINI_API_KEY or GEMINI_API_BASE_URL:
+        # PRD : clé réelle. Perf-test local : mock-key-local + baseUrl mock_gemini.
+        client = genai.Client(
+            api_key=GEMINI_API_KEY or "mock-key-local",
+            http_options=_http_opts,
+        )
     else:
+        # Comportement original préservé : client=None si aucune config Gemini.
+        # Produit un 503 explicite au lieu d'un 401 opaque.
         client = None
 except Exception as e:
     logger.warning("[config] Gemini client init failed (api_key mode): %s — cv_extraction disabled", e)
     client = None
 
 try:
+    # VERTEX_API_BASE_URL : redirection vers mock_gemini pour les batch jobs (mode perf local).
+    # En PRD : absent → None → appels Vertex AI normaux (ADC / service account).
+    VERTEX_API_BASE_URL: str = os.getenv("VERTEX_API_BASE_URL", "")
+    _vertex_http_opts = HttpOptions(baseUrl=VERTEX_API_BASE_URL) if VERTEX_API_BASE_URL else None
     if GCP_PROJECT_ID and VERTEX_LOCATION:
-        vertex_batch_client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=VERTEX_LOCATION)
+        vertex_batch_client = genai.Client(
+            vertexai=True,
+            project=GCP_PROJECT_ID,
+            location=VERTEX_LOCATION,
+            http_options=_vertex_http_opts,
+        )
     else:
         vertex_batch_client = None
 except Exception as e:
@@ -80,13 +98,6 @@ BULK_SCALE_SERVICES: list[str] = ["competencies-api", "items-api"]
 # Défaut 1 : évite les cold starts AlloyDB IAM (~15s) sans sur-provisionner.
 BULK_SCALE_MIN_INSTANCES: int = int(os.getenv("BULK_SCALE_MIN_INSTANCES", "1"))
 
-# ── Cache mémoire en process (TTL-based) ─────────────────────────────────────
-# Partagé entre cv_import_service et bulk_service via ce module.
-# Invalidation via force_invalidate_taxonomy_cache (endpoint POST /cache/invalidate-taxonomy).
-_CV_CACHE: dict = {
-    "prompt": {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)},
-    "tree_items": {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)},
-    "tree_context": {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)},
-    # Cache du rapport data quality (TTL 30s — aligné sur le polling frontend)
-    "data_quality": {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)},
-}
+# Le cache en mémoire (ancien _CV_CACHE) a été supprimé.
+# Veuillez utiliser la librairie partagée `shared.cache` pour un cache Redis distribué
+# (respect de la Golden Rule §6 — namespaces DB isolés, un DB par service).

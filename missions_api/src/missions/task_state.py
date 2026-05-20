@@ -1,14 +1,13 @@
 import json
-import os
 from datetime import datetime
 
-import redis.asyncio as redis
+from shared.redis_state import get_state_redis_client
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/8")
 
 class MissionTaskState:
-    def __init__(self, redis_url: str = REDIS_URL):
-        self._redis = redis.from_url(redis_url, decode_responses=True)
+    def __init__(self):
+        # Client Redis partagé via shared.redis_state (URL résolue via SERVICE_NAME → DB mapping).
+        self._redis = get_state_redis_client()
         self._key_prefix = "mission_job"
 
     async def initialize_task(self, task_id: str, title: str):
@@ -22,7 +21,7 @@ class MissionTaskState:
             "start_time": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
-        await self._redis.setex(f"{self._key_prefix}:{task_id}", 3600 * 24, json.dumps(task_data)) # Retenu 24h max
+        await self._redis.setex(f"{self._key_prefix}:{task_id}", 3600 * 24, json.dumps(task_data))  # Retenu 24h max
         return task_data
 
     async def get_task(self, task_id: str):
@@ -46,5 +45,6 @@ class MissionTaskState:
             data["error"] = error_msg
             data["updated_at"] = datetime.now().isoformat()
             await self._redis.setex(f"{self._key_prefix}:{task_id}", 3600 * 24, json.dumps(data))
+
 
 task_manager = MissionTaskState()

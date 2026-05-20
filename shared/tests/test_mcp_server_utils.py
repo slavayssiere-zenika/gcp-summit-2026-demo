@@ -9,11 +9,66 @@ Couvre :
 - TraceContextTextMapPropagator enregistré globalement
 """
 import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
+
+
+# ─── _resolve_mcp_service_name ──────────────────────────────────────────────
+
+class TestResolveMcpServiceName:
+    """Vérifie la logique de priorité pour la résolution du nom de service MCP."""
+
+    def test_explicit_param_takes_priority(self, monkeypatch):
+        """Paramètre explicite écrase les variables d'env."""
+        from mcp_server_utils import _resolve_mcp_service_name
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "otel-svc")
+        monkeypatch.setenv("SERVICE_NAME", "users_api")
+        assert _resolve_mcp_service_name("explicit-name") == "explicit-name"
+
+    def test_otel_service_name_env_takes_second_priority(self, monkeypatch):
+        """OTEL_SERVICE_NAME en second si pas de paramètre explicite."""
+        from mcp_server_utils import _resolve_mcp_service_name
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "from-otel-env")
+        monkeypatch.setenv("SERVICE_NAME", "users_api")
+        assert _resolve_mcp_service_name(None) == "from-otel-env"
+
+    def test_service_name_env_underscore_to_hyphen(self, monkeypatch):
+        """SERVICE_NAME avec underscores → tirets OTel."""
+        from mcp_server_utils import _resolve_mcp_service_name
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "analytics_mcp")
+        assert _resolve_mcp_service_name(None) == "analytics-mcp"
+
+    def test_agent_service_name_conversion(self, monkeypatch):
+        """agent_router_api → agent-router-api."""
+        from mcp_server_utils import _resolve_mcp_service_name
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "agent_router_api")
+        assert _resolve_mcp_service_name(None) == "agent-router-api"
+
+    def test_no_env_vars_returns_unknown_mcp(self, monkeypatch):
+        """Sans variables d'env → 'unknown-mcp'."""
+        from mcp_server_utils import _resolve_mcp_service_name
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+        assert _resolve_mcp_service_name(None) == "unknown-mcp"
+
+    def test_setup_without_arg_uses_service_name_env(self, monkeypatch):
+        """setup_mcp_tracer_provider() sans arg utilise SERVICE_NAME → tirets."""
+        from mcp_server_utils import setup_mcp_tracer_provider
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "cv_api")
+        captured = {}
+
+        with patch("mcp_server_utils.trace.set_tracer_provider",
+                   side_effect=lambda p: captured.update({"provider": p})), \
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+            setup_mcp_tracer_provider()  # sans argument
+
+        assert captured["provider"].resource.attributes["service.name"] == "cv-api"
 
 
 # ─── get_mcp_trace_headers ────────────────────────────────────────────────────
@@ -88,8 +143,8 @@ class TestSetupMcpTracerProviderServiceName:
         captured, capture_provider = self._setup_capture()
 
         with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=capture_provider), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("missions-api-mcp")
 
         provider = captured["provider"]
@@ -103,8 +158,8 @@ class TestSetupMcpTracerProviderServiceName:
             providers.append(p)
 
         with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=capture_provider), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("service-a")
             setup_mcp_tracer_provider("service-b")
 
@@ -114,8 +169,8 @@ class TestSetupMcpTracerProviderServiceName:
     def test_get_tracer_called_with_service_name(self):
         from mcp_server_utils import setup_mcp_tracer_provider
         with patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()) as mock_get:
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()) as mock_get:
             setup_mcp_tracer_provider("cv-api-mcp")
         mock_get.assert_called_once_with("cv-api-mcp")
 
@@ -135,8 +190,8 @@ class TestSetupMcpTracerProviderAppVersion:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("APP_VERSION", None)
             with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=capture_provider), \
-                 patch("mcp_server_utils.BatchSpanProcessor"), \
-                 patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                    patch("mcp_server_utils.BatchSpanProcessor"), \
+                    patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
                 setup_mcp_tracer_provider("test-svc")
 
         assert captured["provider"].resource.attributes.get("service.version") == "dev"
@@ -150,8 +205,8 @@ class TestSetupMcpTracerProviderAppVersion:
 
         with patch.dict(os.environ, {"APP_VERSION": "v1.2.3"}):
             with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=capture_provider), \
-                 patch("mcp_server_utils.BatchSpanProcessor"), \
-                 patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                    patch("mcp_server_utils.BatchSpanProcessor"), \
+                    patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
                 setup_mcp_tracer_provider("test-svc")
 
         assert captured["provider"].resource.attributes.get("service.version") == "v1.2.3"
@@ -172,8 +227,8 @@ class TestSetupMcpTracerProviderSamplingRate:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TRACE_SAMPLING_RATE", None)
             with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=capture_provider), \
-                 patch("mcp_server_utils.BatchSpanProcessor"), \
-                 patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                    patch("mcp_server_utils.BatchSpanProcessor"), \
+                    patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
                 setup_mcp_tracer_provider("test-svc")
 
         # Le sampler est ParentBased(root=TraceIdRatioBased(1.0))
@@ -186,15 +241,13 @@ class TestSetupMcpTracerProviderSamplingRate:
         from mcp_server_utils import setup_mcp_tracer_provider
         captured_sampler = {}
 
-        real_tracer_id_based = None
-
         def capture_provider(p):
             captured_sampler["sampler"] = p.sampler
 
         with patch.dict(os.environ, {"TRACE_SAMPLING_RATE": "0.0"}):
             with patch("mcp_server_utils.trace.set_tracer_provider", side_effect=capture_provider), \
-                 patch("mcp_server_utils.BatchSpanProcessor"), \
-                 patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                    patch("mcp_server_utils.BatchSpanProcessor"), \
+                    patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
                 setup_mcp_tracer_provider("test-svc")
 
         assert captured_sampler["sampler"] is not None
@@ -209,10 +262,10 @@ class TestSetupMcpTracerProviderExporter:
         from mcp_server_utils import setup_mcp_tracer_provider
         grpc_path = "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
         with patch.dict(os.environ, {"TRACE_EXPORTER": "grpc"}), \
-             patch(grpc_path) as mock_exp, \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch(grpc_path) as mock_exp, \
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.set_tracer_provider"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("svc")
         # En mode grpc : OTLPSpanExporter instancié avec insecure=True
         mock_exp.assert_called_once_with(insecure=True)
@@ -221,10 +274,10 @@ class TestSetupMcpTracerProviderExporter:
         from mcp_server_utils import setup_mcp_tracer_provider
         http_path = "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter"
         with patch.dict(os.environ, {"TRACE_EXPORTER": "http"}), \
-             patch(http_path) as mock_exp, \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch(http_path) as mock_exp, \
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.set_tracer_provider"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("svc")
         # En mode http : OTLPSpanExporter() sans insecure
         mock_exp.assert_called_once_with()
@@ -233,9 +286,9 @@ class TestSetupMcpTracerProviderExporter:
         """TraceContextTextMapPropagator doit être enregistré globalement."""
         from mcp_server_utils import setup_mcp_tracer_provider
         with patch("mcp_server_utils.propagate.set_global_textmap") as mock_set, \
-             patch("mcp_server_utils.BatchSpanProcessor"), \
-             patch("mcp_server_utils.trace.set_tracer_provider"), \
-             patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
+                patch("mcp_server_utils.BatchSpanProcessor"), \
+                patch("mcp_server_utils.trace.set_tracer_provider"), \
+                patch("mcp_server_utils.trace.get_tracer", return_value=MagicMock()):
             setup_mcp_tracer_provider("svc")
         mock_set.assert_called_once()
         # L'argument doit être un TraceContextTextMapPropagator

@@ -113,28 +113,4 @@ def test_isolation_between_tests_no_state_leak(client):
     )
 
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Tests de cache Redis réel
-# ─────────────────────────────────────────────────────────────────────────────
-
-def test_cache_is_populated_on_get(client):
-    """Valide que le cache Redis réel est peuplé lors d'un GET."""
-    import cache as _cache_module
-
-    resp = client.post("/categories", json={"name": "CacheCat", "description": "x"})
-    assert resp.status_code == 201
-    cat_id = resp.json()["id"]
-
-    # Avant GET : cache vide
-    cache_key = f"category:{cat_id}"
-    assert _cache_module.get_cache(cache_key) is None
-
-    # GET → déclenche le peuplement du cache
-    client.get(f"/categories/{cat_id}")
-
-    # Après GET : le cache peut être peuplé (selon l'implémentation du service)
-    # Ce test valide que get_client() retourne bien un vrai client Redis connecté
-    redis_client = _cache_module.get_client()
-    assert redis_client is not None
-    assert redis_client.ping(), "Le client Redis doit être connecté au conteneur Testcontainers"
+# Les tests d'intégration du cache Redis sont gérés au niveau du projet parent (shared.cache).

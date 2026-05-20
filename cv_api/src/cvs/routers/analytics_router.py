@@ -227,8 +227,10 @@ async def get_reanalyze_status(
     if tag:
         params["tag"] = tag
     try:
+        headers_internal: dict = {}
+        inject(headers_internal)
         async with httpx.AsyncClient(timeout=10.0) as http_client:
-            res = await http_client.get(drive_url, params=params)
+            res = await http_client.get(drive_url, params=params, headers=headers_internal)
             if res.status_code == 200:
                 return res.json()
             return {"status": "unavailable", "message": f"drive_api /status HTTP {res.status_code}"}
@@ -375,6 +377,7 @@ async def reanalyze_cvs(
 
     # ── 3. Effacer les compétences existantes (table rase avant réingestion) ──
     clear_errors = []
+    inject(effective_headers)  # propagation OTel sur effective_headers
     async with httpx.AsyncClient(timeout=30.0) as http_client:
         for uid in user_ids_to_clear:
             try:

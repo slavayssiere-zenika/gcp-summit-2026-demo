@@ -247,27 +247,5 @@ def test_bulk_tree_drops_real_postgres(client, postgres_container):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Redis réel
+# Redis réel (déplacé vers les tests globaux de shared.cache)
 # ─────────────────────────────────────────────────────────────────────────────
-
-def test_redis_client_connected_to_real_container():
-    """Valide que get_client() retourne un client Redis connecté."""
-    import cache as _cache_module
-    c = _cache_module.get_client()
-    assert c is not None
-    assert c.ping(), "Le client Redis doit être connecté au conteneur Testcontainers"
-
-
-def test_cache_delete_pattern_real_redis():
-    """Valide delete_cache_pattern() sur vrai Redis (scan_iter avec match=pattern)."""
-    import cache as _cache_module
-    _cache_module.set_cache("competency:1", {"name": "Python"})
-    _cache_module.set_cache("competency:2", {"name": "Go"})
-    _cache_module.set_cache("other:key", {"value": "unrelated"})
-
-    _cache_module.delete_cache_pattern("competency:*")
-
-    assert _cache_module.get_cache("competency:1") is None
-    assert _cache_module.get_cache("competency:2") is None
-    # La clé hors pattern doit rester
-    assert _cache_module.get_cache("other:key") is not None

@@ -82,6 +82,10 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/4"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "cv_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }

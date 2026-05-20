@@ -51,6 +51,12 @@ async def lifespan(app: FastAPI):
     yield
     await database.close_db_connector()
 
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(lifespan=lifespan, title="CV Analysis API", root_path=os.getenv("ROOT_PATH", ""))
 instrument_app(app, service_name="cv-api")
 RedisInstrumentor().instrument()

@@ -1,7 +1,6 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 os.environ["SECRET_KEY"] = "testsecret"
@@ -10,11 +9,13 @@ os.environ["GCP_PROJECT_ID"] = "test-project"
 
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     with patch("mcp_server.client", MagicMock()):
-        from auth import verify_jwt
+        from shared.auth.jwt import verify_jwt
         from mcp_app import app
+
 
 def override_verify_jwt():
     return {"sub": "test", "email": "test@zenika.com", "role": "admin"}
+
 
 app.dependency_overrides[verify_jwt] = override_verify_jwt
 client = TestClient(app)

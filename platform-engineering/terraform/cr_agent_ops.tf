@@ -70,6 +70,10 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = var.gemini_ops_model
       }
       env {
+        name  = "GEMINI_OPS_MODEL"
+        value = var.gemini_ops_model
+      }
+      env {
         name  = "ROOT_PATH"
         value = "/agent-ops-api"
       }
@@ -117,6 +121,27 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         name  = "MISSIONS_API_URL"
         value = "http://api.internal.zenika/api/missions/"
       }
+      # ── MCP Sidecars via LB interne ──────────────────────────────────────────
+      env {
+        name  = "USERS_MCP_URL"
+        value = "http://api.internal.zenika/api/users/"
+      }
+      env {
+        name  = "ITEMS_MCP_URL"
+        value = "http://api.internal.zenika/api/items/"
+      }
+      env {
+        name  = "COMPETENCIES_MCP_URL"
+        value = "http://api.internal.zenika/api/competencies/"
+      }
+      env {
+        name  = "CV_MCP_URL"
+        value = "http://api.internal.zenika/api/cv/"
+      }
+      env {
+        name  = "MISSIONS_MCP_URL"
+        value = "http://api.internal.zenika/api/missions/"
+      }
       env {
         name  = "USE_GCP_LOGGING"
         value = "true"
@@ -142,12 +167,20 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/11"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "agent_ops_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }
       env {
         name  = "TRACE_SAMPLING_RATE"
         value = var.trace_sampling_rate
+      }
+      env {
+        name  = "ENABLE_OUTPUT_SCHEMA"
+        value = var.enable_output_schema
       }
       env {
         name  = "APP_VERSION"

@@ -51,6 +51,12 @@ async def lifespan(app: FastAPI):
     yield
     _logger.info("[Router] 🛑 Arrêt agent_router_api.")
 
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(
     title="ADK Router Agent (A2A)",
     version="1.0.0",

@@ -82,6 +82,10 @@ resource "google_cloud_run_v2_service" "missions_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/8"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "missions_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }
@@ -143,6 +147,18 @@ resource "google_cloud_run_v2_service" "missions_api" {
       env {
         name  = "CV_API_URL"
         value = "http://api.internal.zenika/api/cv/"
+      }
+      # P1 perf : DB pool augmente + index GIN proposed_team (changeset 7).
+      # Valide en stress test 500u : zero QueuePool exhaustion avec ces valeurs.
+      # Règle prd : max_instances(4) x DB_POOL_SIZE(30) = 120 connexions actives
+      # + overflow(60) = 360 max → marge AlloyDB 2vCPU (400 connexions).
+      env {
+        name  = "DB_POOL_SIZE"
+        value = "30"
+      }
+      env {
+        name  = "DB_MAX_OVERFLOW"
+        value = "60"
       }
     }
 

@@ -7,9 +7,7 @@ Sections :
   D. map_user_to_response — allowed_category_ids malformed
 """
 import os
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./users_test_edge.db")
@@ -54,7 +52,7 @@ class TestAuthEdgeCases:
         client = TestClient(app, raise_server_exceptions=False)
         token = create_access_token({"sub": "user@zenika.com"})
 
-        with patch("src.auth._is_user_blacklisted", side_effect=Exception("Redis down")):
+        with patch("src.auth._is_user_blacklisted", new=AsyncMock(side_effect=Exception("Redis down"))):
             # _is_user_blacklisted est wrappé dans try/except → fail-open → 200
             # Mais l'exception est dans la logique interne de verify_jwt
             resp = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
@@ -70,7 +68,7 @@ class TestAuthEdgeCases:
         client = TestClient(app, raise_server_exceptions=False)
         token = create_access_token({"sub": "banned@zenika.com"})
 
-        with patch("src.auth._is_user_blacklisted", return_value=True):
+        with patch("src.auth._is_user_blacklisted", new=AsyncMock(return_value=True)):
             resp = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 401
         assert "suspendu" in resp.json().get("detail", "").lower()
@@ -91,63 +89,7 @@ class TestAuthEdgeCases:
         assert resp.status_code in (200, 401)  # Comportement documenté
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Section B — cache.py : Redis indisponible + JSON invalide
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestCacheEdgeCases:
-
-    def test_get_cache_redis_error_raises(self):
-        """get_cache avec Redis indisponible → lève une exception (pas de fail-open)."""
-        with patch("cache.get_client") as mock_client:
-            mock_client.return_value.get = MagicMock(side_effect=Exception("ConnectionError"))
-            with pytest.raises(Exception, match="ConnectionError"):
-                import cache
-                cache.get_cache("some_key")
-
-    def test_get_cache_invalid_json_raises(self):
-        """get_cache avec JSON invalide en cache → lève json.JSONDecodeError."""
-        with patch("cache.get_client") as mock_client:
-            mock_client.return_value.get = MagicMock(return_value="not-valid-json{{{")
-            with pytest.raises(Exception):
-                import cache
-                cache.get_cache("bad_json_key")
-
-    def test_set_cache_with_non_serializable_value(self):
-        """set_cache avec valeur non-JSON par défaut → json.dumps(default=str) tolère."""
-        import datetime
-        with patch("cache.get_client") as mock_client:
-            mock_setex = MagicMock()
-            mock_client.return_value.setex = mock_setex
-            import cache
-            cache.set_cache("key", {"ts": datetime.datetime.now()}, expire=60)
-            # Doit appeler setex sans erreur grâce à default=str
-            mock_setex.assert_called_once()
-
-    def test_delete_cache_pattern_empty_result(self):
-        """delete_cache_pattern sans résultat → 0 suppressions, pas d'erreur."""
-        with patch("cache.get_client") as mock_client:
-            mock_client.return_value.scan_iter = MagicMock(return_value=iter([]))
-            mock_client.return_value.delete = MagicMock()
-            import cache
-            cache.delete_cache_pattern("users:nonexistent:*")
-            mock_client.return_value.delete.assert_not_called()
-
-    def test_get_client_lazy_init(self):
-        """get_client() crée le client une seule fois (lazy init)."""
-        import cache
-        original = cache._client
-        cache._client = None
-        try:
-            with patch("cache.redis.from_url") as mock_from_url:
-                mock_from_url.return_value = MagicMock()
-                c1 = cache.get_client()
-                c2 = cache.get_client()
-                # from_url appelé une seule fois (lazy init)
-                assert mock_from_url.call_count == 1
-                assert c1 is c2
-        finally:
-            cache._client = original
+# Section B — cache.py : Supprimée car migrée vers shared.cache (testée globalement)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

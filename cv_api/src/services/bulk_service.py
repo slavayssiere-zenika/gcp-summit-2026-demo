@@ -35,7 +35,7 @@ from src.services.bulk_helpers import (  # noqa: F401 — ré-exportation pour r
 )
 from src.services.retry_service import bg_retry_apply  # noqa: F401
 from src.services.search_service import scale_bulk_dependencies
-from src.services.semaphores import _items_delete_sem  # noqa: F401 — partagé avec retry_service
+from src.services.semaphores import _items_delete_sem, acquire_shielded  # noqa: F401 — partagé avec retry_service
 from src.services.utils import (_CV_RESPONSE_SCHEMA, _build_distilled_content,
                                 _clean_llm_json, _coerce_to_str,
                                 build_taxonomy_context)
@@ -350,7 +350,7 @@ async def bg_bulk_reanalyse(service_token: str, cv_ids_filter: list[int] | None 
                                     json={"competency_ids": competency_ids},
                                     headers=req_headers, timeout=120.0,
                                 )
-                        async with _items_delete_sem:
+                        async with acquire_shielded(_items_delete_sem):
                             await _apply_with_retry(
                                 hc, "delete",
                                 f"{ITEMS_API_URL.rstrip('/')}/user/{user_id}/items",

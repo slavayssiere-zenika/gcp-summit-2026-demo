@@ -288,3 +288,112 @@ async def process_cv_core(
         "steps": [s.model_dump() for s in pipeline_steps]
     }
     return CVResponse(**response_data)
+
+
+async def process_cv_direct(
+    direct_user_id: int,
+    raw_text: str,
+    source_tag: str,
+    headers: dict,
+    token_payload: dict,
+    db: Optional[AsyncSession],
+    auth_token: str,
+    background_tasks: BackgroundTasks,
+    genai_client,
+) -> CVResponse:
+    """
+    Pipeline CV direct pour tests de performance.
+    Bypasse : téléchargement Drive (raw_text direct) + résolution identité (direct_user_id).
+    Conserve : extraction LLM (mock_gemini), embeddings, sauvegarde DB.
+    """
+    from src.services.cv_storage_service import CVStorageService
+
+    synthetic_url = f"perf-test://synthetic/{direct_user_id}"
+    pipeline_steps: List[CVImportStep] = []
+    pipeline_warnings: List[str] = []
+
+    # Étape 1 — bypass download
+    pipeline_steps.append(CVImportStep(
+        step="download", label="Texte direct (perf-test)",
+        status="success", duration_ms=0, detail=f"{len(raw_text)} chars",
+    ))
+
+    # Étape 2 — extraction LLM via mock_gemini
+    if not genai_client:
+        raise HTTPException(status_code=503,
+                            detail="GenAI client absent — GEMINI_API_BASE_URL requis.")
+    t0 = time.monotonic()
+    try:
+        structured_cv, safe_meta = await CVExtractionService.analyze_cv_with_llm(
+            raw_text=raw_text, headers=headers, genai_client=genai_client,
+        )
+        dur = int((time.monotonic() - t0) * 1000)
+        if not structured_cv.get("is_cv", False):
+            raise HTTPException(status_code=400, detail="Not a CV (mode perf-test).")
+        pipeline_steps.append(CVImportStep(
+            step="llm_parse", label="Extraction LLM (mock)", status="success", duration_ms=dur,
+        ))
+        await log_finops(
+            token_payload.get("sub", "perf-test"), "analyze_cv_direct",
+            os.getenv("GEMINI_CV_MODEL", os.getenv("GEMINI_MODEL")),
+            safe_meta, {"cv_url": synthetic_url}, auth_token=auth_token,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM extraction failed: {e}")
+
+    # Étape 3 — bypass identité
+    user_id = direct_user_id
+    importer_id = token_payload.get("user_id") or direct_user_id
+    pipeline_steps.append(CVImportStep(
+        step="user_resolve", label="Identité directe (perf-test)",
+        status="success", duration_ms=0, detail=f"User ID {user_id}",
+    ))
+    if background_tasks:
+        background_tasks.add_task(
+            CVStorageService.bg_process_competencies_and_missions,
+            user_id, structured_cv, headers, synthetic_url,
+        )
+
+    # Étape 5 — embeddings
+    distilled = _build_distilled_content(structured_cv)
+    vector_data = None
+    try:
+        emb_res = await embed_content_with_retry(
+            genai_client,
+            model=os.getenv("GEMINI_EMBEDDING_MODEL"),
+            contents=distilled,
+            config={"task_type": "RETRIEVAL_DOCUMENT"},
+        )
+        vector_data = emb_res.embeddings[0].values
+        pipeline_steps.append(CVImportStep(
+            step="embedding", label="Embeddings (mock)", status="success",
+            duration_ms=0, detail=f"{len(vector_data)} dims",
+        ))
+    except Exception as e:
+        pipeline_warnings.append(f"Embedding échoué : {e}")
+
+    # Étape 6 — sauvegarde DB
+    try:
+        await CVStorageService.upsert_cv_profile(
+            db, user_id, synthetic_url, source_tag, structured_cv,
+            raw_text, vector_data, importer_id, None,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB save failed: {e}")
+
+    CV_PROCESSING_TOTAL.labels(status="success").inc()
+    return CVResponse(
+        status="success",
+        message="Import direct perf-test terminé",
+        user_id=user_id,
+        first_name=structured_cv.get("first_name", ""),
+        last_name=structured_cv.get("last_name", ""),
+        email=structured_cv.get("email", ""),
+        is_anonymous=structured_cv.get("is_anonymous", False),
+        competencies_assigned=0,
+        structured_cv=structured_cv,
+        warnings=pipeline_warnings,
+        steps=[s.model_dump() for s in pipeline_steps],
+    )

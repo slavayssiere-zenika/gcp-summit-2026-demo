@@ -8,6 +8,7 @@ from .models import (ALLOWED_TRANSITIONS, STATUS_UPDATE_ROLES, Mission,
                      MissionStatus, MissionStatusHistory)
 from .schemas import (MissionAnalyzeResponse, MissionStatusUpdate,
                       StatusHistoryEntry)
+from .user_router import invalidate_user_active_cache
 
 router = APIRouter(prefix="", tags=["Missions"], dependencies=[Depends(verify_jwt)])
 
@@ -99,6 +100,15 @@ async def update_mission_status(
     await db.commit()
     await db.refresh(mission)
 
+    # Invalider le cache actif de tous les membres de la mission modifiée
+    for member in (mission.proposed_team or []):
+        try:
+            uid = int(member.get("user_id", -1))
+            if uid > 0:
+                await invalidate_user_active_cache(uid)
+        except (ValueError, TypeError):
+            pass
+
     return {
         "id": mission.id,
         "status": mission.status,
@@ -153,8 +163,21 @@ async def delete_all_missions(db: AsyncSession = Depends(database.get_db), token
         raise HTTPException(status_code=403, detail="Accès refusé : rôle admin requis.")
 
     await db.execute(delete(MissionStatusHistory))
+    result_missions = await db.execute(select(Mission))
+    all_missions = result_missions.scalars().all()
     await db.execute(delete(Mission))
     await db.commit()
+    # Invalider le cache de tous les membres affectés
+    seen_uids: set[int] = set()
+    for m in all_missions:
+        for member in (m.proposed_team or []):
+            try:
+                uid = int(member.get("user_id", -1))
+                if uid > 0 and uid not in seen_uids:
+                    seen_uids.add(uid)
+                    await invalidate_user_active_cache(uid)
+            except (ValueError, TypeError):
+                pass
     return {"status": "cleared"}
 
 
@@ -171,6 +194,15 @@ async def delete_mission(mission_id: int, db: AsyncSession = Depends(database.ge
         raise HTTPException(status_code=404, detail="Mission introuvable")
 
     await db.execute(delete(MissionStatusHistory).where(MissionStatusHistory.mission_id == mission_id))
+    proposed_team = mission.proposed_team or []
     await db.execute(delete(Mission).where(Mission.id == mission_id))
     await db.commit()
+    # Invalider le cache des membres de la mission supprimée
+    for member in proposed_team:
+        try:
+            uid = int(member.get("user_id", -1))
+            if uid > 0:
+                await invalidate_user_active_cache(uid)
+        except (ValueError, TypeError):
+            pass
     return {"status": "deleted", "id": mission_id}

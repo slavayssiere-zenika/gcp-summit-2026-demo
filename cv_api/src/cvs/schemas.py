@@ -1,6 +1,6 @@
 from typing import List, Optional, Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 T = TypeVar("T")
 
@@ -13,11 +13,19 @@ class PaginationResponse(BaseModel, Generic[T]):
 
 
 class CVImportRequest(BaseModel):
-    url: str  # A Google Docs export URL or public CV link
+    url: Optional[str] = None  # Google Docs export URL — optionnel si raw_text fourni
     google_access_token: Optional[str] = None
     source_tag: Optional[str] = None
-    # Nomenclature Zenika : nom du dossier parent direct ("Prénom Nom"), transmis par drive_api
     folder_name: Optional[str] = None
+    # Champs perf-test : bypass Drive + identity resolution
+    raw_text: Optional[str] = None      # Texte CV direct (bypasse le téléchargement Drive)
+    direct_user_id: Optional[int] = None  # User_id existant (bypasse la résolution d'identité)
+
+    @model_validator(mode='after')
+    def check_url_or_raw_text(self):
+        if not self.url and not self.raw_text:
+            raise ValueError('url or raw_text must be provided')
+        return self
 
 # Output expected from LLM
 

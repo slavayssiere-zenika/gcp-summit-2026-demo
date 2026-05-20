@@ -7,10 +7,10 @@ from opentelemetry.propagate import inject
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth.jwt import verify_jwt
+from shared.cache import delete_cache
 
 # Import du service coeur pour l'analyse des missions
 from .analysis_service import process_mission_core
-from .cache import force_invalidate_prompt
 from .models import Mission, MissionStatus, MissionStatusHistory
 from .schemas import TaskResponse
 from .task_state import task_manager
@@ -20,13 +20,13 @@ router = APIRouter(prefix="", tags=["Missions_Analysis"], dependencies=[Depends(
 
 @router.post("/missions", response_model=TaskResponse, status_code=202)
 async def create_and_analyze_mission(
-    req: Request, 
-    bg_tasks: BackgroundTasks, 
+    req: Request,
+    bg_tasks: BackgroundTasks,
     title: str = Form(...),
     description: str = Form(None),
     url: str = Form(None),
     file: UploadFile = File(None),
-    db: AsyncSession = Depends(database.get_db), 
+    db: AsyncSession = Depends(database.get_db),
     token_payload: dict = Depends(verify_jwt)
 ):
     # C4 : Seuls commercial, admin et service_account peuvent créer une mission
@@ -40,10 +40,10 @@ async def create_and_analyze_mission(
     auth_header = req.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
     inject(headers)
-    
+
     auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
     user_email = token_payload.get("sub", "unknown@zenika.com")
-    
+
     file_bytes = None
     file_mime = None
     if file:
@@ -88,7 +88,7 @@ async def create_and_analyze_mission(
                 detail="Fichier invalide : la signature binaire ne correspond pas à un PDF ou DOCX reconnu."
             )
         file_mime = file.content_type or "application/pdf"
-    
+
     # Create mission in DB immediately with ANALYSIS_IN_PROGRESS status
     new_mission_pre = Mission(
         title=title,
@@ -122,12 +122,13 @@ async def create_and_analyze_mission(
 
     return {"task_id": task_id, "status": "processing"}
 
+
 @router.post("/missions/{mission_id}/reanalyze", response_model=TaskResponse, status_code=202)
 async def reanalyze_mission(
     mission_id: int,
-    req: Request, 
-    bg_tasks: BackgroundTasks, 
-    db: AsyncSession = Depends(database.get_db), 
+    req: Request,
+    bg_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(database.get_db),
     token_payload: dict = Depends(verify_jwt)
 ):
     # C4b : Seuls commercial, admin et service_account peuvent ré-analyser une mission
@@ -141,10 +142,10 @@ async def reanalyze_mission(
     auth_header = req.headers.get("Authorization")
     headers = {"Authorization": auth_header} if auth_header else {}
     inject(headers)
-    
+
     auth_token = auth_header.replace("Bearer ", "") if auth_header and "Bearer " in auth_header else auth_header
     user_email = token_payload.get("sub", "unknown@zenika.com")
-    
+
     result = await db.execute(select(Mission).where(Mission.id == mission_id))
     m = result.scalars().first()
     if not m:
@@ -153,11 +154,13 @@ async def reanalyze_mission(
     # Generate ID and initialize tracking
     task_id = str(uuid.uuid4())
     await task_manager.initialize_task(task_id, f"Re-analyse: {m.title}")
-    
+
     # Launch background processing
-    bg_tasks.add_task(process_mission_core, m.title, m.description, None, None, None, headers, user_email, auth_token, task_id, mission_id)
-    
+    bg_tasks.add_task(process_mission_core, m.title, m.description, None, None,
+                      None, headers, user_email, auth_token, task_id, mission_id)
+
     return {"task_id": task_id, "status": "processing"}
+
 
 @router.get("/missions/task/{task_id}")
 async def get_mission_task_status(task_id: str, _: dict = Depends(verify_jwt)):
@@ -166,10 +169,12 @@ async def get_mission_task_status(task_id: str, _: dict = Depends(verify_jwt)):
         raise HTTPException(status_code=404, detail="Task introuvable.")
     return stat
 
+
 @router.post("/cache/invalidate")
 async def force_invalidate(prompt_key: str, token_payload: dict = Depends(verify_jwt)):
-    await force_invalidate_prompt(prompt_key)
+    await delete_cache(f"mission_prompt_v1:{prompt_key}")
     return {"message": "Cache invalidé"}
+
 
 @router.get("/missions/{mission_id}/embedding")
 async def get_mission_embedding(

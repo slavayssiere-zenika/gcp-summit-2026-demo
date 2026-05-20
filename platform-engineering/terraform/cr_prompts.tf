@@ -96,6 +96,10 @@ resource "google_cloud_run_v2_service" "prompts_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/5"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "prompts_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }

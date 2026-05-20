@@ -107,51 +107,7 @@ class TestCrudRouterEdgeCases:
             mod._BULK_SEM = original
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Section B — cache.py : erreurs Redis + edge cases
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestItemsCacheEdgeCases:
-
-    def test_get_cache_redis_connection_error_raises(self):
-        """get_cache avec Redis down → lève une exception (pas de fail-open)."""
-        import cache
-        with patch("cache.get_client") as mock_cl:
-            mock_cl.return_value.get = MagicMock(side_effect=ConnectionError("Redis down"))
-            with pytest.raises(ConnectionError):
-                cache.get_cache("test_key")
-
-    def test_set_cache_json_with_default_str(self):
-        """set_cache avec datetime → json.dumps(default=str) tolère sans erreur."""
-        import datetime
-        import cache
-        with patch("cache.get_client") as mock_cl:
-            mock_setex = MagicMock()
-            mock_setex.user = None
-            mock_cl.return_value.setex = mock_setex
-            cache.set_cache("k", {"ts": datetime.datetime(2026, 1, 1)}, expire=30)
-            mock_setex.assert_called_once()
-            # Vérifier que la valeur sérialisée contient bien la date en string
-            serialized = mock_setex.call_args[0][2]
-            assert "2026" in serialized
-
-    def test_delete_cache_pattern_counts_deletions(self):
-        """delete_cache_pattern avec 3 clés → span attribute deleted_count=3."""
-        import cache
-        with patch("cache.get_client") as mock_cl:
-            mock_cl.return_value.scan_iter = MagicMock(return_value=iter(["k1", "k2", "k3"]))
-            mock_delete = MagicMock()
-            mock_delete.user = None
-            mock_cl.return_value.delete = mock_delete
-            cache.delete_cache_pattern("items:*")
-            assert mock_delete.call_count == 3
-
-    def test_reset_client_sets_none(self):
-        """reset_client() remet _client à None pour forcer la réinitialisation."""
-        import cache
-        cache._client = MagicMock()
-        cache.reset_client()
-        assert cache._client is None
+# Section B — cache.py : Supprimée car migrée vers shared.cache (testée globalement)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from cache import delete_cache_pattern
+from shared.cache import clear_namespace
 from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from opentelemetry.propagate import inject
@@ -288,7 +288,7 @@ async def set_user_competency_score(
     ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     await db.commit()
     await db.refresh(ev)
-    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    await clear_namespace(f"competencies:evaluations:user:{user_id}:")
     return CompetencyEvaluationResponse(**_serialize_evaluation(ev, comp.name))
 
 
@@ -341,7 +341,7 @@ async def trigger_ai_score_single(
         await db.refresh(ev)
         result = _serialize_evaluation(ev, comp_name)
 
-    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    await clear_namespace(f"competencies:evaluations:user:{user_id}:")
     return CompetencyEvaluationResponse(**result)
 
 

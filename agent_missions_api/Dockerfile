@@ -35,6 +35,10 @@ ENV ROOT_PATH=/agent-missions-api
 ENV APP_VERSION=dev
 ENV SERVICE_NAME=agent-missions
 ENV GEMINI_MODEL=gemini-3.1-flash-lite-preview
+ENV GEMINI_MISSIONS_MODEL=gemini-3.1-flash-lite-preview
+ENV ENABLE_OUTPUT_SCHEMA=false
+ENV HITL_PENDING_TTL_SECONDS=1800
+ENV HITL_RESPONSE_TTL_SECONDS=86400
 
 # ── MCP Sidecars — internal, no JWT (Level 1) ─────────────────────────────────
 ENV MISSIONS_MCP_URL=http://missions_mcp:8000

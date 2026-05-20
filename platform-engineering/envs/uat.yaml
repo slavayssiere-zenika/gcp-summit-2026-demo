@@ -11,7 +11,7 @@ bq_location:               "europe-west1"  # Obligatoire depuis P2-2 (plus de d�
 
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}
-image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services"
+image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev"
 
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en UAT pour épingler une release précise.

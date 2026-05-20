@@ -1,28 +1,30 @@
 import os
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from shared.database import get_db
 from fastapi.testclient import TestClient
 from main import app
 from shared.auth.jwt import security, verify_jwt
 from src.cvs.schemas import CVImportStep, CVResponse
-from src.cvs.models import CVProfile
 
 os.environ['SECRET_KEY'] = 'testsecret'
+
 
 async def override_get_db():
     db = AsyncMock()
     yield db
 
+
 def override_verify_jwt():
     return {"sub": "test", "role": "admin"}
+
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_jwt] = override_verify_jwt
 app.dependency_overrides[security] = lambda: MagicMock(credentials="testtoken")
 
 client = TestClient(app)
+
 
 def test_import_and_analyze_cv(mocker):
     # Setup Mocks
@@ -110,8 +112,6 @@ def test_import_and_analyze_cv(mocker):
         assert "step" in step, "Chaque step doit avoir un 'step' (identifiant)"
 
 
-
-
 def test_import_cv_steps_on_truncated_document(mocker):
     """Un CV de plus de 100000 chars doit déclencher un warning 'download' + statut warning."""
     mock_db = AsyncMock()
@@ -173,8 +173,6 @@ def test_import_cv_steps_on_truncated_document(mocker):
         f"Le warning de troncature doit être dans CVResponse.warnings. Warnings actuels: {data['warnings']}"
 
 
-
-
 def test_import_cv_steps_on_zero_competencies(mocker):
     """Quand le LLM extrait 0 compétences, llm_parse doit être en warning."""
     mock_db = AsyncMock()
@@ -234,8 +232,6 @@ def test_import_cv_steps_on_zero_competencies(mocker):
         "Le warning '0 compétences' doit être dans CVResponse.warnings"
 
 
-
-
 def test_import_cv_steps_structure(mocker):
     """Vérifie que CVImportStep respecte le schéma Pydantic attendu."""
     step = CVImportStep(
@@ -250,8 +246,6 @@ def test_import_cv_steps_structure(mocker):
     assert step.status == "success"
     assert step.duration_ms == 423
     assert step.detail == "5000 caractères"
-
-
 
 
 def test_cv_response_has_steps_and_warnings():
@@ -274,8 +268,6 @@ def test_cv_response_has_steps_and_warnings():
     assert "Doc tronqué" in r.warnings
 
 
-
-
 def test_fetch_cv_content_internal_url(mocker):
     response = client.post("/import", json={"url": "http://localhost/cv.pdf"},
                            headers={"Authorization": "Bearer token"})
@@ -283,14 +275,10 @@ def test_fetch_cv_content_internal_url(mocker):
     assert "Internal URLs are not allowed" in response.text
 
 
-
-
 def test_fetch_cv_content_invalid_scheme(mocker):
     response = client.post("/import", json={"url": "ftp://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 400
     assert "Invalid URL scheme" in response.text
-
-
 
 
 def test_import_cv_no_auth(mocker):
@@ -304,8 +292,6 @@ def test_import_cv_no_auth(mocker):
     app.dependency_overrides[security] = original_sec
 
 
-
-
 def test_import_cv_genai_not_configured(mocker):
     # force client to None
     mocker.patch("src.services.config.client", None)
@@ -314,8 +300,6 @@ def test_import_cv_genai_not_configured(mocker):
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
     assert "GenAI Client not configured" in response.text
-
-
 
 
 def test_import_cv_prompt_fail(mocker):
@@ -337,18 +321,13 @@ def test_import_cv_prompt_fail(mocker):
     mocker.patch("src.services.cv_extraction_service.CVExtractionService.fetch_cv_content", return_value="text")
     # Pas de fichier fallback disponible
     mocker.patch("os.path.exists", return_value=False)
-    # Vider le cache prompt pour forcer le fetching HTTP
-    from src.services.config import _CV_CACHE
-    _CV_CACHE["prompt"]["value"] = None
-    _CV_CACHE["prompt"]["expires"] = __import__('datetime').datetime.min.replace(
-        tzinfo=__import__('datetime').timezone.utc)
+    mocker.patch("shared.cache.get_cache", return_value=None)
+    mocker.patch("shared.cache.set_cache", return_value=True)
 
     response = client.post("/import", json={"url": "http://test.com/cv.pdf"}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 500
     assert "Cannot fetch generic prompt" in response.text, \
         f"Le message d'erreur attendu est absent. Reçu: {response.text[:300]}"
-
-
 
 
 def test_import_cv_not_a_cv_boolean_check(mocker):
@@ -389,8 +368,6 @@ def test_import_cv_not_a_cv_boolean_check(mocker):
 
     assert response.status_code == 400
     assert "Not a CV" in response.json()["detail"]
-
-
 
 
 def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email="jean.dupont@zenika.com"):
@@ -451,8 +428,6 @@ def _make_full_import_mocks(mocker, first_name="Jean", last_name="Dupont", email
     return ci
 
 
-
-
 def test_import_cv_with_folder_name_zenika_nomenclature(mocker):
     """
     UC1 — Import avec folder_name 'Prénom Nom' : le user_resolve doit réussir
@@ -481,8 +456,6 @@ def test_import_cv_with_folder_name_zenika_nomenclature(mocker):
     # Aucun step ne doit être en erreur
     error_steps = [s for s in data["steps"] if s["status"] == "error"]
     assert not error_steps, f"Des steps sont en erreur: {error_steps}"
-
-
 
 
 def test_import_cv_folder_name_priority_over_llm(mocker):
@@ -543,8 +516,6 @@ def test_import_cv_folder_name_priority_over_llm(mocker):
     assert folder_step is not None, "Un warning de divergence doit être présent dans l'étape 'user_resolve'"
 
 
-
-
 def test_import_cv_folder_name_single_word_ignored(mocker):
     """
     UC3 — Un folder_name mono-composant (trigramme, alias) est ignoré pour l'identité.
@@ -572,8 +543,6 @@ def test_import_cv_folder_name_single_word_ignored(mocker):
     assert folder_step is None, "Pas d'étape folder_identity attendue pour un nom mono-composant"
 
 
-
-
 def test_import_cv_without_folder_name_llm_fallback(mocker):
     """
     UC4 — Import sans folder_name (frontend manuel, MCP sans hint) :
@@ -595,8 +564,6 @@ def test_import_cv_without_folder_name_llm_fallback(mocker):
     assert folder_step is None, "Pas d'étape folder_identity attendue sans folder_name"
 
 
-
-
 def test_import_cv_schema_folder_name_optional():
     """
     UC5 — folder_name est optionnel dans CVImportRequest (rétrocompatibilité).
@@ -608,7 +575,3 @@ def test_import_cv_schema_folder_name_optional():
 
     req2 = CVImportRequest(url="https://docs.google.com/document/d/abc/edit", folder_name="Alice Martin")
     assert req2.folder_name == "Alice Martin"
-
-
-
-

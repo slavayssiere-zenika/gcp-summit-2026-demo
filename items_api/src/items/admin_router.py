@@ -2,7 +2,7 @@ import base64
 import json
 import logging
 
-from cache import delete_cache_pattern
+from shared.cache import clear_namespace
 from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Path
 from pydantic import BaseModel, Field
@@ -60,9 +60,9 @@ async def delete_user_items(
 
     await db.commit()
 
-    delete_cache_pattern(f"items:user:{user_id}:*")
-    delete_cache_pattern("items:list:*")
-    delete_cache_pattern("items:search:*")
+    await clear_namespace(f"items:user:{user_id}:")
+    await clear_namespace("items:list:")
+    await clear_namespace("items:search:")
     return None
 
 # Borne maximale pour les colonnes INT4
@@ -104,8 +104,8 @@ async def handle_user_pubsub_events(request: Request, db: AsyncSession = Depends
                 await db.execute(stmt)
                 await db.commit()
                 # Invalidate cache
-                delete_cache_pattern(f"items:user:{source_id}:*")
-                delete_cache_pattern(f"items:user:{target_id}:*")
+                await clear_namespace(f"items:user:{source_id}:")
+                await clear_namespace(f"items:user:{target_id}:")
 
         return {"status": "processed"}
     except Exception as e:
@@ -120,6 +120,6 @@ async def merge_users(req: UserMergeRequest, request: Request, db: AsyncSession 
     stmt = update(Item).where(Item.user_id == req.source_id).values(user_id=req.target_id)
     await db.execute(stmt)
     await db.commit()
-    delete_cache_pattern(f"items:user:{req.source_id}:*")
-    delete_cache_pattern(f"items:user:{req.target_id}:*")
+    await clear_namespace(f"items:user:{req.source_id}:")
+    await clear_namespace(f"items:user:{req.target_id}:")
     return {"message": f"Successfully migrated items from user {req.source_id} to {req.target_id}"}

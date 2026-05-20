@@ -52,11 +52,13 @@ def test_get_item(client):
     client.post("/categories", json={"name": "GetCat", "description": "Test"})
 
     with patch("httpx.AsyncClient.get", return_value=mock_user) as mock_get:
-        create_resp = client.post("/", json={"name": "GetItem", "user_id": 1, "category_ids": [1]}, headers={"Authorization": "Bearer token"})
+        create_resp = client.post("/", json={"name": "GetItem", "user_id": 1,
+                                  "category_ids": [1]}, headers={"Authorization": "Bearer token"})
         item_id = create_resp.json()["id"]
 
-        from cache import delete_cache_pattern
-        delete_cache_pattern("items:user_info:1")
+        from shared.cache import clear_namespace
+        import asyncio
+        asyncio.run(clear_namespace("items:user_info:1"))
 
         response = client.get(f"/{item_id}", headers={"Authorization": "Bearer verify_jwt_token"})
         assert response.status_code == 200
@@ -78,9 +80,11 @@ def test_list_items(client):
     client.post("/categories", json={"name": "ListCat", "description": "Test"})
 
     with patch("httpx.AsyncClient.get", return_value=mock_user) as mock_get:
-        client.post("/", json={"name": "ListItem", "user_id": 1, "category_ids": [1]}, headers={"Authorization": "Bearer list_token"})
-        from cache import delete_cache_pattern
-        delete_cache_pattern("items:user_info:1")
+        client.post("/", json={"name": "ListItem", "user_id": 1,
+                    "category_ids": [1]}, headers={"Authorization": "Bearer list_token"})
+        from shared.cache import clear_namespace
+        import asyncio
+        asyncio.run(clear_namespace("items:user_info:1"))
         response = client.get("/?include_user=true", headers={"Authorization": "Bearer list_token"})
         assert response.status_code == 200
         data = response.json()
@@ -104,9 +108,11 @@ def test_list_user_items(client):
     client.post("/categories", json={"name": "UserCat", "description": "Test"})
 
     with patch("httpx.AsyncClient.get", return_value=mock_user) as mock_get:
-        client.post("/", json={"name": "UserItem", "user_id": 1, "category_ids": [1]}, headers={"Authorization": "Bearer list_user_token"})
-        from cache import delete_cache_pattern
-        delete_cache_pattern("items:user_info:1")
+        client.post("/", json={"name": "UserItem", "user_id": 1,
+                    "category_ids": [1]}, headers={"Authorization": "Bearer list_user_token"})
+        from shared.cache import clear_namespace
+        import asyncio
+        asyncio.run(clear_namespace("items:user_info:1"))
         response = client.get("/user/1?include_user=true", headers={"Authorization": "Bearer list_user_token"})
         assert response.status_code == 200
         data = response.json()
@@ -189,7 +195,8 @@ def test_list_user_items_filtering(client):
 
     with patch("httpx.AsyncClient.get", return_value=mock_user):
         # Create item in category 1
-        client.post("/", json={"name": "Visible", "user_id": 1, "category_ids": [1]}, headers={"Authorization": "Bearer token"})
+        client.post("/", json={"name": "Visible", "user_id": 1,
+                    "category_ids": [1]}, headers={"Authorization": "Bearer token"})
 
         # Manually create item in category 2 via DB to test filtering
         # (API would block creation, but we test the filtering logic in GET)

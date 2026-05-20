@@ -24,7 +24,7 @@ os.environ.setdefault("USERS_API_URL", "http://users_api:8000")
 _fake_redis = fakeredis.FakeRedis(decode_responses=True)
 
 with patch("redis.from_url", return_value=_fake_redis), \
-     patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+        patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
     from shared.database import get_db
     from main import app
     from shared.auth.jwt import verify_jwt
@@ -88,7 +88,7 @@ def _patch_cache(mocker):
     mocker.patch("src.competencies.competencies_router.get_cache", return_value=None)
     mocker.patch("src.competencies.competencies_router.set_cache", return_value=None)
     mocker.patch("src.competencies.competencies_router.delete_cache", return_value=None)
-    mocker.patch("src.competencies.competencies_router.delete_cache_pattern", return_value=None)
+    mocker.patch("shared.cache.clear_namespace", new_callable=mocker.AsyncMock)
 
 
 def get_client():

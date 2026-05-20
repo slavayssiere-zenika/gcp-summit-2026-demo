@@ -3,8 +3,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, update, select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.cache import delete_cache, get_cache
 from src.models import DriveFolder, DriveSyncState, DriveSyncStatus
-from src.redis_client import get_redis
 from src.routers.files_router import _compute_kpi_metric, _reset_errors_to_pending
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,8 @@ class IngestionKpiService:
             select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.PROCESSING)
         )).scalar() or 0
         ignored = (await self.db.execute(
-            select(func.count()).select_from(DriveSyncState).where(DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV)
+            select(func.count()).select_from(DriveSyncState).where(
+                DriveSyncState.status == DriveSyncStatus.IGNORED_NOT_CV)
         )).scalar() or 0
 
         kpi_import_rate = _compute_kpi_metric(imported, total, 90.0, 75.0)
@@ -83,8 +84,7 @@ class IngestionKpiService:
             "unit": "s"
         }
 
-        redis = get_redis()
-        last_delta_run_str = redis.get("drive:sync:last_delta_run")
+        last_delta_run_str = await get_cache("drive:sync:last_delta_run")
 
         last_imported_at = (await self.db.execute(
             select(func.max(DriveSyncState.imported_at)).where(DriveSyncState.imported_at.isnot(None))
@@ -99,7 +99,8 @@ class IngestionKpiService:
         if last_delta_run_str:
             try:
                 # Redis returns bytes or string depending on connection setup
-                val = last_delta_run_str.decode("utf-8") if isinstance(last_delta_run_str, bytes) else last_delta_run_str
+                val = last_delta_run_str.decode("utf-8") if isinstance(last_delta_run_str,
+                                                                       bytes) else last_delta_run_str
                 reference_time = datetime.fromisoformat(val)
             except ValueError:
                 reference_time = last_imported_at or last_processed
@@ -141,8 +142,7 @@ class IngestionKpiService:
             else "\u26a0\ufe0f Lancez un Quality Gate Batch pour corriger les données incomplètes."
         )
 
-        redis = get_redis()
-        is_rebuilding_tree = bool(redis.get("drive:sync:rebuild_running"))
+        is_rebuilding_tree = bool(await get_cache("drive:sync:rebuild_running"))
 
         return {
             "total_files": total, "imported": imported, "errors": errors,
@@ -308,11 +308,11 @@ class IngestionKpiService:
 
         if all_fixed_ids:
             try:
-                redis = get_redis()
-                pipe = redis.pipeline()
-                for fid in all_fixed_ids:
-                    pipe.delete(f"drive:file:known:{fid}")
-                pipe.execute()
+                import asyncio as _asyncio
+                await _asyncio.gather(*[
+                    delete_cache(f"drive:file:known:{fid}")
+                    for fid in all_fixed_ids
+                ])
             except Exception as e_redis:
                 logger.warning(f"[QualityGate] Redis cache invalidation partielle : {e_redis}")
 

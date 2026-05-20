@@ -70,6 +70,18 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         value = var.gemini_router_model
       }
       env {
+        name  = "GEMINI_ROUTER_MODEL"
+        value = var.gemini_router_model
+      }
+      env {
+        name  = "GEMINI_HR_MODEL"
+        value = var.gemini_hr_model
+      }
+      env {
+        name  = "GEMINI_OPS_MODEL"
+        value = var.gemini_ops_model
+      }
+      env {
         name  = "ROOT_PATH"
         value = "/api"
       }
@@ -151,6 +163,10 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/2"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "agent_router_api"
+      }
+      env {
         name  = "TRACE_EXPORTER"
         value = "gcp"
       }
@@ -170,6 +186,33 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
             version = "latest"
           }
         }
+      }
+
+      # ── ADK v2 Feature Flags ────────────────────────────────────────────────
+      # ENABLE_WORKFLOW_AGENT : active le SequentialAgent (classifier → router)
+      # + ParallelAgent (fan-out HR+Ops) — Phase 4 ADK v2.
+      # Désactivé par défaut — activer manuellement après validation en staging.
+      env {
+        name  = "ENABLE_WORKFLOW_AGENT"
+        value = "false"
+      }
+      # A2A Circuit Breaker — isole les sous-agents défaillants
+      env {
+        name  = "A2A_CB_FAILURE_THRESHOLD"
+        value = "5"
+      }
+      env {
+        name  = "A2A_CB_OPEN_DURATION_S"
+        value = "30"
+      }
+      # Cache TTLs
+      env {
+        name  = "AGENT_CARD_CACHE_TTL_S"
+        value = "300"
+      }
+      env {
+        name  = "PROMPT_CACHE_TTL_S"
+        value = "3600"
       }
     }
   }

@@ -65,4 +65,29 @@ export const agentApi = {
       headers: authHeaders(),
     })
   },
+
+  /**
+   * Phase 3 HITL — Envoie la décision humaine (approved/rejected) pour un pending staffing.
+   * Routé via /api/hitl/respond → agent_missions_api (via Nginx + LB).
+   */
+  async hitlRespond(
+    hitlId: string,
+    decision: 'approved' | 'rejected',
+    comment = '',
+  ): Promise<{ success: boolean; message: string }> {
+    const response = await axios.post(
+      '/api/hitl/respond',
+      { hitl_id: hitlId, decision, comment },
+      { headers: authHeaders() },
+    )
+    return response.data
+  },
+
+  /**
+   * Phase 3 HITL — Liste les demandes d'approbation en attente pour l'utilisateur courant.
+   */
+  async hitlPending(): Promise<{ pending: any[] }> {
+    const response = await axios.get('/api/hitl/pending', { headers: authHeaders() })
+    return response.data
+  },
 }

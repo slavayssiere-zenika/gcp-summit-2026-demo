@@ -122,9 +122,9 @@ async def find_similar_consultants(
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
 
-    results = []
-    async with httpx.AsyncClient(timeout=8.0) as http_client:
-        for profile, distance in rows:
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    async with httpx.AsyncClient(timeout=8.0, limits=limits) as http_client:
+        async def fetch_similar_user(profile, distance):
             entry = {
                 "user_id": profile.user_id,
                 "similarity_score": round(max(0.0, 1.0 - distance), 4),
@@ -146,7 +146,9 @@ async def find_similar_consultants(
                                      extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(f"[SIMILAR] Enrichissement user {profile.user_id} échoué: {e}")
-            results.append(entry)
+            return entry
+
+        results = await asyncio.gather(*(fetch_similar_user(p, d) for p, d in rows))
 
     return results
 
@@ -228,12 +230,9 @@ async def search_candidates_multi_criteria(
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
 
-    results, seen = [], set()
-    async with httpx.AsyncClient(timeout=8.0) as http_client:
-        for profile, dist in rows:
-            if profile.user_id in seen:
-                continue
-            seen.add(profile.user_id)
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    async with httpx.AsyncClient(timeout=8.0, limits=limits) as http_client:
+        async def fetch_mc_user(profile, dist):
             score = round(max(0.0, 1.0 - float(dist)), 4)
             entry = {
                 "user_id": profile.user_id,
@@ -256,9 +255,18 @@ async def search_candidates_multi_criteria(
                                      extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(f"[MULTI-SEARCH] Enrichissement user {profile.user_id} échoué: {e}")
-            results.append(entry)
-            if len(results) >= req_body.limit:
-                break
+            return entry
+
+        seen = set()
+        unique_profiles = []
+        for profile, dist in rows:
+            if profile.user_id not in seen:
+                seen.add(profile.user_id)
+                unique_profiles.append((profile, dist))
+                if len(unique_profiles) >= req_body.limit:
+                    break
+
+        results = await asyncio.gather(*(fetch_mc_user(p, d) for p, d in unique_profiles))
 
     if not results:
         raise HTTPException(status_code=404, detail="Aucun candidat correspondant à ces critères combinés.")
@@ -394,7 +402,8 @@ async def match_mission_to_candidates(
 
     # 1. Récupérer l'embedding de la mission depuis missions_api
     try:
-        async with httpx.AsyncClient(timeout=10.0) as http_client:
+        limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+        async with httpx.AsyncClient(timeout=10.0, limits=limits) as http_client:
             mission_res = await http_client.get(
                 f"{MISSIONS_API_URL.rstrip('/')}/missions/{mission_id}",
                 headers=headers_downstream
@@ -409,7 +418,8 @@ async def match_mission_to_candidates(
 
     # Récupérer l'embedding directement en base (missions_api ne l'expose pas via l'API REST)
     # On requête cv_api's DB pour la mission via missions_api internal
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    async with httpx.AsyncClient(timeout=10.0, limits=limits) as http_client:
         emb_res = await http_client.get(
             f"{MISSIONS_API_URL.rstrip('/')}/missions/{mission_id}/embedding",
             headers=headers_downstream
@@ -446,9 +456,9 @@ async def match_mission_to_candidates(
 
     rows = (await db.execute(stmt)).all()
 
-    results = []
-    async with httpx.AsyncClient(timeout=8.0) as http_client:
-        for profile, distance in rows:
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    async with httpx.AsyncClient(timeout=8.0, limits=limits) as http_client:
+        async def fetch_mm_user(profile, distance):
             entry = {
                 "user_id": profile.user_id,
                 "similarity_score": round(max(0.0, 1.0 - distance), 4),
@@ -470,7 +480,9 @@ async def match_mission_to_candidates(
                                      extra={"error": str(ve)})
             except Exception as e:
                 logger.warning(f"[MISSION-MATCH] Enrichissement user {profile.user_id} échoué: {e}")
-            results.append(entry)
+            return entry
+
+        results = await asyncio.gather(*(fetch_mm_user(p, d) for p, d in rows))
 
     if not results:
         raise HTTPException(status_code=404, detail=f"Aucun candidat trouvé pour la mission {mission_id}.")

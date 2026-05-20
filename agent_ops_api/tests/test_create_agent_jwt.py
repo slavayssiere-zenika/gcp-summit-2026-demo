@@ -29,6 +29,13 @@ def _reset_tools_cache():
     ag._OPS_TOOLS_CACHE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _mock_prompt_cache(mocker):
+    """Désactive le cache Redis pour que chaque test appelle prompts_api."""
+    mocker.patch("shared.cache.get_cache", new=AsyncMock(return_value=None))
+    mocker.patch("shared.cache.set_cache", new=AsyncMock(return_value=None))
+
+
 def _make_http_response(status: int, body: dict) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status
@@ -58,7 +65,7 @@ async def test_create_agent_propagates_jwt_to_prompts_api(mocker):
 
     mocker.patch("agent.get_cached_tools", new=AsyncMock(return_value=[MagicMock()]))
     # Patcher via le module agent (là où httpx est importé)
-    mocker.patch("agent.httpx.AsyncClient", return_value=ctx)
+    mocker.patch("agent_commons.prompt_loader.httpx.AsyncClient", return_value=ctx)
 
     result_agent = await ag.create_agent()
 
@@ -83,12 +90,12 @@ async def test_create_agent_fallback_on_prompts_api_401(mocker):
     ctx, _ = _make_mock_async_client(mock_get)
 
     mocker.patch("agent.get_cached_tools", new=AsyncMock(return_value=[MagicMock()]))
-    mocker.patch("agent.httpx.AsyncClient", return_value=ctx)
+    mocker.patch("agent_commons.prompt_loader.httpx.AsyncClient", return_value=ctx)
 
     result_agent = await ag.create_agent()
 
     # Fallback : instruction contient [Fallback Instruction]
-    assert "[Fallback Instruction]" in result_agent.instruction
+    assert "Tu es l'Agent Ops" in result_agent.instruction
 
 
 @pytest.mark.asyncio
@@ -101,7 +108,7 @@ async def test_create_agent_no_jwt_no_auth_header(mocker):
     ctx, _ = _make_mock_async_client(mock_get)
 
     mocker.patch("agent.get_cached_tools", new=AsyncMock(return_value=[MagicMock()]))
-    mocker.patch("agent.httpx.AsyncClient", return_value=ctx)
+    mocker.patch("agent_commons.prompt_loader.httpx.AsyncClient", return_value=ctx)
 
     result_agent = await ag.create_agent()
 
@@ -112,7 +119,7 @@ async def test_create_agent_no_jwt_no_auth_header(mocker):
 
     # Doit quand même retourner un agent avec fallback
     assert result_agent is not None
-    assert "[Fallback Instruction]" in result_agent.instruction
+    assert "Tu es l'Agent Ops" in result_agent.instruction
 
 
 @pytest.mark.asyncio
@@ -125,7 +132,7 @@ async def test_create_agent_fallback_on_network_error(mocker):
     ctx, _ = _make_mock_async_client(mock_get)
 
     mocker.patch("agent.get_cached_tools", new=AsyncMock(return_value=[MagicMock()]))
-    mocker.patch("agent.httpx.AsyncClient", return_value=ctx)
+    mocker.patch("agent_commons.prompt_loader.httpx.AsyncClient", return_value=ctx)
 
     # Ne doit pas lever d'exception
     result_agent = await ag.create_agent()

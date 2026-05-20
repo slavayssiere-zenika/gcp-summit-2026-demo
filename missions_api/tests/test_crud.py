@@ -73,7 +73,8 @@ def test_list_missions(mocker):
     mock_db = AsyncMock()
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    mock_mission = MagicMock(id=1, title="Test Mission", description="Description", extracted_competencies=["Java"], proposed_team=[], fallback_full_scan=False, status="STAFFED", prefiltered_candidates=[])
+    mock_mission = MagicMock(id=1, title="Test Mission", description="Description", extracted_competencies=[
+                             "Java"], proposed_team=[], fallback_full_scan=False, status="STAFFED", prefiltered_candidates=[])
 
     # Premier execute : SELECT count(*) — retourne scalar_one() = 1
     mock_count_result = MagicMock()
@@ -103,19 +104,21 @@ def test_get_active_missions_for_user_staffed(mocker):
         id=5,
         title="Moteur de Rapprochement Factures (PR-2026-ZEN-FIN-04)",
         proposed_team=[
-            {"user_id": 42, "full_name": "Ahmed KANOUN", "role": "Tech Lead", "estimated_days": 60, "justification": "Expert Java"},
-            {"user_id": 7, "full_name": "Alice MARTIN", "role": "Consultant", "estimated_days": 30, "justification": "Backend Java"}
+            {"user_id": 43, "full_name": "Ahmed KANOUN", "role": "Tech Lead",
+                "estimated_days": 60, "justification": "Expert Java"},
+            {"user_id": 7, "full_name": "Alice MARTIN", "role": "Consultant",
+                "estimated_days": 30, "justification": "Backend Java"}
         ]
     )
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [mock_mission]
     mock_db.execute.return_value = mock_result
 
-    response = client.get("/missions/user/42/active", headers={"Authorization": "Bearer fake_token"})
+    response = client.get("/missions/user/43/active", headers={"Authorization": "Bearer fake_token"})
 
     assert response.status_code == 200
     data = response.json()
-    assert data["user_id"] == 42
+    assert data["user_id"] == 43
     assert data["total"] == 1
     assert len(data["active_missions"]) == 1
     assert data["active_missions"][0]["mission_id"] == 5
@@ -132,7 +135,8 @@ def test_get_active_missions_for_user_not_staffed(mocker):
         id=5,
         title="Mission sans le user 99",
         proposed_team=[
-            {"user_id": 42, "full_name": "Ahmed KANOUN", "role": "Tech Lead", "estimated_days": 60, "justification": "Expert Java"}
+            {"user_id": 42, "full_name": "Ahmed KANOUN", "role": "Tech Lead",
+                "estimated_days": 60, "justification": "Expert Java"}
         ]
     )
     mock_result = MagicMock()
@@ -157,7 +161,8 @@ def test_get_active_missions_ignores_sentinel_user_id_zero(mocker):
         id=3,
         title="Mission sans profils",
         proposed_team=[
-            {"user_id": 0, "full_name": "Aucun profil disponible", "role": "Non staffé", "estimated_days": 0, "justification": "Aucun consultant qualifié"},
+            {"user_id": 0, "full_name": "Aucun profil disponible", "role": "Non staffé",
+                "estimated_days": 0, "justification": "Aucun consultant qualifié"},
             {"user_id": "invalid", "full_name": "Invalid", "role": "Test", "estimated_days": 0, "justification": "test"},
             {"user_id": None, "full_name": "Invalid", "role": "Test", "estimated_days": 0, "justification": "test"}
         ]
@@ -325,7 +330,8 @@ def test_get_mission_status_history(mocker):
     mock_res_m.scalars.return_value.first.return_value = mock_mission
 
     from datetime import datetime
-    mock_hist = MagicMock(id=1, mission_id=1, old_status="STAFFED", new_status="WON", reason="ok", changed_by="admin", changed_at=datetime.utcnow())
+    mock_hist = MagicMock(id=1, mission_id=1, old_status="STAFFED", new_status="WON",
+                          reason="ok", changed_by="admin", changed_at=datetime.utcnow())
     mock_res_h = MagicMock()
     mock_res_h.scalars.return_value.all.return_value = [mock_hist]
 
@@ -338,7 +344,8 @@ def test_get_mission_status_history(mocker):
 def test_get_mission(mocker):
     mock_db = AsyncMock()
     app.dependency_overrides[get_db] = lambda: mock_db
-    mock_mission = MagicMock(id=1, title="M1", description="desc", status="WON", extracted_competencies=[], prefiltered_candidates=[], proposed_team=[])
+    mock_mission = MagicMock(id=1, title="M1", description="desc", status="WON",
+                             extracted_competencies=[], prefiltered_candidates=[], proposed_team=[])
     mock_res_m = MagicMock()
     mock_res_m.scalars.return_value.first.return_value = mock_mission
     mock_db.execute.return_value = mock_res_m
@@ -350,6 +357,11 @@ def test_get_mission(mocker):
 
 def test_delete_all_missions(mocker):
     mock_db = AsyncMock()
+
+    mock_res = MagicMock()
+    mock_res.scalars.return_value.all.return_value = []
+    mock_db.execute.return_value = mock_res
+
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[verify_jwt] = lambda: {"role": "admin"}
     response = client.delete("/missions", headers={"Authorization": "Bearer token"})

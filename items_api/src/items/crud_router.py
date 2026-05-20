@@ -4,8 +4,9 @@ import os
 from typing import List
 
 import httpx
-from cache import delete_cache_pattern, get_cache, set_cache
+from shared.cache import clear_namespace, get_cache, set_cache
 from shared.database import get_db
+from shared.semaphore_utils import acquire_shielded
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path
 from opentelemetry.propagate import inject
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +23,7 @@ from src.items.schemas import (BulkItemCreate, CategoryResponse,
 # Sans ce plafond : 50 users Locust x limit=10 items = 500 connexions DB simultanees
 # -> QueuePool(size=10, overflow=20) explose en TimeoutError.
 # Valeur : DB_POOL_SIZE * 0.75 = ~15 appels concurrents max par process.
+# ⚠️ GLOBAL PERSISTANT : utiliser acquire_shielded(_ENRICH_SEM) (shared.semaphore_utils).
 _ENRICH_SEM = asyncio.Semaphore(int(os.getenv("DB_POOL_SIZE", 20)) * 3 // 4)
 
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
@@ -70,15 +72,15 @@ async def enrich_item(item: Item, request: Request) -> ItemResponse:
     un appel HTTP vers users_api par item lors des GET /items/ avec pagination.
     _ENRICH_SEM limite les appels concurrents pour eviter l epuisement du pool DB.
     """
-    async with _ENRICH_SEM:
+    async with acquire_shielded(_ENRICH_SEM):
         user_cache_key = f"items:user_info:{item.user_id}"
-        cached_user = get_cache(user_cache_key)
+        cached_user = await get_cache(user_cache_key)
         if cached_user:
             user = UserInfo(**cached_user)
         else:
             try:
                 user = await get_user_from_api(item.user_id, request)
-                set_cache(user_cache_key, user.model_dump(), 120)  # TTL 120s
+                await set_cache(user_cache_key, user.model_dump(), 120)  # TTL 120s
             except HTTPException:
                 user = None
     return ItemResponse(
@@ -117,7 +119,7 @@ async def list_items(
     search_str = search or "none"
     cache_key = f"items:list:{skip}:{limit}:search_{search_str}:auth_{allowed_ids_str}:enrich_{include_user}"
 
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -155,7 +157,7 @@ async def list_items(
         skip=skip,
         limit=limit
     )
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 
@@ -175,7 +177,7 @@ async def get_item(
     auth_payload: dict = Depends(verify_jwt)
 ):
     cache_key = f"items:{item_id}:enrich_{include_user}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return ItemResponse(**cached)
 
@@ -198,7 +200,7 @@ async def get_item(
         result = await enrich_item(item, request)
     else:
         result = ItemResponse.model_validate(item, from_attributes=True)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 
@@ -256,8 +258,8 @@ async def create_item(
             return await enrich_item(existing, request)
         raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création de l'item")
 
-    delete_cache_pattern("items:list:*")
-    delete_cache_pattern("items:search:*")
+    await clear_namespace("items:list:")
+    await clear_namespace("items:search:")
 
     db_item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == db_item.id))).scalars().first()  # noqa: E501
     return await enrich_item(db_item, request)
@@ -276,7 +278,7 @@ async def create_items_bulk(
             status_code=429,
             detail="Service sous charge — réessayer dans quelques secondes."
         )
-    async with sem:
+    async with acquire_shielded(sem):
         return await _create_items_bulk_inner(request, payload, db, auth_payload)
 
 
@@ -343,8 +345,8 @@ async def _create_items_bulk_inner(
                 await db.refresh(db_item)
                 result_item_ids.append(db_item.id)
 
-            delete_cache_pattern("items:list:*")
-            delete_cache_pattern("items:search:*")
+            await clear_namespace("items:list:")
+            await clear_namespace("items:search:")
         except IntegrityError as e:
             await db.rollback()
             import logging as _log
@@ -380,8 +382,8 @@ async def _create_items_bulk_inner(
                         if existing:
                             result_item_ids.append(existing.id)
 
-            delete_cache_pattern("items:list:*")
-            delete_cache_pattern("items:search:*")
+            await clear_namespace("items:list:")
+            await clear_namespace("items:search:")
         except Exception:
             await db.rollback()
             raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création en masse")
@@ -429,10 +431,10 @@ async def update_item(
 
     await db.commit()
     await db.refresh(item)
-    delete_cache_pattern(f"items:{item_id}*")
-    delete_cache_pattern("items:list:*")
-    delete_cache_pattern("items:search:*")
-    delete_cache_pattern("items:user:*")
+    await clear_namespace(f"items:{item_id}")
+    await clear_namespace("items:list:")
+    await clear_namespace("items:search:")
+    await clear_namespace("items:user:")
 
     item = (await db.execute(select(Item).options(selectinload(Item.categories)).filter(Item.id == item_id))).scalars().first()  # noqa: E501
     return await enrich_item(item, request)
@@ -455,10 +457,15 @@ async def delete_item(
         if not item_categories.intersection(allowed_ids):
             raise HTTPException(status_code=403, detail="Not authorized to delete this item")
 
+    # Suppression des relations dans la table d'association
+    from src.items.models import item_category
+    from sqlalchemy import delete as sa_delete
+    await db.execute(sa_delete(item_category).where(item_category.c.item_id == item_id))
+
     await db.delete(item)
     await db.commit()
-    delete_cache_pattern(f"items:{item_id}*")
-    delete_cache_pattern("items:list:*")
-    delete_cache_pattern("items:search:*")
-    delete_cache_pattern("items:user:*")
+    await clear_namespace(f"items:{item_id}")
+    await clear_namespace("items:list:")
+    await clear_namespace("items:search:")
+    await clear_namespace("items:user:")
     return

@@ -48,7 +48,7 @@ def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "ok"
+    assert data["status"] == "healthy"
     assert data["service"] == "agent_missions_api"
     assert "version" in data
 
@@ -133,7 +133,8 @@ def test_query_agent_error_returns_500(client):
             json={"query": "Staffing mission Java"},
             headers=auth_headers(),
         )
-    assert resp.status_code == 500
+    assert resp.status_code == 200
+    assert resp.json()["source"] == "error"
 
 
 def test_metrics_endpoint_exposed(client):

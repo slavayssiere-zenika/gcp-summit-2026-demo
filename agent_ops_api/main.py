@@ -58,14 +58,14 @@ provider = TracerProvider(
     resource=Resource.create({
         ResourceAttributes.SERVICE_NAME: "agent-ops-api",
         ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    })
-    ,
+    }),
     sampler=sampler
 )
 if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
     provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
 else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv("TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
+        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 app_logger = logging.getLogger(__name__)
@@ -79,6 +79,12 @@ async def lifespan(app: FastAPI):
     print("Starting ADK Web Agent with Gemini...")
     yield
 
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(
     title="ADK Ops Agent (A2A)",
     version="1.0.0",
@@ -280,7 +286,12 @@ async def a2a_query(request: A2ARequest, http_request: Request,
                 str(e) or repr(e),
                 exc_info=True,
             )
-            raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+            # ADK v2 — réponse dégradée (pas de HTTP 500 dans la chaîne A2A)
+            return A2AResponse(
+                response=f"⚠️ L'agent Ops a rencontré une erreur technique : {type(e).__name__}.",
+                source="error",
+                steps=[{"type": "error", "tool": "a2a_handler", "args": {"message": str(e)}}],
+            )
 
 
 # NOTE: Les endpoints /login, /me, /logout ont été supprimés.
@@ -323,7 +334,8 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
         base_url = os.getenv(target_url_env_mcp)
 
     if not base_url:
-        raise HTTPException(status_code=404, detail=f"MCP Server {server_name} introuvable (Tried {target_url_env} and {target_url_env_mcp if 'target_url_env_mcp' in locals() else 'N/A'})")
+        raise HTTPException(
+            status_code=404, detail=f"MCP Server {server_name} introuvable (Tried {target_url_env} and {target_url_env_mcp if 'target_url_env_mcp' in locals() else 'N/A'})")
 
     auth_header = f"{auth.scheme} {auth.credentials}"
     headers = {"Authorization": auth_header}

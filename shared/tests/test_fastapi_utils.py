@@ -9,11 +9,14 @@ Couvre :
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from shared.fastapi_utils import instrument_app, register_health_endpoint
+from shared.fastapi_utils import (
+    _resolve_otel_service_name,
+    instrument_app,
+    register_health_endpoint,
+)
 
 
 def _bare_app() -> FastAPI:
@@ -25,6 +28,60 @@ def _bare_app() -> FastAPI:
         return {"hello": "world"}
 
     return app
+
+
+# ─── _resolve_otel_service_name ──────────────────────────────────────────────
+
+class TestResolveOtelServiceName:
+
+    def test_explicit_otel_service_name_takes_priority(self, monkeypatch):
+        """OTEL_SERVICE_NAME explicite écrase SERVICE_NAME."""
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "my-explicit-svc")
+        monkeypatch.setenv("SERVICE_NAME", "users_api")
+        result = _resolve_otel_service_name()
+        assert result == "my-explicit-svc"
+
+    def test_service_name_underscores_become_hyphens(self, monkeypatch):
+        """SERVICE_NAME avec underscores → tirets OTel."""
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "agent_router_api")
+        result = _resolve_otel_service_name()
+        assert result == "agent-router-api"
+
+    def test_service_name_analytics_mcp(self, monkeypatch):
+        """analytics_mcp → analytics-mcp."""
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "analytics_mcp")
+        result = _resolve_otel_service_name()
+        assert result == "analytics-mcp"
+
+    def test_service_name_no_underscore_unchanged(self, monkeypatch):
+        """SERVICE_NAME sans underscore reste inchangé."""
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "frontend")
+        result = _resolve_otel_service_name()
+        assert result == "frontend"
+
+    def test_no_env_vars_returns_unknown_service(self, monkeypatch):
+        """Sans aucune variable → 'unknown-service'."""
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+        result = _resolve_otel_service_name()
+        assert result == "unknown-service"
+
+    def test_injects_otel_service_name_env(self, monkeypatch):
+        """La résolution injecte OTEL_SERVICE_NAME dans os.environ pour le SDK OTel."""
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+        monkeypatch.setenv("SERVICE_NAME", "cv_api")
+        _resolve_otel_service_name()
+        assert os.environ.get("OTEL_SERVICE_NAME") == "cv-api"
+
+    def test_explicit_otel_not_overwritten(self, monkeypatch):
+        """Quand OTEL_SERVICE_NAME est déjà défini, il ne doit pas être réécrit."""
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "custom-name")
+        monkeypatch.setenv("SERVICE_NAME", "cv_api")
+        _resolve_otel_service_name()
+        assert os.environ.get("OTEL_SERVICE_NAME") == "custom-name"
 
 
 # ─── instrument_app — comportement de base ────────────────────────────────────
@@ -49,7 +106,7 @@ class TestInstrumentApp:
         """ContentLengthSanitizerASGIMiddleware doit être dans la stack."""
         app = _bare_app()
         instrument_app(app, service_name="test-svc")
-        middleware_classes = [type(m).__name__ for m in app.middleware_stack.__class__.__mro__]
+        [type(m).__name__ for m in app.middleware_stack.__class__.__mro__]
         # On vérifie via le fonctionnement plutôt que l'introspection directe
         with TestClient(app) as client:
             r = client.get("/hello")

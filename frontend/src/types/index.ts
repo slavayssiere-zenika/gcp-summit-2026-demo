@@ -63,12 +63,29 @@ export interface ChatSession {
   historyLoaded?: boolean
 }
 
+export interface HitlRequest {
+  /** Identifiant unique du pending HITL stocké en Redis. */
+  hitl_id: string
+  /** Explication du besoin de validation (approval_reason). */
+  reason: string
+  /** Mission concernée. */
+  mission_title: string
+  /** Consultants proposés à valider. */
+  candidates: Array<{
+    consultant_id: number
+    full_name: string
+    confidence_score: number
+  }>
+  /** ISO 8601 — expiration de la demande (TTL Redis : 30 min par défaut). */
+  expires_at: string
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'error'
   content: string
   data?: any // Raw original tool data
   parsedData?: any[] // Formatted or treeified data
-  displayType?: string // 'text_only', 'cards', 'table', 'tree', 'cloudrun_logs'
+  displayType?: string // 'text_only' | 'cards' | 'table' | 'tree' | 'cloudrun_logs' | 'consultants' | 'candidates' | 'profile' | 'missions' | 'evaluations' | 'competencies' | 'items' | 'availabilities' | 'empty'
   typing?: boolean
 
   // Expert Mode & History fields
@@ -88,6 +105,9 @@ export interface Message {
   // Résultats sémantiques extraits des steps (search_candidates_multi_criteria)
   // Permet l'affichage dual : table évaluations + cards consultants
   consultantCards?: any[]
+
+  // Phase 3 HITL — Human-in-the-Loop : présent quand requires_human_approval=True
+  hitlRequest?: HitlRequest
 }
 
 /**

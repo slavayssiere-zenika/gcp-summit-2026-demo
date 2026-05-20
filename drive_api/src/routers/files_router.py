@@ -11,9 +11,9 @@ from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from shared.auth.jwt import verify_jwt
+from shared.cache import delete_cache
 from src.google_auth import get_google_access_token
 from src.models import DriveSyncState, DriveSyncStatus
-from src.redis_client import get_redis
 from src.schemas import (FileStateResponse, FileUpdate, PaginatedFilesResponse,
                          StatusResponse)
 
@@ -219,7 +219,7 @@ async def unblacklist_file(
     state.error_message = "Blacklist réinitialisé manuellement par un administrateur"
 
     try:
-        get_redis().delete(f"drive:file:known:{google_file_id}")
+        await delete_cache(f"drive:file:known:{google_file_id}")
         logger.info("[Cache] drive:file:known:%s invalidé (unblacklist admin).", google_file_id)
     except Exception as e_redis:
         logger.warning("[Cache] Impossible d'invalider drive:file:known:%s : %s", google_file_id, e_redis)
@@ -362,8 +362,8 @@ async def update_file(file_id: str, update_data: FileUpdate, db: AsyncSession = 
         pending_val = DriveSyncStatus.PENDING
         if update_data.status == pending_val or str(update_data.status) == pending_val.value:
             try:
-                get_redis().delete(f"drive:file:known:{file_id}")
-                logger.info(f"[Cache] drive:file:known:{file_id} invalidé (status → PENDING).")
+                await delete_cache(f"drive:file:known:{file_id}")
+                logger.info(f"[Cache] drive:file:known:{file_id} invalidé (status → PENDING).")
             except Exception as e_redis:
                 logger.warning(f"[Cache] Impossible d'invalider drive:file:known:{file_id}: {e_redis}")
     if update_data.error_message is not None:

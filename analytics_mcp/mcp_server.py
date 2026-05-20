@@ -349,5 +349,11 @@ async def main():
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, options)
 
+
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 if __name__ == "__main__":
     asyncio.run(main())

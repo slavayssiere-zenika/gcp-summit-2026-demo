@@ -82,8 +82,8 @@ def test_create_category_duplicate():
     assert "Category name already exists" in resp.json()["detail"]
 
 
-@patch("src.items.routers.categories_router.get_cache")
-@patch("src.items.routers.categories_router.set_cache")
+@patch("src.items.routers.categories_router.get_cache", new_callable=AsyncMock)
+@patch("src.items.routers.categories_router.set_cache", new_callable=AsyncMock)
 def test_get_item_stats(mock_set_cache, mock_get_cache):
     mock_get_cache.return_value = None
 

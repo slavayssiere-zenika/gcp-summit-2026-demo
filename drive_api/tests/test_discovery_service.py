@@ -26,7 +26,7 @@ def mock_drive():
 def discovery_service(mock_db, mock_drive, mock_redis):
     # Patch TreeResolver to not hit redis/db inside init if needed
     with patch('src.discovery_service.TreeResolver') as mock_tree_resolver:
-        service = DiscoveryService(mock_db, mock_drive, mock_redis)
+        service = DiscoveryService(mock_db, mock_drive)
         service.tree_resolver = mock_tree_resolver.return_value
         return service
 
@@ -36,15 +36,19 @@ def test_invalidate_roots_cache(discovery_service):
     discovery_service.tree_resolver.invalidate_roots_cache.assert_called_once()
 
 
-def test_is_file_known(discovery_service, mock_redis):
-    mock_redis.get.return_value = b"IMPORTED_CV"
-    assert discovery_service._is_file_known("test_id") is True
-    mock_redis.get.assert_called_with("drive:file:known:test_id")
+@pytest.mark.asyncio
+@patch('src.discovery_service.get_cache', new_callable=AsyncMock)
+async def test_is_file_known(mock_get_cache, discovery_service):
+    mock_get_cache.return_value = b"IMPORTED_CV"
+    assert await discovery_service._is_file_known("test_id") is True
+    mock_get_cache.assert_called_with("drive:file:known:test_id")
 
 
-def test_mark_file_known(discovery_service, mock_redis):
-    discovery_service._mark_file_known("test_id")
-    mock_redis.set.assert_called_with("drive:file:known:test_id", "IMPORTED_CV", ex=86400)
+@pytest.mark.asyncio
+@patch('src.discovery_service.set_cache', new_callable=AsyncMock)
+async def test_mark_file_known(mock_set_cache, discovery_service):
+    await discovery_service._mark_file_known("test_id")
+    mock_set_cache.assert_called_with("drive:file:known:test_id", "IMPORTED_CV", 86400)
 
 
 @pytest.mark.asyncio
@@ -105,15 +109,18 @@ async def test_discover_files_delta_only(discovery_service, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_discover_full_top_down(discovery_service, mock_redis):
+@patch('src.discovery_service.set_cache', new_callable=AsyncMock)
+async def test_discover_full_top_down(mock_set_cache, discovery_service):
     roots = [{"id": 1, "google_folder_id": "root1", "tag": "root_tag", "excluded_folders": ["excluded"]}]
 
     files_page_1 = [
-        {"id": "file1", "name": "cv.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
+        {"id": "file1", "name": "cv.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
         {"id": "folder2", "name": "subfolder", "mimeType": "application/vnd.google-apps.folder"}
     ]
     files_page_2 = [
-        {"id": "file2", "name": "cv2.doc", "mimeType": "application/vnd.google-apps.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
+        {"id": "file2", "name": "cv2.doc", "mimeType": "application/vnd.google-apps.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
         {"id": "folder3", "name": "Excluded", "mimeType": "application/vnd.google-apps.folder"}
     ]
 
@@ -126,8 +133,7 @@ async def test_discover_full_top_down(discovery_service, mock_redis):
     result = await discovery_service._discover_full_top_down(roots)
 
     assert result == 2  # 2 CVs discovered
-    assert mock_redis.pipeline.called  # Called for folder caching
-    assert mock_redis.set.called  # Called for excluded folder OOS
+    assert mock_set_cache.called  # Called for folder caching
 
 
 @pytest.mark.asyncio
@@ -135,7 +141,8 @@ async def test_discover_full_top_down_db_error(discovery_service):
     roots = [{"id": 1, "google_folder_id": "root1", "tag": "root_tag", "excluded_folders": []}]
 
     files_page_1 = [
-        {"id": "file1", "name": "cv.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
+        {"id": "file1", "name": "cv.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
     ]
 
     discovery_service.drive_api.list_files = AsyncMock(return_value={"files": files_page_1})
@@ -148,7 +155,9 @@ async def test_discover_full_top_down_db_error(discovery_service):
 
 
 @pytest.mark.asyncio
-async def test_discover_delta_bottom_up(discovery_service, mock_redis):
+@patch('src.discovery_service.set_cache', new_callable=AsyncMock)
+@patch('src.discovery_service.delete_cache', new_callable=AsyncMock)
+async def test_discover_delta_bottom_up(mock_delete_cache, mock_set_cache, discovery_service):
     roots = [{"id": 1, "google_folder_id": "root1", "tag": "root_tag", "excluded_folders": []}]
 
     mock_db_result = MagicMock()
@@ -158,8 +167,10 @@ async def test_discover_delta_bottom_up(discovery_service, mock_redis):
     discovery_service.drive_api.get_about = AsyncMock(return_value={"user": {"emailAddress": "test@test.com"}})
 
     files = [
-        {"id": "file1", "name": "cv.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1", "parents": ["root1"]},
-        {"id": "file2", "name": "cv2.doc", "mimeType": "application/vnd.google-apps.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1", "parents": ["root1"], "trashed": True}
+        {"id": "file1", "name": "cv.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1", "parents": ["root1"]},
+        {"id": "file2", "name": "cv2.doc", "mimeType": "application/vnd.google-apps.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1", "parents": ["root1"], "trashed": True}
     ]
 
     # 2 corpora: allDrives, user
@@ -202,14 +213,17 @@ async def test_discover_delta_bottom_up_auth_loss(discovery_service):
 
 
 @pytest.mark.asyncio
-async def test_discover_full_top_down_with_pagination(discovery_service, mock_redis):
+@patch('src.discovery_service.set_cache', new_callable=AsyncMock)
+async def test_discover_full_top_down_with_pagination(mock_set_cache, discovery_service):
     roots = [{"id": 1, "google_folder_id": "root1", "tag": "root_tag", "excluded_folders": []}]
 
     files_page_1 = [
-        {"id": "file1", "name": "cv1.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
+        {"id": "file1", "name": "cv1.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
     ]
     files_page_2 = [
-        {"id": "file2", "name": "cv2.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
+        {"id": "file2", "name": "cv2.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "modifiedTime": "2023-01-01T00:00:00Z", "version": "1"},
     ]
 
     # Return two pages for the same query using nextPageToken

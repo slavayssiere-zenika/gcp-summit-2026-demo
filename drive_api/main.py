@@ -5,41 +5,9 @@ import shared.database as database
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from shared.fastapi_utils import instrument_app
-from opentelemetry import trace
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.semconv.resource import ResourceAttributes
 from shared.auth.jwt import verify_jwt
 from src.router import public_router, router
-
-if os.getenv("TRACE_EXPORTER", "grpc") == "http":
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import \
-        OTLPSpanExporter
-elif os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-else:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-        OTLPSpanExporter
-
-
-sampling_rate = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
-sampler = ParentBased(root=TraceIdRatioBased(sampling_rate))
-provider = TracerProvider(
-    resource=Resource.create({
-        ResourceAttributes.SERVICE_NAME: "drive-api",
-        ResourceAttributes.SERVICE_VERSION: os.getenv("APP_VERSION", "dev"),
-    }),
-    sampler=sampler
-)
-if os.getenv("TRACE_EXPORTER", "grpc") == "gcp":
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter() if os.getenv(
-        "TRACE_EXPORTER", "grpc") == "http" else OTLPSpanExporter(insecure=True)))
-trace.set_tracer_provider(provider)
 
 
 @asynccontextmanager

@@ -4,6 +4,7 @@ import os
 import re
 
 import httpx
+from opentelemetry.propagate import inject
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +52,7 @@ async def remediate_legacy_errors(
 
         fixed_count = 0
 
+        inject(headers)  # propagation traces OTel vers competencies_api et drive_api
         async with httpx.AsyncClient(timeout=10.0) as client:
             for p_id, user_id, source_url, extracted_competencies in profiles:
                 llm_comps = extracted_competencies if extracted_competencies else []

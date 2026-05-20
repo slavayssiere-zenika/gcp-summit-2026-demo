@@ -6,7 +6,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 import httpx
-from cache import delete_cache, delete_cache_pattern
+from shared.cache import delete_cache, set_cache, clear_namespace
 from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -298,12 +298,11 @@ async def suspend_user(email: str, db: AsyncSession = Depends(get_db), token_pay
     db.add(audit_log)
     await db.commit()
 
-    from cache import get_client
     BLACKLIST_KEY = f"jwt:blacklist:user:{user.username}"
-    get_client().setex(BLACKLIST_KEY, 15 * 60, "suspended")
+    await set_cache(BLACKLIST_KEY, "suspended", ttl_seconds=15 * 60)
 
-    delete_cache(f"users:{user.id}")
-    delete_cache_pattern("users:me:*")
-    delete_cache_pattern("users:list:*")
+    await delete_cache(f"users:{user.id}")
+    await clear_namespace("users:me:")
+    await clear_namespace("users:list:")
 
     return {"status": "suspended", "email": email}

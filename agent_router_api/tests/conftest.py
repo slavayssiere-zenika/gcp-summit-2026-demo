@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import fakeredis
 import pytest
+from unittest.mock import MagicMock
 
 # Ajouter le répertoire parent (agent_router_api/) au path pour accéder aux modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,7 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Variables d'environnement minimales pour les tests
 os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_API_KEY", "test-key")
 os.environ["GEMINI_MODEL"] = os.environ.get("GEMINI_ROUTER_MODEL", "gemini-3.1-flash-lite-preview")
-os.environ["SECRET_KEY"] = "testsecret_must_be_32_characters_long_for_sha256"  # Clé fixe (≥32 chars) — aligne make_jwt() avec verify_jwt() dans main.py
+# Clé fixe (≥32 chars) — aligne make_jwt() avec verify_jwt() dans main.py
+os.environ["SECRET_KEY"] = "testsecret_must_be_32_characters_long_for_sha256"
 os.environ["REDIS_URL"] = os.environ.get("REDIS_URL", "redis://redis:6379/1")
 os.environ["SEMANTIC_CACHE_ENABLED"] = "true"
 os.environ["SEMANTIC_CACHE_THRESHOLD"] = "0.95"
@@ -36,3 +38,9 @@ _fake_redis_client = fakeredis.FakeAsyncRedis(decode_responses=False)
 def mock_redis_for_semantic_cache():
     with patch("redis.asyncio.from_url", return_value=_fake_redis_client):
         yield _fake_redis_client
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_otel_exporter():
+    with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
+        yield

@@ -10,11 +10,11 @@ import logging
 import os
 import uuid
 
-import httpx
+
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.genai import types
-from opentelemetry.propagate import inject
+
 
 from agent_commons.finops import estimate_cost_usd, log_tokens_to_bq
 from agent_commons.guardrails import (check_empty_candidate_guardrail,
@@ -29,8 +29,25 @@ from agent_commons.runner import run_agent_and_collect
 from agent_commons.session import (RedisSessionService, get_hr_candidates_pool,
                                    store_hr_candidates_pool)
 from agent_commons.ui_tools import render_ui_widgets
+from shared.schemas.staffing import StaffingResponse
+from agent_commons.prompt_loader import fetch_agent_prompt
+
 
 app_logger = logging.getLogger(__name__)
+
+
+def _output_schema_kwargs() -> dict:
+    """Retourne les kwargs output_schema/output_key si ENABLE_OUTPUT_SCHEMA=true.
+
+    Activé via variable d'environnement pour permettre un déploiement progressif.
+    ADK 1.28+ et v2 supportent output_schema sur LlmAgent.
+    Note : output_schema est incompatible avec tool_config en mode ANY sur certaines
+    versions de Gemini. Le flag permet de tester par agent avant généralisation.
+    """
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        return {"output_schema": StaffingResponse, "output_key": "hr_result"}
+    return {}
+
 
 # ---------------------------------------------------------------------------
 # Outils de recherche de candidats surveillés par le guardrail COM-006.
@@ -97,26 +114,16 @@ def get_session_service() -> RedisSessionService:
 # ---------------------------------------------------------------------------
 async def create_agent(session_id: str | None = None) -> Agent:
     global HR_TOOLS
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    instruction_text = (
+    _default = (
         "Tu es l'Agent RH (Staffing & Compétences) de la plateforme Zenika. "
         "Tu détiens l'expertise des utilisateurs, des items et missions."
     )
-    try:
-        auth_header = auth_header_var.get()
-        headers = {"Authorization": auth_header} if auth_header else {}
-        inject(headers)
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(
-                f"{prompts_api_url.rstrip('/')}/agent_hr_api.system_instruction/compiled",
-                headers=headers,
-            )
-            if res.status_code == 200:
-                instruction_text = res.json()["value"]
-            else:
-                instruction_text += "\n[Fallback Instruction]"
-    except Exception as e:
-        app_logger.warning("Error fetching system prompt for HR: %s", e)
+    instruction_text = await fetch_agent_prompt(
+        prompt_key="agent_hr_api.system_instruction",
+        default_text=_default,
+        auth_header=auth_header_var.get(),
+        agent_prefix="[HR]",
+    )
 
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_HR_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
@@ -145,6 +152,12 @@ async def create_agent(session_id: str | None = None) -> Agent:
         instruction=instruction_text,
         description="Le module spécialisé dans les ressources humaines et le staffing.",
         tools=HR_TOOLS,
+        # ADK v1.28+ / v2 — Task API : réponse structurée Pydantic garantie
+        # output_schema force le LLM à produire un JSON valide StaffingResponse.
+        # output_key permet d'accéder au résultat via session.state["hr_result"].
+        # IMPORTANT : désactivé par défaut (ENABLE_OUTPUT_SCHEMA=true pour activer)
+        # car incompatible avec tool_calls selon les versions de Gemini.
+        **_output_schema_kwargs(),
     )
     app_logger.info("[HR] Agent created successfully with %d tools.", len(HR_TOOLS))
     return agent
@@ -271,10 +284,27 @@ async def run_agent_query(
     # --- Guardrail 4 : grounding des noms (warning only) ---
     _, steps = check_name_grounding_guardrail(response_text, steps, "[HR]")
 
+    # --- ENABLE_OUTPUT_SCHEMA : display_type depuis StaffingResponse (source de vérité) ---
+    # Quand output_schema=StaffingResponse est actif, le LLM renseigne display_type dans
+    # la réponse JSON structurée. On l'utilise en priorité sur render_ui_widgets.
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        try:
+            hr_result = getattr(updated_session, "state", {}).get("hr_result")
+            if hr_result and isinstance(hr_result, dict) and hr_result.get("display_type"):
+                schema_display_type = hr_result["display_type"]
+                if schema_display_type != display_type:
+                    app_logger.info(
+                        "[HR] display_type override: render_ui_widgets=%r → output_schema=%r",
+                        display_type, schema_display_type,
+                    )
+                display_type = schema_display_type
+        except Exception as e:
+            app_logger.warning("[HR] Impossible de lire hr_result.display_type : %s", e)
+
     return {
         "response": response_text,
         "data": last_tool_data,
-        "display_type": display_type,  # Propagé depuis render_ui_widgets ADK → A2AResponse
+        "display_type": display_type,  # Pydantic (ENABLE_OUTPUT_SCHEMA) > render_ui_widgets
         "steps": steps,
         "thoughts": "\n".join(thoughts),
         "usage": {

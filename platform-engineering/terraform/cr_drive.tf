@@ -81,6 +81,10 @@ resource "google_cloud_run_v2_service" "drive_api" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/6"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "drive_api"
+      }
+      env {
         name  = "CV_API_URL"
         value = "http://api.internal.zenika/api/cv/"
         # NOTE: gardée pour compatibilité ascendante.
@@ -226,8 +230,13 @@ resource "google_cloud_run_v2_service" "drive_api" {
 # ==========================================
 # Identité et Permissions
 # ==========================================
+# IMPORTANT: Ce SA a un suffixe fixe "-v2" intentionnel (contrairement aux autres SA qui utilisent random_id.sa_suffix.hex).
+# Il est créé dans /bootstrap/platform_engineering.tf et doit survivre aux destroy/apply du Terraform principal.
+# NE PAS changer le suffixe vers random_id.sa_suffix.hex.
+# PRÉ-REQUIS : le bootstrap doit avoir été exécuté pour le workspace cible avant le premier apply ici.
 data "google_service_account" "drive_sa" {
   account_id = "sa-drive-${terraform.workspace}-v2"
+  project    = var.project_id
 }
 
 resource "google_secret_manager_secret_iam_member" "drive_jwt_access" {

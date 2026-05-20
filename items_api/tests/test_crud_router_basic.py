@@ -180,7 +180,7 @@ def test_delete_item_success():
     mock_item.categories = []
     mock_result_existing.scalars.return_value.first.return_value = mock_item
 
-    mock_db.execute.side_effect = [mock_result_existing]
+    mock_db.execute.side_effect = [mock_result_existing, MagicMock()]
     app.dependency_overrides[get_db] = lambda: mock_db
 
     resp = client.delete("/100")

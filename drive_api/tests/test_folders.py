@@ -25,9 +25,9 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
     from shared.auth.jwt import verify_jwt
 
 
-
 def override_verify_jwt_admin():
     return {"sub": "admin1", "email": "admin@zenika.com", "role": "admin"}
+
 
 async def override_get_db():
     db = AsyncMock()
@@ -38,12 +38,14 @@ async def override_get_db():
     db.execute = AsyncMock(return_value=result)
     yield db
 
+
 @pytest.fixture(autouse=True)
 def reset_overrides():
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[verify_jwt] = override_verify_jwt_admin
     yield
     app.dependency_overrides.clear()
+
 
 client = TestClient(app)
 AUTH = {"Authorization": "Bearer testtoken"}
@@ -130,8 +132,6 @@ def test_add_folder_success(mocker):
     """Nouveau dossier (aucun existant) → 200/201."""
     from datetime import datetime, timezone
 
-    from src.models import DriveFolder
-
     mock_db = _make_sync_db(first_results=[None, None])
 
     async def mock_refresh(obj):
@@ -150,7 +150,7 @@ def test_add_folder_success(mocker):
     mock_drive = MagicMock()
     mock_drive.files.return_value.get.return_value.execute.return_value = {"name": "Test Folder"}
     mocker.patch("src.services.folder_service.get_drive_service", return_value=mock_drive)
-    mocker.patch("src.services.folder_service.get_redis", return_value=MagicMock())
+    mocker.patch("src.services.folder_service.delete_cache", new_callable=AsyncMock)
 
     resp = client.post("/folders", json={
         "google_folder_id": "newid", "tag": "new-tag"
@@ -247,7 +247,7 @@ def test_delete_folder_success(mocker):
         yield mock_db
 
     app.dependency_overrides[get_db] = override_db
-    mocker.patch("src.services.folder_service.get_redis", return_value=MagicMock())
+    mocker.patch("src.services.folder_service.delete_cache", new_callable=AsyncMock)
 
     resp = client.delete("/folders/1", headers=AUTH)
     assert resp.status_code in (200, 204)
@@ -269,10 +269,8 @@ def test_delete_folder_non_admin_returns_403():
 
 def test_invalidate_cache_success(mocker):
     """POST /folders/invalidate-cache → 200 avec keys_deleted."""
-    mock_redis = MagicMock()
-    mock_redis.scan_iter.return_value = []  # pas de clés matchantes
-    mock_redis.delete.return_value = True
-    mocker.patch("src.services.folder_service.get_redis", return_value=mock_redis)
+    mocker.patch("shared.cache.clear_namespace", new_callable=AsyncMock, return_value=1)
+    mocker.patch("shared.cache.delete_cache", new_callable=AsyncMock)
 
     resp = client.post("/folders/invalidate-cache", headers=AUTH)
     assert resp.status_code == 200
@@ -282,14 +280,13 @@ def test_invalidate_cache_success(mocker):
 
 def test_invalidate_cache_deletes_rebuild_lock(mocker):
     """POST /folders/invalidate-cache → supprime drive:sync:rebuild_running."""
-    mock_redis = MagicMock()
-    mock_redis.scan_iter.return_value = []
-    mocker.patch("src.services.folder_service.get_redis", return_value=mock_redis)
+    mock_delete_cache = mocker.patch("shared.cache.delete_cache", new_callable=AsyncMock)
+    mocker.patch("shared.cache.clear_namespace", new_callable=AsyncMock)
 
     resp = client.post("/folders/invalidate-cache", headers=AUTH)
     assert resp.status_code == 200
     # Vérifie que delete a été appelé (pour le verrou rebuild)
-    mock_redis.delete.assert_called()
+    mock_delete_cache.assert_called()
 
 
 def test_invalidate_cache_non_admin_returns_403():

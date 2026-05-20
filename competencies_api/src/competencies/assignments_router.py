@@ -9,8 +9,9 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from cache import delete_cache_pattern, get_cache, set_cache
+from shared.cache import clear_namespace, get_cache, set_cache
 from shared.database import get_db
+from shared.semaphore_utils import acquire_shielded
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import delete, update
@@ -36,6 +37,7 @@ public_router = APIRouter(prefix="", tags=["assignments_public"])
 #
 # Valeur : DB_POOL_SIZE / ~2 connexions par assign/bulk = 10/2 = 5.
 # Configurable via ASSIGN_BULK_SEMAPHORE pour ajuster sans redéploiement code.
+# ⚠️ GLOBAL PERSISTANT : utiliser acquire_shielded(_ASSIGN_BULK_SEM) (shared.semaphore_utils).
 _ASSIGN_BULK_SEM: asyncio.Semaphore | None = None
 
 
@@ -70,7 +72,7 @@ async def assign_competencies_bulk(
             status_code=429,
             detail="assign/bulk: service sous charge — réessayer dans quelques secondes.",
         )
-    async with sem:
+    async with acquire_shielded(sem):
         body = await request.json()
         competency_ids = body.get("competency_ids", [])
         if not competency_ids:
@@ -101,7 +103,7 @@ async def assign_competencies_bulk(
             )
 
         await db.commit()
-        delete_cache_pattern(f"competencies:user:{user_id}:*")
+        await clear_namespace(f"competencies:user:{user_id}:")
         return {
             "assigned": len(valid_ids),
             "skipped": len(invalid_ids),
@@ -136,7 +138,7 @@ async def assign_competency_to_user(
         .on_conflict_do_nothing(index_elements=["user_id", "competency_id"])
     )
     await db.commit()
-    delete_cache_pattern(f"competencies:user:{user_id}:*")
+    await clear_namespace(f"competencies:user:{user_id}:")
     return {"user_id": user_id, "competency_id": competency_id, "status": "assigned"}
 
 
@@ -153,7 +155,7 @@ async def clear_user_evaluations(
         delete(CompetencyEvaluation).where(CompetencyEvaluation.user_id == user_id)
     )
     await db.commit()
-    delete_cache_pattern(f"competencies:evaluations:user:{user_id}:*")
+    await clear_namespace(f"competencies:evaluations:user:{user_id}:")
     return Response(status_code=204)
 
 
@@ -169,7 +171,7 @@ async def remove_competency_from_user(
         )
     )
     await db.commit()
-    delete_cache_pattern(f"competencies:user:{user_id}:*")
+    await clear_namespace(f"competencies:user:{user_id}:")
     return Response(status_code=204)
 
 
@@ -182,7 +184,7 @@ async def list_user_competencies(
 ):
     """Retourne toutes les compétences assignées à un utilisateur."""
     cache_key = f"competencies:user:{user_id}:list:skip:{skip}:limit:{limit}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -214,7 +216,7 @@ async def list_user_competencies(
     resp = PaginationResponse(
         items=[i.model_dump() for i in items], total=total, skip=skip, limit=limit
     )
-    set_cache(cache_key, resp.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, resp.model_dump(), CACHE_TTL)
     return resp
 
 
@@ -261,8 +263,8 @@ async def merge_users(
         user_competency.delete().where(user_competency.c.user_id == req.source_id)
     )
     await db.commit()
-    delete_cache_pattern(f"competencies:user:{req.source_id}:*")
-    delete_cache_pattern(f"competencies:user:{req.target_id}:*")
+    await clear_namespace(f"competencies:user:{req.source_id}:")
+    await clear_namespace(f"competencies:user:{req.target_id}:")
     return {
         "message": f"Successfully migrated competencies from user {req.source_id} to {req.target_id}"
     }
@@ -281,7 +283,7 @@ async def clear_user_competencies(
         user_competency.delete().where(user_competency.c.user_id == user_id)
     )
     await db.commit()
-    delete_cache_pattern(f"competencies:user:{user_id}:*")
+    await clear_namespace(f"competencies:user:{user_id}:")
     return Response(status_code=204)
 
 
@@ -311,9 +313,9 @@ async def handle_user_pubsub_events(
                     .values(user_id=tgt)
                 )
                 await db.commit()
-                delete_cache_pattern(f"competencies:user:{src}:*")
-                delete_cache_pattern(f"competencies:user:{tgt}:*")
-                delete_cache_pattern("competencies:evaluation:*")
+                await clear_namespace(f"competencies:user:{src}:")
+                await clear_namespace(f"competencies:user:{tgt}:")
+                await clear_namespace("competencies:evaluation:")
         return {"status": "processed"}
     except Exception as e:
         logger.error(f"Error processing Pub/Sub event: {e}")

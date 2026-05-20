@@ -1,7 +1,7 @@
 """categories_router.py — Items categories et statistiques."""
 import os
 
-from cache import get_cache, set_cache
+from shared.cache import get_cache, set_cache
 from shared.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +46,7 @@ async def create_category(category: CategoryCreate, db: AsyncSession = Depends(g
 @router.get("/stats", response_model=ItemStatsResponse)
 async def get_item_stats(db: AsyncSession = Depends(get_db)):
     cache_key = "items:stats"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return ItemStatsResponse(**cached)
 
@@ -57,5 +57,5 @@ async def get_item_stats(db: AsyncSession = Depends(get_db)):
     by_user = {user_id: count for user_id, count in by_user_raw}
 
     result = ItemStatsResponse(total=total, by_user=by_user)
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result

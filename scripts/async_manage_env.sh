@@ -3,7 +3,7 @@ set -e
 
 PROJECT_ID="slavayssiere-sandbox-462015"
 REGION="europe-west1"
-AR_NAME="z-gcp-summit-services"
+AR_NAME="z-gcp-summit-services-dev"
 JOB_NAME="platform-engineering"
 
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_NAME}/${JOB_NAME}"

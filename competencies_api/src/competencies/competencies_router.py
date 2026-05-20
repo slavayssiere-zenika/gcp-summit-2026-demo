@@ -23,7 +23,7 @@ enregistrées AVANT les routes wildcard (/{competency_id}).
 import logging
 from typing import List
 
-from cache import delete_cache, delete_cache_pattern, get_cache, set_cache
+from shared.cache import clear_namespace, delete_cache, get_cache, set_cache
 from shared.database import get_db
 from fastapi import (
     APIRouter,
@@ -69,7 +69,7 @@ async def list_competencies(
 ):
     """Retourne l'arbre complet de compétences (structure hiérarchique paginée sur les racines)."""
     cache_key = f"competencies:tree:list:{skip}:{limit}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
 
@@ -97,7 +97,7 @@ async def list_competencies(
     result = PaginationResponse(
         items=roots[skip: skip + limit], total=len(roots), skip=skip, limit=limit
     )
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 
@@ -111,7 +111,7 @@ async def search_competencies(
     from sqlalchemy import or_
 
     cache_key = f"competencies:search:{query}:{limit}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return PaginationResponse(**cached)
     results = (
@@ -136,7 +136,7 @@ async def search_competencies(
         skip=0,
         limit=limit,
     )
-    set_cache(cache_key, response.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, response.model_dump(), CACHE_TTL)
     return response
 
 
@@ -144,7 +144,7 @@ async def search_competencies(
 async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db)):
     """Retourne une compétence par son ID."""
     cache_key = f"competencies:{competency_id}"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return CompetencyResponse(**cached)
     competency = (
@@ -155,7 +155,7 @@ async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db))
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
     result = CompetencyResponse(**serialize_competency(competency))
-    set_cache(cache_key, result.model_dump(), CACHE_TTL)
+    await set_cache(cache_key, result.model_dump(), CACHE_TTL)
     return result
 
 
@@ -163,7 +163,7 @@ async def get_competency(competency_id: int, db: AsyncSession = Depends(get_db))
 async def list_competency_users(competency_id: int, db: AsyncSession = Depends(get_db)):
     """Retourne les user_ids associés à cette compétence et ses descendants (CTE récursif)."""
     cache_key = f"competencies:{competency_id}:users"
-    cached = get_cache(cache_key)
+    cached = await get_cache(cache_key)
     if cached:
         return cached
     comp_a = aliased(Competency)
@@ -183,7 +183,7 @@ async def list_competency_users(competency_id: int, db: AsyncSession = Depends(g
         )
     ).all()
     user_ids = list(set([r[0] for r in results]))
-    set_cache(cache_key, user_ids, CACHE_TTL)
+    await set_cache(cache_key, user_ids, CACHE_TTL)
     return user_ids
 
 
@@ -245,7 +245,7 @@ async def create_competency(
         raise HTTPException(
             status_code=409, detail="Competency naming conflict unresolved"
         )
-    delete_cache_pattern("competencies:tree:*")
+    await clear_namespace("competencies:tree:")
     return CompetencyResponse(**serialize_competency(db_comp))
 
 
@@ -288,8 +288,8 @@ async def update_competency(
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=409, detail="Conflit de données.")
-    delete_cache(f"competencies:{competency_id}")
-    delete_cache_pattern("competencies:tree:*")
+    await delete_cache(f"competencies:{competency_id}")
+    await clear_namespace("competencies:tree:")
     return CompetencyResponse(**serialize_competency(db_comp))
 
 
@@ -311,8 +311,8 @@ async def delete_competency(
         raise HTTPException(status_code=404, detail="Competency not found")
     await db.delete(db_comp)
     await db.commit()
-    delete_cache(f"competencies:{competency_id}")
-    delete_cache_pattern("competencies:tree:*")
+    await delete_cache(f"competencies:{competency_id}")
+    await clear_namespace("competencies:tree:")
     return Response(status_code=204)
 
 

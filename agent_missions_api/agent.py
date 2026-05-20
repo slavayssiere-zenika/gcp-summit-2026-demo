@@ -10,11 +10,11 @@ import logging
 import os
 import uuid
 
-import httpx
+
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.genai import types
-from opentelemetry.propagate import inject
+
 
 from agent_commons.finops import estimate_cost_usd, log_tokens_to_bq
 from agent_commons.guardrails import (check_hallucination_guardrail,
@@ -27,8 +27,22 @@ from agent_commons.session import (RedisSessionService,
                                    get_missions_context,
                                    store_missions_context)
 from agent_commons.ui_tools import render_ui_widgets
+from shared.schemas.staffing import MissionAnalysis
+from agent_commons.prompt_loader import fetch_agent_prompt
+
 
 app_logger = logging.getLogger(__name__)
+
+
+def _output_schema_kwargs() -> dict:
+    """Active output_schema=MissionAnalysis si ENABLE_OUTPUT_SCHEMA=true (opt-in).
+
+    Si requires_human_approval=True dans la réponse, le handler déclenchera le HITL.
+    """
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        return {"output_schema": MissionAnalysis, "output_key": "missions_result"}
+    return {}
+
 
 # ---------------------------------------------------------------------------
 # MCP Clients — l'agent Missions n'a besoin que de ces 4 MCPs :
@@ -83,26 +97,16 @@ def get_session_service() -> RedisSessionService:
 # ---------------------------------------------------------------------------
 async def create_agent(session_id: str | None = None) -> Agent:
     global MISSIONS_TOOLS
-    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
-    instruction_text = (
+    _default = (
         "Tu es l'Agent Missions (Staffing Director) de la plateforme Zenika. "
-        "Tu es spécialisé dans la gestion des missions client et le staffing des consultants."
+        "Tu es sp\u00e9cialis\u00e9 dans la gestion des missions client et le staffing des consultants."
     )
-    try:
-        auth_header = auth_header_var.get()
-        headers = {"Authorization": auth_header} if auth_header else {}
-        inject(headers)
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(
-                f"{prompts_api_url.rstrip('/')}/agent_missions_api.system_instruction/compiled",
-                headers=headers,
-            )
-            if res.status_code == 200:
-                instruction_text = res.json()["value"]
-            else:
-                instruction_text += "\n[Fallback Instruction]"
-    except Exception as e:
-        app_logger.warning("[MISSIONS] Error fetching system prompt: %s", e)
+    instruction_text = await fetch_agent_prompt(
+        prompt_key="agent_missions_api.system_instruction",
+        default_text=_default,
+        auth_header=auth_header_var.get(),
+        agent_prefix="[MISSIONS]",
+    )
 
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_MISSIONS_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
@@ -131,6 +135,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
         instruction=instruction_text,
         description="Le module spécialisé dans la gestion des missions client et le staffing de consultants.",
         tools=MISSIONS_TOOLS,
+        **_output_schema_kwargs(),
     )
     app_logger.info("[MISSIONS] Agent created successfully with %d tools.", len(MISSIONS_TOOLS))
     return agent
@@ -229,10 +234,49 @@ async def run_agent_query(
     # --- Guardrail 3 : invention d'ID ---
     steps = check_id_invention_guardrail(steps, "[MISSIONS]")
 
+    # --- Phase 3 HITL post-processing ---
+    # Si ENABLE_OUTPUT_SCHEMA=true, l'agent peut produire un MissionAnalysis structuré.
+    # On inspecte l'état de session pour détecter requires_human_approval=True.
+    hitl_request_data = None
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        try:
+            hitl_request_data = await _maybe_trigger_hitl(
+                session_service=session_service,
+                app_name="zenika_missions_assistant",
+                user_id=user_id,
+                session_id=ephemeral_session_id,
+                caller_session_id=session_id,
+                auth_token=auth_token,
+            )
+        except Exception as e:
+            app_logger.warning("[MISSIONS][HITL] Impossible de déclencher le HITL : %s", e)
+
+    # Injecter hitl_request dans data si déclenché
+    merged_data = last_tool_data
+    if hitl_request_data:
+        merged_data = {**(last_tool_data or {}), "hitl_request": hitl_request_data}
+
+    # --- ENABLE_OUTPUT_SCHEMA : display_type depuis MissionAnalysis (source de vérité) ---
+    # Quand output_schema=MissionAnalysis est actif, le LLM renseigne display_type dans
+    # la réponse JSON structurée. On l'utilise en priorité sur render_ui_widgets.
+    if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
+        try:
+            missions_result = getattr(updated_session, "state", {}).get("missions_result")
+            if missions_result and isinstance(missions_result, dict) and missions_result.get("display_type"):
+                schema_display_type = missions_result["display_type"]
+                if schema_display_type != display_type:
+                    app_logger.info(
+                        "[MISSIONS] display_type override: render_ui_widgets=%r → output_schema=%r",
+                        display_type, schema_display_type,
+                    )
+                display_type = schema_display_type
+        except Exception as e:
+            app_logger.warning("[MISSIONS] Impossible de lire missions_result.display_type : %s", e)
+
     return {
         "response": response_text,
-        "data": last_tool_data,
-        "display_type": display_type,
+        "data": merged_data,
+        "display_type": display_type,  # Pydantic (ENABLE_OUTPUT_SCHEMA) > render_ui_widgets
         "steps": steps,
         "thoughts": "\n".join(thoughts),
         "usage": {
@@ -241,3 +285,71 @@ async def run_agent_query(
             "estimated_cost_usd": estimate_cost_usd(total_input_tokens, total_output_tokens),
         },
     }
+
+
+async def _maybe_trigger_hitl(
+    session_service,
+    app_name: str,
+    user_id: str,
+    session_id: str,
+    caller_session_id: str | None,
+    auth_token: str | None,  # noqa: ARG001 — conservé pour compatibilité API future
+) -> dict | None:
+    """Inspecte la session ADK pour un MissionAnalysis avec requires_human_approval=True.
+
+    Si trouvé, crée une entrée Redis directement via hitl_create_entry() (import interne)
+    — sans aller-retour HTTP ni loopback Cloud Run.
+    Retourne le payload hitl_request à injecter dans la réponse A2A, ou None.
+    """
+    try:
+        updated_session = await session_service.get_session(
+            app_name=app_name, user_id=user_id, session_id=session_id
+        )
+        if not updated_session:
+            return None
+
+        # L'output_key par défaut est "missions_result" (voir _output_schema_kwargs)
+        missions_result = getattr(updated_session, "state", {}).get("missions_result")
+        if not missions_result or not isinstance(missions_result, dict):
+            return None
+
+        if not missions_result.get("requires_human_approval", False):
+            return None
+
+        app_logger.info(
+            "[MISSIONS][HITL] requires_human_approval=True détecté — création demande HITL directe"
+        )
+
+        # Import local pour éviter la dépendance circulaire au module level
+        # (agent.py est importé par main.py qui définit hitl_create_entry)
+        from main import hitl_create_entry  # noqa: PLC0415
+
+        result = hitl_create_entry(
+            mission_title=missions_result.get("mission_title", "Mission inconnue"),
+            reason=missions_result.get("approval_reason") or (
+                f"Urgence '{missions_result.get('urgency_level', 'unknown')}' "
+                f"— validation managériale requise."
+            ),
+            candidates=[
+                {
+                    "consultant_id": c.get("consultant_id", 0),
+                    "full_name": c.get("full_name", ""),
+                    "confidence_score": c.get("confidence_score", 0.0),
+                }
+                for c in missions_result.get("recommended_consultants", [])
+            ],
+            urgency_level=missions_result.get("urgency_level", "medium"),
+            session_id=caller_session_id or "",
+        )
+
+        return {
+            "hitl_id": result["hitl_id"],
+            "expires_at": result["expires_at"],
+            "mission_title": missions_result.get("mission_title", ""),
+            "reason": missions_result.get("approval_reason", "Validation requise."),
+            "candidates": missions_result.get("recommended_consultants", []),
+        }
+
+    except Exception as e:
+        app_logger.error("[MISSIONS][HITL] _maybe_trigger_hitl error: %s", e, exc_info=True)
+        return None

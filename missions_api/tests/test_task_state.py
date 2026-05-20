@@ -3,11 +3,12 @@ import json
 from unittest.mock import AsyncMock
 from src.missions.task_state import MissionTaskState
 
+
 @pytest.mark.asyncio
 async def test_task_state_lifecycle(mocker):
     # Mock redis module
     mock_redis = AsyncMock()
-    mocker.patch("src.missions.task_state.redis.from_url", return_value=mock_redis)
+    mocker.patch("src.missions.task_state.get_state_redis_client", return_value=mock_redis)
 
     ts = MissionTaskState()
 
@@ -44,4 +45,3 @@ async def test_task_state_lifecycle(mocker):
     saved_data = json.loads(saved_json)
     assert saved_data["status"] == "failed"
     assert saved_data["error"] == "Big Error"
-

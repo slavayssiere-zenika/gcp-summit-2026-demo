@@ -108,6 +108,21 @@ try:
 except Exception as _e:
     print(f"[Locust] WARN: seeded_ids.json non trouve ({_e}) — bootstrap API active.")
 
+# Pool de textes CV synthetiques pour POST /cv/import (mode mock_gemini)
+_MOCK_CV_TEXTS: list[str] = []
+try:
+    import json as _json
+    with open(f"{_DATA_DIR}/mock_cv_pool.json", encoding="utf-8") as _f:
+        _mock_pool = _json.load(_f)
+        _MOCK_CV_TEXTS = [
+            f"{p.get('current_role', '')} {p.get('summary', '')} Competences: "
+            + ", ".join(c.get("name", "") for c in p.get("competencies", []))
+            for p in _mock_pool
+        ]
+except Exception as _e:
+    print(f"[Locust] WARN: mock_cv_pool.json non trouve ({_e}) — texte CV synthetique par defaut.")
+    _MOCK_CV_TEXTS = ["Consultant senior Python GCP avec 8 ans d experience en cloud et data engineering."]
+
 FIRST_NAMES = _TEST_DATA.get("first_names", [
     "Alice", "Bob", "Charlie", "David", "Emma", "Frank",
     "Grace", "Henry", "Isabel", "Jack", "Karl", "Laura",
@@ -156,6 +171,11 @@ def _random_str(n: int = 6) -> str:
 # sinon bootstrap via API au premier on_start.
 _CREATED_USER_IDS: list[int] = list(_SEEDED_IDS.get("user_ids", []))
 _CV_PROFILE_USER_IDS: list[int] = list(_SEEDED_IDS.get("cv_profile_user_ids", []))
+# Fallback : si le seed CV n a pas pu inserer de profils (psycopg2 hors-Docker),
+# utiliser les user_ids standards — les 404 /cv/user/{id} disparaissent.
+if not _CV_PROFILE_USER_IDS and _CREATED_USER_IDS:
+    _CV_PROFILE_USER_IDS = _CREATED_USER_IDS[:]
+    print(f"[Locust] WARN: cv_profile_user_ids vide — fallback sur {len(_CV_PROFILE_USER_IDS)} user_ids standards.")
 # Set pour le O(1) membership check dans _read_profile
 # (evite 404 sur /cv/user/{id} pour les users crees EN DIRECT qui n'ont pas de profil CV)
 _CV_PROFILE_USER_IDS_SET: set[int] = set(_CV_PROFILE_USER_IDS)
@@ -464,11 +484,18 @@ class ZenikaPerfUser(HttpUser):
     def get_user_by_id(self):
         """GET /users/{user_id} — lecture simple PostgreSQL."""
         user_id = random.choice(_CV_PROFILE_USER_IDS) if _CV_PROFILE_USER_IDS else random.randint(1, 400)
-        self.client.get(
+        with self.client.get(
             f"{self.users_api}/{user_id}",
             headers=self.headers,
             name="[Users] GET /users/{id}",
-        )
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("id") != user_id:
+                    resp.failure(f"[Value] ID mismatch: got {data.get('id')} expected {user_id}")
+                else:
+                    resp.success()
 
     @task(1)
     def search_users(self):
@@ -504,11 +531,18 @@ class ZenikaPerfUser(HttpUser):
     def get_item_by_id(self):
         """GET /items/{item_id} — lecture item PostgreSQL par PK."""
         item_id = random.choice(_ITEM_IDS) if _ITEM_IDS else random.randint(1, 200)
-        self.client.get(
+        with self.client.get(
             f"{self.items_api}/{item_id}",
             headers=self.headers,
             name="[Items] GET /items/{id}",
-        )
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("id") != item_id:
+                    resp.failure(f"[Value] ID mismatch: got {data.get('id')} expected {item_id}")
+                else:
+                    resp.success()
 
     @task(1)
     def get_items_by_user(self):
@@ -524,11 +558,26 @@ class ZenikaPerfUser(HttpUser):
     def search_items(self):
         """GET /items/search/query — recherche texte DB/Redis."""
         q = random.choice(_SEARCH_QUERIES.get("items", ["python", "java", "cloud"]))
-        self.client.get(
+        with self.client.get(
             f"{self.items_api}/search/query?query={q}",
             headers=self.headers,
             name="[Items] GET /items/search/query",
-        )
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items", [])
+                valid = True
+                for item in items:
+                    name = item.get("name", "").lower()
+                    desc = item.get("description", "").lower()
+                    if q.lower() not in name and q.lower() not in desc:
+                        valid = False
+                        break
+                if not valid and items:
+                    resp.failure(f"[Value] '{q}' not found in results")
+                else:
+                    resp.success()
 
     @task(1)
     def get_items_stats(self):
@@ -872,37 +921,67 @@ class CVIngestionPipelineUser(HttpUser):
             else:
                 resp.failure(f"Unexpected {resp.status_code}: {resp.text[:80]}")
 
-    def _read_profile(self, user_id: int) -> None:
+    def _upload_cv(self, user_id: int) -> bool:
+        """
+        Etape 2b : Upload d'un CV synthetique via POST /cv/import.
+        cv_api appelle mock_gemini pour l'extraction -> profil stocke en DB.
+        Retourne True si succes (HTTP 200/201) pour que _read_profile
+        valide ensuite GET /cv/user/{id}.
+        """
+        cv_text = random.choice(_MOCK_CV_TEXTS) if _MOCK_CV_TEXTS else "Consultant perf-test."
+        with self.client.post(
+            f"{self.cv_api}/import",
+            json={"raw_text": cv_text, "direct_user_id": user_id, "source_tag": "perf-test"},
+            headers=self.headers,
+            name="[Ingestion] POST /cv/import (synthetic CV)",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (200, 201):
+                resp.success()
+                return True
+            elif resp.status_code == 503:
+                # mock_gemini non disponible (mode dev sans --profile perf)
+                resp.success()
+                return False
+            else:
+                resp.failure(f"CV import failed: {resp.status_code} {resp.text[:80]}")
+                return False
+
+    def _read_profile(self, user_id: int, cv_imported: bool = False) -> None:
         """
         Etape 4 : Lecture de validation du profil ingere.
-        Simule le chargement post-ingestion pour verifier la coherence.
-
-        Note : /cv/user/{id} et /cv/user/{id}/missions retournent 404 pour les
-        users crees EN DIRECT dans ce flow (aucun profil CV ingere). On n'appelle
-        ces endpoints que pour les users du pool seede qui ont un profil existant.
+        cv_imported=True : le profil CV existe (mock_gemini actif) -> valider GET /cv/user/{id}.
+        cv_imported=False : pas de mock, on valide uniquement competences et missions.
         """
-        # CV validation uniquement pour les users pre-seedes (qui ont un profil cv_api)
-        if user_id in _CV_PROFILE_USER_IDS_SET:
-            self.client.get(
+        if cv_imported:
+            with self.client.get(
                 f"{self.cv_api}/user/{user_id}",
                 headers=self.headers,
                 name="[Ingestion] GET /cv/user/{id} (validate profile)",
-            )
-            self.client.get(
-                f"{self.cv_api}/user/{user_id}/missions",
-                headers=self.headers,
-                name="[Ingestion] GET /cv/user/{id}/missions (validate missions)",
-            )
+                catch_response=True,
+            ) as resp:
+                if resp.status_code in (200, 201):
+                    resp.success()
+                elif resp.status_code == 404:
+                    # Profil pas encore commite (background task) : acceptable
+                    resp.success()
+                else:
+                    resp.failure(f"CV profile error: {resp.status_code}")
         self.client.get(
             f"{self.competencies_api}/user/{user_id}?skip=0&limit=50",
             headers=self.headers,
             name="[Ingestion] GET /competencies/user/{id} (validate comp.)",
         )
-        self.client.get(
+        with self.client.get(
             f"{self.missions_api}/missions/user/{user_id}/active",
             headers=self.headers,
             name="[Ingestion] GET /missions/user/{id}/active",
-        )
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 200:
+                resp.success()
+            else:
+                resp.failure(f"HTTP {resp.status_code} on missions")
 
     def _read_analytics(self) -> None:
         """
@@ -923,16 +1002,15 @@ class CVIngestionPipelineUser(HttpUser):
     @task
     def ingest_cv_pipeline(self):
         """
-        Pipeline complet d'ingestion d'un CV sans IA.
-        Chaque exécution = 1 CV ingéré (1 user + 30 compétences + 50 missions).
+        Pipeline complet d'ingestion d'un CV avec mock Gemini.
+        Chaque execution = 1 CV ingere (1 user + CV upload mock + 30 comp + 50 missions).
         """
-        # Refresh proactif du token avant un pipeline long (multiples appels API)
         self._ensure_fresh_token()
 
         CVIngestionPipelineUser._cv_count += 1
         cv_num = CVIngestionPipelineUser._cv_count
 
-        # Étape 1 : Création du candidat
+        # Etape 1 : Creation du candidat
         candidate = self._create_candidate()
         if not candidate:
             return
@@ -940,7 +1018,10 @@ class CVIngestionPipelineUser(HttpUser):
         if not user_id:
             return
 
-        # Étape 2 : Assignation de 30 compétences
+        # Etape 2a : Upload CV synthetique (mock_gemini)
+        cv_imported = self._upload_cv(user_id)
+
+        # Etape 2b : Assignation de 30 competences
         self._assign_competencies_bulk(user_id, [])
 
         # Etape 3a : 45 missions individuelles
@@ -949,10 +1030,10 @@ class CVIngestionPipelineUser(HttpUser):
         # Etape 3b : 5 items via POST /items/bulk (stresse le semaphore 429)
         self._create_items_bulk(user_id, self._fetch_category_ids())
 
-        # Étape 4 : Validation lecture du profil
-        self._read_profile(user_id)
+        # Etape 4 : Validation lecture du profil (CV si mock actif)
+        self._read_profile(user_id, cv_imported=cv_imported)
 
-        # Étape 5 : Analytics (1 fois sur 10 pour ne pas surcharger)
+        # Etape 5 : Analytics (1 fois sur 10)
         if cv_num % 10 == 0:
             self._read_analytics()
-            print(f"  📊 [{cv_num}/{self.CV_TARGET}] CVs ingérés simulés")
+            print(f"  📊 [{cv_num}/{self.CV_TARGET}] CVs ingeres simules")

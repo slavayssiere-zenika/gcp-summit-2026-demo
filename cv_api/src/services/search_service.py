@@ -208,32 +208,42 @@ async def execute_search(
         headers_downstream = {"Authorization": auth_header} if auth_header else {}
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as http_client:
-                for skill in required_skills:
-                    search_res = await http_client.get(
-                        f"{COMPETENCIES_API_URL.rstrip('/')}/search",
-                        params={"query": skill, "limit": 1},
-                        headers=headers_downstream,
-                    )
-                    if search_res.status_code == 200:
-                        try:
-                            page_data = PaginationResponse[dict].model_validate(search_res.json())
-                            items = page_data.items
-                        except ValidationError as ve:
-                            logger.warning(
-                                "[search_service] Rupture de contrat API competencies/search",
-                                extra={"skill": skill, "error": str(ve)},
-                            )
-                            items = []
-                        if items:
-                            canonical_id = items[0]["id"]
-                            users_res = await http_client.get(
-                                f"{COMPETENCIES_API_URL.rstrip('/')}/{canonical_id}/users",
-                                headers=headers_downstream,
-                            )
-                            if users_res.status_code == 200:
-                                user_ids = users_res.json()
-                                approved_user_ids.update(user_ids)
+            limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0), limits=limits) as http_client:
+                async def fetch_canonical_skill(skill: str):
+                    skill_users = set()
+                    try:
+                        search_res = await http_client.get(
+                            f"{COMPETENCIES_API_URL.rstrip('/')}/search",
+                            params={"query": skill, "limit": 1},
+                            headers=headers_downstream,
+                        )
+                        if search_res.status_code == 200:
+                            try:
+                                page_data = PaginationResponse[dict].model_validate(search_res.json())
+                                items = page_data.items
+                            except ValidationError as ve:
+                                logger.warning(
+                                    "[search_service] Rupture de contrat API competencies/search",
+                                    extra={"skill": skill, "error": str(ve)},
+                                )
+                                items = []
+                            if items:
+                                canonical_id = items[0]["id"]
+                                users_res = await http_client.get(
+                                    f"{COMPETENCIES_API_URL.rstrip('/')}/{canonical_id}/users",
+                                    headers=headers_downstream,
+                                )
+                                if users_res.status_code == 200:
+                                    skill_users.update(users_res.json())
+                    except Exception as e:
+                        logger.warning(f"Canonical competencies resolution failed for {skill}: {e}")
+                    return skill_users
+
+                tasks = [fetch_canonical_skill(skill) for skill in required_skills]
+                results = await asyncio.gather(*tasks)
+                for res in results:
+                    approved_user_ids.update(res)
         except Exception as e:
             logger.warning(f"Canonical competencies resolution failed: {e}")
 
@@ -307,7 +317,8 @@ async def execute_search(
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
 
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    async with httpx.AsyncClient(timeout=10.0, limits=limits) as http_client:
         async def fetch_user(res):
             try:
                 u_res = await http_client.get(
@@ -465,7 +476,8 @@ async def execute_search_chunked(
     headers_downstream = {"Authorization": auth_header} if auth_header else {}
     inject(headers_downstream)
 
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+    async with httpx.AsyncClient(timeout=10.0, limits=limits) as http_client:
         async def fetch_user_chunked(res):
             try:
                 u_res = await http_client.get(

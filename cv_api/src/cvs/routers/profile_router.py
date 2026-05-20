@@ -3,7 +3,6 @@ from src.cvs.schemas import PaginationResponse
 import base64
 import json
 import logging
-from datetime import datetime, timezone
 
 # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 import src.services.config as _svc_config
@@ -20,8 +19,8 @@ from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
                              CVProfileResponse, CVResponse, UserMergeRequest,
                              ExtractedMission)
 from src.services.bulk_service import bg_retry_apply
-from src.services.config import _CV_CACHE
-from src.services.cv_import_service import process_cv_core
+from shared.cache import delete_cache
+from src.services.cv_import_service import process_cv_core, process_cv_direct
 from src.services.taxonomy_service import (fetch_prompt,
                                            get_existing_competencies)
 
@@ -42,8 +41,8 @@ public_router = APIRouter(prefix="", tags=["CV_Public"])
 @router.post("/cache/invalidate-taxonomy")
 async def force_invalidate_taxonomy_cache(_: dict = Depends(verify_jwt)):
     """Invalide spécifiquement le contexte sémantique de l'arbre des compétences (Taxonomy Event)."""
-    _CV_CACHE["tree_context"] = {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)}
-    _CV_CACHE["tree_items"] = {"value": None, "expires": datetime.min.replace(tzinfo=timezone.utc)}
+    await delete_cache("cv_api:tree_context")
+    await delete_cache("cv_api:tree_items")
     logger.info("Cache de taxonomie purgé avec succès (Event-driven).")
     return {"message": "Cache de taxonomie invalidé"}
 
@@ -68,6 +67,23 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, backgrou
     headers = {"Authorization": auth_header}
     inject(headers)  # Mandatory Trace Span Propagation (Agent.md Rule 4)
 
+    auth_token = auth_header.replace("Bearer ", "") if "Bearer " in auth_header else auth_header
+
+    # Mode perf-test : bypass Drive + identity resolution
+    if req.raw_text and req.direct_user_id:
+        return await process_cv_direct(
+            direct_user_id=req.direct_user_id,
+            raw_text=req.raw_text,
+            source_tag=req.source_tag or "perf-test",
+            headers=headers,
+            token_payload=token_payload,
+            db=db,
+            auth_token=auth_token,
+            background_tasks=background_tasks,
+            genai_client=_svc_config.client,
+        )
+
+    # req.url est garanti non-None ici (model_validator l'a validé au niveau Pydantic)
     return await process_cv_core(
         url=req.url,
         google_access_token=req.google_access_token,
@@ -76,8 +92,7 @@ async def import_and_analyze_cv(req: CVImportRequest, request: Request, backgrou
         headers=headers,
         token_payload=token_payload,
         db=db,
-        auth_token=auth_header.replace(
-            "Bearer ", "") if "Bearer " in auth_header else auth_header,
+        auth_token=auth_token,
         background_tasks=background_tasks, genai_client=_svc_config.client
     )
 
@@ -251,7 +266,8 @@ async def handle_user_pubsub_events(
 async def remediate_anonymous_profiles(
     request: Request,
     background_tasks: BackgroundTasks,
-    dry_run: bool = Query(True, description="Si True, ne modifie rien — retourne seulement le compte de profils à corriger."),
+    dry_run: bool = Query(
+        True, description="Si True, ne modifie rien — retourne seulement le compte de profils à corriger."),
     token_payload: dict = Depends(verify_jwt),
     db: AsyncSession = Depends(get_db),
 ):

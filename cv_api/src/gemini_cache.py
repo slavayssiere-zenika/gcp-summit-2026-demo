@@ -21,12 +21,11 @@ import logging
 import os
 from typing import Optional
 
+from shared.cache import get_cache, set_cache, delete_cache
+
 logger = logging.getLogger(__name__)
 
 GEMINI_CACHE_TTL_S: int = int(os.getenv("GEMINI_CACHE_TTL_S", "3600"))
-
-# Dictionnaire en mémoire : cache_key → {"name": str, "model": str}
-_CACHE_STORE: dict = {}
 
 
 def _is_vertex_available(client) -> bool:
@@ -61,8 +60,8 @@ async def get_or_create_prompt_cache(
         logger.debug("[gemini_cache] Context caching non disponible (API key mode) — skip")
         return None
 
-    full_key = f"{model}:{cache_key}"
-    cache_entry = _CACHE_STORE.get(full_key)
+    full_key = f"cv_api:gemini_cache:{model}:{cache_key}"
+    cache_entry = await get_cache(full_key)
 
     if cache_entry:
         try:
@@ -83,7 +82,7 @@ async def get_or_create_prompt_cache(
                 )
         except Exception as e:
             logger.warning("[gemini_cache] Cache introuvable (%s) — recréation", e)
-            _CACHE_STORE.pop(full_key, None)
+            await delete_cache(full_key)
 
     try:
         from google.genai import types
@@ -96,7 +95,7 @@ async def get_or_create_prompt_cache(
                 display_name=f"zenika-{cache_key}-{model}",
             ),
         )
-        _CACHE_STORE[full_key] = {"name": cache.name}
+        await set_cache(full_key, {"name": cache.name}, ttl_seconds=GEMINI_CACHE_TTL_S)
         logger.info(
             "[gemini_cache] ✅ CachedContent créé : '%s' (key=%s, TTL=%ds)",
             cache.name, cache_key, GEMINI_CACHE_TTL_S

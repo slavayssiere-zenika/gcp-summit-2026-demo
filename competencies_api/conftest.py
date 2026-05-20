@@ -1,3 +1,4 @@
+from fakeredis import aioredis
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy import create_engine
@@ -19,9 +20,8 @@ os.environ["COMPETENCIES_API_URL"] = "http://competencies_api:8003"
 os.environ["USERS_API_URL"] = "http://users_api:8000"
 os.environ["SECRET_KEY"] = "testsecret"
 
-# Remplace le client Redis par un serveur FakeRedis in-memory.
 _fake_redis_server = fakeredis.FakeServer()
-_fake_redis_client = fakeredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
+_fake_redis_client = aioredis.FakeRedis(server=_fake_redis_server, decode_responses=True)
 
 # Mock OTel AVANT l'import de main
 with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()):
@@ -31,8 +31,8 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
     from src.competencies.models import Base
 
 # Injecte le client fakeredis dans le module cache (lazy init)
-import cache as _cache_module  # noqa: E402
-_cache_module._client = _fake_redis_client
+import shared.cache as _cache_module  # noqa: E402
+_cache_module._redis_pool = _fake_redis_client
 
 
 if engine:
@@ -77,5 +77,6 @@ def client():
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
-    _fake_redis_client.flushall()
+    import asyncio
+    asyncio.run(_fake_redis_client.flushall())
     yield

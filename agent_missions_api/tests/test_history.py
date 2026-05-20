@@ -25,7 +25,8 @@ def client():
 def test_get_history_empty(client):
     mock_session_service = AsyncMock()
     mock_session_service.get_session.return_value = None
-    with patch("main.get_session_service", return_value=mock_session_service):
+    # get_session_service est appelé depuis session_router._get_session_service()
+    with patch("session_router._get_session_service", return_value=mock_session_service):
         resp = client.get("/history", headers=auth_headers())
     assert resp.status_code == 200
     assert resp.json() == {"history": []}
@@ -57,8 +58,9 @@ def test_get_history_with_events(client):
 
     mock_session_service.get_session.return_value = mock_session
 
-    with patch("main.get_session_service", return_value=mock_session_service):
-        with patch("main.extract_metadata_from_session", return_value={"data": None, "steps": []}):
+    # Handlers dans session_router — patch les dépendances au bon endroit
+    with patch("session_router._get_session_service", return_value=mock_session_service):
+        with patch("session_router.extract_metadata_from_session", return_value={"data": None, "steps": []}):
             resp = client.get("/history", headers=auth_headers())
 
     assert resp.status_code == 200
@@ -76,7 +78,7 @@ def test_delete_history(client):
     mock_session_service.get_session.return_value = mock_session
     mock_session_service._delete_session_impl = MagicMock()
 
-    with patch("main.get_session_service", return_value=mock_session_service):
+    with patch("session_router._get_session_service", return_value=mock_session_service):
         resp = client.delete("/history", headers=auth_headers())
 
     assert resp.status_code == 200
@@ -88,7 +90,7 @@ def test_delete_history_empty(client):
     mock_session_service = AsyncMock()
     mock_session_service.get_session.return_value = None
 
-    with patch("main.get_session_service", return_value=mock_session_service):
+    with patch("session_router._get_session_service", return_value=mock_session_service):
         resp = client.delete("/history", headers=auth_headers())
 
     assert resp.status_code == 200

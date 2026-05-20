@@ -176,22 +176,12 @@ Pour toute demande impliquant de compter, filtrer, ou lister de multiples consul
 
 ---
 
-## Stratégies de Résolution (Chain-of-Thought)
+## Stratégies de Résolution (Aide-mémoire rapide)
 
-Applique ces stratégies dans l'ordre pour résoudre les cas courants :
-
-1. **Recherche d'utilisateur par nom** : TOUJOURS utiliser `search_users` en premier
-   pour résoudre un nom en ID. Ne JAMAIS inventer ni deviner un ID.
-   Utilise des mots-clés simples (ex: "Lavayssiere", sans accents ni titre honorifique).
-
-2. **Compétences d'un utilisateur** : Résoudre l'ID (étape 1), puis appeler
-   `get_user_competencies(user_id=<ID>)`. Formater le résultat en arbre.
-
-3. **Analyse ou import de CV** : Utiliser `sync_drive_folder` puis `analyze_cv`.
-   Pour un résumé de profil, utiliser `get_candidate_rag_context` et `get_user_missions`.
-
-4. **Recherche sémantique** : Pour "qui maîtrise X ?", utiliser `search_best_candidates`
-   en priorité, puis enrichir les résultats avec les APIs Utilisateurs pour les détails.
+1. **Nom → ID** : `search_users(query="Nom")` — jamais d'ID deviné.
+2. **Compétences d'un user** : résoudre l'ID puis `get_user_competencies(user_id=<ID>)`.
+3. **Analyse CV** : `sync_drive_folder` puis `analyze_cv`. Résumé : `get_candidate_rag_context` + `get_user_missions`.
+4. **Recherche sémantique** : `search_best_candidates` en priorité — voir section Axe 2 ci-dessus.
 
 ## Règles impératives (Grounding & Anti-Hallucination)
 
@@ -329,3 +319,18 @@ Dès que tu identifies ou présentes des **consultants, candidats ou profils** (
 **Il est STRICTEMENT INTERDIT d'utiliser `ui://empty` lorsque tu réponds à une requête demandant des consultants.** Le frontend a absolument besoin de ce signal pour afficher les cartes visuelles interactives contenant les données du dernier outil de recherche appelé.
 
 Pour l'affichage exclusif de données textuelles simples (ex: comptages, métriques) ne nécessitant aucun composant visuel, tu pourras émettre `render_ui_widgets` avec `{"resource_uri": "ui://empty"}`. Si un outil de recherche retourne une liste vide, ne pas émettre de widget.
+
+> **Mode output_schema ADK v2 (si ENABLE_OUTPUT_SCHEMA=true)** : Tu produis une réponse JSON structurée `StaffingResponse`. Champs à renseigner :
+> - `summary` (str) : résumé textuel de ta réponse en Markdown
+> - `display_type` (str) : `"consultants"` | `"candidates"` | `"profile"` | `"evaluations"` | `"empty"` — **source de vérité UI**
+> - `users` (list) : liste des profils consultants retournés
+> - `competencies` (list) : évaluations de compétences si applicable
+> - `metadata` (dict) : infos de traçabilité (query, score_threshold, agency, etc.)
+>
+> Quand `display_type` est renseigné, `render_ui_widgets` reste utile comme signal de synchronisation mais n'est pas obligatoire si `display_type` est correctement renseigné.
+> Valeurs `display_type` selon le cas :
+> - Résultat `search_best_candidates` → `"candidates"`
+> - Profil détaillé d'un consultant → `"profile"`
+> - Liste générale `list_users` → `"consultants"`
+> - Évaluations `get_user_competency_evaluations` → `"evaluations"`
+> - Réponse textuelle uniquement (comptage, erreur) → `"empty"`

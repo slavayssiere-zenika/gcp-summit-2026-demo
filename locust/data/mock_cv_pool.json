@@ -1,0 +1,170 @@
+[
+  {
+    "is_cv": true, "first_name": "Alice", "last_name": "Martin",
+    "email": "alice.martin@mock.local", "trigram": "ALM",
+    "summary": "Architecte Cloud GCP avec 10 ans d'expérience en migration et DevOps.",
+    "current_role": "Cloud Architect", "years_of_experience": 10, "is_anonymous": false,
+    "competencies": [
+      {"name": "GCP", "parent": "Cloud", "aliases": ["Google Cloud"], "practiced": true},
+      {"name": "Terraform", "parent": "Infrastructure as Code", "aliases": [], "practiced": true},
+      {"name": "Kubernetes", "parent": "Conteneurisation", "aliases": ["K8s"], "practiced": true},
+      {"name": "Python", "parent": "Langages Backend", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "Migration GCP", "company": "BNP Paribas", "description": "Migration on-premise vers GCP.",
+       "start_date": "2022-03", "end_date": "present", "duration": "2 ans",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["GCP", "Terraform"]},
+      {"title": "CI/CD Platform", "company": "Société Générale", "description": "Déploiement plateforme CI/CD.",
+       "start_date": "2020-01", "end_date": "2022-02", "duration": "2 ans",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["Kubernetes", "Python"]}
+    ],
+    "educations": [{"degree": "Ingénieur Informatique", "school": "Polytechnique"}]
+  },
+  {
+    "is_cv": true, "first_name": "Bruno", "last_name": "Leclerc",
+    "email": "bruno.leclerc@mock.local", "trigram": "BRL",
+    "summary": "Data Engineer spécialisé Spark et BigQuery, 7 ans d'expérience.",
+    "current_role": "Senior Data Engineer", "years_of_experience": 7, "is_anonymous": false,
+    "competencies": [
+      {"name": "Apache Spark", "parent": "Big Data", "aliases": ["Spark"], "practiced": true},
+      {"name": "BigQuery", "parent": "Data Warehouse", "aliases": [], "practiced": true},
+      {"name": "dbt", "parent": "Data Transformation", "aliases": [], "practiced": true},
+      {"name": "Python", "parent": "Langages Backend", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "Data Lake GCP", "company": "AXA", "description": "Construction data lake sur BigQuery.",
+       "start_date": "2021-06", "end_date": "present", "duration": "3 ans",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["BigQuery", "dbt"]},
+      {"title": "Pipeline Spark", "company": "Orange", "description": "Pipelines de traitement Spark.",
+       "start_date": "2019-01", "end_date": "2021-05", "duration": "2 ans",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["Apache Spark", "Python"]}
+    ],
+    "educations": [{"degree": "Master Data Science", "school": "Université Paris-Saclay"}]
+  },
+  {
+    "is_cv": true, "first_name": "Camille", "last_name": "Dupont",
+    "email": "camille.dupont@mock.local", "trigram": "CDP",
+    "summary": "Tech Lead Java/Spring Boot avec expertise microservices et DDD, 9 ans d'XP.",
+    "current_role": "Tech Lead Java", "years_of_experience": 9, "is_anonymous": false,
+    "competencies": [
+      {"name": "Java", "parent": "Langages Backend", "aliases": [], "practiced": true},
+      {"name": "Spring Boot", "parent": "Frameworks Java", "aliases": [], "practiced": true},
+      {"name": "Kafka", "parent": "Messaging", "aliases": [], "practiced": true},
+      {"name": "PostgreSQL", "parent": "Bases de données", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "Refonte microservices", "company": "Crédit Agricole", "description": "Refonte SI bancaire en microservices.",
+       "start_date": "2021-01", "end_date": "present", "duration": "3 ans",
+       "mission_type": "build", "is_sensitive": true, "competencies": ["Java", "Spring Boot", "Kafka"]},
+      {"title": "API Gateway", "company": "BPCE", "description": "Mise en place API Gateway Kong.",
+       "start_date": "2018-03", "end_date": "2020-12", "duration": "2 ans",
+       "mission_type": "architecture", "is_sensitive": false, "competencies": ["Java", "PostgreSQL"]}
+    ],
+    "educations": [{"degree": "Ingénieur ESGI", "school": "ESGI Paris"}]
+  },
+  {
+    "is_cv": true, "first_name": "David", "last_name": "Renaud",
+    "email": "david.renaud@mock.local", "trigram": "DVR",
+    "summary": "DevOps Engineer spécialisé CI/CD et observabilité, 6 ans d'XP.",
+    "current_role": "DevOps Engineer", "years_of_experience": 6, "is_anonymous": false,
+    "competencies": [
+      {"name": "GitLab CI", "parent": "CI/CD", "aliases": [], "practiced": true},
+      {"name": "Prometheus", "parent": "Observabilité", "aliases": [], "practiced": true},
+      {"name": "Docker", "parent": "Conteneurisation", "aliases": [], "practiced": true},
+      {"name": "Ansible", "parent": "Infrastructure as Code", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "Plateforme DevOps", "company": "Thales", "description": "Déploiement plateforme CI/CD GitLab.",
+       "start_date": "2022-01", "end_date": "present", "duration": "2 ans",
+       "mission_type": "build", "is_sensitive": true, "competencies": ["GitLab CI", "Docker"]},
+      {"title": "Monitoring Prometheus", "company": "Airbus", "description": "Stack monitoring complète.",
+       "start_date": "2020-06", "end_date": "2021-12", "duration": "18 mois",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["Prometheus", "Ansible"]}
+    ],
+    "educations": [{"degree": "BTS Informatique", "school": "IUT Lyon"}]
+  },
+  {
+    "is_cv": true, "first_name": "Emma", "last_name": "Petit",
+    "email": "emma.petit@mock.local", "trigram": "EMP",
+    "summary": "Coach Agile et Scrum Master certifiée, 8 ans d'accompagnement équipes.",
+    "current_role": "Coach Agile / Scrum Master", "years_of_experience": 8, "is_anonymous": false,
+    "competencies": [
+      {"name": "Scrum", "parent": "Méthodes Agiles", "aliases": [], "practiced": true},
+      {"name": "SAFe", "parent": "Méthodes Agiles", "aliases": [], "practiced": true},
+      {"name": "Jira", "parent": "Outils Gestion", "aliases": [], "practiced": true},
+      {"name": "Facilitation", "parent": "Soft Skills", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "Transformation Agile", "company": "La Poste", "description": "Accompagnement transformation Agile 200 personnes.",
+       "start_date": "2021-09", "end_date": "present", "duration": "2 ans",
+       "mission_type": "accompagnement", "is_sensitive": false, "competencies": ["SAFe", "Facilitation"]},
+      {"title": "Coaching Scrum", "company": "SNCF", "description": "Coaching équipes Scrum.",
+       "start_date": "2019-01", "end_date": "2021-08", "duration": "2 ans",
+       "mission_type": "accompagnement", "is_sensitive": false, "competencies": ["Scrum", "Jira"]}
+    ],
+    "educations": [{"degree": "Certification SAFe SPC", "school": "Scaled Agile"}]
+  },
+  {
+    "is_cv": true, "first_name": "François", "last_name": "Bernard",
+    "email": "francois.bernard@mock.local", "trigram": "FRB",
+    "summary": "ML Engineer spécialisé NLP et LLMs, 5 ans d'XP en production IA.",
+    "current_role": "ML Engineer", "years_of_experience": 5, "is_anonymous": false,
+    "competencies": [
+      {"name": "Python", "parent": "Langages Backend", "aliases": [], "practiced": true},
+      {"name": "PyTorch", "parent": "ML Frameworks", "aliases": [], "practiced": true},
+      {"name": "Vertex AI", "parent": "MLOps", "aliases": [], "practiced": true},
+      {"name": "LangChain", "parent": "LLM Frameworks", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "RAG Production", "company": "Renault", "description": "Déploiement pipeline RAG en production.",
+       "start_date": "2023-01", "end_date": "present", "duration": "1 an",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["LangChain", "Vertex AI"]},
+      {"title": "NLP Classification", "company": "EDF", "description": "Modèles NLP de classification documents.",
+       "start_date": "2021-06", "end_date": "2022-12", "duration": "18 mois",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["Python", "PyTorch"]}
+    ],
+    "educations": [{"degree": "Master IA", "school": "CentraleSupélec"}]
+  },
+  {
+    "is_cv": true, "first_name": "Gaëlle", "last_name": "Simon",
+    "email": "gaelle.simon@mock.local", "trigram": "GLS",
+    "summary": "Product Manager digital B2B, 10 ans d'XP produit SaaS.",
+    "current_role": "Product Manager", "years_of_experience": 10, "is_anonymous": false,
+    "competencies": [
+      {"name": "Roadmap Produit", "parent": "Product Management", "aliases": [], "practiced": true},
+      {"name": "OKR", "parent": "Management", "aliases": [], "practiced": true},
+      {"name": "SQL", "parent": "Données", "aliases": [], "practiced": true},
+      {"name": "Figma", "parent": "Design", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "Refonte Plateforme SaaS", "company": "Salesforce France", "description": "Product ownership plateforme CRM.",
+       "start_date": "2020-03", "end_date": "present", "duration": "4 ans",
+       "mission_type": "conseil", "is_sensitive": false, "competencies": ["Roadmap Produit", "OKR"]},
+      {"title": "Digitalisation Parcours", "company": "Allianz", "description": "Digitalisation parcours clients.",
+       "start_date": "2017-01", "end_date": "2020-02", "duration": "3 ans",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["Figma", "SQL"]}
+    ],
+    "educations": [{"degree": "MBA", "school": "HEC Paris"}]
+  },
+  {
+    "is_cv": true, "first_name": "Hugo", "last_name": "Moreau",
+    "email": "hugo.moreau@mock.local", "trigram": "HGM",
+    "summary": "Fullstack React/Node.js avec expertise TypeScript et architecture frontend.",
+    "current_role": "Fullstack Developer", "years_of_experience": 5, "is_anonymous": false,
+    "competencies": [
+      {"name": "React", "parent": "Frameworks Frontend", "aliases": [], "practiced": true},
+      {"name": "TypeScript", "parent": "Langages Frontend", "aliases": [], "practiced": true},
+      {"name": "Node.js", "parent": "Runtime Backend", "aliases": [], "practiced": true},
+      {"name": "GraphQL", "parent": "API", "aliases": [], "practiced": true}
+    ],
+    "missions": [
+      {"title": "App React Enterprise", "company": "Capgemini", "description": "Application React pour grand compte.",
+       "start_date": "2022-06", "end_date": "present", "duration": "2 ans",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["React", "TypeScript"]},
+      {"title": "API GraphQL", "company": "Sopra Steria", "description": "Backend GraphQL Node.js.",
+       "start_date": "2020-09", "end_date": "2022-05", "duration": "18 mois",
+       "mission_type": "build", "is_sensitive": false, "competencies": ["Node.js", "GraphQL"]}
+    ],
+    "educations": [{"degree": "Licence Pro Développement Web", "school": "IUT Bordeaux"}]
+  }
+]

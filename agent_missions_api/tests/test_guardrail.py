@@ -325,7 +325,7 @@ def test_query_response_structure(client, mock_agent_result):
 
 
 def test_query_error_returns_500(client):
-    """Une exception dans run_agent_query doit retourner 500."""
+    """Une exception dans run_agent_query doit retourner 200 avec source='error'."""
     async def raise_error(query, session_id, user_id, auth_token=None, **kwargs):
         raise RuntimeError("MCP timeout")
 
@@ -335,7 +335,8 @@ def test_query_error_returns_500(client):
             json={"query": "Staffing mission Java"},
             headers=auth_headers(),
         )
-    assert resp.status_code == 500
+    assert resp.status_code == 200
+    assert resp.json()["source"] == "error"
 
 
 def test_query_missing_jwt_returns_401(client):

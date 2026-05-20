@@ -32,16 +32,16 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 128 | ✅ |
+| `main.py` | 134 | ✅ |
 | `mcp_server.py` | 588 | ⚠️ |
 | `conftest.py` | 89 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `src/cvs/router.py` | 47 | ✅ |
-| `src/cvs/routers/admin_router.py` | 174 | ✅ |
-| `src/cvs/routers/analytics_router.py` | 454 | ✅ |
-| `src/cvs/routers/bulk_router.py` | 324 | ✅ |
+| `src/cvs/routers/admin_router.py` | 176 | ✅ |
+| `src/cvs/routers/analytics_router.py` | 457 | ✅ |
+| `src/cvs/routers/bulk_router.py` | 309 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 56 | ✅ |
-| `src/cvs/routers/profile_router.py` | 287 | ✅ |
+| `src/cvs/routers/profile_router.py` | 303 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

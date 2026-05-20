@@ -13,10 +13,10 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 | `mcp_server.py` | 298 | ✅ |
 | `conftest.py` | 39 | ✅ |
 | `metrics.py` | 3 | ✅ |
-| `src/missions/analysis_router.py` | 196 | ✅ |
-| `src/missions/crud_router.py` | 176 | ✅ |
+| `src/missions/analysis_router.py` | 201 | ✅ |
+| `src/missions/crud_router.py` | 208 | ✅ |
 | `src/missions/router.py` | 16 | ✅ |
-| `src/missions/user_router.py` | 44 | ✅ |
+| `src/missions/user_router.py` | 109 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |

@@ -87,6 +87,10 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
         value = var.gemini_missions_model
       }
       env {
+        name  = "GEMINI_MISSIONS_MODEL"
+        value = var.gemini_missions_model
+      }
+      env {
         name  = "ROOT_PATH"
         value = "/agent-missions-api"
       }
@@ -116,6 +120,10 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
       env {
         name  = "REDIS_URL"
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/12"
+      }
+      env {
+        name  = "SERVICE_NAME"
+        value = "agent_missions_api"
       }
 
       # ── MCP Sidecars via LB interne ────────────────────────────────────────
@@ -150,6 +158,30 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
       env {
         name  = "MONITORING_MCP_URL"
         value = "http://api.internal.zenika/monitoring-mcp/"
+      }
+
+      # ── ADK v2 Feature Flags — Phase 3 HITL + Phase 1 Output Schema ─────────
+      # ENABLE_OUTPUT_SCHEMA : active MissionAnalysis comme output_schema LlmAgent.
+      # Déclenche automatiquement le flow HITL si requires_human_approval=True.
+      env {
+        name  = "ENABLE_OUTPUT_SCHEMA"
+        value = var.enable_output_schema
+      }
+      # HITL_PENDING_TTL_SECONDS : durée de vie des demandes HITL en Redis (30 min).
+      env {
+        name  = "HITL_PENDING_TTL_SECONDS"
+        value = "1800"
+      }
+      # HITL_RESPONSE_TTL_SECONDS : durée de conservation de la décision (24h).
+      env {
+        name  = "HITL_RESPONSE_TTL_SECONDS"
+        value = "86400"
+      }
+      # MISSIONS_API_URL : URL interne du service lui-même pour POST /hitl/create
+      # (loopback via LB interne — évite le couplage direct).
+      env {
+        name  = "MISSIONS_API_URL"
+        value = "http://api.internal.zenika/api/agent-missions"
       }
     }
   }

@@ -170,7 +170,7 @@
                 class="chat-msg"
                 :class="msg.role"
               >
-                <div class="msg-bubble">{{ msg.content }}</div>
+                <div class="msg-bubble markdown-body" v-html="md.render(msg.content)"></div>
               </div>
               <div v-if="isCoachLoading" class="chat-msg assistant">
                 <div class="msg-bubble typing">
@@ -222,6 +222,9 @@ import StarRating from './StarRating.vue'
 import {
   Award, RefreshCw, Check, X, Info, MessageSquare, Send, BrainCircuit, Zap, Loader2
 } from 'lucide-vue-next'
+import markdownit from 'markdown-it'
+
+const md = markdownit({ html: true, breaks: true })
 
 const props = defineProps<{
   userId: number
@@ -371,6 +374,7 @@ async function sendCoachMessage() {
 
   try {
     const context = [
+      `ID Consultant : ${props.userId}`,
       `Compétence : ${coachingComp.value?.competency_name}`,
       coachingComp.value?.ai_score !== null
         ? `Note Gemini : ${coachingComp.value?.ai_score}/5. Justification : ${coachingComp.value?.ai_justification}`
@@ -735,8 +739,12 @@ onMounted(fetchEvaluations)
   border-radius: 12px;
   font-size: 0.85rem;
   line-height: 1.5;
-  white-space: pre-wrap;
 }
+
+.msg-bubble :deep(p:first-child) { margin-top: 0; }
+.msg-bubble :deep(p:last-child) { margin-bottom: 0; }
+.msg-bubble :deep(ul), .msg-bubble :deep(ol) { margin: 0.5rem 0; padding-left: 1.2rem; }
+.msg-bubble :deep(li) { margin-bottom: 0.25rem; }
 
 .chat-msg.user .msg-bubble {
   background: linear-gradient(135deg, #e31937, #c01228);

@@ -36,12 +36,18 @@ async def init_db_connector():
 
     pool_params = {
         "pool_pre_ping": True,
-        "pool_recycle": 1800,
+        # 5min au lieu de 30min : les connexions dégradées post-pic sont recyclées
+        # plus agressivement. Évite la latence résiduelle constatée après les stress tests.
+        "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", 300)),
         "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
         "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
         # Fail-fast si pool sature : renvoie 500 apres 5s au lieu de bloquer 30s
         # (defaut SQLAlchemy = 30s → cascade de latences sur toutes les routes items_api)
         "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", 5)),
+        # Rollback explicite à chaque retour de connexion au pool : garantit qu'une
+        # transaction ouverte (BEGIN sans COMMIT, après exception) est annulée proprement
+        # plutôt que de rester dans un état indéterminé jusqu'au prochain pool_recycle.
+        "pool_reset_on_return": "rollback",
     }
 
     if USE_IAM_AUTH and ALLOYDB_INSTANCE_URI:

@@ -9,10 +9,10 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 323 | ✅ |
+| `main.py` | 336 | ✅ |
 | `conftest.py` | 22 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 285 | ✅ |
+| `agent.py` | 315 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -22,6 +22,8 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 | `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `GEMINI_HR_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
+| `ENABLE_OUTPUT_SCHEMA` | Comportement | `false` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |
@@ -36,14 +38,13 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 | `MISSIONS_API_URL` | Infra | `http://missions_api:8009` |
 | `PROMPTS_API_URL` | Infra | `http://prompts_api:8000` |
 | `ANALYTICS_MCP_URL` | Infra | `http://analytics_mcp:8080` |
+| `MONITORING_MCP_URL` | Infra | `http://monitoring_mcp:8010` |
 | `USERS_MCP_URL` | Infra | `http://users_mcp:8000` |
 | `ITEMS_MCP_URL` | Infra | `http://items_mcp:8000` |
 | `COMPETENCIES_MCP_URL` | Infra | `http://competencies_mcp:8000` |
 | `CV_MCP_URL` | Infra | `http://cv_mcp:8000` |
 | `MISSIONS_MCP_URL` | Infra | `http://missions_mcp:8000` |
 | `DRIVE_MCP_URL` | Infra | `http://drive_api:8080` |
-| `LOKI_MCP_URL` | Infra | `http://loki:3100/mcp` |
-| `MONITORING_MCP_URL` | Infra | `http://monitoring_mcp:8010` |
 
 ## Redis
 **DB 10** — namespace `session:hr:*` (historique de session par user)

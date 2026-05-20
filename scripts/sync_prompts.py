@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-import os
 import sys
-import json
 import logging
 import argparse
 import httpx
@@ -33,14 +31,15 @@ CACHE_INVALIDATION_MAP = {
     "missions_api.": "/api/missions",
 }
 
+
 async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
     base_url = api_url.rstrip("/")
     base_domain = base_url.replace('/api/prompts', '').replace('/prompts', '')
     # Handle dev API gateway vs frontend proxy
     auth_url = f"{base_domain}/auth/login" if "api.dev" in base_domain or "dev.zenika" in base_domain else f"{base_domain}/api/auth/login"
-    
+
     logger.info(f"{YELLOW}[*] Authenticating as {admin_email}...{RESET}")
-    
+
     async with httpx.AsyncClient(verify=False) as client:
         # 1. Login
         try:
@@ -49,28 +48,28 @@ async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
             token = res.json().get("access_token")
             logger.info(f"{GREEN}[+] Authentication successful.{RESET}")
         except Exception as e:
-            logger.error(f"{RED}[!] Authentication failed: {e}{RESET}")
+            logger.error(f"{RED}[!] Authentication failed: {repr(e)}{RESET}")
             sys.exit(1)
-            
+
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # 2. Sync each prompt
         for key, rel_path in PROMPTS_MAP.items():
             file_path = Path(rel_path)
             if not file_path.exists():
                 logger.warning(f"{YELLOW}[!] File not found, skipping: {rel_path}{RESET}")
                 continue
-                
+
             content = file_path.read_text(encoding="utf-8")
             logger.info(f"[*] Syncing {key}...")
-            
+
             # Upsert logic
             try:
                 # Check if exists
                 check_res = await client.get(f"{base_url}/{key}", headers=headers)
                 method = "PUT" if check_res.status_code == 200 else "POST"
                 target_url = f"{base_url}/{key}" if method == "PUT" else f"{base_url}/"
-                
+
                 payload = {"key": key, "value": content}
                 res = await client.request(method, target_url, json=payload, headers=headers)
                 res.raise_for_status()
@@ -90,7 +89,8 @@ async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
                             if inv_res.status_code < 400:
                                 logger.info(f"{GREEN}    -> Cache Redis invalidé pour '{key}' sur {service_path}.{RESET}")
                             else:
-                                logger.warning(f"{YELLOW}    [!] Cache invalidation returned HTTP {inv_res.status_code} for '{key}'.{RESET}")
+                                logger.warning(
+                                    f"{YELLOW}    [!] Cache invalidation returned HTTP {inv_res.status_code} for '{key}'.{RESET}")
                         except Exception as cache_err:
                             logger.warning(f"{YELLOW}    [!] Cache invalidation failed for '{key}': {cache_err}{RESET}")
 
@@ -99,11 +99,12 @@ async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sync project prompts with Prompts API")
-    parser.add_argument("--url", required=True, help="Base URL of the Prompts API (e.g., https://api.dev.example.com/api/prompts)")
+    parser.add_argument("--url", required=True,
+                        help="Base URL of the Prompts API (e.g., https://api.dev.example.com/api/prompts)")
     parser.add_argument("--email", default="admin@zenika.com", help="Admin email for auth")
     parser.add_argument("--password", required=True, help="Admin password for auth")
-    
+
     args = parser.parse_args()
-    
+
     import asyncio
     asyncio.run(sync_prompts(args.url, args.email, args.password))

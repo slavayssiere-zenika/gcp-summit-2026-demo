@@ -69,8 +69,8 @@ Il ne possède aucun outil MCP direct — il orchestre uniquement d'autres agent
 - **PATCH** `/sessions/{session_id}` : Rename Session
 - **DELETE** `/sessions/{session_id}` : Delete Session
 - **GET** `/mcp/registry` : Mcp Registry
-- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

@@ -326,7 +326,7 @@ export const useChatStore = defineStore('chat', {
             if (jsonObj.reply && jsonObj.display_type) {
               replyText = jsonObj.reply
               displayType = jsonObj.display_type
-              if (displayType === 'profile') displayType = 'cards'
+              // Note: 'profile' est géré nativement par Home.vue (CandidateProfileCard)
               if (jsonObj.display_type === 'tree') {
                 parsedData = jsonObj.data
               } else if (jsonObj.data) {
@@ -359,10 +359,21 @@ export const useChatStore = defineStore('chat', {
 
         const consultantCards = extractConsultantCards(steps)
 
+        // Phase 3 HITL — extraire la demande d'approbation si présente dans data
+        // L'agent missions place {hitl_request: {hitl_id, mission_title, reason, …}} dans data
+        // quand MissionAnalysis.requires_human_approval === True
+        const hitlRequest = responseData.data?.hitl_request ?? null
+
         if (responseData.response) {
           if (responseData.degraded) {
             uxStore.showToast(
               '⚠️ Réponse partielle — un sous-agent est temporairement indisponible',
+              'warning'
+            )
+          }
+          if (hitlRequest) {
+            uxStore.showToast(
+              '🔔 Validation requise — un staffing critique attend votre approbation',
               'warning'
             )
           }
@@ -381,6 +392,7 @@ export const useChatStore = defineStore('chat', {
             usage: responseData.usage,
             semanticCacheHit: responseData.semantic_cache_hit === true,
             debugPrompt: debugPrompt || undefined,
+            hitlRequest: hitlRequest || undefined,
           })
         } else {
           this.addMessage({

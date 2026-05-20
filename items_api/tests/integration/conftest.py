@@ -49,9 +49,9 @@ def integration_env(postgres_container, redis_container):
     redis_port = redis_container.get_exposed_port(6379)
     os.environ["REDIS_URL"] = f"redis://{redis_host}:{redis_port}/1"
 
-    # Réinitialise le client Redis lazy pour qu'il reconstruise avec la nouvelle URL
-    import cache as _cache_module
-    _cache_module.reset_client()
+    import redis
+    _client = redis.from_url(os.environ["REDIS_URL"])
+    _client.flushdb()
 
     yield
 
@@ -76,6 +76,7 @@ def wipe_pg_db(postgres_container, integration_env):
 @pytest.fixture
 def wipe_redis_integration(redis_container, integration_env):
     """Vide Redis avant chaque test d'intégration."""
-    import cache as _cache_module
-    _cache_module.get_client().flushdb()
+    import redis
+    client = redis.from_url(os.environ["REDIS_URL"])
+    client.flushdb()
     yield

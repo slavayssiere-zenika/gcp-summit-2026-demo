@@ -3,8 +3,6 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.google_auth import get_drive_service
-from src.redis_client import get_redis
-
 from src.discovery_service import DiscoveryService
 from src.ingestion_service import IngestionService
 
@@ -15,9 +13,8 @@ class DriveService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.drive = get_drive_service()
-        self.redis = get_redis()
 
-        self.discovery_service = DiscoveryService(self.db, self.drive, self.redis)
+        self.discovery_service = DiscoveryService(self.db, self.drive)
         self.ingestion_service = IngestionService(self.db)
 
     def invalidate_roots_cache(self) -> None:

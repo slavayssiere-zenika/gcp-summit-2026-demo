@@ -4,8 +4,8 @@ from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
+from shared.cache import delete_cache
 from src.models import DriveFolder, DriveSyncState
-from src.redis_client import get_redis
 from src.schemas import FolderCreate, FolderUpdate
 from src.google_auth import get_drive_service
 
@@ -45,13 +45,14 @@ class FolderService:
         except Exception as e:
             logger.warning(f"[add_folder] Impossible de récupérer le nom Drive pour {raw_id}: {e}")
 
-        db_f = DriveFolder(google_folder_id=raw_id, tag=folder.tag.strip(), folder_name=resolved_folder_name, excluded_folders=folder.excluded_folders)
+        db_f = DriveFolder(google_folder_id=raw_id, tag=folder.tag.strip(),
+                           folder_name=resolved_folder_name, excluded_folders=folder.excluded_folders)
         self.db.add(db_f)
         await self.db.commit()
         await self.db.refresh(db_f)
 
         try:
-            get_redis().delete("drive:roots")
+            await delete_cache("drive:roots")
             logger.info("[Cache] drive:roots invalidé (nouveau folder enregistré).")
         except Exception as e_redis:
             logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
@@ -80,7 +81,7 @@ class FolderService:
         await self.db.refresh(folder)
 
         try:
-            get_redis().delete("drive:roots")
+            await delete_cache("drive:roots")
             logger.info(f"[Cache] drive:roots invalidé (folder {folder_id} mis à jour).")
         except Exception as e_redis:
             logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
@@ -90,21 +91,21 @@ class FolderService:
     async def list_folders_with_stats(self, skip: int = 0, limit: int = 50) -> tuple[list[DriveFolder], dict, int]:
         total = (await self.db.execute(select(func.count()).select_from(DriveFolder))).scalar()
         folders = (await self.db.execute(select(DriveFolder).offset(skip).limit(limit))).scalars().all()
-        
+
         stats_query = select(
             DriveSyncState.folder_id,
             DriveSyncState.status,
             func.count(DriveSyncState.google_file_id)
         ).group_by(DriveSyncState.folder_id, DriveSyncState.status)
-        
+
         stats_result = (await self.db.execute(stats_query)).all()
-        
+
         stats_map = {}
         for folder_id, status, count in stats_result:
             if folder_id not in stats_map:
                 stats_map[folder_id] = {}
             stats_map[folder_id][status.name] = count
-            
+
         return folders, stats_map, total
 
     async def reset_folder_sync(self, tag: str | None = None) -> int:
@@ -132,7 +133,7 @@ class FolderService:
         await self.db.commit()
 
         try:
-            get_redis().delete("drive:roots")
+            await delete_cache("drive:roots")
             logger.info(f"[Cache] drive:roots invalidé (folder {folder_id} supprimé).")
         except Exception as e_redis:
             logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
@@ -140,16 +141,12 @@ class FolderService:
         return files_count
 
     @staticmethod
-    def invalidate_drive_cache() -> int:
-        redis = get_redis()
-        keys_to_delete = []
-        for pattern in ["drive:graph:*", "drive:oos:*", "drive:name:*"]:
-            for key in redis.scan_iter(pattern):
-                keys_to_delete.append(key)
-                
-        redis.delete("drive:sync:rebuild_running")
-        
-        if keys_to_delete:
-            redis.delete(*keys_to_delete)
-            logger.info(f"Purge du cache Redis Drive : {len(keys_to_delete)} cles supprimees.")
-        return len(keys_to_delete)
+    async def invalidate_drive_cache() -> int:
+        """Invalide le cache Drive (graphe, oos, noms) via shared.cache (async)."""
+        from shared.cache import clear_namespace, delete_cache
+        deleted = 0
+        for pattern in ["drive:graph:", "drive:oos:", "drive:name:"]:
+            deleted += await clear_namespace(pattern)
+        await delete_cache("drive:sync:rebuild_running")
+        logger.info(f"Purge du cache Redis Drive : {deleted} clés supprimées.")
+        return deleted

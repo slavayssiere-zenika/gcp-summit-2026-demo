@@ -43,8 +43,9 @@ def integration_env(postgres_container, redis_container):
     redis_port = redis_container.get_exposed_port(6379)
     os.environ["REDIS_URL"] = f"redis://{redis_host}:{redis_port}/0"
 
-    import cache as _cache_module
-    _cache_module.reset_client()
+    import redis
+    _client = redis.from_url(os.environ["REDIS_URL"])
+    _client.flushdb()
 
     yield
 
@@ -57,7 +58,6 @@ def integration_env(postgres_container, redis_container):
         os.environ["REDIS_URL"] = _orig_redis_url
     else:
         os.environ.pop("REDIS_URL", None)
-    _cache_module.reset_client()
 
 
 @pytest.fixture
@@ -75,8 +75,9 @@ def wipe_users_db(postgres_container, integration_env):
 @pytest.fixture
 def wipe_redis(redis_container, integration_env):
     """Vide Redis avant chaque test."""
-    import cache as _cache_module
-    _cache_module.get_client().flushdb()
+    import redis
+    client = redis.from_url(os.environ["REDIS_URL"])
+    client.flushdb()
     yield
 
 

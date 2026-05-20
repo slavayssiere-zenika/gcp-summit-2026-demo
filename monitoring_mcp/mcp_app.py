@@ -22,7 +22,11 @@ from shared.mcp_server_utils import setup_mcp_tracer_provider
 
 tracer = setup_mcp_tracer_provider("monitoring-mcp")
 
-
+# Leak Mitigation (Anti prompt-injection / introspection)
+os.environ.pop("JWT_SECRET", None)
+os.environ.pop("SECRET_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("ADMIN_SERVICE_PASSWORD", None)
 app = FastAPI(title="Monitoring MCP Sidecar", root_path=os.getenv("ROOT_PATH", ""))
 instrument_app(app, service_name="monitoring-mcp")
 HTTPXClientInstrumentor().instrument()

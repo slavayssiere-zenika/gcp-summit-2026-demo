@@ -12,7 +12,7 @@ Routes :
 import logging
 from datetime import datetime, timezone
 
-from cache import delete_cache_pattern
+from shared.cache import clear_namespace
 from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func
@@ -165,7 +165,7 @@ async def review_competency_suggestion(
                 new_comp.aliases = gen_aliases
             db.add(new_comp)
             await db.flush()
-            delete_cache_pattern("competencies:*")
+            await clear_namespace("competencies:")
             trigger_taxonomy_cache_invalidation(bg_tasks, request)
         suggestion.status = "ACCEPTED"
     else:

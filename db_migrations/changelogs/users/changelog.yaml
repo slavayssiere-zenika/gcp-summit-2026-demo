@@ -229,3 +229,47 @@ databaseChangeLog:
         - sql:
             sql: ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_role;
 
+  - changeSet:
+      id: "10"
+      author: "antigravity"
+      runInTransaction: false
+      comment: >
+        P2 perf — Index sur users pour reduire le P95 sous charge (500u stress test).
+        Cibles identifiees par analyse Locust : GET /users/ (filtre is_anonymous),
+        GET /users/search (ILIKE full_name/email/first_name/last_name/username),
+        GET /users/duplicates (scan complet ordonne par created_at).
+        pg_trgm requis pour les recherches ILIKE trigram (operateur %).
+        runInTransaction: false requis pour CONCURRENTLY.
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_is_anonymous
+              ON users (is_anonymous, created_at DESC);
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_full_name_trgm
+              ON users USING GIN (full_name gin_trgm_ops);
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_trgm
+              ON users USING GIN (email gin_trgm_ops);
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_created_at_desc
+              ON users (created_at DESC);
+      rollback:
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_is_anonymous;"
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_full_name_trgm;"
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_email_trgm;"
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_created_at_desc;"

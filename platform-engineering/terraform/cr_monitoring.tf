@@ -67,6 +67,10 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
         value = "redis://${google_redis_instance.cache.host}:${google_redis_instance.cache.port}/9"
       }
       env {
+        name  = "SERVICE_NAME"
+        value = "monitoring_mcp"
+      }
+      env {
         name  = "ROOT_PATH"
         value = ""
       }

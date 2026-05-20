@@ -66,7 +66,8 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
             response.raise_for_status()
             data = response.json()
             if not data:
-                return [TextContent(type="text", text=f"Aucun utilisateur trouvé dans la base de données pour la recherche '{query}'.")]
+                msg = f"Aucun utilisateur trouvé dans la base de données pour la recherche '{query}'."
+                return [TextContent(type="text", text=msg)]
             return [TextContent(type="text", text=json.dumps(data))]
 
         elif name == "toggle_user_status":
@@ -118,6 +119,9 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
                 )
                 if missions_response.status_code == 200:
                     missions_data = missions_response.json()
+                    # Contrat intentionnel : /missions/user/{user_id}/active retourne
+                    # {"active_missions": [...]} — ce n'est PAS une PaginationResponse.
+                    # Ne pas migrer vers model_validate(PaginationResponse) sans modifier l'API.
                     active_missions = missions_data.get("active_missions", [])
             except Exception as missions_err:
                 logging.error(f"[get_user_availability] missions_api indisponible pour user {user_id}: {missions_err}")
@@ -188,7 +192,9 @@ async def handle_tool_call(name: str, arguments: dict, headers: dict, client: ht
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 409:
-            return [TextContent(type="text", text=json.dumps({"success": False, "error": f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres."}))]
-        return [TextContent(type="text", text=json.dumps({"success": False, "error": f"HTTP Error: {e.response.status_code} - {e.response.text}"}))]
+            err_msg = f"CONFLIT (409) : {e.response.text}. Ne PAS réessayer l'outil avec les mêmes paramètres."
+            return [TextContent(type="text", text=json.dumps({"success": False, "error": err_msg}))]
+        err_msg = f"HTTP Error: {e.response.status_code} - {e.response.text}"
+        return [TextContent(type="text", text=json.dumps({"success": False, "error": err_msg}))]
     except Exception as e:
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]

@@ -168,3 +168,29 @@ databaseChangeLog:
             tableName: missions
             columnName: embedding_model
 
+  - changeSet:
+      id: "7"
+      author: "antigravity"
+      runInTransaction: false
+      comment: >
+        P1 perf — Index GIN sur proposed_team + B-tree DESC sur created_at.
+        Resout le full table scan O(n) sur /missions/user/{id}/active (QueuePool
+        exhaustion a 500 users). GIN permet WHERE proposed_team @> '[{"user_id":X}]'
+        en O(log n). Index crees CONCURRENTLY pour eviter tout lock table en production.
+        runInTransaction: false requis — CREATE INDEX CONCURRENTLY interdit en transaction.
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_missions_proposed_team_gin
+              ON missions USING GIN (proposed_team);
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_missions_created_at_desc
+              ON missions (created_at DESC);
+      rollback:
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_missions_proposed_team_gin;"
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_missions_created_at_desc;"

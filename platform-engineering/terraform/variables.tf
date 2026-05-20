@@ -320,3 +320,9 @@ variable "bq_location" {
   type        = string
   default     = "europe-west1"
 }
+
+variable "enable_output_schema" {
+  description = "Active output_schema Pydantic (StaffingResponse/MissionAnalysis) comme source de vérité pour display_type dans agent_hr_api, agent_ops_api et agent_missions_api. false = render_ui_widgets reste seul mécanisme actif (défaut stable)."
+  type        = string
+  default     = "false"
+}
