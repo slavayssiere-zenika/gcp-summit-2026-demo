@@ -1,3 +1,63 @@
+## Mise à jour automatique - 2026-05-21 00:53:10
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2567  | 562  |  78% |
+| agent_hr_api     | 1477  | 179  |  88% |
+| agent_missions_api | 1755  | 198  |  89% |
+| agent_ops_api    | 1348  | 187  |  86% |
+| agent_router_api | 3274  | 566  |  83% |
+| analytics_mcp    | 931   | 141  |  85% |
+| competencies_api | 4993  | 993  |  80% |
+| cv_api           | 9496  | 1559 |  84% |
+| drive_api        | 3493  | 425  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2168  | 228  |  89% |
+| monitoring_mcp   | 1162  | 128  |  89% |
+| platform-engineering | 1497  | 1212 |  19% |
+| prompts_api      | 1350  | 252  |  81% |
+| shared           | 2935  | 300  |  90% |
+| tests            | 456   | 38   |  92% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/README.md` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/agent.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/agent.py` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/README.md` (M)
+- `agent_router_api/spec.md` (M)
+- `cv_api/spec.md` (M)
+- `drive_api/spec.md` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/spec.md` (M)
+- `platform-engineering/terraform/import_users_prd.sh` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-20 23:58:46
 
 ### Couverture de Code

@@ -68,7 +68,6 @@
 5e3a8936b1645010c24490a7c5f5035a84ae78c4  ./frontend/src/App.vue
 5ea74b8d982bfa2c077854728d1409db536b2c06  ./frontend/coverage/src/components/ui/index.html
 5f5e4e38c2ab569279c807c91991e50737ca8b10  ./frontend/src/views/Docs.vue
-5fa0168fe5095bf60602e97ea25a7e3472af06e9  ./frontend/vitest.log
 605853978aa324dab689511ad91b691beadf8934  ./frontend/src/components/agent/DebugPromptCard.vue
 607c4375c5cfe6c0f4b9c027474c71fca1c2f66e  ./frontend/src/components/CompetencyNode.vue
 628e602160d666d7a860eb9fd1431c3f344317a9  ./frontend/coverage/src/views/FinopsAdmin.vue.html
@@ -126,6 +125,7 @@ a2a9df1e2c8347657b3ca5074649f58a11ece975  ./frontend/coverage/src/components/age
 a345a51e69c22119fff064c42c75d58ecea537b4  ./frontend/coverage/src/components/agent/ItemCard.vue.html
 a5d8befcae9fd64acbed445962432e8fa876c51e  ./frontend/src/views/Competencies.vue
 a9f55bce18ee6bc559fed8373cdce23399fd44f8  ./frontend/src/views/__tests__/Competencies.spec.ts
+ad18b865b06e0643b2e4872b1f180583e1986513  ./frontend/vitest.log
 b0a3b293e2aafe2cda33eba2e9759e4d38d82198  ./frontend/src/types/__tests__/index.spec.ts
 b1fa2fe2854f7c5a883a8ce0e903e19ca4724b24  ./frontend/src/utils/treeify.ts
 b42b7f4370e9be3672d1061e5ee1ef0b78f400a5  ./frontend/src/types/__tests__/agentQueryResponse.spec.ts

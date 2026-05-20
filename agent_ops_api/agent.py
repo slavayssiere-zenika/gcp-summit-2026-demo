@@ -167,7 +167,7 @@ async def create_agent(session_id: str | None = None) -> Agent:
     cached_content = None
     if cache_name:
         cached_content = cache_name
-        instruction_text = None
+        instruction_text = ""
 
     agent = Agent(
         name="assistant_zenika_ops",

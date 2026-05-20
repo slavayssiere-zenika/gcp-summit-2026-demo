@@ -91,4 +91,4 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 - Les erreurs non-critiques (FinOps, monitoring) doivent être en mode dégradé (`asyncio.create_task`) pour ne pas bloquer la réponse
 
 ## Dernière modification
-2026-04-28 — v0.1.23 — fix SemanticCache HNSW TAG + session reset overflow
+2026-05-20 — v0.5.18 — import cleanup, startup discovery optimization, and timeout robustifications in A2A calls.

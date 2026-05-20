@@ -39,6 +39,7 @@
 55624d733542e9f0886d755192c46a62d5306514  ./agent_missions_api/tests/test_create_agent_jwt.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 5de53d3f073c15c9352924144c3faff7eb60aa37  ./agent_commons/agent_commons/a2a_utils.py
+61dacaec1ba949b039dbecc5c043ebfbf59c52dc  ./agent_missions_api/agent.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 640597ccea9961b2ca828eaf5288a7386f8f4a37  ./agent_commons/tests/test_runner_null_safety.py
@@ -102,7 +103,6 @@ eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.
 ec91162ea9ca78cddd1bed545bbda789f1e2777a  ./shared/auth/jwt.py
 f07c219bfe776cf380c0401a19129c79ee251ad1  ./agent_commons/tests/__init__.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
-f6abfdbb01f847006fed21cd6ba5ea49092a5dc6  ./agent_missions_api/agent.py
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 fa30e320e8004878cfa40b92c96201cf9230fedb  ./agent_commons/agent_commons/session.py
 ff9b5fbbbec38443b0d6ebfdf32ffe5ad01e8cfd  ./agent_commons/pyproject.toml

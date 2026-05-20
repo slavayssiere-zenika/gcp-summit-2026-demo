@@ -91,8 +91,8 @@ Après chaque appel outil retournant une **liste de consultants ou de profils**,
 - **POST** `/query` : Query
 - **POST** `/a2a/query` : A2A Query
 - **GET** `/mcp/registry` : Mcp Registry
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

@@ -67,7 +67,6 @@
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a39e83228deb8a11b7ab728933ca8dcc97c87a64  ./agent_hr_api/tests/test_main.py
 a3ca36e9721c55c574ee171242f97343afefd753  ./agent_commons/tests/test_runner_tool_budget.py
-a41c7560bcc73f8bc31634c34c623e25502cc37a  ./agent_hr_api/agent.py
 acc0839e3349350e07c28c1ec634faf05f8ac79b  ./agent_hr_api/requirements.txt
 acef654bdf0e1197537cfe1a69e22bc9f8faf0d0  ./agent_commons/agent_commons/http_resilience.py
 af164cd3af2ed9c0647b4083d5427898d6917752  ./agent_hr_api/.dockerignore
@@ -91,6 +90,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 dc4b44a504335da955f1b1459f7a441ed9a93187  ./agent_hr_api/metrics.py
 ddf7886948b0d7931bf32be2e9f3d8d93f165f67  ./agent_commons/agent_commons/runner.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
+e3ba209e0a52ca343af11b3b1b6b51e6588d1f5d  ./agent_hr_api/agent.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 e94ec766935137fa55bb6262412fde909427a061  ./agent_commons/tests/test_guardrails.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
