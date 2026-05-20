@@ -218,6 +218,14 @@ services:
       - ANALYTICS_MCP_URL=http://analytics_mcp:8008
       - DRIVE_API_URL=http://drive_api:8006
       - ROOT_PATH=/cv-api
+      - PUBSUB_EMULATOR_HOST=${PUBSUB_EMULATOR_HOST:-}
+      - PUBSUB_INVOKER_SA_EMAIL=${PUBSUB_INVOKER_SA_EMAIL:-mock@test.iam.gserviceaccount.com}
+      - MOCK_M2M_JWT=${MOCK_M2M_JWT:-}
+      - PUBSUB_CV_IMPORT_AUDIENCE=${PUBSUB_CV_IMPORT_AUDIENCE:-}
+      # P3.1 perf : qualite de la recherche HNSW (ef_search=100 vs defaut 40).
+      # Augmente le recall de ~90% a ~95% au cout d un parcours de graphe plus large.
+      # Uniquement cv_api : les autres services n utilisent pas pgvector.
+      - HNSW_EF_SEARCH=100
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -309,6 +317,9 @@ services:
       - CV_API_URL=http://cv_api:8004
       - SECRET_KEY=${SECRET_KEY}
       - ROOT_PATH=/drive-api
+      - PUBSUB_EMULATOR_HOST=${PUBSUB_EMULATOR_HOST:-}
+      - PUBSUB_CV_IMPORT_TOPIC=${PUBSUB_CV_IMPORT_TOPIC:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-test-project}
     depends_on:
       db_migrations:
         condition: service_completed_successfully
@@ -865,6 +876,25 @@ services:
       - MOCK_LLM_EMBED_LATENCY_MAX_S=0    # Embeddings servis en O(1) depuis pool pré-généré → 0s
       - MOCK_LLM_EMBEDDING_DIM=3072
       - MOCK_DATA_FILE=/data/mock_cv_pool.json
+    profiles:
+      - perf
+      - perf-stress
+    networks:
+      - monitoring_net
+
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:emulators
+    container_name: pubsub_emulator
+    hostname: pubsub_emulator
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=test-project
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8085"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     profiles:
       - perf
       - perf-stress

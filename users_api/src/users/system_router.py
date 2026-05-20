@@ -84,7 +84,7 @@ async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db), p
     if payload.get("role") not in ["admin", "rh"]:
         raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
 
-    users = (await db.execute(select(User).filter(User.is_active is True))).scalars().all()
+    users = (await db.execute(select(User).filter(User.is_active.is_(True)))).scalars().all()
     grouped = {}
     for u in users:
         if u.first_name and u.last_name:
@@ -102,7 +102,10 @@ async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db), p
 
 
 @router.post("/merge")
-async def merge_users(req: MergeRequest, request: Request, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+async def merge_users(
+    req: MergeRequest, request: Request, db: AsyncSession = Depends(get_db),
+    payload: dict = Depends(verify_jwt),
+):
     if payload.get("role") not in ["admin", "rh"]:
         raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
 

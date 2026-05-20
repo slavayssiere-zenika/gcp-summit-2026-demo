@@ -10,6 +10,35 @@ proposer des optimisations priorisées.
 > **Pré-requis** : Docker Desktop actif, `local_up.py` accessible, images AR présentes.
 > Ce workflow NE déploie PAS en production. Il est 100% local.
 
+### 🏗️ Contexte d'exécution cible : Google Cloud Run
+
+> [!IMPORTANT]
+> Les tests locaux simulent la **production sur Cloud Run** (europe-west1). Toute proposition
+> d'amélioration doit être évaluée dans ce contexte, pas dans un contexte serveur classique.
+
+| Caractéristique | Local (Docker) | Production (Cloud Run) |
+|---|---|---|
+| **CPU par instance** | Multi-core Mac | **1 vCPU** par défaut (configurable 2-8) |
+| **Concurrence** | Unlimited | `--concurrency 80` (FastAPI async) |
+| **Scaling** | Manuel | **Scale-to-zero** automatique |
+| **Instances** | 1 processus | 1 instance = 1 processus Python (uvicorn) |
+| **Pool DB** | Local postgres | AlloyDB (max_connections à calculer depuis prd) |
+| **Workers WSGI** | N/A (uvicorn) | **Uvicorn** (pas Gunicorn) — 1 seul worker par instance |
+
+**Implications pour l'analyse :**
+
+- **ThreadPoolExecutor bcrypt** : avec 1 vCPU par instance Cloud Run, le `ThreadPoolExecutor`
+  par défaut a `min(32, cpu_count+4) = 5` workers. Sur Cloud Run 1 vCPU, un seul thread
+  bcrypt tourne réellement à la fois (CPU-bound) → **le ThreadPoolExecutor est déjà correct**,
+  ne jamais proposer de réduire `max_workers` car cela degraderait la concurrence async.
+- **Pas de Gunicorn/unicorn multi-workers** : Cloud Run utilise `uvicorn` en processus unique.
+  Les optimisations multi-workers (ex: Gunicorn `--workers N`) ne s'appliquent pas.
+- **Latences locales vs prd** : les latences Docker local sont **supérieures** à la prd
+  (réseau local, même machine). En prd, AlloyDB répond en ~1-3ms vs ~10-50ms en local.
+- **LOCUST_INGESTION_USERS** : contrôle le **nombre de pipelines parallèles** (concurrence),
+  pas la vitesse individuelle. 30 workers = 30 connexions DB simultanées. À aligner avec
+  la capacité réelle du pool DB (`DB_POOL_SIZE` calculé depuis AlloyDB prd).
+
 ### Modes disponibles
 
 | Flag | Phases | Durée totale |
@@ -210,7 +239,48 @@ docker-compose logs --tail=50 users_api 2>/dev/null | grep -E "ERROR|WARNING|500
 > ⚠️ **Avant de proposer une action corrective, vérifier si elle n'est pas déjà implémentée** :
 > - Index HNSW sur `cv_profiles(embedding)` → déjà présent (`db_migrations/changelogs/cv/changelog.yaml`)
 > - bcrypt async via `ThreadPoolExecutor` → déjà présent (`users_api/src/auth.py`)
-> - `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` → déjà calculés par service dans `platform-engineering/terraform/`
+> - **Réduire `max_workers` du ThreadPoolExecutor bcrypt** → **INTERDIT sur Cloud Run** :
+>   1 vCPU = 1 thread CPU à la fois, le default est déjà optimal. Réduire dégraderait la concurrence async.
+> - **Proposer Gunicorn multi-workers** → **NON PERTINENT** : Cloud Run utilise uvicorn (1 processus).
+> - `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` → **NE JAMAIS proposer de valeur arbitraire.**
+>   Ces paramètres sont calculés depuis la configuration AlloyDB de production (voir bloc ci-dessous).
+>   Toute recommendation se limite à signaler une anomalie et renvoyer vers le calcul prd.
+
+> [!CAUTION]
+> **Règle DB Pool — INTERDICTION de hardcoder des valeurs**
+> `DB_POOL_SIZE` et `DB_MAX_OVERFLOW` ne doivent jamais être modifiés sans d'abord consulter
+> la capacité AlloyDB réelle en production. La formule est :
+> `DB_POOL_SIZE = floor(alloydb_max_connections / nb_instances_cloud_run / nb_services_partageant_la_db)`
+> Récupérer les paramètres AlloyDB prd avec :
+> ```bash
+> GCLOUD_BIN=/Users/sebastien.lavayssiere/Apps/google-cloud-sdk/bin/gcloud
+> $GCLOUD_BIN alloydb instances describe primary \
+>   --cluster=zenika-cluster --region=europe-west1 \
+>   --project=prod-ia-staffing \
+>   --format="yaml(databaseFlags,machineConfig)"
+> ```
+> Si le `max_connections` AlloyDB est inconnu, **ne pas toucher** `DB_POOL_SIZE` et le noter
+> dans le rapport sous "Investigations requises".
+
+> [!CAUTION]
+> **Règle Cache Redis — INTERDICTION de proposer du cache comme correctif de performance**
+> Ajouter du cache Redis pour améliorer un P95 élevé détecté pendant un tir de perf/stress est
+> **formellement interdit comme action corrective**. Raisons :
+> 1. Le cache se "réchauffe" pendant le tir → les métriques s'améliorent artificiellement au fil du temps,
+>    masquant la latence réelle de la requête froide.
+> 2. Le cache cache le problème (requête SQL lente, N+1, index manquant) au lieu de le corriger.
+> 3. Un cache mal invalidé introduit des incohérences de données en production.
+>
+> **Ce qui est autorisé à la place :**
+> - Identifier et corriger la requête SQL lente (EXPLAIN ANALYZE, index manquant)
+> - Corriger un pattern N+1 (jointure ou `selectinload` SQLAlchemy)
+> - Ajouter un index PostgreSQL via une migration Liquibase
+> - Réduire la complexité algorithmique (ex: groupby Python O(n) → GROUP BY SQL)
+>
+> **Exception** : si un cache Redis **existe déjà** sur l'endpoint et que la latence observée
+> correspond à un cache miss structurel (cold start), signaler sous "Investigations requises".
+> Ne jamais ajouter un nouveau cache pour compenser une latence SQL.
+
 
 **Format du rapport attendu :**
 

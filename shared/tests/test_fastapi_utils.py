@@ -158,6 +158,7 @@ class TestInstrumentApp:
             mock_instance = MagicMock()
             mock_prom.return_value = mock_instance
             mock_instance.instrument.return_value = mock_instance
+            mock_instance.add.return_value = mock_instance
             instrument_app(app, service_name="test-svc", skip_otel_fastapi=True)
             mock_prom.assert_called_once()
             mock_instance.instrument.assert_called_once_with(app)

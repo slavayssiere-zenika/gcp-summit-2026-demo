@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: "008-add-idx-user-comp-competency-id"
+      author: "antigravity"
+      runInTransaction: "false"
+      comment: >
+        Index sur user_competency.competency_id pour accelerer GET /competencies/stats/coverage.
+        Sans cet index, PostgreSQL effectue un seq scan complet de user_competency pour les
+        requetes COUNT GROUP BY competency_id (P95 observe : 5 800ms sous charge d ingestion).
+        La PK (user_id, competency_id) couvre uniquement les lookups par user_id en premier.
+        Cet index secondaire sur competency_id seul permet les agregations par competence
+        sans seq scan (P95 attendu apres index : < 300ms).
+        runInTransaction=false requis car CREATE INDEX CONCURRENTLY ne peut pas
+        s executer dans un bloc de transaction (erreur PostgreSQL).
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_comp_competency_id
+              ON user_competency (competency_id);
+      rollback:
+        - sql:
+            sql: "DROP INDEX IF EXISTS idx_user_comp_competency_id;"

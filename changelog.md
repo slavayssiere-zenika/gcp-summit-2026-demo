@@ -1,3 +1,122 @@
+## Mise à jour automatique - 2026-05-20 23:20:49
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2567  | 562  |  78% |
+| agent_hr_api     | 1478  | 180  |  88% |
+| agent_missions_api | 1755  | 198  |  89% |
+| agent_ops_api    | 1349  | 188  |  86% |
+| agent_router_api | 3275  | 566  |  83% |
+| analytics_mcp    | 931   | 141  |  85% |
+| competencies_api | 4993  | 993  |  80% |
+| cv_api           | 9496  | 1559 |  84% |
+| drive_api        | 3493  | 425  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2168  | 228  |  89% |
+| monitoring_mcp   | 1162  | 128  |  89% |
+| platform-engineering | 1497  | 1212 |  19% |
+| prompts_api      | 1350  | 252  |  81% |
+| shared           | 2935  | 300  |  90% |
+| tests            | 456   | 38   |  92% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/analyse-performance.md` (M)
+- `agent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/src/competencies/assignments_router.py` (M)
+- `cv_api/Dockerfile` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/analytics_router.py` (M)
+- `cv_api/src/services/search_service.py` (M)
+- `db_migrations/FILE_HASHES` (M)
+- `db_migrations/HASH` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/competencies/changelog.yaml` (M)
+- `docker-compose.yml` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/tests/integration/conftest.py` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/locustfile.py` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/terraform/cr_analytics.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/cr_monitoring.tf` (M)
+- `platform-engineering/terraform/db_init_job.tf` (M)
+- `platform-engineering/terraform/db_migrations_job.tf` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/spec.md` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/local_up.py` (M)
+- `shared/FILE_HASHES` (M)
+- `shared/HASH` (M)
+- `shared/VERSION` (M)
+- `shared/database.py` (M)
+- `shared/fastapi_utils.py` (M)
+- `shared/pyproject.toml` (M)
+- `shared/tests/test_fastapi_utils.py` (M)
+- `tempo/tempo.yaml` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+- `users_api/src/users/system_router.py` (M)
+- `.env.perf` (??)
+- `db_migrations/changelogs/competencies/008-add-idx-user-comp-competency-id.yaml` (??)
+- `docs/local_up_testing_guide.md` (??)
+- `platform-engineering/terraform/iam_registry.tf` (??)
+- `scripts/init_pubsub_emulator.py` (??)
+- `scripts/validate_pubsub_emulator.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-20 16:01:56
 
 ### Couverture de Code

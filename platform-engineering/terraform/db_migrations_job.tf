@@ -45,7 +45,8 @@ resource "google_cloud_run_v2_job" "db_migrations" {
 
   depends_on = [
     google_secret_manager_secret_iam_member.alloydb_password_access,
-    google_cloud_run_v2_job.db_init
+    google_cloud_run_v2_job.db_init,
+    google_project_iam_member.cloudrun_cross_project_registry_reader
   ]
 }
 

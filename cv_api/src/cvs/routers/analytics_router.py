@@ -35,7 +35,12 @@ router = APIRouter(prefix="", tags=["CV Analytics"], dependencies=[Depends(verif
 
 
 @router.get("/ranking/experience", response_model=List[RankedExperienceResponse])
-async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[str] = None, request: Request = None, db: AsyncSession = Depends(get_db)):  # noqa: E501
+async def get_consultants_experience_ranking(
+    limit: int = 5,
+    agency: Optional[str] = None,
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Retourne la liste des consultants les plus expérimentés basés sur les années d'expérience extraites des CVs.
     """
@@ -72,7 +77,10 @@ async def get_consultants_experience_ranking(limit: int = 5, agency: Optional[st
     async with httpx.AsyncClient(timeout=10.0) as http_client:
         async def fetch_user(res):
             try:
-                u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{res['user_id']}", headers=headers_downstream)  # noqa: E501
+                u_res = await http_client.get(
+                    f"{USERS_API_URL.rstrip('/')}/{res['user_id']}",
+                    headers=headers_downstream,
+                )  # noqa: E501
                 if u_res.status_code == 200:
                     u_data = u_res.json()
                     res["full_name"] = u_data.get("full_name")

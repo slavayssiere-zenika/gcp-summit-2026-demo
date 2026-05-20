@@ -107,6 +107,10 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
       template[0].containers[0].resources[0].limits["cpu"]
     ]
   }
+
+  depends_on = [
+    google_project_iam_member.cloudrun_cross_project_registry_reader
+  ]
 }
 
 # ==========================================

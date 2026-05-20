@@ -1,6 +1,6 @@
 # 📦 Documentation des Pipelines CI/CD
 
-> ⚙️ Document auto-généré le **2026-05-20 14:01 UTC** par `scripts/generate_pipeline_docs.py`.
+> ⚙️ Document auto-généré le **2026-05-20 21:20 UTC** par `scripts/generate_pipeline_docs.py`.
 
 > Ne pas éditer manuellement — vos modifications seront écrasées au prochain `/git-push`.
 
@@ -22,7 +22,7 @@
 
 | Paramètre | **DEV** | **PRD** | **UAT** |
 | --- | --- | --- | --- | --- |
-| `image_registry` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` |
+| `image_registry` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services` | `europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev` |
 
 ### 🚀 Cloud Run
 

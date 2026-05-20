@@ -254,6 +254,15 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = "true"
       }
 
+      env {
+        # P3.1 perf — Qualité de la recherche HNSW lors du parcours du graphe.
+        # ef_search=100 vs défaut pgvector=40 : recall ~90% → ~95%, latence +25%.
+        # Activé uniquement pour cv_api (les autres services n'utilisent pas pgvector).
+        # Pertinent à partir de 5000+ CVs indexés (en-dessous, seq scan est plus rapide).
+        name  = "HNSW_EF_SEARCH"
+        value = "100"
+      }
+
     }
 
     # Conteneur Sidecar (MCP)

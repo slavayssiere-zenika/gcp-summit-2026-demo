@@ -147,3 +147,5 @@ databaseChangeLog:
       file: "changelogs/competencies/006-add-scoring-metadata.yaml"
   - include:
       file: "changelogs/competencies/007-fix-context-column-text.yaml"
+  - include:
+      file: "changelogs/competencies/008-add-idx-user-comp-competency-id.yaml"

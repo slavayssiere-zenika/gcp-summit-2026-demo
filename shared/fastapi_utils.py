@@ -30,7 +30,7 @@ import os
 
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import Instrumentator, metrics as pfi_metrics
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response as StarletteResponse
@@ -38,6 +38,15 @@ from starlette.responses import Response as StarletteResponse
 from shared.exception_handler import register_global_exception_handler
 from shared.middlewares import ContentLengthSanitizerASGIMiddleware
 from shared.observability import LoggingMiddleware
+
+# Buckets Prometheus étendus jusqu'à 10s pour capturer les queues P95/P99 des
+# endpoints lents (pgvector, bcrypt, LLM mock). Les buckets par défaut plafonnent
+# à ~1s, ce qui sature le compteur sur les endpoints à 3-10s de latence.
+_LATENCY_BUCKETS = (
+    0.01, 0.025, 0.05, 0.1, 0.25, 0.5,
+    1.0, 2.0, 3.0, 5.0, 7.5, 10.0,
+    float("inf"),
+)
 
 # URLs exclues des instrumentations (health-check / readiness / métriques)
 _EXCLUDED_URLS = "health,ready,metrics,version,api/health"
@@ -131,8 +140,14 @@ def instrument_app(
     _service_name = service_name or os.getenv("SERVICE_NAME", "unknown-service")
     _excluded = excluded_urls or _EXCLUDED_URLS
 
-    # 1. Prometheus — expose /metrics
-    Instrumentator().instrument(app).expose(app)
+    # 1. Prometheus — expose /metrics avec buckets étendus jusqu'à 10s
+    # (API v7.x : les buckets se configurent via .add(metrics.latency(buckets=...)))
+    (
+        Instrumentator()
+        .add(pfi_metrics.latency(buckets=_LATENCY_BUCKETS))
+        .instrument(app)
+        .expose(app)
+    )
 
     # 2. OTEL FastAPI — trace les requêtes HTTP entrantes (sauf si tracer_provider custom)
     if not skip_otel_fastapi:

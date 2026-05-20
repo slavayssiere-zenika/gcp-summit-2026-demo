@@ -38,7 +38,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `metrics.py` | 19 | ✅ |
 | `src/cvs/router.py` | 47 | ✅ |
 | `src/cvs/routers/admin_router.py` | 176 | ✅ |
-| `src/cvs/routers/analytics_router.py` | 456 | ✅ |
+| `src/cvs/routers/analytics_router.py` | 464 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 307 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 56 | ✅ |
 | `src/cvs/routers/profile_router.py` | 318 | ✅ |
@@ -74,6 +74,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `BULK_APPLY_SEMAPHORE` | Comportement | `5` |
 | `BULK_EMBED_SEMAPHORE` | Comportement | `10` |
 | `BULK_SCALE_MIN_INSTANCES` | Comportement | `1` |
+| `HNSW_EF_SEARCH` | Comportement | `0` |
 | `CLOUDRUN_WORKSPACE` | Comportement | `dev` |
 
 ## Redis

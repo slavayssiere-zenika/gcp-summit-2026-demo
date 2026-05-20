@@ -12,6 +12,8 @@ Paramètres Locust conseillés pour le profil ingestion :
     --users 30 --spawn-rate 3 --run-time 5m
     (30 pipelines concurrents = ~3000 CVs sur 5 min)
 """
+import base64
+import json
 import os
 import random
 import string
@@ -201,7 +203,8 @@ class ZenikaPerfUser(HttpUser):
     En mode navigation (LOCUST_SCENARIO=navigation) : seule classe active (500 users).
     Désactivé en mode ingestion (weight=0).
     """
-    weight = 0 if _SCENARIO in ("navigation", "ingestion") else 3  # 75 % du trafic en mode full
+    weight = 0 if _SCENARIO == "ingestion" else 3  # 75% en mode full, 100% en mode navigation, 0% en ingestion
+
     wait_time = between(1, 3)
     _bootstrapped_globally = False
 
@@ -817,7 +820,8 @@ class CVIngestionPipelineUser(HttpUser):
     que le système tient 3000 CVs (30 compétences + 50 missions chacun)
     sans dégradation de latence ni erreur de pool DB.
     """
-    weight = 0 if _SCENARIO == "navigation" else 1  # 25% en mode full, 100% en mode ingestion, 0% en navigation
+    weight = 0 if _SCENARIO in ("navigation",) else 1  # 25% en mode full, 100% en mode ingestion, 0% en navigation
+
     wait_time = between(0.5, 1.5)
 
     # Compteur de CVs simulés partagé entre instances (approximatif)
@@ -1132,9 +1136,64 @@ class CVIngestionPipelineUser(HttpUser):
         # Etape 5 : Analytics + progression (1 fois sur 10)
         if cv_num % 10 == 0:
             self._read_analytics()
-            print(f"  📊 [{cv_num}/{self.CV_TARGET}] CVs ingeres simules")
+            if _SCENARIO == "ingestion":
+                # Affichage de progression uniquement en mode ingestion (auto-stop actif)
+                print(f"  📊 [{cv_num}/{self.CV_TARGET}] CVs ingeres simules (mode ingestion)")
+            else:
+                # En mode full, le CV_TARGET n'est pas un objectif d'arret
+                print(f"  📊 CV #{cv_num} ingere simule (mode {_SCENARIO}, pas d'auto-stop)")
+
+        # Test Pub/Sub : toutes les 50 CVs en mode ingestion, valider le endpoint push
+        if _SCENARIO == "ingestion" and cv_num % 50 == 0:
+            self._test_pubsub_push_endpoint(cv_num)
 
         # Auto-stop en mode ingestion : quitte quand CV_TARGET atteint
         if _SCENARIO == "ingestion" and cv_num >= self.CV_TARGET:
             print(f"  ✅ Objectif atteint : {cv_num} CVs ingeres. Arret du runner.")
             self.environment.runner.quit()
+
+    def _test_pubsub_push_endpoint(self, cv_num: int):
+        """Valide le contrat de l'endpoint push cv_api /pubsub/import-cv.
+
+        Envoie un message Pub/Sub synthetique encodé en base64 au format GCP.
+        Le message simule une notification publiée par drive_api sur le topic cv-import.
+        Appelé periodiquement (toutes les 50 CVs) en mode ingestion pour valider
+        que le endpoint de push subscription est bien joignable et retourne 200.
+        """
+        # Payload conformément au contrat drive_api → Pub/Sub → cv_api
+        msg_data = base64.b64encode(json.dumps({
+            "google_file_id": "locust-test-synthetic-file-id",
+            "url": "https://docs.google.com/document/d/locust-test-synthetic/edit",
+            "file_type": "google_doc",
+            "action": "upsert",
+            "source_tag": "locust-perf-test",
+        }).encode("utf-8")).decode("utf-8")
+
+        push_payload = {
+            "message": {
+                "data": msg_data,
+                "messageId": f"locust-test-{cv_num}",
+                "publishTime": "2026-01-01T00:00:00Z",
+                "attributes": {"source": "locust-perf-test"},
+            },
+            "subscription": "projects/test-project/subscriptions/cv-import-sub",
+        }
+        cv_api = os.getenv("CV_API_URL", "http://cv_api:8004")
+        # Appel sans JWT (endpoint public_router) — le header OIDC sera manquant :
+        # on s'attend soit à 200 (audience non configurée = bypass OIDC),
+        # soit à 401 (audience configurée mais pas de token — attendu en prod).
+        with self.client.post(
+            f"{cv_api}/pubsub/import-cv",
+            json=push_payload,
+            name="[PubSub] POST /pubsub/import-cv (synthetic push)",
+            catch_response=True,
+            headers={},  # Pas de JWT — endpoint public
+        ) as resp:
+            if resp.status_code in (200, 202, 401, 403):
+                # 200/202 = endpoint joignable et traitement accepté
+                # 401/403 = OIDC actif (normal en prod, indique que le contrat est en place)
+                resp.success()
+            else:
+                resp.failure(
+                    f"Endpoint /pubsub/import-cv inattendu : HTTP {resp.status_code}"
+                )

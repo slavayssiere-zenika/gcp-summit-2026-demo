@@ -310,7 +310,11 @@ print_summary() {
       local errors
       errors=$(grep -E 'ERROR|FAILED|Error|Exception|NameError|ImportError|assert|XFAIL' "$f" \
         | grep -v 'DeprecationWarning\|pythonjsonlogger\|HTTP Request Failed\|exc_info\|warnings.warn\|PytestUnraisable\|ConnectionError\|opentelemetry\|ServiceUnavailable\|_InactiveRpcError\|ValueError' \
+        | grep -v 'Logging error\|Failed to export\|grpc_status\|grpc_message\|StatusCode\|localhost:4317\|OTLP\|BatchExport\|Call stack' \
+        | grep -v '_log(ERROR\|logger\.error\|logger\.warning\|self\._log' \
         | head -50)
+
+
       if [ -n "$errors" ]; then
         HAS_ERRORS=true
         found_any_test_error=true

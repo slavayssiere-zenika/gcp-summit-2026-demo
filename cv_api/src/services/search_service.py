@@ -51,7 +51,7 @@ VECTOR_DISTANCE_THRESHOLD = float(os.getenv("VECTOR_DISTANCE_THRESHOLD", "0.55")
 # les candidats au-delà du rang 100.
 # Le filtre R2 (VECTOR_DISTANCE_THRESHOLD) garantit la qualité de ce pool.
 # Ajuster selon la taille du corpus : 500 pour <5k CVs, 1000 pour >5k CVs.
-MAX_VECTOR_CANDIDATES = int(os.getenv("MAX_VECTOR_CANDIDATES", "500"))
+MAX_VECTOR_CANDIDATES = int(os.getenv("MAX_VECTOR_CANDIDATES", "100"))
 
 
 async def execute_search(
@@ -177,11 +177,16 @@ async def execute_search(
             | (CVProfile.embedding_model.is_(None))
         )
 
-    # R2 — Seuil de pertinence : exclut les candidats trop éloignés sémantiquement.
-    # Configurable via VECTOR_DISTANCE_THRESHOLD (défaut 0.55).
-    stmt = stmt.filter(
-        CVProfile.semantic_embedding.cosine_distance(search_vector) < VECTOR_DISTANCE_THRESHOLD
-    )
+    # R2 — Seuil de pertinence applique en post-processing Python (apres fetch DB).
+    # Le filtre WHERE SQL est supprime : il forcait un seq scan et calculait la distance
+    # DEUX fois par ligne (WHERE + ORDER BY). Sans ce filtre, pgvector peut utiliser
+    # l index HNSW pour ORDER BY ... LIMIT k (KNN pur) a partir de ~5000 lignes.
+
+    # Limite effective : garantit la pagination profonde (skip+limit+buffer).
+    # max(MAX_VECTOR_CANDIDATES, skip+limit+20) : la marge +20 compense les candidats
+    # elimines par le filtre Python (distance >= threshold) et la deduplication.
+    # En prod : MAX_VECTOR_CANDIDATES=2000 > corpus (~1461 CVs) → pas d impact.
+    effective_limit = max(MAX_VECTOR_CANDIDATES, skip + limit + 20)
 
     if agency:
         stmt = stmt.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
@@ -252,45 +257,44 @@ async def execute_search(
         if approved_user_ids:
             stmt_filtered = stmt.filter(CVProfile.user_id.in_(list(approved_user_ids)))
             query_results = (
-                await db.execute(stmt_filtered.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+                await db.execute(stmt_filtered.order_by("distance").limit(effective_limit))
             ).all()
             if not query_results:
                 fallback_scan = True
                 query_results = (
-                    await db.execute(stmt.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+                    await db.execute(stmt.order_by("distance").limit(effective_limit))
                 ).all()
         else:
             fallback_scan = True
             query_results = (
-                await db.execute(stmt.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+                await db.execute(stmt.order_by("distance").limit(effective_limit))
             ).all()
     else:
         query_results = (
-            await db.execute(stmt.order_by("distance").limit(MAX_VECTOR_CANDIDATES))
+            await db.execute(stmt.order_by("distance").limit(effective_limit))
         ).all()
+
+    # R2 — Post-filtrage Python par seuil de distance cosine.
+    # Remplace le WHERE SQL supprime ci-dessus : calcul en memoire sur les rows fetchees
+    # (max MAX_VECTOR_CANDIDATES=100), distance deja calculee dans le SELECT.
+    query_results_raw = query_results
+    query_results = [
+        (profile, dist) for profile, dist in query_results_raw
+        if dist is not None and dist < VECTOR_DISTANCE_THRESHOLD
+    ]
 
     if response:
         response.headers["X-Fallback-Full-Scan"] = str(fallback_scan).lower()
 
-    # Déduplication et formatage
+    # Deduplication et formatage
     mapped_results = []
     seen_users: set = set()
     agency_label = agency or "all"
 
-    # R6 — Calcul du nombre de candidats élagués par le seuil R2
-    # On exécute la même query SANS le filtre de distance pour avoir le total brut
-    stmt_unfiltered = select(
-        func.count(CVProfile.user_id)
-    ).filter(CVProfile.semantic_embedding.is_not(None))
-    if current_embedding_model:
-        stmt_unfiltered = stmt_unfiltered.filter(
-            (CVProfile.embedding_model == current_embedding_model)
-            | (CVProfile.embedding_model.is_(None))
-        )
-    if agency:
-        stmt_unfiltered = stmt_unfiltered.filter(CVProfile.source_tag.ilike(f"%{agency}%"))
-    total_before_threshold = (await db.execute(stmt_unfiltered)).scalar() or 0
-    filtered_count = max(0, total_before_threshold - len(query_results))
+    # R6 — Calcul sans requete DB supplementaire : diff Python rows fetchees vs filtrees.
+    # Suppression du stmt_unfiltered COUNT(*) : economise 1 connexion pool par search.
+    # Impact : passage de 2 requetes DB/search a 1 seule (-50% pool pressure).
+    filtered_count = len(query_results_raw) - len(query_results)
     if filtered_count > 0:
         CV_SEARCH_THRESHOLD_FILTERED.labels(agency=agency_label).inc(filtered_count)
     if response:

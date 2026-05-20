@@ -34,6 +34,15 @@ SessionLocal = None
 async def init_db_connector():
     global connector, engine, SessionLocal
 
+    # P3.1 — hnsw.ef_search : parametre de qualite du graphe HNSW lors de la recherche.
+    # Uniquement pour cv_api : configure via HNSW_EF_SEARCH=100 dans docker-compose / Cloud Run.
+    # 0 = desactive (defaut) : aucune surcharge pour les autres services.
+    hnsw_ef_search = int(os.getenv("HNSW_EF_SEARCH", "0"))
+    _connect_args: dict = {}
+    if hnsw_ef_search > 0:
+        _connect_args["server_settings"] = {"hnsw.ef_search": str(hnsw_ef_search)}
+        logger.info("[DB] hnsw.ef_search=%d configure via server_settings asyncpg.", hnsw_ef_search)
+
     pool_params = {
         "pool_pre_ping": True,
         # 5min au lieu de 30min : les connexions dégradées post-pic sont recyclées
@@ -79,7 +88,7 @@ async def init_db_connector():
         target_url = DATABASE_URL
         if target_url and target_url.startswith("postgresql://"):
             target_url = target_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        engine = create_async_engine(target_url, **pool_params)
+        engine = create_async_engine(target_url, connect_args=_connect_args, **pool_params)
 
     SessionLocal = sessionmaker(
         bind=engine, class_=AsyncSession, expire_on_commit=False,

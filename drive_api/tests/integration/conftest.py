@@ -40,6 +40,9 @@ def pubsub_emulator():
 
     L'émulateur expose le port 8085 et est compatible avec le SDK Python
     via la variable d'environnement PUBSUB_EMULATOR_HOST.
+
+    Note : l'image est lourde (cloud-sdk + Java) — le timeout est volontairement
+    long (120s) pour absorber le temps de pull + démarrage JVM au premier run.
     """
     container = (
         DockerContainer("gcr.io/google.com/cloudsdktool/cloud-sdk:emulators")
@@ -56,17 +59,21 @@ def pubsub_emulator():
     port = container.get_exposed_port(8085)
     emulator_host = f"{host}:{port}"
 
-    # Attendre que l'émulateur soit prêt (max 30s)
+    # Attendre que l'émulateur soit prêt (max 120s — image lourde + JVM)
     os.environ["PUBSUB_EMULATOR_HOST"] = emulator_host
-    _wait_for_pubsub_emulator(emulator_host)
+    _wait_for_pubsub_emulator(emulator_host, timeout=120)
 
     yield emulator_host
 
     container.stop()
 
 
-def _wait_for_pubsub_emulator(host: str, timeout: int = 30):
-    """Attend que l'émulateur Pub/Sub soit prêt à accepter des connexions."""
+def _wait_for_pubsub_emulator(host: str, timeout: int = 120):
+    """Attend que l'émulateur Pub/Sub soit prêt à accepter des connexions gRPC.
+
+    timeout élevé (120s) car l'image cloud-sdk est lourde et la JVM prend
+    du temps à démarrer, surtout au premier run (pull de l'image inclus).
+    """
     import grpc
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -76,7 +83,7 @@ def _wait_for_pubsub_emulator(host: str, timeout: int = 30):
             channel.close()
             return
         except Exception:
-            time.sleep(0.5)
+            time.sleep(1)  # pause 1s au lieu de 0.5s pour réduire le bruit
     raise TimeoutError(f"L'émulateur Pub/Sub n'est pas démarré après {timeout}s sur {host}")
 
 

@@ -13,11 +13,11 @@ distributor:
           endpoint: "0.0.0.0:4318"
 
 ingester:
-  max_block_duration: 10m
+  max_block_duration: 30m
 
 compactor:
   compaction:
-    block_retention: 4h
+    block_retention: 48h
 
 storage:
   trace:

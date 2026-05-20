@@ -6,8 +6,9 @@
 0e5a53df220ce4fa4132c7fb45b29dc392f67808  ./users_api/tests/test_mcp_tools.py
 0e67206eb9bb4bdd2a227d7f16449b8c6430782d  ./shared/tests/zero_trust.py
 0e9afc1569a93b46896d8b18da10cb9d4bf4ad6a  ./shared/tests/test_cache.py
-18640081682fc22a822eeca0caba0473054c2a9e  ./users_api/src/users/system_router.py
+0f7f5ec4004cb525f4719df4f127706442bd22e9  ./shared/tests/test_edge_cases.py
 199c230aede20c4ac73b49944a86a8b47e708ced  ./users_api/tests/test_mcp_extended.py
+1f4fe6603d631baffc00c40d3ec10b5bcff95256  ./shared/schemas/pagination.py
 1f9cd3848db0c58827475a042a843f84a1a1f290  ./users_api/src/users/router.py
 27a5482c11e72a28f6c6bfef63b1f39e4773c425  ./users_api/tests/test_contract.py
 29e62c52763a613694d3fcddc10c948df0891c4f  ./shared/redis_state.py
@@ -19,14 +20,15 @@
 408a9930e940145795da4f35a8c547032c0233e8  ./users_api/uv.lock
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 43d645bad4be76820c88438898c63b3689f053d4  ./users_api/metrics.py
-44eb5e2028e790d4d7ef545e504fa846b71e1101  ./shared/database.py
 4d7fbfac151dbe541236eedf98d1fae4a52e6f5b  ./users_api/tests/test_main.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f82ec239ed4068d831d636bc428e81fe39ff09b  ./users_api/tests/integration/conftest.py
+53ec7850836038d178ae07b5587d855b819e63e7  ./shared/fastapi_utils.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 61f39a84525adaa6547dbc46d74fe590d6680e0c  ./users_api/tests/test_crud_extended.py
-69a1257437052550029d4992cfde698b6c4b25a9  ./shared/fastapi_utils.py
+635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
+6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 6aad6aa1620870803bfe70245fb7d355b7112658  ./users_api/src/users/models.py
 78a59620d02c0a50ddd70ef064e2cce9f50dad59  ./users_api/mcp_app.py
 7d390ff330651fb35ae0e3c21e58969723c6c8ca  ./users_api/tests/test_auth_service_account.py
@@ -37,12 +39,13 @@
 88600b3221070902131ebb2aa88073456a316a40  ./users_api/src/mcp_tools/tools_handlers.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
+976f8b26632b1fe7209ed983522d606f94e38e5c  ./users_api/main.py
 9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 9c9044377e84ad6ec3ecc14a28a8c7388a00d9a2  ./shared/schemas/auth.py
+9cd32f95fb148ec2c6d2e6c0bf0e45cce233fa65  ./users_api/src/users/system_router.py
 9ce70d39e7eeaa234846a5e5e15c7d9b3ea2b621  ./users_api/tests/test_main_extended.py
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 9f1963d3642606631dcef281f018a4d1490026a8  ./users_api/conftest.py
-a331eecf311fb46bd739bd73aea8696506753d4e  ./shared/pyproject.toml
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a473832417b069357ce408e7a23edac11d878218  ./users_api/tests/integration/test_pg_integration.py
 ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
@@ -57,8 +60,6 @@ ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./users_api/.dockerignore
 d2ba7681c1870b202f6beee5d40b58007600cd92  ./users_api/tests/test_extended_coverage.py
-d3ae0e30fd3fd20ac9243dcdbbb91e33be85ec5a  ./users_api/main.py
-d565cc42fbcdad7e346e30ae273b521b9906533d  ./shared/schemas/pagination.py
 d6040f181c9a8ed47aea69996d670acee82354f1  ./users_api/tests/test_zero_trust.py
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
@@ -76,4 +77,3 @@ ec91162ea9ca78cddd1bed545bbda789f1e2777a  ./shared/auth/jwt.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f8355065da4af90b7aedca4af6e3b537578872cb  ./users_api/src/auth.py
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
-feb2d1c674cd0a12fa26a09f9572eedcafc8558a  ./shared/tests/test_edge_cases.py
