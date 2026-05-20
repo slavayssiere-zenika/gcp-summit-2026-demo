@@ -93,13 +93,6 @@ class TestQueryContract:
             data = resp.json()
             assert "response" in data or "answer" in data, "Champ réponse manquant"
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "BUG CONNU : /query retourne HTTP 500 quand run_agent_query lève une exception. "
-            "Le handler doit catcher et retourner 200 dégradé ou 503."
-        ),
-    )
     def test_query_error_returns_degraded_not_500(self, client):
         """Si le LLM échoue, l'API doit retourner une réponse dégradée (pas un 500)."""
         with patch("agent.run_agent_query", new=AsyncMock(side_effect=Exception("LLM unavailable"))):

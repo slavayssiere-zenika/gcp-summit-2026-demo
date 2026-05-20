@@ -259,7 +259,7 @@ async def a2a_query(request: A2ARequest, http_request: Request,
             return A2AResponse(
                 response=f"⚠️ L'agent RH a rencontré une erreur technique : {type(e).__name__}.",
                 source="error",
-                steps=[{"type": "error", "tool": "a2a_handler", "args": {"message": str(e)}}],
+                steps=[{"type": "warning", "tool": "a2a_handler", "args": {"message": str(e)}}],
             )
 
 

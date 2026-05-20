@@ -1,5 +1,7 @@
 024816c95615f9719db2715f6f71e97994366e21  ./agent_hr_api/pyproject.toml
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
+083ea77779cba06889496e3797b80dd93ff70aa6  ./agent_hr_api/tests/test_functional_contract.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
@@ -40,11 +42,12 @@
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 640597ccea9961b2ca828eaf5288a7386f8f4a37  ./agent_commons/tests/test_runner_null_safety.py
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 6c8e5b19314741275ae156448a2929b92f721d48  ./agent_hr_api/mcp_client.py
+6cbc7a859589969e3d0308b101723f5d4d4e1bfa  ./agent_hr_api/main.py
 717de9103446d979bba50df9b38f8c7f7b88084d  ./agent_hr_api/tests/test_create_agent_jwt.py
 74e8b86bc4c092dc89b7bb846cf465c9ec425aab  ./agent_commons/agent_commons/mcp_client.py
 7f618f5535793e57770c3a22e639bdcc583f4578  ./agent_commons/tests/test_prompt_loader_cache.py
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
 83eff2f28e5e28c0095435c920671841f6d9c3ee  ./agent_commons/tests/test_runner_display_type.py
@@ -65,7 +68,6 @@ a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a39e83228deb8a11b7ab728933ca8dcc97c87a64  ./agent_hr_api/tests/test_main.py
 a3ca36e9721c55c574ee171242f97343afefd753  ./agent_commons/tests/test_runner_tool_budget.py
 a41c7560bcc73f8bc31634c34c623e25502cc37a  ./agent_hr_api/agent.py
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 acc0839e3349350e07c28c1ec634faf05f8ac79b  ./agent_hr_api/requirements.txt
 acef654bdf0e1197537cfe1a69e22bc9f8faf0d0  ./agent_commons/agent_commons/http_resilience.py
 af164cd3af2ed9c0647b4083d5427898d6917752  ./agent_hr_api/.dockerignore
@@ -97,7 +99,5 @@ f07c219bfe776cf380c0401a19129c79ee251ad1  ./agent_commons/tests/__init__.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 fa30e320e8004878cfa40b92c96201cf9230fedb  ./agent_commons/agent_commons/session.py
-fb6be697ab4cbc40c20c7cdb3edc060eac5fd3ed  ./agent_hr_api/main.py
-fd97e54679251c1444637b7494539a63583a8b09  ./agent_hr_api/tests/test_functional_contract.py
 ff5ada46de4005cc979f9fb37b88c3c1d430b63b  ./agent_hr_api/conftest.py
 ff9b5fbbbec38443b0d6ebfdf32ffe5ad01e8cfd  ./agent_commons/pyproject.toml

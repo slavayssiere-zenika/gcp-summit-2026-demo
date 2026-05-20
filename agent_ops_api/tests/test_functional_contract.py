@@ -79,14 +79,6 @@ class TestQueryContract:
         resp = client.post("/a2a/query", json={"query": "test"})
         assert resp.status_code == 401
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "BUG CONNU : /a2a/query retourne HTTP 500 quand run_agent_query lève une exception. "
-            "Le handler doit catcher et retourner 200 dégradé ou 503. "
-            "À corriger dans main.py (try/except autour de run_agent_query)."
-        ),
-    )
     def test_query_error_returns_degraded_not_500(self, client):
         """Si le LLM échoue, l'API doit retourner une réponse dégradée (pas un 500)."""
         with patch("main.run_agent_query", new=AsyncMock(side_effect=Exception("LLM unavailable"))):

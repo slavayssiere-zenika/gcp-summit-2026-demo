@@ -1,4 +1,5 @@
 019b00c8fd44f5e1b0328d229502bc0656fc6f82  ./items_api/tests/test_edge_cases.py
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 065ec94b7a2f9b64c40a2b2994c80a93a9dd13f2  ./items_api/requirements.txt
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
@@ -32,9 +33,9 @@
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 667cbd66308dd9bf08ca28f574b06ff274f28987  ./items_api/tests/test_admin_router.py
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 7a121d04816cc831ed91bd09857eba95ad816f85  ./items_api/src/items/admin_router.py
 7d774c68f44ab6c08e304d2eb8635d3757ddcda8  ./items_api/src/items/routers/search_router.py
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
 8738bf4bf3bd8937c3677f11f438636cb777ea52  ./shared/exception_handler.py
@@ -46,7 +47,6 @@
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 9f19e7af6b6f4b26bc3152960ff2e4dc7e02edc2  ./items_api/tests/integration/test_pg_integration.py
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 ac188d18c1e4338f8234cfbabd7052794efd3dc7  ./items_api/src/items/router.py
 b5ea1e24445f0cf7c8729088857507631a520425  ./items_api/mcp_app.py
 ba2a006fe4ff2b2a621ee7d426bed249b86235e0  ./items_api/Dockerfile

@@ -1,3 +1,4 @@
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 0661524a71e8722946d2f0820e28fd37dde601a0  ./users_api/src/users/pubsub.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
@@ -28,11 +29,11 @@
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 61f39a84525adaa6547dbc46d74fe590d6680e0c  ./users_api/tests/test_crud_extended.py
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 6aad6aa1620870803bfe70245fb7d355b7112658  ./users_api/src/users/models.py
 78a59620d02c0a50ddd70ef064e2cce9f50dad59  ./users_api/mcp_app.py
 7d390ff330651fb35ae0e3c21e58969723c6c8ca  ./users_api/tests/test_auth_service_account.py
 7e84674989e1e22eb79f3dd73d7be00c8296198f  ./users_api/pytest.ini
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
 8738bf4bf3bd8937c3677f11f438636cb777ea52  ./shared/exception_handler.py
@@ -48,7 +49,6 @@
 9f1963d3642606631dcef281f018a4d1490026a8  ./users_api/conftest.py
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a473832417b069357ce408e7a23edac11d878218  ./users_api/tests/integration/test_pg_integration.py
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 ac7fd3b8e5768664535cb4df9e7f785018fa0188  ./users_api/tests/test_edge_cases.py
 b7751e5cc7dbdf183b3bb2e882a98854e4dea17f  ./users_api/src/users/auth_router.py
 b9b8b4b30829e84a760b2f3a05673258cedd66f0  ./users_api/src/mcp_tools/tools_registry.py

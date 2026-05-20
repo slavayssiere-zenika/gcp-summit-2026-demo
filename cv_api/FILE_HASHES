@@ -1,4 +1,5 @@
 0218aa013f4501c4ba8dc2a048ded62efda93a55  ./cv_api/query_tags.py
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 05b249360bfc1ff646484195ffdc805bd3cb5154  ./cv_api/src/services/embedding_service.py
 0663d3e9a5c06b22f40a8978ed15f90e16162e8f  ./cv_api/src/services/semaphores.py
@@ -56,12 +57,12 @@
 658388edd4501b05528ce1d538dc348c56411583  ./cv_api/tests/test_search_router.py
 679c373d3819d9d5300c4d49cdaa454bec7d21e7  ./cv_api/tests/test_search_service.py
 692f90b5c01e739dbd0ab9ea487de9a0886f1b42  ./cv_api/src/services/cv_extraction_service.py
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 6c4b038a27bfdb18aec9430dc214deb158f77f79  ./cv_api/src/cvs/routers/taxonomy_router.py
 70237bded477457fab647cee278c7e8ade839cdc  ./cv_api/tests/test_data_quality_publisher.py
 70d5c4e4f1eaac31d72469dd316bb621b3a85e93  ./cv_api/tests/test_cv_storage_service.py
 72e16df0a63579830fd4ff9473b30a2c8da54e8a  ./cv_api/tests/test_zero_trust.py
 78eec5b5d8dfd79acfb3ceae4e9721ea356fc8bb  ./cv_api/my_pytest.log
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 802c79d25c7b55eae2c1e01006e3b7b2126dd2da  ./cv_api/src/services/data_quality_publisher.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 8244dc4eb10e05cf6886b552806c54ebd5c2a829  ./cv_api/src/services/cv_import_service.py
@@ -94,7 +95,6 @@ a41644d411e42100afd33fce57998fb0a8b70b34  ./cv_api/cv_api.generate_taxonomy_tree
 a47d7b0cb568178eb3a4fff0998230cfad077aec  ./cv_api/src/gemini_retry.py
 a6cb4496753a5b210fc47ec7877d4a23d35bac2d  ./cv_api/src/cvs/routers/profile_router.py
 a758c3d930ad0a85325ad94041e6f5c0357fbff1  ./cv_api/conftest.py
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 b1eeca46632f5e6a79b6ca316fe397c82507c663  ./cv_api/eval/rag_quality_eval.py
 b5a9df2b6c870f1dcf42c1140f78c3d3f3d7b14a  ./cv_api/src/cvs/routers/data_quality_router.py
 bfb8b3c5d85f60436ddc844329b08479eacfeade  ./cv_api/src/services/taxonomy_service.py

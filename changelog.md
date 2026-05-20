@@ -1,3 +1,101 @@
+## Mise à jour automatique - 2026-05-20 23:58:46
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2567  | 562  |  78% |
+| agent_hr_api     | 1477  | 179  |  88% |
+| agent_missions_api | 1755  | 198  |  89% |
+| agent_ops_api    | 1348  | 187  |  86% |
+| agent_router_api | 3274  | 566  |  83% |
+| analytics_mcp    | 931   | 141  |  85% |
+| competencies_api | 4993  | 993  |  80% |
+| cv_api           | 9496  | 1559 |  84% |
+| drive_api        | 3493  | 425  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2168  | 228  |  89% |
+| monitoring_mcp   | 1162  | 128  |  89% |
+| platform-engineering | 1497  | 1212 |  19% |
+| prompts_api      | 1350  | 252  |  81% |
+| shared           | 2935  | 300  |  90% |
+| tests            | 456   | 38   |  92% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/main.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_hr_api/tests/test_functional_contract.py` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/tests/test_functional_contract.py` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `agent_router_api/tests/test_functional_contract.py` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `db_migrations/FILE_HASHES` (M)
+- `db_migrations/HASH` (M)
+- `db_migrations/VERSION` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/style.css` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/spec.md` (M)
+- `shared/FILE_HASHES` (M)
+- `shared/HASH` (M)
+- `shared/VERSION` (M)
+- `shared/pyproject.toml` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+- `.tmp_logs.json` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-20 23:20:49
 
 ### Couverture de Code

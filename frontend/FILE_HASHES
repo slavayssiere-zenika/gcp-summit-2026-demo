@@ -28,7 +28,6 @@
 295bd30a830ba9192a24251ea221efe3fc26d97e  ./frontend/src/components/agent/SystemHealthCard.vue
 299c1ad15b1320e8d0a2437361f68f23560b67b8  ./frontend/src/stores/__tests__/uxStore.spec.ts
 29e8aab0e6ae6d7fb28724c416b6e4978b17bb10  ./frontend/coverage/src/views/MissionDetail.vue.html
-2aa25487c4b6c7a051f81cd389931a144ba8c08c  ./frontend/src/style.css
 2d54a2195675e6b11f31c0382d27da88cb1ac914  ./frontend/coverage/src/views/AgentsDocs.vue.html
 3001d071fc2195d9d77c4c11eaeccdb403566a78  ./frontend/coverage/index.html
 30988755cdb0001f633572baf25b085d6372cd17  ./frontend/src/components/agent/__tests__/SystemHealthCard.spec.ts
@@ -69,6 +68,7 @@
 5e3a8936b1645010c24490a7c5f5035a84ae78c4  ./frontend/src/App.vue
 5ea74b8d982bfa2c077854728d1409db536b2c06  ./frontend/coverage/src/components/ui/index.html
 5f5e4e38c2ab569279c807c91991e50737ca8b10  ./frontend/src/views/Docs.vue
+5fa0168fe5095bf60602e97ea25a7e3472af06e9  ./frontend/vitest.log
 605853978aa324dab689511ad91b691beadf8934  ./frontend/src/components/agent/DebugPromptCard.vue
 607c4375c5cfe6c0f4b9c027474c71fca1c2f66e  ./frontend/src/components/CompetencyNode.vue
 628e602160d666d7a860eb9fd1431c3f344317a9  ./frontend/coverage/src/views/FinopsAdmin.vue.html
@@ -107,6 +107,7 @@
 89c443e9e52dd5a5592e1737055ae08f11c86a60  ./frontend/src/services/auth.ts
 8ac8e5b1798091cdeaa353fd7d4d9e43e20c817d  ./frontend/coverage/src/router/index.html
 8aea36e46b54cb300127668b82d61c604c7a3707  ./frontend/coverage/src/views/UserDetail.vue.html
+8b52de7a8cd252f316e256cc19a37bc7d9ea8d71  ./frontend/src/style.css
 8e726963869287c9fad878c795881e14a878dfa4  ./frontend/coverage/src/components/agent/MissionCard.vue.html
 8ed5565aa2e785d4d53d68ce9cef60588855769e  ./frontend/src/components/agent/CloudRunLogsViewer.vue
 8ff0e1e08c2c613c7014a13b3e193cdea989cf7b  ./frontend/coverage/src/components/ConsultantProfile.vue.html
@@ -184,7 +185,6 @@ ea50c6ce6112776848f67e79b3425ac7d8d3d84a  ./frontend/src/components/agent/Evalua
 ea756908233ed25e0209217b50eafc5bf73267ed  ./frontend/src/components/agent/SessionPanel.vue
 eefe7cd53b199c681e2bb83e19719b688577da3a  ./frontend/src/views/AdminDeduplication.vue
 efe00a3b6cac3db77f727c4ea3df585dc7b8f7aa  ./frontend/coverage/src/views/Registry.vue.html
-f061e3c447990fa7bc1562a2688a05c91317535c  ./frontend/vitest.log
 f2b2cc99b2b1e60606f06e7a61dc2b10b9c49dcd  ./frontend/coverage/src/components/agent/CompetencyList.vue.html
 f3a568e3fe5a3aa18868fffa78b7ac5be2e2a09d  ./frontend/coverage/src/components/CompetencyEvaluationPanel.vue.html
 f3da7ebfeb1041381cf67564702ac21ebe6ea2bf  ./frontend/src/components/TaxonomySuggestions.vue

@@ -146,3 +146,17 @@ a {
     scroll-behavior: auto /* exception: prefers-reduced-motion requires !important to override scoped scroll-behavior */ !important;
   }
 }
+
+/* ── Accessibilité : Screen Reader Only (WCAG 2.1 / 2.2) ── */
+/* Masque visuellement un élément tout en le conservant accessible aux lecteurs d'écran. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}

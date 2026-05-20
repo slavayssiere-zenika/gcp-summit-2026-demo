@@ -1,3 +1,4 @@
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 0635205d232d5876520b479d7ca818cbfc6cde6e  ./agent_missions_api/tests/test_maybe_trigger_hitl.py
 08463e221b00fb4cb958a260c188cca4309e0cdd  ./agent_missions_api/tests/debug_test_history.py
@@ -42,10 +43,10 @@
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 640597ccea9961b2ca828eaf5288a7386f8f4a37  ./agent_commons/tests/test_runner_null_safety.py
 6459c884b3e10d2a41d92639d70259c7de21d794  ./agent_missions_api/metrics.py
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 74e8b86bc4c092dc89b7bb846cf465c9ec425aab  ./agent_commons/agent_commons/mcp_client.py
 7d36e7ae1b657810a0e50d3d849fb8e7b2d25318  ./agent_missions_api/conftest.py
 7f618f5535793e57770c3a22e639bdcc583f4578  ./agent_commons/tests/test_prompt_loader_cache.py
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 80cbbce14ae248012a9d476c326db59f2eaae59d  ./agent_missions_api/mcp_client.py
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
@@ -72,7 +73,6 @@
 a053c501c9732808f133fea8e62535813d2a4906  ./agent_missions_api/tests/test_guardrail.py
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a3ca36e9721c55c574ee171242f97343afefd753  ./agent_commons/tests/test_runner_tool_budget.py
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 acef654bdf0e1197537cfe1a69e22bc9f8faf0d0  ./agent_commons/agent_commons/http_resilience.py
 aff77694e553f03d5a11ab4503847c181331f3c8  ./agent_missions_api/tests/test_zero_trust.py
 b0de4a079635eda20c582ea4ef8fe5b5ed87d6c6  ./agent_commons/agent_commons/guardrails.py

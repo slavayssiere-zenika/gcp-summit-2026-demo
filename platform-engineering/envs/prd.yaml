@@ -14,27 +14,27 @@ bq_location:               "europe-west1"  # Obligatoire depuis P2-2 (plus de d�
 
 # ── Registre d'images ─────────────────────────────────────
 # manage_env.py assemble : {image_registry}/{service}:{version déclarée ci-dessous}
-image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services"
+image_registry: "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev"
 
 # ── Versions des services (priorité sur les fichiers VERSION locaux) ──────────
 # Déclarez ici les versions à déployer en production pour épingler une release précise.
 # Laisser la valeur vide ("") ou supprimer la ligne → utilise le fichier VERSION local.
 agent_router_api_version:   "v0.5.17"
 agent_hr_api_version:       "v0.3.15"
-agent_ops_api_version:      "v0.2.15"
-agent_missions_api_version: "v0.4.18"
-users_api_version:          "v0.2.22"
-items_api_version:          "v0.1.19"
-competencies_api_version:   "v0.2.21"
-cv_api_version:             "v0.1.21"
-prompts_api_version:        "v0.1.16"
-drive_api_version:          "v0.1.15"
-analytics_mcp_version:      "v0.1.15"
-monitoring_mcp_version:     "v0.1.14"
-db_migrations_version:      "v0.0.68"
+agent_ops_api_version:      "v0.2.16"
+agent_missions_api_version: "v0.4.19"
+users_api_version:          "v0.2.23"
+items_api_version:          "v0.1.20"
+competencies_api_version:   "v0.2.22"
+cv_api_version:             "v0.1.22"
+prompts_api_version:        "v0.1.17"
+drive_api_version:          "v0.1.16"
+analytics_mcp_version:      "v0.1.16"
+monitoring_mcp_version:     "v0.1.15"
+db_migrations_version:      "v0.0.69"
 db_init_version:            "v0.1.3"
-missions_api_version:       "v0.1.16"
-frontend_version:           "v0.1.8"
+missions_api_version:       "v0.1.17"
+frontend_version:           "v0.1.9"
 
 # ── Cloud Run ─────────────────────────────────────────────
 cloudrun_min_instances: 0

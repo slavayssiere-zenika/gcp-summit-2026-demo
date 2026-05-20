@@ -1,4 +1,6 @@
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
+083ea77779cba06889496e3797b80dd93ff70aa6  ./agent_ops_api/tests/test_functional_contract.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
@@ -13,7 +15,6 @@
 1f4fe6603d631baffc00c40d3ec10b5bcff95256  ./shared/schemas/pagination.py
 1fa5d028739a2a437b39a75b7a09dca43f24c5da  ./agent_commons/agent_commons/exception_handler.py
 2142fa834c9c0dee8ccc7291779d42c71a99b2c7  ./agent_commons/agent_commons/prompt_loader.py
-22c505baf7f21ca1fdde40d26507ced0d9d23471  ./agent_ops_api/main.py
 29e62c52763a613694d3fcddc10c948df0891c4f  ./shared/redis_state.py
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
 2cf6c1ada7941df6612b49151a315ce9fe67b8de  ./agent_commons/agent_commons/metadata.py
@@ -37,10 +38,11 @@
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 640597ccea9961b2ca828eaf5288a7386f8f4a37  ./agent_commons/tests/test_runner_null_safety.py
 65ecfdcea73d6eb3239b8f0b65ee41a2ebf283f2  ./agent_ops_api/agent_api.assistant_system_instruction.txt
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
+6ac7fc9d44e8ee66765d4cf95d3b785ed5f8a1bd  ./agent_ops_api/main.py
 72bf64a77373440f68fe4f36981dbe5951439e19  ./agent_ops_api/Dockerfile
 74e8b86bc4c092dc89b7bb846cf465c9ec425aab  ./agent_commons/agent_commons/mcp_client.py
 7f618f5535793e57770c3a22e639bdcc583f4578  ./agent_commons/tests/test_prompt_loader_cache.py
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
 83eff2f28e5e28c0095435c920671841f6d9c3ee  ./agent_commons/tests/test_runner_display_type.py
@@ -64,7 +66,6 @@ a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a3ca36e9721c55c574ee171242f97343afefd753  ./agent_commons/tests/test_runner_tool_budget.py
 a8478990b4732c3b213a22f384f225c27f3b5586  ./agent_ops_api/tests/test_jwt_propagation.py
 a983c7552689c18dfb1ca30835a63692947e6ef9  ./agent_ops_api/tests/test_guardrail.py
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 acef654bdf0e1197537cfe1a69e22bc9f8faf0d0  ./agent_commons/agent_commons/http_resilience.py
 af3b0a9ef967cb716223fffd2501274419954886  ./agent_ops_api/tests/test_create_agent_jwt.py
 aff77694e553f03d5a11ab4503847c181331f3c8  ./agent_ops_api/tests/test_zero_trust.py
@@ -98,5 +99,4 @@ f07c219bfe776cf380c0401a19129c79ee251ad1  ./agent_commons/tests/__init__.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 fa30e320e8004878cfa40b92c96201cf9230fedb  ./agent_commons/agent_commons/session.py
-fd97e54679251c1444637b7494539a63583a8b09  ./agent_ops_api/tests/test_functional_contract.py
 ff9b5fbbbec38443b0d6ebfdf32ffe5ad01e8cfd  ./agent_commons/pyproject.toml

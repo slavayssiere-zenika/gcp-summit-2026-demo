@@ -16,6 +16,7 @@
 0358cd077e7a1d94e2815e60372335e3cddc54ec  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/formatters/terminal.py
 03a0a49915d54e0bc0ef4f9de3ee8352810c495b  ./agent_router_api/.venv_test/lib/python3.13/site-packages/fakeredis/_valkey.py
 03a0bc33c3be41acc507dccd0207dc35dfc301d8  ./agent_router_api/.venv_test/lib/python3.13/site-packages/_pytest/config/findpaths.py
+03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 041b82baf95116f0b0b98cf5f96f3357084f6512  ./agent_router_api/.venv_test/lib/python3.13/site-packages/_pytest/stash.py
 0445ed0f69910eeaee036f09a39a13c6e1f37e12  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip-25.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE
@@ -528,7 +529,6 @@
 6936f46dc739a852b15f3829a8bdf73e164f62c1  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/styles/rrt.py
 69901c6b3671648c51f5feb7b86e82fa1a570c7a  ./agent_router_api/.venv_test/lib/python3.13/site-packages/fakeredis/commands_mixins/acl_mixin.py
 699b83571ce3106dcd5441092da9cbe4193622c3  ./agent_router_api/.venv_test/lib/python3.13/site-packages/packaging/version.py
-6a1bc6f39bd2bbb669164ddabda7e455ec349ec5  ./shared/pyproject.toml
 6a3cddb7a94565bd3429a2448cab7c27ec2e22c3  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip/_internal/network/lazy_wheel.py
 6a4d4301aab61ea737f7a6caf22c92de7554c6ae  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/lexers/testing.py
 6a5ae6755f1c4e7b13c4deda2c992ef4e6e3a9ff  ./agent_router_api/.venv_test/lib/python3.13/site-packages/redis/sentinel.py
@@ -648,6 +648,7 @@
 7f618f5535793e57770c3a22e639bdcc583f4578  ./agent_commons/tests/test_prompt_loader_cache.py
 7f87c8def88846a2e05ccde6367014ac0ff3a78e  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip/_vendor/rich/control.py
 7fdff2222f3e9b44e6a3554a282d2db744a5657a  ./agent_router_api/.venv_test/lib/python3.13/site-packages/httpcore/_sync/http_proxy.py
+7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 8008078eb02faaead2b9d949d90a11cd2c60abd4  ./agent_router_api/tests/test_sessions.py
 800e92193ea6b22237a6776c0479f6b2920735d5  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/lexers/modula2.py
 80198a2f861db4ff0524a7c4c280efa7b4abbdfa  ./agent_router_api/.venv_test/lib/python3.13/site-packages/anyio/streams/file.py
@@ -915,7 +916,6 @@ aa971229f7c91781d0a992f5f5dc0563765aa064  ./agent_router_api/.venv_test/lib/pyth
 aaef0c067b4494fcd2a33cd2a41f00baa3f18c72  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/cmdline.py
 ab59a3d994567c0a89205892de2f9b55d4651428  ./agent_router_api/.venv_test/lib/python3.13/site-packages/jwt/utils.py
 ab7b4302b29cab0b6f2a043f46aaab0197615a1d  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments-2.20.0.dist-info/entry_points.txt
-ab97eef41537fa638a966245fdbca83f57a79e85  ./shared/tests/test_fastapi_utils.py
 abd651b5ccb2a9a36e877a7a9131f15dba6d3432  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/lexers/diff.py
 ac39b4311cea9f4a64af07a462c571702d71ce4d  ./agent_router_api/.venv_test/lib/python3.13/site-packages/iniconfig/_version.py
 ac6eedea89b4b94ec20f824a184cfebc5347e4d4  ./agent_router_api/.venv_test/lib/python3.13/site-packages/httpcore/_async/socks_proxy.py
@@ -1008,7 +1008,6 @@ bd0148dbf332996830254a0329d3312c2f8c4cc5  ./agent_router_api/.venv_test/lib/pyth
 bd056ce12c15a1eec9ce94da90345348b1538bdb  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/scanner.py
 bd1e299d7a9c35a1429fc62dca377971fd4ff983  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/regexopt.py
 bd96146ba4180f816dbd9c693f0b11ecc21ee214  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip/_vendor/requests/auth.py
-bd9a2bfe9c6565ed208c5ea3c50e43c4ad43fc77  ./agent_router_api/tests/test_functional_contract.py
 bdd79f05afb4c5e9164bfd2543f50e3ba9331bf9  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/lexers/_php_builtins.py
 bdfcfcf4649743e765ba3254279f009c29f57ee4  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip/_vendor/rich/json.py
 be320c8b88821235c7e701d21017f285ac8be07c  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/lexers/fortran.py
@@ -1430,6 +1429,7 @@ fb67ba57371beab1cb52ce4c5431556eea3b453e  ./agent_router_api/.venv_test/lib/pyth
 fb6cb1263a2db50140a16465f49a0b53a2901544  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pygments/lexers/grammar_notation.py
 fb885ddd85d4f73e775fde77511c0b2794373c51  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip/_internal/utils/glibc.py
 fb9129ed64b85fe2711248143eacd0ec1d131bae  ./agent_router_api/.venv_test/lib/python3.13/site-packages/anyio/abc/_subprocesses.py
+fc024d82758ccde359e77120ae1f15b8bda250ac  ./agent_router_api/tests/test_functional_contract.py
 fc6fe651470ae65f5305a83c4cfb1daca36097cc  ./agent_router_api/.venv_test/lib/python3.13/site-packages/pip/_vendor/tomli_w/_writer.py
 fc911bc5df6cf1acc699f264cd9688a2f3f69356  ./agent_router_api/.venv_test/lib/python3.13/site-packages/anyio/_core/_eventloop.py
 fca74a58d521a346510a7fe5dd45881f833599ec  ./agent_router_api/.venv_test/lib/python3.13/site-packages/_pytest/deprecated.py
