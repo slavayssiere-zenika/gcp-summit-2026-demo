@@ -80,6 +80,8 @@ Le dépôt est organisé pour supporter une scalabilité horizontale et une sép
 └── docker-compose.yml    # Orchestration du développement local
 ```
 
+> **Note** : Les dossiers de logs locaux, configurations GCloud (`.gcloud`, `.gcloud_config`) et environnements virtuels temporaires (`.venv-lint`) sont exclus du dépôt pour garantir la sécurité et la propreté du code.
+
 ---
 
 ## 🔍 Focus Technique : Sécurité & Standards

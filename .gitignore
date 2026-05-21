@@ -82,7 +82,10 @@ test_env/
 # =========================
 # GCloud config logs
 # =========================
+.gcloud/
 .gcloud_config/
+logs/
+.venv-lint/
 
 # =========================
 # Temp Python envs
