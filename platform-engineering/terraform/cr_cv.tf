@@ -129,6 +129,14 @@ resource "google_cloud_run_v2_service" "cv_api" {
         value = var.gemini_cv_model
       }
       env {
+        name  = "GEMINI_API_BASE_URL"
+        value = ""
+      }
+      env {
+        name  = "VERTEX_API_BASE_URL"
+        value = ""
+      }
+      env {
         name  = "GEMINI_PRO_MODEL"
         value = var.gemini_pro_model
       }

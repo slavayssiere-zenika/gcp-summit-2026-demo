@@ -21,3 +21,51 @@ Public modules:
 """
 
 __version__ = "1.1.0"
+
+
+# Monkeypatch google-genai Client to respect GEMINI_API_BASE_URL and VERTEX_API_BASE_URL
+try:
+    import os
+    import logging
+    from google import genai
+    from google.genai import types
+
+    logger = logging.getLogger("agent_commons.gemini_mock")
+    _original_init = genai.Client.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        gemini_base = os.getenv("GEMINI_API_BASE_URL")
+        vertex_base = os.getenv("VERTEX_API_BASE_URL")
+
+        # In google-genai SDK, vertexai can be passed as vertexai=True or as the first positional argument
+        is_vertex = kwargs.get("vertexai") or (len(args) > 0 and args[0] is True)
+        base_url = vertex_base if (is_vertex and vertex_base) else gemini_base
+
+        # Zero-Trust Production Guardrail (bypasses local mocks in GCP environments)
+        if base_url:
+            is_gcp_run = os.getenv("K_SERVICE") is not None
+            is_local_mock = any(mock in base_url for mock in ["mock_gemini", "localhost", "127.0.0.1"])
+            if is_gcp_run and is_local_mock:
+                logger.warning(
+                    "[gemini_mock] ALERTE SECURITE : tentative de redirection vers un mock local (%s) "
+                    "ignoree en production GCP.", base_url
+                )
+                base_url = None
+
+        if base_url:
+            http_opts = kwargs.get("http_options")
+            if not http_opts:
+                http_opts = types.HttpOptions()
+            elif isinstance(http_opts, dict):
+                http_opts = types.HttpOptions(**http_opts)
+            http_opts.baseUrl = base_url
+            kwargs["http_options"] = http_opts
+
+            if not is_vertex and not kwargs.get("api_key"):
+                kwargs["api_key"] = "mock-key-local"
+
+        _original_init(self, *args, **kwargs)
+
+    genai.Client.__init__ = _patched_init
+except ImportError:
+    pass

@@ -396,6 +396,8 @@ services:
       - "8002:8080"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_API_BASE_URL=${GEMINI_API_BASE_URL:-}
+      - VERTEX_API_BASE_URL=${VERTEX_API_BASE_URL:-}
       - GEMINI_ROUTER_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
@@ -457,6 +459,8 @@ services:
     hostname: agent_hr_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_API_BASE_URL=${GEMINI_API_BASE_URL:-}
+      - VERTEX_API_BASE_URL=${VERTEX_API_BASE_URL:-}
       - GEMINI_HR_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - USERS_API_URL=http://users_api:8000
@@ -511,6 +515,8 @@ services:
     hostname: agent_ops_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_API_BASE_URL=${GEMINI_API_BASE_URL:-}
+      - VERTEX_API_BASE_URL=${VERTEX_API_BASE_URL:-}
       - GEMINI_OPS_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005
@@ -546,6 +552,8 @@ services:
     hostname: agent_missions_api
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_API_BASE_URL=${GEMINI_API_BASE_URL:-}
+      - VERTEX_API_BASE_URL=${VERTEX_API_BASE_URL:-}
       - GEMINI_MISSIONS_MODEL=gemini-3.1-flash-lite
       - GEMINI_MODEL=gemini-3.1-flash-lite  # [LEGACY] fallback
       - PROMPTS_API_URL=http://prompts_api:8005

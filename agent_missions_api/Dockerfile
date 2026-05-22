@@ -24,6 +24,9 @@ COPY agent_missions_api/ .
 # ── Comportement applicatif (Level 1 — safe defaults) ─────────────────────────
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
+ENV GEMINI_API_BASE_URL=""
+ENV VERTEX_API_BASE_URL=""
+ENV ENABLE_GEMINI_CONTEXT_CACHE=false
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 ENV LOG_LEVEL=INFO

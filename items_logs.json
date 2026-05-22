@@ -1,0 +1,602 @@
+[
+  {
+    "timestamp": "2026-05-22T08:23:16.118290+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:63339 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:23:16.055895+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:4487 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:23:06.115557+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:11851 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:23:06.052044+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:42765 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:56.112591+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:61193 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:56.047664+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:47265 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:46.109285+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:35607 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:46.045481+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:46701 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:36.106182+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:63697 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:36.043367+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:34975 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:34.460678+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.42:0 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:34.451695+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-22T08:22:26.103391+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:5057 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:26.041397+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:56407 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:16.099748+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:10853 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:16.039261+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:31267 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:06.096248+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:38451 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:22:06.035763+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:48201 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:56.093388+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:37625 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:56.032901+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:30545 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:46.090782+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:28053 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:46.030021+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:38483 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:36.087967+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:28713 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:36.027629+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:28741 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:26.085294+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:41969 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:26.025418+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:23585 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:16.079586+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:47357 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:16.023105+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:29105 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:06.077013+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:63329 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:21:06.020249+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:27851 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:56.073851+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:34253 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:56.018399+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:32137 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:46.070973+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:58985 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:46.016410+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:37769 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:36.067922+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:23399 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:36.014252+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:28271 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:26.064723+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:3513 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:26.011677+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:12899 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:16.055624+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:63883 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:16.009371+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:64007 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:06.053036+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:37253 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:20:06.007317+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:37607 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:56.050194+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:10925 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:56.004866+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:60699 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:46.047306+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:45871 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:46.002464+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:36399 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:36.044357+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:2131 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:35.999537+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:44595 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:26.040484+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:20403 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:25.997372+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:43163 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:16.036426+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:6591 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:15.988584+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:65337 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:06.033646+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:8605 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:19:05.986616+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:16585 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:56.027347+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:20351 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:55.984453+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:28151 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:46.024389+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:17509 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:45.981417+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:10521 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:36.021390+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:1659 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:35.978435+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:60541 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:26.018574+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:24969 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:25.975903+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:19129 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:16.015887+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:29223 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:15.973949+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:20923 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:06.013667+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-22T08:18:06.013132+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:27477 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:18:05.972162+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"mcp\" on port 8081 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-22T08:18:05.971758+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:48729 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:56.758404+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.48:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:56.753684+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.2:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:56.731629+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.243884+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.48:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.241059+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.2:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.240035+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.48:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.237422+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.2:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.189964+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.36:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.185387+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     10.0.0.2:0 - \"GET /mcp/tools HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.015766+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "  decoded = self.decode_complete("
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.015754+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/jwt/api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 31 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.010242+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 1 attempt for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:51.009425+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:39657 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:50.969339+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 1 attempt for container \"mcp\" on port 8081 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:50.968868+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     169.254.169.126:20277 - \"GET /health HTTP/1.1\" 200 OK"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:47.352583+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:47.352019+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Application startup complete."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:46.979111+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Waiting for application startup."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:46.979049+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Started server process [1]"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:45.808588+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-22T08:17:45.322518+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-22T08:17:44.734292+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Uvicorn running on http://0.0.0.0:8081 (Press CTRL+C to quit)"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:44.733271+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Application startup complete."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:44.732615+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Waiting for application startup."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:44.732443+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Started server process [1]"
+  },
+  {
+    "timestamp": "2026-05-22T08:17:34.864182+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-22T08:17:34.832388+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "items-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T21:57:33.822495+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Finished server process [1]"
+  },
+  {
+    "timestamp": "2026-05-21T21:57:33.822374+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Application shutdown complete."
+  },
+  {
+    "timestamp": "2026-05-21T21:57:33.822131+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Waiting for application shutdown."
+  },
+  {
+    "timestamp": "2026-05-21T21:57:33.797062+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Finished server process [1]"
+  },
+  {
+    "timestamp": "2026-05-21T21:57:33.796972+00:00",
+    "severity": null,
+    "cloud_run_service": "items-api-prd",
+    "message": "INFO:     Application shutdown complete."
+  }
+]

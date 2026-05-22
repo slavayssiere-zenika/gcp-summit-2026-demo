@@ -99,9 +99,19 @@ async def publish_data_quality_snapshot(
         "rag_embedding_model": report.get("rag", {}).get("embedding_model"),
     }
 
+    # Filtrer le payload pour ne conserver que les 15 champs définis dans le schéma Avro Pub/Sub.
+    # Les champs RAG (rag_*) sont exclus pour éviter des erreurs de validation 400 sur la prod.
+    allowed_keys = {
+        "computed_at", "total_cvs", "users_with_cv", "score", "grade",
+        "embedding_pct", "missions_pct", "competencies_pct", "summary_pct",
+        "current_role_pct", "competency_assignment_pct", "ai_scoring_pct",
+        "processing_errors_pct", "issues_count", "trigger"
+    }
+    pubsub_payload = {k: v for k, v in payload.items() if k in allowed_keys}
+
     try:
         publisher = pubsub_v1.PublisherClient()
-        data = json.dumps(payload).encode("utf-8")
+        data = json.dumps(pubsub_payload).encode("utf-8")
         future = publisher.publish(topic_name, data)
         message_id = future.result(timeout=10)
         logger.info(

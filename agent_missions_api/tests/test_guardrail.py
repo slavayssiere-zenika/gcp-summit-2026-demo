@@ -241,7 +241,8 @@ async def test_missions_guardrail_no_tool_call_injects_warning(mocker):
 
     evt_text = _make_mock_event("model", text="La mission Java FinTech nécessite 3 développeurs seniors.")
 
-    mock_svc = AsyncMock()
+    mock_svc = MagicMock()
+    mock_svc.r = MagicMock()
     mock_svc.create_session = AsyncMock()
     mock_svc.get_session = AsyncMock(return_value=None)
     mock_runner = MagicMock()
@@ -278,7 +279,8 @@ async def test_missions_guardrail_not_triggered_with_tool(mocker):
     evt_result = _make_mock_event("tool", tool_result=[{"id": 1, "title": "Java FinTech"}])
     evt_text = _make_mock_event("model", text="Voici la mission Java FinTech (ID 1).")
 
-    mock_svc = AsyncMock()
+    mock_svc = MagicMock()
+    mock_svc.r = MagicMock()
     mock_svc.create_session = AsyncMock()
     mock_svc.get_session = AsyncMock(return_value=None)
     mock_runner = MagicMock()

@@ -11,7 +11,7 @@ user_competency = Table(
     Base.metadata,
     Column("user_id", Integer, primary_key=True, index=True),
     Column("competency_id", Integer, ForeignKey("competencies.id"), primary_key=True),
-    Column("created_at", DateTime, default=datetime.utcnow),
+    Column("created_at", DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)),
 )
 
 

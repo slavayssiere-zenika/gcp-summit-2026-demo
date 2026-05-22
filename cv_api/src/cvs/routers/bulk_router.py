@@ -20,6 +20,7 @@ from src.services.embedding_service import (
     reindex_mission_chunks_bg,
 )
 from src.services.data_quality_service import CACHE_TTL_SECONDS, compute_data_quality_report
+from src.services.taxonomy_batch_service import TaxonomyBatchService
 from src.services.taxonomy_service import fetch_prompt, get_existing_competencies
 
 _fetch_prompt = fetch_prompt
@@ -200,9 +201,13 @@ async def get_data_quality_report(
         if cached_report is not None:
             return cached_report
 
+        # Utilisation d'un token autonome pour éviter le cache-poisoning lors de l'interrogation inter-services
+        service_token = await TaxonomyBatchService.generate_autonomous_service_token()
+        auth_header = f"Bearer {service_token}" if service_token else request.headers.get("Authorization", "")
+
         report = await compute_data_quality_report(
             db=db,
-            auth_header=request.headers.get("Authorization", ""),
+            auth_header=auth_header,
         )
 
         await set_cache("cv_api:data_quality", report, ttl_seconds=CACHE_TTL_SECONDS)

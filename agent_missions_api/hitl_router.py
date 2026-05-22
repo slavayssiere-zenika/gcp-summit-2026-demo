@@ -36,6 +36,15 @@ import redis.asyncio as _redis
 
 logger = logging.getLogger(__name__)
 
+
+async def _close_redis(r) -> None:
+    """Closes Redis connection safely, supporting both real Redis (aclose) and FakeRedis (close)."""
+    if hasattr(r, "aclose"):
+        await r.aclose()
+    else:
+        await r.close()
+
+
 # ── Configuration Redis HITL ──────────────────────────────────────────────────
 _HITL_PENDING_TTL = int(os.getenv("HITL_PENDING_TTL_SECONDS", "1800"))   # 30 min
 _HITL_RESPONSE_TTL = int(os.getenv("HITL_RESPONSE_TTL_SECONDS", "86400"))  # 24h
@@ -183,7 +192,7 @@ async def hitl_create_entry(
 
     r = _get_hitl_redis()
     await r.setex(f"hitl:{hitl_id}:pending", _HITL_PENDING_TTL, _encrypt_hitl(payload_data))
-    await r.close()
+    await _close_redis(r)
     logger.info("[HITL] Demande créée hitl_id=%s mission='%s'", hitl_id, mission_title)
     return {"hitl_id": hitl_id, "expires_at": expires_at, "success": True}
 
@@ -209,7 +218,7 @@ async def hitl_respond(
         pending_key = f"hitl:{request.hitl_id}:pending"
         pending_raw = await r.get(pending_key)
         if pending_raw is None:
-            await r.close()
+            await _close_redis(r)
             raise HTTPException(
                 status_code=404,
                 detail=f"Demande HITL '{request.hitl_id}' introuvable ou expirée.",
@@ -219,7 +228,7 @@ async def hitl_respond(
         try:
             _decrypt_hitl(pending_raw)  # Vérification d'intégrité + existence
         except Exception:
-            await r.close()
+            await _close_redis(r)
             logger.warning("[HITL] Pending hitl_id=%s : blob invalide ou clé incorrecte", request.hitl_id)
             raise HTTPException(
                 status_code=404,
@@ -238,7 +247,7 @@ async def hitl_respond(
             _encrypt_hitl(response_payload),
         )
         await r.delete(pending_key)
-        await r.close()
+        await _close_redis(r)
 
         logger.info(
             "[HITL] Decision '%s' enregistrée pour hitl_id=%s",
@@ -271,7 +280,7 @@ async def hitl_pending():
                     pending.append(data)
                 except Exception as dec_err:
                     logger.warning("[HITL] Clé %s — déchiffrement échoué : %s", key, dec_err)
-        await r.close()
+        await _close_redis(r)
         return {"pending": pending, "count": len(pending)}
     except Exception as e:
         logger.error("[HITL] Erreur hitl_pending: %s", e, exc_info=True)

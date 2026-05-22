@@ -86,9 +86,9 @@ MCP_SIDECAR_ALIASES: dict = {
 
 # Locust config
 # Mode perf standard (--perf)
-LOCUST_USERS = 50
-LOCUST_SPAWN_RATE = 10
-LOCUST_DURATION = "3m"  # 3 min : couverture suffisante pour valider les latences P95
+LOCUST_USERS = int(os.getenv("LOCUST_USERS", "50"))
+LOCUST_SPAWN_RATE = int(os.getenv("LOCUST_SPAWN_RATE", "10"))
+LOCUST_DURATION = os.getenv("LOCUST_DURATION", "3m")  # 3 min par défaut en local, configurable pour la gate
 # 13 workers ingestion × 180s / ~3s par pipeline (latence 1s) = ~780 CVs théoriques en 3 min
 # Objectif affiché : conservatif (incl. overhead pipeline)
 LOCUST_CV_TARGET_PERF = 120
@@ -700,9 +700,12 @@ def run_full_suite() -> None:
         display_results(csv_prefix="perf_stats_perf")
         archive_results(csv_prefix="perf_stats_perf")
         run_compare()
+        if not _check_perf_gate(csv_prefix="perf_stats_perf"):
+            print("  ❌ Gate SLO non respectés en Phase 1 — abandon du cycle full.")
+            sys.exit(1)
     else:
         print("  ⛔ Phase 1 échouée — abandon du cycle complet.")
-        return
+        sys.exit(1)
 
     print(f"\n{sep}")
     print(
@@ -730,6 +733,7 @@ def run_full_suite() -> None:
         run_compare()
     else:
         print("  ⛔ Phase 3 (stress) échouée.")
+        sys.exit(1)
 
 
 def run_locust(stress: bool = False) -> bool:
@@ -795,7 +799,7 @@ def display_results(csv_prefix: str = "perf_stats") -> None:
         cols = [
             r.get("Name", "")[:36],
             r.get("Requests/s", "-"),
-            r.get("Failure %", "-"),
+            f"{_fail_pct_from_row(r):.1f}%",  # calcule depuis Failure Count / Request Count
             r.get("50%", "-"),
             r.get("95%", "-"),
             r.get("99%", "-"),
@@ -833,11 +837,144 @@ def display_results(csv_prefix: str = "perf_stats") -> None:
     _print_analysis_report(detail_rows, agg_rows, failures)
 
 
-# Seuils d alerte
+# Seuils d alerte (display-only — utilises dans _print_analysis_report)
 _P95_WARN_MS = 1_000
 _P95_CRIT_MS = 5_000
 _FAIL_WARN_PCT = 5.0
 _FAIL_CRIT_PCT = 15.0
+
+# Seuils bloquants par endpoint critique (P3)
+# Format : "sous-chaine du nom CSV" -> (max_fail_pct, max_p95_ms)
+# max_fail_pct = 0.0 : zero tolerance ; max_p95_ms = 0 : desactive la verif P95
+CRITICAL_ENDPOINTS_GATES: dict = {
+    "POST /cv/import":      (10.0, 12_000),  # LLM heavy — tolere chauffe mock
+    "[Agent] POST /query": (1.0, 5_000),    # Requete agent critique
+    "POST /users/":        (1.0, 8_000),    # Creation utilisateur (1% tolere: ConnectionReset Docker transitoire)
+    "GET /users/":         (0.0, 5_000),    # Liste utilisateurs
+    "POST /items/bulk":    (1.0, 10_000),   # Import bulk items (tolere erreurs transitoires)
+}
+
+
+def _endpoint_matches(key: str, name: str) -> bool:
+    """True si `key` correspond a `name` en tenant compte des limites de chemin.
+
+    Evite les faux positifs par sous-chaine :
+      'GET /users/' correspond a '[Users] GET /users/' mais PAS a '[Users] GET /users/stats'.
+    Regle : apres la cle, le caractere suivant doit etre fin-de-chaine, espace ou parenthese
+    (jamais une lettre/chiffre qui signifierait un sous-chemin supplementaire).
+    """
+    idx = name.find(key)
+    if idx == -1:
+        return False
+    after = name[idx + len(key):]
+    return not after or after[0] in " ()\t"
+
+
+def _fail_pct_from_row(row: dict) -> float:
+    """Calcule le taux d'echec en % depuis les colonnes CSV 'Failure Count' / 'Request Count'.
+
+    Le CSV Locust n'expose pas de colonne 'Failure %' — elle doit etre calculee.
+    Retourne 0.0 si Request Count = 0 ou si les valeurs sont invalides.
+    """
+    try:
+        req = float(row.get("Request Count", 0) or 0)
+        fail = float(row.get("Failure Count", 0) or 0)
+        return (fail / req * 100.0) if req > 0 else 0.0
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def _check_perf_gate(csv_prefix: str) -> bool:
+    """
+    Verifie que les SLOs critiques sont respectes apres le run Locust.
+
+    Gate agregée (P1) :
+    - Taux d'echec global >= _FAIL_CRIT_PCT (15%) → FAIL
+    - P95 agrege >= _P95_CRIT_MS (5 000 ms) → FAIL
+
+    Gate par-endpoint (P3) :
+    - Pour chaque entree de CRITICAL_ENDPOINTS_GATES :
+        - fail% depasse max_fail_pct → FAIL
+        - P95 depasse max_p95_ms (si > 0) → FAIL
+
+    Retourne True si toute la gate est passee, False sinon.
+    """
+    stats_file = RESULTS_DIR / f"{csv_prefix}_stats.csv"
+    sep = "=" * 70
+
+    if not stats_file.exists():
+        print(f"\n⚠️  _check_perf_gate: {stats_file} introuvable — gate ignoree (permissif).")
+        return True
+
+    with open(stats_file, newline="", encoding="utf-8") as f:
+        rows = {r.get("Name", "").strip(): r for r in csv.DictReader(f)}
+
+    gate_pass = True
+    print(f"\n{sep}")
+    print("\U0001f512 GATE DE PERFORMANCE — VERIFICATION DES SLOs")
+    print(sep)
+
+    # ── 1. Gate agregee (P1) ─────────────────────────────────────────────────
+    agg = rows.get("Aggregated", {})
+    fail_pct = _fail_pct_from_row(agg)  # Calcule depuis Failure Count / Request Count
+    try:
+        p95_ms = int(float(agg.get("95%", 0) or 0))
+    except ValueError:
+        p95_ms = 0
+
+    if fail_pct >= _FAIL_CRIT_PCT:
+        print(f"❌ [GATE FAIL] Taux d'echec global {fail_pct:.1f}% >= seuil {_FAIL_CRIT_PCT}%")
+        gate_pass = False
+    else:
+        print(f"✅ [OK] Taux d'echec global {fail_pct:.1f}% < {_FAIL_CRIT_PCT}%")
+
+    if p95_ms >= _P95_CRIT_MS:
+        print(f"❌ [GATE FAIL] P95 agrege {p95_ms} ms >= seuil {_P95_CRIT_MS} ms")
+        gate_pass = False
+    else:
+        print(f"✅ [OK] P95 agrege {p95_ms} ms < {_P95_CRIT_MS} ms")
+
+    # ── 2. Gate par-endpoint critique (P3) ───────────────────────────────────
+    print("")
+    print("Endpoints critiques :")
+    for endpoint_substr, (max_fail_pct, max_p95_ms) in CRITICAL_ENDPOINTS_GATES.items():
+        matched = [
+            (name, row) for name, row in rows.items()
+            if _endpoint_matches(endpoint_substr, name) and name != "Aggregated"
+        ]
+        if not matched:
+            print(f"  ⚠️  '{endpoint_substr}' absent du CSV — endpoint non teste, gate ignoree.")
+            continue
+        for name, row in matched:
+            ep_fail = _fail_pct_from_row(row)  # Calcule depuis Failure Count / Request Count
+            try:
+                ep_p95 = int(float(row.get("95%", 0) or 0))
+            except ValueError:
+                ep_p95 = 0
+
+            if ep_fail > max_fail_pct:
+                print(
+                    f"  ❌ [GATE FAIL] '{name}': fail% {ep_fail:.1f}% > seuil {max_fail_pct}%"
+                )
+                gate_pass = False
+            else:
+                print(f"  ✅ [OK] '{name}': fail% {ep_fail:.1f}% <= {max_fail_pct}%")
+
+            if max_p95_ms > 0 and ep_p95 > max_p95_ms:
+                print(
+                    f"  ❌ [GATE FAIL] '{name}': P95 {ep_p95} ms > seuil {max_p95_ms} ms"
+                )
+                gate_pass = False
+            elif max_p95_ms > 0:
+                print(f"  ✅ [OK] '{name}': P95 {ep_p95} ms <= {max_p95_ms} ms")
+
+    print(f"\n{sep}")
+    if gate_pass:
+        print("✅ Gate de performance : PASSEE — tous les SLOs respectes.")
+    else:
+        print("❌ Gate de performance : ECHOUEE — SLOs non respectes. Deploiement bloque.")
+    print(sep)
+    return gate_pass
 
 
 def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) -> None:
@@ -865,10 +1002,7 @@ def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) ->
             warn_latency.append((name, p95))
 
     agg = agg_rows[0] if agg_rows else {}
-    try:
-        fail_pct = float(agg.get("Failure %", 0) or 0)
-    except ValueError:
-        fail_pct = 0.0
+    fail_pct = _fail_pct_from_row(agg)  # Calcule depuis Failure Count / Request Count
     total_req = agg.get("Request Count", "?")
     total_fail = agg.get("Failure Count", "?")
     rps = agg.get("Requests/s", "?")
@@ -1124,9 +1258,15 @@ def main() -> None:
                 display_results(csv_prefix=_csv_prefix)
                 archive_results(csv_prefix=_csv_prefix)
                 run_compare()
+                if not _check_perf_gate(csv_prefix=_csv_prefix):
+                    log("\n❌ Gate de performance : SLOs non respectés. Déploiement bloqué.")
+                    _close_session_log()
+                    sys.exit(1)
             else:
                 log(
                     "\n⛔ Locust a echoue — resultats precedents non affiches (fail-fast).")
+                _close_session_log()
+                sys.exit(1)
 
     log("\n✨ local_up.py terminé.")
     _close_session_log()

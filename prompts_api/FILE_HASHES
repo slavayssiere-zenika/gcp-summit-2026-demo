@@ -12,6 +12,7 @@
 1cbb57ffe7c4fe8631d57b29b296b3248bd88f71  ./prompts_api/src/gemini_retry.py
 1f4fe6603d631baffc00c40d3ec10b5bcff95256  ./shared/schemas/pagination.py
 1fd31adce2148ac5acab51360924ea8cf4f9aa6a  ./prompts_api/pytest.ini
+229f22090d15b73bab3eec7761211c7df1e949a2  ./prompts_api/pyproject.toml
 29e62c52763a613694d3fcddc10c948df0891c4f  ./shared/redis_state.py
 2a04000625d6344508a05dc6a7bb145ed6032d21  ./prompts_api/prompts_api.error_correction.txt
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
@@ -30,8 +31,8 @@
 53ec7850836038d178ae07b5587d855b819e63e7  ./shared/fastapi_utils.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
+6253b37da39b2a7602e220e54bd9a1294e54f230  ./prompts_api/uv.lock
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
-727bfac2967c8b4b80cfc74db642e156013a68c7  ./prompts_api/pyproject.toml
 750ace2bb74fa86e38ec0a93418b842224d0bb5c  ./prompts_api/tests/test_prompts.py
 7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
@@ -59,7 +60,6 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./prompts_api/src/prompts/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./prompts_api/tests/integration/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
-df2e67e4358afe8101e6ebf4e4a1b0ec72ea7570  ./prompts_api/uv.lock
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py

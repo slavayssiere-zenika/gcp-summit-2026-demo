@@ -21,6 +21,9 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
+| `GEMINI_API_BASE_URL` | Infra | `""` |
+| `VERTEX_API_BASE_URL` | Infra | `""` |
+| `ENABLE_GEMINI_CONTEXT_CACHE` | Comportement | `false` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `PORT` | Infra | `8080` |
 | `LOG_LEVEL` | Comportement | `INFO` |

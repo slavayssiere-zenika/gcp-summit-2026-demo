@@ -48,6 +48,7 @@ show_help() {
   echo "  --no-deploy        Construit et pousse les images Docker uniquement, ignore le déploiement Cloud Run"
   echo "  --force-all        Force le rebuild de TOUS les services (même ceux sans changement détecté)"
   echo "  --skip-tests       Bypasse la gate de tests unitaires (HOTFIX UNIQUEMENT — apparaîtra dans le summary)"
+  echo "  --skip-perf        Bypasse le test de performance/charge Locust post-déploiement"
   echo ""
   echo "Tests:"
   echo "  Par défaut, tous les tests sont lancés : unitaires + intégration Testcontainers (nécessite Docker)."
@@ -79,6 +80,7 @@ DEPLOYS_SKIPPED=()
 TESTS_SKIPPED=()  # Services dont les tests ont été bypassés via --skip-tests
 CURRENT_DEPLOYING_SERVICE=""
 SKIP_TESTS=false
+SKIP_PERF=false
 SKIP_UNCHANGED=true    # Défaut : rebuild uniquement ce qui a changé (opt-out via --force-all)
 FORCE_ALL=false        # Rebuild tout, même si aucun changement détecté
 declare -A COVERAGE_RESULTS   # service -> "75%" | "N/A" | "SKIPPED"
@@ -553,7 +555,7 @@ compute_service_hash() {
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
-    ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/env/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+    ! -path "*/.venv*/*" ! -path "*/venv*/*" ! -path "*/env*/*" ! -path "*/test_env*/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     ! -path "*/*.egg-info/*" \
@@ -577,7 +579,7 @@ save_shared_hash() {
       ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
       ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
       ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
-      ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/env/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+      ! -path "*/.venv*/*" ! -path "*/venv*/*" ! -path "*/env*/*" ! -path "*/test_env*/*" ! -path "*/node_modules/*" \
       ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
       ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
       ! -path "*/*.egg-info/*" \
@@ -599,7 +601,7 @@ check_shared_changed() {
     ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
-    ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/env/*" ! -path "*/test_env/*" ! -path "*/node_modules/*" \
+    ! -path "*/.venv*/*" ! -path "*/venv*/*" ! -path "*/env*/*" ! -path "*/test_env*/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
     ! -path "*/*.egg-info/*" \
@@ -610,6 +612,50 @@ check_shared_changed() {
     return 0 # changed
   else
     return 1 # not changed
+  fi
+}
+
+audit_mock_configs() {
+  echo -e "\n${GREY}--- 🛡️  Audit de securite des variables de Mocking Gemini ---${RESET}"
+  local audit_failed=0
+
+  # 1. Verification des fichiers d'environnement dans platform-engineering/envs/
+  if [ -d "platform-engineering/envs" ]; then
+    for env_file in platform-engineering/envs/*.yaml; do
+      [ ! -f "$env_file" ] && continue
+      local match_gemini
+      match_gemini=$(grep -E "GEMINI_API_BASE_URL" "$env_file" | grep -v '""' | grep -v "''" || true)
+      local match_vertex
+      match_vertex=$(grep -E "VERTEX_API_BASE_URL" "$env_file" | grep -v '""' | grep -v "''" || true)
+      
+      if [ -n "$match_gemini" ] || [ -n "$match_vertex" ]; then
+        echo -e "${RED}❌ ERREUR AUDIT : Valeur de mock non vide detectee dans $(basename "$env_file") :${RESET}"
+        [ -n "$match_gemini" ] && echo -e "   -> $match_gemini"
+        [ -n "$match_vertex" ] && echo -e "   -> $match_vertex"
+        audit_failed=1
+      fi
+    done
+  fi
+
+  # 2. Verification des fichiers Terraform (cr_*.tf)
+  if [ -d "platform-engineering/terraform" ]; then
+    for tf_file in platform-engineering/terraform/cr_*.tf; do
+      [ ! -f "$tf_file" ] && continue
+      local bad_lines
+      bad_lines=$(grep -A 1 -E "GEMINI_API_BASE_URL|VERTEX_API_BASE_URL" "$tf_file" | grep "value" | grep -E "mock_gemini|localhost|127.0.0.1" || true)
+      if [ -n "$bad_lines" ]; then
+        echo -e "${RED}❌ ERREUR AUDIT : Configuration locale detectee dans Terraform $(basename "$tf_file") :${RESET}"
+        echo -e "   -> $bad_lines"
+        audit_failed=1
+      fi
+    done
+  fi
+
+  if [ "$audit_failed" -eq 1 ]; then
+    echo -e "${RED}❌ L'audit a echoue. Le deploiement est bloque pour proteger la production.${RESET}\n"
+    exit 1
+  else
+    echo -e "${GREEN}✅ Audit de securite reussi : aucun mock Gemini configure pour la production.${RESET}\n"
   fi
 }
 
@@ -837,141 +883,233 @@ ${GREY}------------------------------------------------------------${RESET}"
 build_and_push_standard() {
   local SERVICE=$1
   local BUMP=${2:-"patch"}
+  local MODE=${3:-"both"}
 
-  if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
-    echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
-    DEPLOYS_SKIPPED+=("$SERVICE")
-    return 0
-  fi
-
-  # ── Vérification Docker (prérequis Testcontainers) ────────────────────────────────────
-  check_docker_available
-
-  # ── Gate de test fail-fast ──────────────────────────────────────────────────
-  # CURRENT_DEPLOYING_SERVICE vidé avant return 1 pour éviter la double entrée
-  # dans DEPLOYS_FAILED via le trap EXIT (P0/R4)
-  run_service_tests "$SERVICE" || { CURRENT_DEPLOYING_SERVICE=""; return 1; }
-
-  local TAG=$(get_service_tag "$SERVICE" "$BUMP")
-  echo "--- Building $SERVICE ($TAG) ---"
   local IMAGE_NAME="${DOCKER_REPO}/${SERVICE}"
+  local TAG
 
-  # Build pour Cloud Run (nécessite amd64) — contexte = racine du monorepo
-  # BuildKit requis pour --secret (token AR non visible dans docker history)
-  # Le token est éphémère (1h) et jamais persisté dans l'image
-  local AR_TOKEN
-  AR_TOKEN=$(gcloud auth print-access-token)
-  local AR_TOKEN_FILE
-  AR_TOKEN_FILE=$(mktemp)
-  _TMPFILES+=("$AR_TOKEN_FILE")
-  echo -n "$AR_TOKEN" > "$AR_TOKEN_FILE"
-
-  local SHARED_VERSION_RAW=$(cat shared/VERSION 2>/dev/null || echo "latest")
-  local SHARED_VERSION="${SHARED_VERSION_RAW#v}"
-
-  DOCKER_BUILDKIT=1 docker build --platform linux/amd64 \
-    --secret id=ar_token,src="$AR_TOKEN_FILE" \
-    --build-arg PYTHON_AR_REPO="${PYTHON_REPO_URL}" \
-    --build-arg SHARED_VERSION="${SHARED_VERSION}" \
-    -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" \
-    -f "./${SERVICE}/Dockerfile" .
-  
-  echo "--- Smoke Test: Vérification du démarrage du conteneur ---"
-  if [ "$SERVICE" == "db_migrations" ]; then
-    echo -e "${GREEN}✅ [SMOKE TEST] Ignoré pour $SERVICE (Job d'exécution courte).${RESET}"
-  else
-    local SMOKE_CONTAINER="smoke_${SERVICE}_$RANDOM"
-    
-    docker run -d --name "$SMOKE_CONTAINER" \
-      -e SECRET_KEY="smoke_test_key" \
-      -e GEMINI_API_KEY="dummy" \
-      -e REDIS_URL="redis://localhost:6379" \
-      -e DATABASE_URL="postgresql+asyncpg://dummy:dummy@localhost:5432/dummy" \
-      "${IMAGE_NAME}:${TAG}" >/dev/null
-      
-    sleep 3
-    
-    if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
-      echo -e "${RED}❌ [SMOKE TEST] L'image Docker a crashé au démarrage (Missing Module, Syntax Error, etc) !${RESET}"
-      echo -e "${RED}   Logs du crash :${RESET}"
-      docker logs "$SMOKE_CONTAINER" 2>&1 | tee -a "${LOG_DIR}/${SERVICE}_tests.log"
-      docker rm -f "$SMOKE_CONTAINER" >/dev/null
-      DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
-      CURRENT_DEPLOYING_SERVICE=""
-      return 1
+  if [[ "$MODE" == "build" || "$MODE" == "both" ]]; then
+    if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
+      echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
+      DEPLOYS_SKIPPED+=("$SERVICE")
+      return 0
     fi
+
+    # ── Vérification Docker (prérequis Testcontainers) ────────────────────────────────────
+    check_docker_available
+
+    # ── Gate de test fail-fast ──────────────────────────────────────────────────
+    # CURRENT_DEPLOYING_SERVICE vidé avant return 1 pour éviter la double entrée
+    # dans DEPLOYS_FAILED via le trap EXIT (P0/R4)
+    run_service_tests "$SERVICE" || { CURRENT_DEPLOYING_SERVICE=""; return 1; }
+
+    TAG=$(get_service_tag "$SERVICE" "$BUMP")
+    echo "--- Building $SERVICE ($TAG) ---"
+
+    # Build pour Cloud Run (nécessite amd64) — contexte = racine du monorepo
+    # BuildKit requis pour --secret (token AR non visible dans docker history)
+    # Le token est éphémère (1h) et jamais persisté dans l'image
+    local AR_TOKEN
+    AR_TOKEN=$(gcloud auth print-access-token)
+    local AR_TOKEN_FILE
+    AR_TOKEN_FILE=$(mktemp)
+    _TMPFILES+=("$AR_TOKEN_FILE")
+    echo -n "$AR_TOKEN" > "$AR_TOKEN_FILE"
+
+    local SHARED_VERSION_RAW=$(cat shared/VERSION 2>/dev/null || echo "latest")
+    local SHARED_VERSION="${SHARED_VERSION_RAW#v}"
+
+    DOCKER_BUILDKIT=1 docker build --platform linux/amd64 \
+      --secret id=ar_token,src="$AR_TOKEN_FILE" \
+      --build-arg PYTHON_AR_REPO="${PYTHON_REPO_URL}" \
+      --build-arg SHARED_VERSION="${SHARED_VERSION}" \
+      -t "${IMAGE_NAME}:${TAG}" -t "${IMAGE_NAME}:latest" \
+      -f "./${SERVICE}/Dockerfile" .
+
+    # Bridging tag for Compose local name
+    echo "--- Tagging for Compose: test-open-code-${SERVICE}:latest ---"
+    docker tag "${IMAGE_NAME}:latest" "test-open-code-${SERVICE}:latest"
     
-    echo -e "${GREEN}✅ [SMOKE TEST] Démarrage réussi.${RESET}"
-    docker rm -f "$SMOKE_CONTAINER" >/dev/null
-  fi
+    echo "--- Smoke Test: Vérification du démarrage du conteneur ---"
+    if [ "$SERVICE" == "db_migrations" ]; then
+      echo -e "${GREEN}✅ [SMOKE TEST] Ignoré pour $SERVICE (Job d'exécution courte).${RESET}"
+    else
+      local PORT_EXPOSED=8080
+      case "$SERVICE" in
+        users_api|prompts_api) PORT_EXPOSED=8000 ;;
+        items_api) PORT_EXPOSED=8001 ;;
+        competencies_api) PORT_EXPOSED=8003 ;;
+        cv_api) PORT_EXPOSED=8004 ;;
+        drive_api) PORT_EXPOSED=8006 ;;
+        missions_api) PORT_EXPOSED=8009 ;;
+        *) PORT_EXPOSED=8080 ;;
+      esac
 
-  
-  # Push
-  echo "--- Pushing $SERVICE ---"
-  docker push "${IMAGE_NAME}:${TAG}"
-  docker push "${IMAGE_NAME}:latest"
-  
-    if [ "$SKIP_CLOUDRUN" = true ]; then
-    echo "--- Skipping update_cloudrun/jobs for $SERVICE ---"
-    DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
-  else
-    if [ "$SERVICE" != "db_migrations" ]; then
-      if update_cloudrun "$SERVICE" "$TAG"; then
-        DEPLOYS_SUCCESS+=("$SERVICE")
-        save_service_hash "$SERVICE"  # P1/R6 — indentation corrigée
+      local SMOKE_CONTAINER="smoke_${SERVICE}_$RANDOM"
+      
+      docker run -d --name "$SMOKE_CONTAINER" \
+        -p 0:"$PORT_EXPOSED" \
+        -e SECRET_KEY="smoke_test_key" \
+        -e GEMINI_API_KEY="dummy" \
+        -e REDIS_URL="redis://localhost:6379" \
+        -e DATABASE_URL="postgresql+asyncpg://dummy:dummy@localhost:5432/dummy" \
+        "${IMAGE_NAME}:${TAG}" >/dev/null
+        
+      # Extraction du port dynamique hôte affecté par Docker
+      # sleep 1 : laisse Docker enregistrer le mapping avant d'appeler docker port
+      sleep 1
+      local HOST_PORT
+      HOST_PORT=$(docker port "$SMOKE_CONTAINER" "$PORT_EXPOSED" 2>/dev/null | awk -F: '{print $NF}' | tr -d '[:space:]')
 
-        # ── R3 — Évaluation RAG post-déploiement (optionnelle) ──────────────
-        # Activée via : RAG_EVAL_ENABLED=true ./scripts/deploy.sh cv_api
-        # Non bloquante : un échec RAG ajoute un warning dans le summary mais
-        # ne rollback pas le déploiement.
-        if [ "$SERVICE" = "cv_api" ] && [ "${RAG_EVAL_ENABLED:-false}" = "true" ] && [ "$SKIP_TESTS" = false ]; then
-          echo -e "\n${GREY}--- 🔍 [R3] Évaluation qualité RAG post-déploiement (30s) ---${RESET}"
-          RAG_EVAL_EXIT=0
-          RAG_EVAL_DRY_RUN="${RAG_EVAL_DRY_RUN:-false}" \
-          PROJECT_ID="$PROJECT_ID" \
-          bash scripts/run_rag_eval.sh --env dev || RAG_EVAL_EXIT=$?
-          if [ "$RAG_EVAL_EXIT" -ne 0 ]; then
-            echo -e "${RED}⚠️  [R3] Régression RAG détectée — vérifiez GEMINI_EMBEDDING_MODEL ou VECTOR_DISTANCE_THRESHOLD${RESET}"
-            echo -e "${GREY}   → Requalifier les cas golden : RAG_EVAL_DRY_RUN=true ./scripts/run_rag_eval.sh${RESET}"
-            # On n'ajoute pas dans DEPLOYS_FAILED — le déploiement est réussi,
-            # la régression RAG est un warning qualité.
-          else
-            echo -e "${GREEN}✅ [R3] Qualité RAG validée post-déploiement${RESET}"
+      # Fallback : docker inspect si docker port échoue (container crashé trop vite ou mapping non encore enregistré)
+      if [ -z "$HOST_PORT" ]; then
+        HOST_PORT=$(docker inspect --format="{{(index (index .NetworkSettings.Ports \"${PORT_EXPOSED}/tcp\") 0).HostPort}}" "$SMOKE_CONTAINER" 2>/dev/null | tr -d '[:space:]')
+      fi
+
+      if [ -z "$HOST_PORT" ] || [ "$HOST_PORT" = "<no value>" ]; then
+        echo -e "${RED}❌ [SMOKE TEST] Impossible de récupérer le port dynamique affecté par Docker !${RESET}"
+        docker logs "$SMOKE_CONTAINER" 2>&1 | tee -a "${LOG_DIR}/${SERVICE}_tests.log"
+        docker rm -f "$SMOKE_CONTAINER" >/dev/null
+        DEPLOYS_FAILED+=("$SERVICE (Smoke Test dynamic port mapping failed)")
+        CURRENT_DEPLOYING_SERVICE=""
+        return 1
+      fi
+
+
+      # Active HTTP probe loop (max 30s)
+      local SUCCESS=false
+      local ELAPSED=0
+      
+      local SERVICE_ROOT_PATH=""
+      case "$SERVICE" in
+        drive_api) SERVICE_ROOT_PATH="/drive-api" ;;
+        missions_api) SERVICE_ROOT_PATH="/missions-api" ;;
+        users_api) SERVICE_ROOT_PATH="/users-api" ;;
+        items_api) SERVICE_ROOT_PATH="/items-api" ;;
+        competencies_api) SERVICE_ROOT_PATH="/competencies-api" ;;
+        cv_api) SERVICE_ROOT_PATH="/cv-api" ;;
+        prompts_api) SERVICE_ROOT_PATH="/prompts-api" ;;
+        analytics_mcp) SERVICE_ROOT_PATH="/analytics-mcp" ;;
+        monitoring_mcp) SERVICE_ROOT_PATH="/monitoring-mcp" ;;
+      esac
+
+      echo -e "${GREY}[*] Port dynamique mappé : ${HOST_PORT}. Lancement de la boucle de sondes actives (max 30s)...${RESET}"
+      while [ $ELAPSED -lt 30 ]; do
+        if ! docker ps -q -f name="^${SMOKE_CONTAINER}$" | grep -q .; then
+          echo -e "${RED}❌ [SMOKE TEST] Le conteneur a crashé au démarrage pendant le probing !${RESET}"
+          break
+        fi
+        
+        local HTTP_STATUS="000"
+        
+        # 1. Probe /health
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 1 "http://localhost:${HOST_PORT}/health" || echo "000")
+        
+        # 2. Probe /${ROOT_PATH}/health
+        if [[ "$HTTP_STATUS" == "000" || "$HTTP_STATUS" == "404" ]]; then
+          if [ -n "$SERVICE_ROOT_PATH" ]; then
+            local CLEAN_ROOT
+            CLEAN_ROOT=$(echo "$SERVICE_ROOT_PATH" | sed 's/^\///')
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 1 "http://localhost:${HOST_PORT}/${CLEAN_ROOT}/health" || echo "000")
           fi
         fi
-        # ────────────────────────────────────────────────────────────────────
-
-      else
-        DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
-      fi
-    else
-      # Chaine automatiquement avec le init_job
-      run_db_init_job || true
-
-      local CLEAN_NAME="${SERVICE//_/-}"
-      local JOB_NAME="${CLEAN_NAME}-job-dev"
-      
-      if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
-        echo "--- Mise à jour de l'image du Cloud Run Job: $JOB_NAME ---"
-        gcloud run jobs update "$JOB_NAME" \
-          --region "$REGION" \
-          --project "$PROJECT_ID" \
-          --image "${IMAGE_NAME}:${TAG}"
         
-        echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
-        if gcloud run jobs execute "$JOB_NAME" \
-          --region "$REGION" \
-          --project "$PROJECT_ID" \
-          --wait; then
+        # 3. Probe root /
+        if [[ "$HTTP_STATUS" == "000" || "$HTTP_STATUS" == "404" ]]; then
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 1 "http://localhost:${HOST_PORT}/" || echo "000")
+        fi
+        
+        if [[ "$HTTP_STATUS" != "000" ]]; then
+          SUCCESS=true
+          break
+        fi
+        
+        sleep 1
+        ELAPSED=$((ELAPSED + 1))
+      done
+
+      if [ "$SUCCESS" = false ]; then
+        echo -e "${RED}❌ [SMOKE TEST] L'image Docker n'a pas répondu aux sondes HTTP dans les 30s ou a crashé !${RESET}"
+        echo -e "${RED}   Logs du conteneur :${RESET}"
+        docker logs "$SMOKE_CONTAINER" 2>&1 | tee -a "${LOG_DIR}/${SERVICE}_tests.log"
+        docker rm -f "$SMOKE_CONTAINER" >/dev/null
+        DEPLOYS_FAILED+=("$SERVICE (Smoke Test failed)")
+        CURRENT_DEPLOYING_SERVICE=""
+        return 1
+      fi
+      
+      echo -e "${GREEN}✅ [SMOKE TEST] Démarrage et boucle de sondes validés avec succès (statut HTTP: ${HTTP_STATUS}).${RESET}"
+      docker rm -f "$SMOKE_CONTAINER" >/dev/null
+    fi
+  fi
+
+  if [[ "$MODE" == "deploy" || "$MODE" == "both" ]]; then
+    if [[ " ${DEPLOYS_SKIPPED[*]} " == *" $SERVICE "* ]]; then
+      return 0
+    fi
+
+    TAG=$(get_service_tag "$SERVICE" "none")
+    echo "--- Pushing $SERVICE ($TAG) ---"
+    docker push "${IMAGE_NAME}:${TAG}"
+    docker push "${IMAGE_NAME}:latest"
+    
+    if [ "$SKIP_CLOUDRUN" = true ]; then
+      echo "--- Skipping update_cloudrun/jobs for $SERVICE ---"
+      DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
+    else
+      if [ "$SERVICE" != "db_migrations" ]; then
+        if update_cloudrun "$SERVICE" "$TAG"; then
           DEPLOYS_SUCCESS+=("$SERVICE")
           save_service_hash "$SERVICE"  # P1/R6 — indentation corrigée
+
+          # ── R3 — Évaluation RAG post-déploiement (optionnelle) ──────────────
+          if [ "$SERVICE" = "cv_api" ] && [ "${RAG_EVAL_ENABLED:-false}" = "true" ] && [ "$SKIP_TESTS" = false ]; then
+            echo -e "\n${GREY}--- 🔍 [R3] Évaluation qualité RAG post-déploiement (30s) ---${RESET}"
+            RAG_EVAL_EXIT=0
+            RAG_EVAL_DRY_RUN="${RAG_EVAL_DRY_RUN:-false}" \
+            PROJECT_ID="$PROJECT_ID" \
+            bash scripts/run_rag_eval.sh --env dev || RAG_EVAL_EXIT=$?
+            if [ "$RAG_EVAL_EXIT" -ne 0 ]; then
+              echo -e "${RED}⚠️  [R3] Régression RAG détectée — vérifiez GEMINI_EMBEDDING_MODEL ou VECTOR_DISTANCE_THRESHOLD${RESET}"
+              echo -e "${GREY}   → Requalifier les cas golden : RAG_EVAL_DRY_RUN=true ./scripts/run_rag_eval.sh${RESET}"
+            else
+              echo -e "${GREEN}✅ [R3] Qualité RAG validée post-déploiement${RESET}"
+            fi
+          fi
+          # ────────────────────────────────────────────────────────────────────
+
         else
-          DEPLOYS_FAILED+=("$SERVICE (Job execution failed)")
+          DEPLOYS_FAILED+=("$SERVICE (Cloud Run)")
         fi
       else
-        echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
-        DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
-        save_service_hash "$SERVICE"
+        # Chaine automatiquement avec le init_job
+        run_db_init_job || true
+
+        local CLEAN_NAME="${SERVICE//_/-}"
+        local JOB_NAME="${CLEAN_NAME}-job-dev"
+        
+        if gcloud run jobs describe "$JOB_NAME" --region "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+          echo "--- Mise à jour de l'image du Cloud Run Job: $JOB_NAME ---"
+          gcloud run jobs update "$JOB_NAME" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --image "${IMAGE_NAME}:${TAG}"
+          
+          echo "--- Lancement du Cloud Run Job: $JOB_NAME ---"
+          if gcloud run jobs execute "$JOB_NAME" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --wait; then
+            DEPLOYS_SUCCESS+=("$SERVICE")
+            save_service_hash "$SERVICE"  # P1/R6 — indentation corrigée
+          else
+            DEPLOYS_FAILED+=("$SERVICE (Job execution failed)")
+          fi
+        else
+          echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
+          DEPLOYS_SUCCESS+=("$SERVICE (Docker only)")
+          save_service_hash "$SERVICE"
+        fi
       fi
     fi
   fi
@@ -983,76 +1121,100 @@ build_and_push_standard() {
 
 build_and_upload_frontend() {
   local BUMP=${1:-"patch"}
+  local MODE=${2:-"both"}
 
-  if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "frontend"; then
-    echo -e "${YELLOW}--- Skipped frontend (no changes detected since last deployment) ---${RESET}"
-    DEPLOYS_SKIPPED+=("frontend")
-    return 0
-  fi
+  if [[ "$MODE" == "build" || "$MODE" == "both" ]]; then
+    if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "frontend"; then
+      echo -e "${YELLOW}--- Skipped frontend (no changes detected since last deployment) ---${RESET}"
+      DEPLOYS_SKIPPED+=("frontend")
+      return 0
+    fi
 
-  local TAG=$(get_service_tag "frontend" "$BUMP")
+    local TAG=$(get_service_tag "frontend" "$BUMP")
 
-  echo "=== Traitement du Frontend ($TAG) ==="
-  if [ ! -d "frontend" ]; then
-    echo "Dossier frontend introuvable"
-    exit 1
-  fi
-  # P1/R8 — pushd/popd garantit le retour au répertoire racine même si npm échoue (set -eo pipefail)
-  pushd frontend > /dev/null
-  echo "--- NPM ci && Tests && Build ---"
-  npm ci   # A2 — npm ci (reproductible, ne modifie pas package-lock.json, ~2-3x plus rapide en CI)
-  
-  if [ "$SKIP_TESTS" = false ]; then
-    echo "--- Run Frontend Tests ---"
-    npm run test:unit:run
-  else
-    echo -e "${YELLOW}[⚠️  TESTS SKIPPED] frontend — bypass via --skip-tests${RESET}"
-    TESTS_SKIPPED+=("frontend")
-  fi
-
-  npm run build
-  popd > /dev/null
-
-  echo "--- Création de l'archive tar.gz ---"
-  local TIMESTAMP=$(date +%Y%m%d%H%M%S)
-  local ARCHIVE_NAME="frontend-${TIMESTAMP}-${TAG}.tar.gz"
-  # A3 — L'archive locale est enregistrée dans _TMPFILES pour nettoyage automatique après upload
-  _TMPFILES+=("$ARCHIVE_NAME")
-
-  tar -czvf "$ARCHIVE_NAME" frontend/dist/
-
-  echo "--- Upload vers Google Cloud Storage ($FRONTEND_BUCKET) ---"
-  gcloud storage cp "$ARCHIVE_NAME" "gs://${FRONTEND_BUCKET}/"
-
-  if [ "$SKIP_CLOUDRUN" = true ]; then
-    echo "--- Skipping deployment to environment bucket for frontend ---"
-    DEPLOYS_SUCCESS+=("frontend (Archive only)")
-    save_service_hash "frontend"
-    return 0
-  fi
-
-  echo "--- Déploiement vers le bucket de l'environnement DEV et gestion du cache ---"
-  local DEV_BUCKET
-  DEV_BUCKET=$(cd platform-engineering/terraform && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
-
-  if [[ -n "$DEV_BUCKET" && ! "$DEV_BUCKET" =~ "Warning:" ]]; then
-    echo "-> Synchronisation des fichiers vers gs://${DEV_BUCKET}..."
-    gcloud storage rsync frontend/dist/ "gs://${DEV_BUCKET}/" --recursive --delete-unmatched-destination-objects
+    echo "=== Traitement du Frontend ($TAG) ==="
+    if [ ! -d "frontend" ]; then
+      echo "Dossier frontend introuvable"
+      exit 1
+    fi
+    # P1/R8 — pushd/popd garantit le retour au répertoire racine même si npm échoue (set -eo pipefail)
+    pushd frontend > /dev/null
+    echo "--- NPM ci && Tests && Build ---"
+    npm ci   # A2 — npm ci (reproductible, ne modifie pas package-lock.json, ~2-3x plus rapide en CI)
     
-    echo "-> Configuration des entêtes Cache-Control..."
-    # Désactiver le cache pour index.html
-    gcloud storage objects update "gs://${DEV_BUCKET}/index.html" --cache-control="no-store, no-cache, must-revalidate, max-age=0"
-    # Mettre en cache les assets statiques (js, css, etc.) pour 1 an
-    gcloud storage objects update "gs://${DEV_BUCKET}/assets/**" --cache-control="public, max-age=31536000, immutable" 2>/dev/null || true
+    if [ "$SKIP_TESTS" = false ]; then
+      echo "--- Run Frontend Tests ---"
+      npm run test:unit:run
+    else
+      echo -e "${YELLOW}[⚠️  TESTS SKIPPED] frontend — bypass via --skip-tests${RESET}"
+      TESTS_SKIPPED+=("frontend")
+    fi
 
-    echo "-> Invalidation du cache CDN (Google Cloud CDN)..."
-    gcloud compute url-maps invalidate-cdn-cache "lb-dev" --path "/*" --async --project "$PROJECT_ID" || echo "/!\ Attention: impossible d'invalider le cache CDN"
-    DEPLOYS_SUCCESS+=("frontend")
-    save_service_hash "frontend"
-  else
-    echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform (ou output vide). Déploiement ignoré."
-    DEPLOYS_SUCCESS+=("frontend (Build & Archive only)")
-    save_service_hash "frontend"
+    npm run build
+    popd > /dev/null
+
+    echo "--- Création de l'archive tar.gz ---"
+    local TIMESTAMP=$(date +%Y%m%d%H%M%S)
+    local ARCHIVE_NAME="frontend-${TIMESTAMP}-${TAG}.tar.gz"
+    # A3 — L'archive locale est enregistrée dans _TMPFILES pour nettoyage automatique après upload
+    _TMPFILES+=("$ARCHIVE_NAME")
+
+    tar -czvf "$ARCHIVE_NAME" frontend/dist/
+    FRONTEND_ARCHIVE_NAME="$ARCHIVE_NAME"
+  fi
+
+  if [[ "$MODE" == "deploy" || "$MODE" == "both" ]]; then
+    if [[ " ${DEPLOYS_SKIPPED[*]} " == *" frontend "* ]]; then
+      return 0
+    fi
+
+    local TAG=$(get_service_tag "frontend" "none")
+    local ARCHIVE_NAME
+    if [ -n "$FRONTEND_ARCHIVE_NAME" ]; then
+      ARCHIVE_NAME="$FRONTEND_ARCHIVE_NAME"
+    else
+      ARCHIVE_NAME=$(ls frontend-*-${TAG}.tar.gz 2>/dev/null | tail -n 1)
+    fi
+
+    if [ -z "$ARCHIVE_NAME" ] || [ ! -f "$ARCHIVE_NAME" ]; then
+      echo -e "${RED}❌ Archive frontend introuvable pour la version $TAG !${RESET}"
+      DEPLOYS_FAILED+=("frontend (Missing archive)")
+      return 1
+    fi
+
+    echo "--- Upload vers Google Cloud Storage ($FRONTEND_BUCKET) ---"
+    gcloud storage cp "$ARCHIVE_NAME" "gs://${FRONTEND_BUCKET}/"
+
+    if [ "$SKIP_CLOUDRUN" = true ]; then
+      echo "--- Skipping deployment to environment bucket for frontend ---"
+      DEPLOYS_SUCCESS+=("frontend (Archive only)")
+      save_service_hash "frontend"
+      return 0
+    fi
+
+    echo "--- Déploiement vers le bucket de l'environnement DEV et gestion du cache ---"
+    local DEV_BUCKET
+    DEV_BUCKET=$(cd platform-engineering/terraform && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
+
+    if [[ -n "$DEV_BUCKET" && ! "$DEV_BUCKET" =~ "Warning:" ]]; then
+      echo "-> Synchronisation des fichiers vers gs://${DEV_BUCKET}..."
+      gcloud storage rsync frontend/dist/ "gs://${DEV_BUCKET}/" --recursive --delete-unmatched-destination-objects
+      
+      echo "-> Configuration des entêtes Cache-Control..."
+      # Désactiver le cache pour index.html
+      gcloud storage objects update "gs://${DEV_BUCKET}/index.html" --cache-control="no-store, no-cache, must-revalidate, max-age=0"
+      # Mettre en cache les assets statiques (js, css, etc.) pour 1 an
+      gcloud storage objects update "gs://${DEV_BUCKET}/assets/**" --cache-control="public, max-age=31536000, immutable" 2>/dev/null || true
+
+      echo "-> Invalidation du cache CDN (Google Cloud CDN)..."
+      gcloud compute url-maps invalidate-cdn-cache "lb-dev" --path "/*" --async --project "$PROJECT_ID" || echo "/!\ Attention: impossible d'invalider le cache CDN"
+      DEPLOYS_SUCCESS+=("frontend")
+      save_service_hash "frontend"
+    else
+      echo "-> /!\ Impossible de récupérer le nom du bucket dev depuis Terraform (ou output vide). Déploiement ignoré."
+      DEPLOYS_SUCCESS+=("frontend (Build & Archive only)")
+      save_service_hash "frontend"
+    fi
   fi
 }
 
@@ -1194,6 +1356,9 @@ for arg in "$@"; do
   elif [[ "$arg" == "--skip-tests" ]]; then
     SKIP_TESTS=true
     echo -e "${RED}🚨 [--skip-tests] Gate de tests DÉSACTIVÉE — réservé aux hotfixes urgents uniquement !${RESET}"
+  elif [[ "$arg" == "--skip-perf" ]]; then
+    SKIP_PERF=true
+    echo -e "${YELLOW}[--skip-perf] Gate de performance/charge Locust post-déploiement DÉSACTIVÉE.${RESET}"
   else
     # Normalize input (e.g. agent-api -> agent_api)
     TARGET_SERVICES+=("${arg//-/_}")
@@ -1221,6 +1386,9 @@ for svc in "${NEW_TARGETS[@]}"; do
     ALL_TASKS+=("$svc")
   fi
 done
+
+# ── Gate d'audit de securite des configurations de Mocking (fail-fast) ───────────
+audit_mock_configs
 
 # ── Gate de test E2E & Evaluation globale (fail-fast) ───────────────────────────
 if [ "$SKIP_TESTS" = false ]; then
@@ -1297,14 +1465,19 @@ if check_shared_changed; then
   fi
 fi
 
+# ==============================================================================
+# Phase 1: Build Local & Smoke Tests
+# ==============================================================================
+echo -e "\n${RED}============================================================${RESET}"
+echo -e "${RED}=== PHASE 1: Build Local & Smoke Tests                      ===${RESET}"
+echo -e "${RED}============================================================${RESET}"
+
 for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
   CURRENT_DEPLOYING_SERVICE="$TARGET_SERVICE"
   if [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
     show_progress "$TARGET_SERVICE"
-    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"
+    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE" "build"
   elif [ "$TARGET_SERVICE" = "db_init" ]; then
-    # ── DB Init : build image dédiée + mise à jour du Cloud Run Job + exécution ──
-    # AlloyDB n'est accessible qu'en VPC GCP (IP privée) : pas d'exécution locale possible.
     if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "db_init"; then
       echo -e "${YELLOW}--- Skipped db_init (no changes detected since last deployment) ---${RESET}"
       DEPLOYS_SKIPPED+=("db_init")
@@ -1319,6 +1492,94 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
       -t "${DOCKER_REPO}/db_init:${local_tag}" \
       -t "${DOCKER_REPO}/db_init:latest" \
       ./db_init
+
+    # Bridging tag for Compose
+    echo "--- Tagging for Compose: test-open-code-db_init:latest ---"
+    docker tag "${DOCKER_REPO}/db_init:latest" "test-open-code-db_init:latest"
+
+  elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
+    show_progress "$TARGET_SERVICE"
+    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE" "build"
+  elif [ "$TARGET_SERVICE" = "frontend" ]; then
+    show_progress "frontend"
+    build_and_upload_frontend "$BUMP_TYPE" "build"
+  elif [ "$TARGET_SERVICE" = "sync_prompts" ]; then
+    echo -e "${GREY}[*] sync_prompts: Pas d'étape de build local requise.${RESET}"
+  else
+    echo -e "${RED}Erreur : Service '${TARGET_SERVICE}' inconnu.${RESET}"
+    exit 1
+  fi
+  CURRENT_DEPLOYING_SERVICE=""
+done
+
+# Interrompre immédiatement la pipeline si un build ou smoke test local a échoué (fail-fast)
+if [ ${#DEPLOYS_FAILED[@]} -gt 0 ]; then
+  echo -e "${RED}❌ Échecs détectés lors de la Phase 1 (Build Local). Annulation du déploiement.${RESET}"
+  exit 1
+fi
+
+# ==============================================================================
+# Phase 2: Gate de Performance & Charge Locale (Locust)
+# ==============================================================================
+echo -e "\n${RED}============================================================${RESET}"
+echo -e "${RED}=== PHASE 2: Gate de Performance & Charge Locale (Locust)   ===${RESET}"
+echo -e "${RED}============================================================${RESET}"
+
+if [ "$SKIP_PERF" = true ]; then
+  echo -e "${YELLOW}[!] Gate de performance locale bypassée via --skip-perf.${RESET}"
+elif [ "$SKIP_TESTS" = true ]; then
+  echo -e "${YELLOW}[!] Gate de performance locale bypassée via --skip-tests.${RESET}"
+elif [ ${#ALL_TASKS[@]} -eq 0 ]; then
+  echo -e "${YELLOW}[!] Aucun service ciblé : skip de la gate Locust locale.${RESET}"
+else
+  CURRENT_DEPLOYING_SERVICE="locust_local_gate"
+  echo -e "${GREY}[*] Teardown des conteneurs perf existants (pubsub_emulator, mock_gemini...)${RESET}"
+  docker-compose --profile perf --profile perf-stress down --remove-orphans 2>/dev/null || true
+  echo -e "${GREY}[*] Suppression du réseau monitoring_net pour recréation en mode isolé (internal: true)${RESET}"
+  docker network rm monitoring_net 2>/dev/null || true
+
+  # Note : les images de services (cv_api, users_api, etc.) sont déjà correctes —
+  # Phase 3 du run précédent les a buildées et taguées :latest localement.
+  # L'image Locust est buildée par _build_locust_image() dans local_up.py.
+  # La variable GEMINI_API_BASE_URL est passée au conteneur cv_api via docker-compose.perf-override.yml.
+
+  GEMINI_API_BASE_URL=http://mock_gemini:8099 \
+  COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \
+  LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" python3 scripts/local_up.py --no-pull --perf --erase
+  LOCUST_EXIT=$?
+  
+  if [ "$LOCUST_EXIT" -ne 0 ]; then
+    echo -e "${RED}❌ La gate de performance locale (Locust) a échoué ! (Code de retour: $LOCUST_EXIT)${RESET}"
+    DEPLOYS_FAILED+=("locust_local_gate (Failure in local performance gate)")
+    exit 1
+  else
+    echo -e "${GREEN}✅ Gate de performance locale validée avec succès !${RESET}"
+    DEPLOYS_SUCCESS+=("locust_local_gate")
+  fi
+  CURRENT_DEPLOYING_SERVICE=""
+fi
+
+# ==============================================================================
+# Phase 3: Déploiement vers GCP (Artifact Registry / Cloud Run)
+# ==============================================================================
+echo -e "\n${RED}============================================================${RESET}"
+echo -e "${RED}=== PHASE 3: Déploiement vers GCP (Artifact Registry / Cloud Run) ===${RESET}"
+echo -e "${RED}============================================================${RESET}"
+
+for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
+  CURRENT_DEPLOYING_SERVICE="$TARGET_SERVICE"
+  if [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
+    show_progress "$TARGET_SERVICE"
+    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE" "deploy"
+  elif [ "$TARGET_SERVICE" = "db_init" ]; then
+    if [[ " ${DEPLOYS_SKIPPED[*]} " == *" db_init "* ]]; then
+      CURRENT_DEPLOYING_SERVICE=""
+      continue
+    fi
+
+    show_progress "db_init"
+    local_tag=$(get_service_tag "db_init" "none")
+    db_init_image="${DOCKER_REPO}/db_init:${local_tag}"
     echo "--- Pushing db_init ---"
     docker push "${DOCKER_REPO}/db_init:${local_tag}"
     docker push "${DOCKER_REPO}/db_init:latest"
@@ -1345,20 +1606,19 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
       else
         echo "--- Cloud Run Job $JOB_NAME n'existe pas encore. Seul le push de l'image a été effectué ---"
         DEPLOYS_SUCCESS+=("db_init (Docker only)")
-      save_service_hash "db_init"
+        save_service_hash "db_init"
       fi
     fi
   elif [[ "$TARGET_SERVICE" == "agent_"* ]]; then
     show_progress "$TARGET_SERVICE"
-    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE"  # P1/R5 — fusionné avec build_and_push_standard
+    build_and_push_standard "$TARGET_SERVICE" "$BUMP_TYPE" "deploy"
   elif [ "$TARGET_SERVICE" = "frontend" ]; then
     show_progress "frontend"
-    build_and_upload_frontend "$BUMP_TYPE"
+    build_and_upload_frontend "$BUMP_TYPE" "deploy"
   elif [ "$TARGET_SERVICE" = "sync_prompts" ]; then
     if sync_system_prompts; then DEPLOYS_SUCCESS+=("sync_prompts"); else DEPLOYS_FAILED+=("sync_prompts"); fi
   else
     echo -e "${RED}Erreur : Service '${TARGET_SERVICE}' inconnu.${RESET}"
-    echo "Utilisez --help pour voir la liste des services disponibles."
     exit 1
   fi
   CURRENT_DEPLOYING_SERVICE=""

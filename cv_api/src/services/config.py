@@ -41,7 +41,7 @@ BATCH_GCS_BUCKET = os.getenv("BATCH_GCS_BUCKET", "")
 
 # Redirection vers mock_gemini si GEMINI_API_BASE_URL est défini (mode perf local)
 GEMINI_API_BASE_URL: str = os.getenv("GEMINI_API_BASE_URL", "")
-_http_opts = HttpOptions(baseUrl=GEMINI_API_BASE_URL) if GEMINI_API_BASE_URL else None
+_http_opts = HttpOptions(base_url=GEMINI_API_BASE_URL) if GEMINI_API_BASE_URL else None
 try:
     if GEMINI_API_KEY or GEMINI_API_BASE_URL:
         # PRD : clé réelle. Perf-test local : mock-key-local + baseUrl mock_gemini.

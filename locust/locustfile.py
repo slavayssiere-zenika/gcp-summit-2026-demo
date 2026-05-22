@@ -216,6 +216,7 @@ class ZenikaPerfUser(HttpUser):
         self.missions_api = os.getenv("MISSIONS_API_URL", "http://missions_api:8009")
         self.drive_api = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
         self.prompts_api = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+        self.agent_router_api = os.getenv("AGENT_ROUTER_API_URL", "http://agent_router_api:8080")
         self._login()
 
         # Intercept requests to refresh token and update headers dynamically
@@ -338,9 +339,11 @@ class ZenikaPerfUser(HttpUser):
     _TOKEN_REFRESH_THRESHOLD = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15)) * 60 - 180
 
     def _login(self):
+        email = os.getenv("LOCUST_ADMIN_EMAIL", "admin@zenika.com")
+        password = os.getenv("LOCUST_ADMIN_PASSWORD", "admin")
         res = self.client.post(
             f"{self.users_api}/login",
-            json={"email": "admin@zenika.com", "password": "admin"},
+            json={"email": email, "password": password},
             name="/login",
         )
         if res.status_code == 200:
@@ -794,6 +797,26 @@ class ZenikaPerfUser(HttpUser):
             f"{self.prompts_api}/{key}",
             headers=self.headers,
             name="[Prompts] GET /prompts/{key}",
+        )
+
+    # --- Agent Router API ---
+
+    @task(2)
+    def post_agent_query(self):
+        """POST /query — interroge l'agent router intelligent (Gemini + Vertex AI)."""
+        queries = [
+            "Trouve un consultant disponible expert en Python et GCP",
+            "Quels sont les compétences de Sébastien ?",
+            "Recherche des missions d'architecture cloud",
+            "Qui connait Vue.js dans l'équipe ?",
+            "Est-ce que Alice est disponible pour une mission ?"
+        ]
+        q = random.choice(queries)
+        self.client.post(
+            f"{self.agent_router_api}/query",
+            json={"query": q},
+            headers=self.headers,
+            name="[Agent] POST /query",
         )
 
 

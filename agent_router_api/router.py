@@ -26,6 +26,15 @@ tracer = setup_telemetry()
 _semantic_cache = SemanticCache()
 logger = logging.getLogger(__name__)
 
+
+async def _close_redis(r) -> None:
+    """Closes Redis connection safely, supporting both real Redis (aclose) and FakeRedis (close)."""
+    if hasattr(r, "aclose"):
+        await r.aclose()
+    else:
+        await r.close()
+
+
 from shared.auth.jwt import ALGORITHM, SECRET_KEY, security  # noqa: E402
 
 router = APIRouter(dependencies=[Depends(verify_jwt)])
@@ -234,7 +243,12 @@ async def get_history(
                     elif hasattr(res_to_process, 'dict'):
                         res_to_process = res_to_process.dict()
 
-                    if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
+                    if (
+                        isinstance(res_to_process, dict)
+                        and "result" in res_to_process
+                        and isinstance(res_to_process["result"], str)
+                        and res_to_process["result"].startswith("{")
+                    ):
                         try:
                             res_to_process = json.loads(res_to_process["result"])
                         except Exception as e:
@@ -262,7 +276,12 @@ async def get_history(
                         if sub_display_type and current_assistant_msg.get("displayType") == "text_only":
                             current_assistant_msg["displayType"] = sub_display_type
 
-                    if isinstance(res_to_process, dict) and "result" in res_to_process and isinstance(res_to_process["result"], str) and res_to_process["result"].startswith("{"):
+                    if (
+                        isinstance(res_to_process, dict)
+                        and "result" in res_to_process
+                        and isinstance(res_to_process["result"], str)
+                        and res_to_process["result"].startswith("{")
+                    ):
                         try:
                             res_to_process = json.loads(res_to_process["result"])
                         except Exception as e:
@@ -337,7 +356,12 @@ async def get_history(
         if isinstance(msg, dict):
             msg.pop("_full_text_progress", None)
 
-            if msg.get("role") == "assistant" and not msg.get("content") and not msg.get("steps") and not msg.get("data"):
+            if (
+                msg.get("role") == "assistant"
+                and not msg.get("content")
+                and not msg.get("steps")
+                and not msg.get("data")
+            ):
                 continue
 
             final_history.append(msg)
@@ -397,7 +421,7 @@ async def _load_sessions(user_id: str) -> list:
     try:
         r = _get_redis()
         raw = await r.get(_sessions_key(user_id))
-        await r.close()
+        await _close_redis(r)
         if raw:
             return json.loads(raw)
     except Exception as e:
@@ -410,7 +434,7 @@ async def _save_sessions(user_id: str, sessions: list):
     try:
         r = _get_redis()
         await r.set(_sessions_key(user_id), json.dumps(sessions), ex=SESSIONS_TTL)
-        await r.close()
+        await _close_redis(r)
     except Exception as e:
         logger.error("[sessions] Redis save failed: %s", e)
 
@@ -432,7 +456,7 @@ async def _migrate_legacy_session(user_id: str, sessions: list) -> list:
             }
             sessions = [default_session]
             logger.info("[sessions] Migrated legacy session for user %s", user_id)
-        await r.close()
+        await _close_redis(r)
     except Exception as e:
         logger.error("[sessions] Legacy migration failed: %s", e)
     return sessions

@@ -538,20 +538,91 @@ async def test_e2e_stateless_workflow():
     create_res = users_client.post("/", json=user_payload, headers={"Authorization": "Bearer testtoken"})
     assert create_res.status_code == 201, f"Failed to create user: {create_res.text}"
     user_data = create_res.json()
-    user_id = user_data["id"]
-    assert user_data["username"] == "candidate_test"
+
+    # Validation de contrat Pydantic (Point 3)
+    from shared.schemas.users import UserItem, UsersResponse
+    validated_user = UserItem.model_validate(user_data)
+    user_id = validated_user.id
+    assert validated_user.username == "candidate_test"
+
+    # Validation de contrat Pydantic (Point 3) — Liste des utilisateurs
+    list_users_res = users_client.get("/", headers={"Authorization": "Bearer testtoken"})
+    assert list_users_res.status_code == 200, f"Failed to list users: {list_users_res.text}"
+    validated_users_list = UsersResponse.model_validate(list_users_res.json())
+    assert validated_users_list.total >= 1
+    assert any(u.id == user_id for u in validated_users_list.items)
+
+    # 1bis. Création de catégories/items sur Items API et validation de contrats Pydantic
+    items_client = TestClient(items_app)
+    auth_headers = {"Authorization": "Bearer testtoken"}
+
+    # Création d'une catégorie
+    cat_payload = {
+        "name": "Backend Development",
+        "description": "Programming languages and frameworks for server-side logic"
+    }
+    cat_res = items_client.post("/categories", json=cat_payload, headers=auth_headers)
+    assert cat_res.status_code == 201, f"Failed to create category: {cat_res.text}"
+    cat_data = cat_res.json()
+
+    # Validation du schéma CategoryResponse
+    from items_api.src.items.schemas import CategoryResponse, ItemResponse
+    from items_api.src.items.schemas import PaginationResponse as ItemsPaginationResponse
+    validated_cat = CategoryResponse.model_validate(cat_data)
+    assert validated_cat.name == "Backend Development"
+    cat_id = validated_cat.id
+
+    # Création d'un item sous cette catégorie
+    item_payload = {
+        "name": "Python",
+        "description": "Python programming language",
+        "category_ids": [cat_id],
+        "user_id": user_id,
+    }
+    item_res = items_client.post("/", json=item_payload, headers=auth_headers)
+    assert item_res.status_code == 201, f"Failed to create item: {item_res.text}"
+    item_data = item_res.json()
+
+    # Validation du schéma ItemResponse
+    validated_item = ItemResponse.model_validate(item_data)
+    assert validated_item.name == "Python"
+    assert any(c.id == cat_id for c in validated_item.categories)
+
+    # Liste des catégories et validation de contrat paginé
+    list_cats_res = items_client.get("/categories", headers=auth_headers)
+    assert list_cats_res.status_code == 200, f"Failed to list categories: {list_cats_res.text}"
+    validated_cats = ItemsPaginationResponse[CategoryResponse].model_validate(list_cats_res.json())
+    assert validated_cats.total >= 1
+
+    # Liste des items et validation de contrat paginé
+    list_items_res = items_client.get("/", headers=auth_headers)
+    assert list_items_res.status_code == 200, f"Failed to list items: {list_items_res.text}"
+    validated_items = ItemsPaginationResponse[ItemResponse].model_validate(list_items_res.json())
+    assert validated_items.total >= 1
 
     # 2. Trigger Google Drive Sync on Drive API
     drive_client = TestClient(drive_app)
 
+    auth_headers = {"Authorization": "Bearer testtoken"}
     # Pre-seed a drive folder mapping to configure the sync
     folder_payload = {
         "google_folder_id": "mock_folder_1",
         "tag": "Paris",
         "folder_name": "Paris Agence"
     }
-    folder_res = drive_client.post("/folders", json=folder_payload, headers={"Authorization": "Bearer testtoken"})
-    assert folder_res.status_code == 200 or folder_res.status_code == 201
+    folder_res = drive_client.post("/folders", json=folder_payload, headers=auth_headers)
+    assert folder_res.status_code in (200, 201), f"Failed to map folder: {folder_res.text}"
+
+    # Validation de contrat Pydantic (Point 3) — Folder
+    from drive_api.src.schemas import FolderResponse, PaginatedFoldersResponse
+    validated_folder = FolderResponse.model_validate(folder_res.json())
+    assert validated_folder.google_folder_id == "mock_folder_1"
+
+    # Liste des folders et validation du schéma
+    list_folders_res = drive_client.get("/folders", headers=auth_headers)
+    assert list_folders_res.status_code == 200, f"Failed to list folders: {list_folders_res.text}"
+    validated_folders_list = PaginatedFoldersResponse.model_validate(list_folders_res.json())
+    assert validated_folders_list.total >= 1
 
     # Trigger Google Drive Sync on Drive API (fully mocked globally)
     sync_res = drive_client.post("/sync", headers={"Authorization": "Bearer testtoken"})
@@ -604,15 +675,23 @@ async def test_e2e_stateless_workflow():
     cv_res = cv_client.post("/import", json=cv_import_payload, headers={"Authorization": "Bearer testtoken"})
     assert cv_res.status_code == 200, f"Failed CV Import: {cv_res.text}"
     cv_data = cv_res.json()
-    assert cv_data["user_id"] == user_id
-    assert cv_data["competencies_assigned"] >= 0
+
+    # Validation de contrat Pydantic (Point 3)
+    from cv_api.src.cvs.schemas import CVResponse
+    validated_cv = CVResponse.model_validate(cv_data)
+    assert validated_cv.user_id == user_id
+    assert validated_cv.competencies_assigned >= 0
 
     # Explicitly check competencies_app's assignments router to verify they were successfully saved in SQLite
     comp_client = TestClient(competencies_app)
     get_comp_res = comp_client.get(f"/user/{user_id}", headers={"Authorization": "Bearer testtoken"})
     assert get_comp_res.status_code == 200
     comp_json = get_comp_res.json()
-    assert len(comp_json["items"]) > 0
+
+    # Validation de contrat Pydantic (Point 3)
+    from shared.schemas.pagination import PaginationResponse
+    validated_comp = PaginationResponse[dict].model_validate(comp_json)
+    assert len(validated_comp.items) > 0
 
     # 4. Create and match a mock mission on Missions API
     missions_client = TestClient(missions_app)
@@ -643,6 +722,14 @@ async def test_e2e_stateless_workflow():
     assert status_res.status_code == 200, f"Task status response: {status_res.text}"
     status_data = status_res.json()
     assert status_data["status"] in ("processing", "completed", "success"), f"Task failed: {status_data}"
+
+    # Validation de contrat Pydantic (Point 3) — Liste des missions
+    list_missions_res = missions_client.get("/missions", headers={"Authorization": "Bearer testtoken"})
+    assert list_missions_res.status_code == 200, f"Failed to list missions: {list_missions_res.text}"
+
+    from shared.schemas.missions import MissionsResponse
+    validated_missions = MissionsResponse.model_validate(list_missions_res.json())
+    assert validated_missions.total >= 0
 
 
 class MockDriveService:

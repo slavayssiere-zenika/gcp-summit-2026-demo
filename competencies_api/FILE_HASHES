@@ -20,7 +20,6 @@
 23ba50c6c4914ea2026863ff877ecd39d081ca93  ./competencies_api/src/competencies/finops.py
 29e62c52763a613694d3fcddc10c948df0891c4f  ./shared/redis_state.py
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
-2be4dc56e0af0a4919ca05f9bb5a3ee31baf4373  ./competencies_api/pyproject.toml
 318d40c2613f11eee25e8a4b2971d853377d78c1  ./competencies_api/tools/evaluation_tools.py
 320a7906238100a88bde8259af8903f5482855b7  ./competencies_api/tests/test_zero_trust.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
@@ -34,12 +33,15 @@
 52be2f6afe9670a196ed175624830ed97694f572  ./competencies_api/pytest.ini
 53ec7850836038d178ae07b5587d855b819e63e7  ./shared/fastapi_utils.py
 54ae2084823cea8d170a111a1b3dae569ba9f698  ./competencies_api/tests/test_outbound_propagation.py
+553361d1c367a17725eeac5c8e49d81f7902a943  ./competencies_api/uv.lock
+569c0548a2eee3b544e037fd1d8c2f92f2ed2692  ./competencies_api/src/competencies/models.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 62feccea1c94bcd56a8d4c0cfd03fb3c2c85d52d  ./competencies_api/mcp_app.py
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 6cdc2c2f85ffa7bd64b86995ca668ce1d7c80190  ./competencies_api/tests/test_scoring_router.py
 712fcb045ee7401b514b015c7375e4a5c1c27a76  ./competencies_api/tests/test_assign_bulk_contract.py
+787f5784e22694a5437f39947110cfe1c43076a1  ./competencies_api/requirements.txt
 7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 826e733e1045dc2a19951ab075976dcc1696ed3b  ./competencies_api/tests/integration/conftest.py
@@ -70,7 +72,7 @@ c398d547e0bdf194a013df9fc0b359a91f93b6c7  ./competencies_api/src/competencies/an
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 c78b015f898a06f3652b22da23810c0c4191b506  ./competencies_api/src/competencies/scoring_utils.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
-ca5844137768816e7d99f68c545ffc9689bbf8f9  ./competencies_api/uv.lock
+ca6e382a29dd7f5ef9bf68fe4735159cdb863558  ./competencies_api/pyproject.toml
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb4006b523171c8ff50988b4e4d8e433e771a4d0  ./competencies_api/src/competencies/bulk_task_state.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./competencies_api/.dockerignore
@@ -84,7 +86,6 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 dfba805920889cb681b9b08cbad4d71d7cd260a2  ./competencies_api/tests/test_scoring_pipeline.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
-e6160bf54cf638931f95ca538a2b697b055e3a0b  ./competencies_api/src/competencies/models.py
 e757ab6b090bc976eee4713b3a63a5cd1c7b7aff  ./competencies_api/main.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
 ec0d97863df482a6183c16b7fa89cbe6d7467b05  ./competencies_api/tests/test_scheduler_control.py
@@ -96,5 +97,4 @@ f5a26f4f6eba3f08d1216596eade4105aaf23d3c  ./competencies_api/tests/test_scoring_
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 fa8939bb96b35b2a945d47d88e6f4e591c1b65d6  ./competencies_api/tests/test_evaluations_functional.py
 faaf28b203a9560d20e753d9d1721f2de73d6eba  ./competencies_api/src/competencies/scoring_service.py
-fb9dd57c2f3e79c5cfd285dd11e77ddd186a3437  ./competencies_api/requirements.txt
 fc38603fcbd7820ef8bb8253a6992dd5fae57774  ./competencies_api/Dockerfile

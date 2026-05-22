@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (Column, DateTime, ForeignKey, Integer, String, Table,
                         UniqueConstraint)
@@ -23,7 +23,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
     description = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Back-relationship to items
     items = relationship("Item", secondary=item_category, back_populates="categories")
@@ -37,7 +37,7 @@ class Item(Base):
     description = Column(String, nullable=True)
     user_id = Column(Integer, nullable=False, index=True)
     metadata_json = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_items_user_name"),

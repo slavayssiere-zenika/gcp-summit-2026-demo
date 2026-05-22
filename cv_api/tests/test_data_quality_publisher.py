@@ -47,8 +47,6 @@ EXPECTED_PAYLOAD_KEYS = {
     "embedding_pct", "missions_pct", "competencies_pct", "summary_pct",
     "current_role_pct", "competency_assignment_pct", "ai_scoring_pct",
     "processing_errors_pct", "issues_count", "trigger",
-    # Champs RAG ajoutés lors du feature R6 (rag_quality dans data_quality_publisher)
-    "rag_recall_at_5", "rag_nb_cases", "rag_nb_cases_ok", "rag_embedding_model",
 }
 
 

@@ -125,7 +125,6 @@ a2a9df1e2c8347657b3ca5074649f58a11ece975  ./frontend/coverage/src/components/age
 a345a51e69c22119fff064c42c75d58ecea537b4  ./frontend/coverage/src/components/agent/ItemCard.vue.html
 a5d8befcae9fd64acbed445962432e8fa876c51e  ./frontend/src/views/Competencies.vue
 a9f55bce18ee6bc559fed8373cdce23399fd44f8  ./frontend/src/views/__tests__/Competencies.spec.ts
-ad18b865b06e0643b2e4872b1f180583e1986513  ./frontend/vitest.log
 b0a3b293e2aafe2cda33eba2e9759e4d38d82198  ./frontend/src/types/__tests__/index.spec.ts
 b1fa2fe2854f7c5a883a8ce0e903e19ca4724b24  ./frontend/src/utils/treeify.ts
 b42b7f4370e9be3672d1061e5ee1ef0b78f400a5  ./frontend/src/types/__tests__/agentQueryResponse.spec.ts
@@ -170,6 +169,7 @@ d825eeb4d513d858c51e06de98899f1c4667cee9  ./frontend/coverage/src/data/index.htm
 d973ce52f14db14cd844b8c4677be10a3f017094  ./frontend/src/stores/__tests__/chatStore.spec.ts
 d9a48401c21325b78b99e7afabee0f140d576604  ./frontend/src/components/agent/__tests__/ItemCard.spec.ts
 da5c0ef467a330913336cd9b0da5f3c900af6c3e  ./frontend/coverage/sort-arrow-sprite.png
+db81ed7a360babac7cabc7cccd8e941aa3c45fb8  ./frontend/vitest.log
 dc8e4d271329feadc712d7f69c562a41495a01b4  ./frontend/coverage/src/components/index.html
 de48769f243677e77d535ee0b60ac009197b981e  ./frontend/package.json
 e0d0263fe312e2a673b155691909dc959fa542da  ./frontend/src/views/ExtractionQualityList.vue

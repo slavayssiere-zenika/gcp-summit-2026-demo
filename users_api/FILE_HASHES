@@ -18,7 +18,6 @@
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 374d04c95af03fcf4dd91b66af0a3e84c033ead8  ./users_api/tests/debug_jwt.py
 3e64725740a71b4bc93a80ea7989e4affd47a1a6  ./users_api/mcp_server.py
-408a9930e940145795da4f35a8c547032c0233e8  ./users_api/uv.lock
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 43d645bad4be76820c88438898c63b3689f053d4  ./users_api/metrics.py
 4d7fbfac151dbe541236eedf98d1fae4a52e6f5b  ./users_api/tests/test_main.py
@@ -40,6 +39,7 @@
 88600b3221070902131ebb2aa88073456a316a40  ./users_api/src/mcp_tools/tools_handlers.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
+95da5f7f057a59d5996fefd347a9128dba5c8b93  ./users_api/uv.lock
 976f8b26632b1fe7209ed983522d606f94e38e5c  ./users_api/main.py
 9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 9c9044377e84ad6ec3ecc14a28a8c7388a00d9a2  ./shared/schemas/auth.py
@@ -51,6 +51,7 @@ a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a473832417b069357ce408e7a23edac11d878218  ./users_api/tests/integration/test_pg_integration.py
 ac7fd3b8e5768664535cb4df9e7f785018fa0188  ./users_api/tests/test_edge_cases.py
 b7751e5cc7dbdf183b3bb2e882a98854e4dea17f  ./users_api/src/users/auth_router.py
+b992f0fe87560b22e186812aff469a7efe58547e  ./users_api/pyproject.toml
 b9b8b4b30829e84a760b2f3a05673258cedd66f0  ./users_api/src/mcp_tools/tools_registry.py
 bf847ba53cd1104e10cf28a2891f9566ff2a2709  ./users_api/Dockerfile
 bfa2a6fe2c7611ecd5cbf56a9a0afec97b9f66b4  ./users_api/src/users/crud_router.py
@@ -69,7 +70,6 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/src/users/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/tests/integration/__init__.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e3f78075d5519c255d702f8da72da78a38cc94f4  ./users_api/tests/test_outbound_propagation.py
-e45a4635cb56621e067e45b759c9ea2ca99847e5  ./users_api/pyproject.toml
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
 ec0f1460fa50bc39952477d7db1b6391d0e11a29  ./users_api/src/users/schemas.py

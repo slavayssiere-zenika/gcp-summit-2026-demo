@@ -214,6 +214,18 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         name  = "PROMPT_CACHE_TTL_S"
         value = "3600"
       }
+      env {
+        name  = "GEMINI_API_BASE_URL"
+        value = ""
+      }
+      env {
+        name  = "VERTEX_API_BASE_URL"
+        value = ""
+      }
+      env {
+        name  = "ENABLE_GEMINI_CONTEXT_CACHE"
+        value = "false"
+      }
     }
   }
 

@@ -1,0 +1,29 @@
+# docker-compose.perf-override.yml
+#
+# Override d'isolation réseau pour la gate de performance locale (Phase 2 de deploy.sh).
+#
+# But : interdire tout appel réseau extérieur au stack Docker pendant les tests Locust.
+#       Les conteneurs peuvent toujours communiquer entre eux via DNS (même réseau),
+#       mais aucun paquet ne peut sortir vers internet.
+#
+# Activation : ce fichier est chargé automatiquement par COMPOSE_FILE lors de la Phase 2.
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml
+#
+# Mécanisme Docker :
+#   internal: true → Docker supprime la route par défaut (0.0.0.0/0) du bridge.
+#   Les appels vers des IP externes (Gemini API, GCS, etc.) reçoivent une erreur
+#   "network unreachable" ou "no route to host" au niveau réseau — sans timeout.
+
+networks:
+  monitoring_net:
+    driver: bridge
+    name: monitoring_net
+    internal: true
+
+services:
+  cv_api:
+    environment:
+      # URL hardcodée — cette valeur est fixe dans tout contexte de perf-test local.
+      # Pas de substitution ${VAR} pour éviter les silences de Docker Compose sur certaines versions.
+      # gemini_mock_patch.py ET config.py lisent GEMINI_API_BASE_URL pour rediriger vers mock_gemini.
+      - GEMINI_API_BASE_URL=http://mock_gemini:8099

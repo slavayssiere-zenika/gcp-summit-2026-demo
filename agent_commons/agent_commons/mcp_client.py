@@ -148,7 +148,7 @@ class MCPHttpClient:
         if auth:
             headers["Authorization"] = auth
         async with httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(30.0, connect=5.0)) as client:
-            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools", timeout=10.0)
+            res = await client.get(f"{self.url.rstrip('/')}/mcp/tools", timeout=30.0)
             res.raise_for_status()
             return res.json()
 

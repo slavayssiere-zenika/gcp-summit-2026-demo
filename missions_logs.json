@@ -1,0 +1,2285 @@
+[
+  {
+    "timestamp": "2026-05-22T08:11:18.195195+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-22 08:11:18,196",
+      "levelname": "INFO",
+      "name": "main",
+      "service": "agent_missions_api",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api."
+    }
+  },
+  {
+    "timestamp": "2026-05-22T07:56:23.490414+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-22T07:56:08.487837+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-22T07:55:56.132800+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-22T07:55:56.132784+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-22T07:55:47.778746+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-22T07:55:47.746645+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T21:51:08.225819+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 21:51:08,226",
+      "levelname": "INFO",
+      "service": "agent_missions_api",
+      "name": "main",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api."
+    }
+  },
+  {
+    "timestamp": "2026-05-21T21:36:15.204392+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T21:36:00.202005+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T21:35:47.697323+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T21:35:47.697303+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T21:35:39.483858+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T21:35:39.451995+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T16:31:24.459578+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 16:31:24,460",
+      "levelname": "INFO",
+      "service": "agent_missions_api",
+      "name": "main",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api."
+    }
+  },
+  {
+    "timestamp": "2026-05-21T16:16:35.669203+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T16:16:26.250144+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Shutting down user disabled instance"
+  },
+  {
+    "timestamp": "2026-05-21T16:16:24.071374+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {
+        "message": "Ready condition status changed to True for Service agent-missions-api-prd."
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "/Services.UpdateService",
+      "resourceName": "namespaces/prod-ia-staffing/services/agent-missions-api-prd",
+      "response": {
+        "metadata": {
+          "name": "agent-missions-api-prd",
+          "uid": "7a9316a7-a0f5-4492-b3dd-0caac009fe97",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/815625034299/services/agent-missions-api-prd",
+          "creationTimestamp": "2026-04-24T09:50:22.231728Z",
+          "labels": {
+            "cloud.googleapis.com/location": "europe-west1"
+          },
+          "resourceVersion": "AAZSVjvKmIU",
+          "annotations": {
+            "serving.knative.dev/lastModifier": "sebastien.lavayssiere@zenika.com",
+            "run.googleapis.com/urls": "[\"https://agent-missions-api-prd-815625034299.europe-west1.run.app\",\"https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app\"]",
+            "run.googleapis.com/operation-id": "47cd8785-46c0-4aa5-96c4-ef3bdcfa6e80",
+            "run.googleapis.com/ingress": "internal-and-cloud-load-balancing",
+            "run.googleapis.com/ingress-status": "internal-and-cloud-load-balancing",
+            "run.googleapis.com/maxScale": "50",
+            "serving.knative.dev/creator": "sebastien.lavayssiere@zenika.com"
+          },
+          "generation": 52.0,
+          "namespace": "815625034299"
+        },
+        "kind": "Service",
+        "spec": {
+          "template": {
+            "metadata": {
+              "labels": {
+                "run.googleapis.com/startupProbeType": "Custom"
+              },
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "50",
+                "run.googleapis.com/sessionAffinity": "false",
+                "run.googleapis.com/cpu-throttling": "false",
+                "autoscaling.knative.dev/minScale": "0",
+                "run.googleapis.com/network-interfaces": "[{\"network\":\"projects/prod-ia-staffing/global/networks/vpc-prd\",\"subnetwork\":\"projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd\",\"tags\":[\"cr-egress\"]}]",
+                "run.googleapis.com/vpc-access-egress": "private-ranges-only"
+              }
+            },
+            "spec": {
+              "containerConcurrency": 80.0,
+              "serviceAccountName": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+              "timeoutSeconds": 120.0,
+              "containers": [
+                {
+                  "livenessProbe": {
+                    "failureThreshold": 3.0,
+                    "periodSeconds": 10.0,
+                    "initialDelaySeconds": 15.0,
+                    "timeoutSeconds": 3.0,
+                    "httpGet": {
+                      "port": 8080.0,
+                      "path": "/health"
+                    }
+                  },
+                  "args": [
+                    "-m",
+                    "uvicorn",
+                    "main:app",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "8080",
+                    "--proxy-headers",
+                    "--forwarded-allow-ips",
+                    "*",
+                    "--no-server-header"
+                  ],
+                  "ports": [
+                    {
+                      "containerPort": 8080.0,
+                      "name": "http1"
+                    }
+                  ],
+                  "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api:v0.4.21",
+                  "env": [
+                    {
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "gemini-api-key"
+                        }
+                      },
+                      "name": "GOOGLE_API_KEY"
+                    },
+                    {
+                      "value": "gemini-3.1-flash-lite",
+                      "name": "GEMINI_MISSIONS_MODEL"
+                    },
+                    {
+                      "value": "gemini-3.1-flash-lite",
+                      "name": "GEMINI_MODEL"
+                    },
+                    {
+                      "value": "true",
+                      "name": "USE_GCP_LOGGING"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/prompts/",
+                      "name": "PROMPTS_API_URL"
+                    },
+                    {
+                      "value": "redis://172.31.48.3:6379/12",
+                      "name": "REDIS_URL"
+                    },
+                    {
+                      "value": "gcp",
+                      "name": "TRACE_EXPORTER"
+                    },
+                    {
+                      "value": "v0.4.21",
+                      "name": "APP_VERSION"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/users/",
+                      "name": "USERS_MCP_URL"
+                    },
+                    {
+                      "value": "0.1",
+                      "name": "TRACE_SAMPLING_RATE"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/cv/",
+                      "name": "CV_MCP_URL"
+                    },
+                    {
+                      "value": "prod-ia-staffing",
+                      "name": "GCP_PROJECT_ID"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/competencies/",
+                      "name": "COMPETENCIES_MCP_URL"
+                    },
+                    {
+                      "value": "86400",
+                      "name": "HITL_RESPONSE_TTL_SECONDS"
+                    },
+                    {
+                      "value": "/agent-missions-api",
+                      "name": "ROOT_PATH"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/monitoring-mcp/",
+                      "name": "MONITORING_MCP_URL"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/analytics/",
+                      "name": "ANALYTICS_MCP_URL"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/missions/",
+                      "name": "MISSIONS_MCP_URL"
+                    },
+                    {
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "jwt-secret"
+                        }
+                      },
+                      "name": "SECRET_KEY"
+                    },
+                    {
+                      "value": "1800",
+                      "name": "HITL_PENDING_TTL_SECONDS"
+                    },
+                    {
+                      "value": "false",
+                      "name": "ENABLE_OUTPUT_SCHEMA"
+                    },
+                    {
+                      "value": "agent_missions_api",
+                      "name": "SERVICE_NAME"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/agent-missions",
+                      "name": "MISSIONS_API_URL"
+                    }
+                  ],
+                  "command": [
+                    "python3"
+                  ],
+                  "startupProbe": {
+                    "failureThreshold": 20.0,
+                    "periodSeconds": 5.0,
+                    "initialDelaySeconds": 15.0,
+                    "timeoutSeconds": 3.0,
+                    "httpGet": {
+                      "port": 8080.0,
+                      "path": "/health"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "1536Mi",
+                      "cpu": "1000m"
+                    }
+                  },
+                  "name": "api"
+                }
+              ]
+            }
+          },
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100.0
+            }
+          ]
+        },
+        "@type": "type.googleapis.com/google.cloud.run.v1.Service",
+        "apiVersion": "serving.knative.dev/v1",
+        "status": {
+          "address": {
+            "url": "https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app"
+          },
+          "conditions": [
+            {
+              "type": "Ready",
+              "lastTransitionTime": "2026-05-21T16:16:24.062085Z",
+              "status": "True"
+            },
+            {
+              "type": "ConfigurationsReady",
+              "lastTransitionTime": "2026-05-21T16:16:02.928667Z",
+              "status": "True"
+            },
+            {
+              "type": "RoutesReady",
+              "lastTransitionTime": "2026-05-21T16:16:24.012144Z",
+              "status": "True"
+            }
+          ],
+          "url": "https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app",
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100.0,
+              "revisionName": "agent-missions-api-prd-00052-6hd"
+            }
+          ],
+          "latestCreatedRevisionName": "agent-missions-api-prd-00052-6hd",
+          "observedGeneration": 52.0,
+          "latestReadyRevisionName": "agent-missions-api-prd-00052-6hd"
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T16:16:23.408089+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {
+        "message": "Ready condition status changed to True for Revision agent-missions-api-prd-00052-6hd with message: Deploying revision succeeded in 46.38s."
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "/Services.UpdateService",
+      "resourceName": "namespaces/prod-ia-staffing/revisions/agent-missions-api-prd-00052-6hd",
+      "response": {
+        "metadata": {
+          "name": "agent-missions-api-prd-00052-6hd",
+          "uid": "67a537a4-0911-4da0-929d-5373b7272d2b",
+          "ownerReferences": [
+            {
+              "controller": true,
+              "kind": "Configuration",
+              "uid": "f4c83c65-942f-4c73-adaf-058cd0e2a75e",
+              "blockOwnerDeletion": true,
+              "apiVersion": "serving.knative.dev/v1",
+              "name": "agent-missions-api-prd"
+            }
+          ],
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/815625034299/revisions/agent-missions-api-prd-00052-6hd",
+          "creationTimestamp": "2026-05-21T16:15:37.010433Z",
+          "labels": {
+            "serving.knative.dev/route": "agent-missions-api-prd",
+            "run.googleapis.com/startupProbeType": "Custom",
+            "serving.knative.dev/service": "agent-missions-api-prd",
+            "serving.knative.dev/serviceUid": "7a9316a7-a0f5-4492-b3dd-0caac009fe97",
+            "serving.knative.dev/configurationGeneration": "52",
+            "cloud.googleapis.com/location": "europe-west1",
+            "serving.knative.dev/configuration": "agent-missions-api-prd"
+          },
+          "resourceVersion": "AAZSVjvAPIY",
+          "annotations": {
+            "run.googleapis.com/operation-id": "47cd8785-46c0-4aa5-96c4-ef3bdcfa6e80",
+            "autoscaling.knative.dev/minScale": "0",
+            "run.googleapis.com/network-interfaces": "[{\"network\":\"projects/prod-ia-staffing/global/networks/vpc-prd\",\"subnetwork\":\"projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd\",\"tags\":[\"cr-egress\"]}]",
+            "run.googleapis.com/vpc-access-egress": "private-ranges-only",
+            "autoscaling.knative.dev/maxScale": "50",
+            "run.googleapis.com/sessionAffinity": "false",
+            "run.googleapis.com/cpu-throttling": "false",
+            "run.googleapis.com/ingress": "internal-and-cloud-load-balancing",
+            "serving.knative.dev/creator": "sebastien.lavayssiere@zenika.com"
+          },
+          "generation": 1.0,
+          "namespace": "815625034299"
+        },
+        "kind": "Revision",
+        "spec": {
+          "containerConcurrency": 80.0,
+          "serviceAccountName": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+          "timeoutSeconds": 120.0,
+          "containers": [
+            {
+              "livenessProbe": {
+                "failureThreshold": 3.0,
+                "periodSeconds": 10.0,
+                "initialDelaySeconds": 15.0,
+                "timeoutSeconds": 3.0,
+                "httpGet": {
+                  "port": 8080.0,
+                  "path": "/health"
+                }
+              },
+              "args": [
+                "-m",
+                "uvicorn",
+                "main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--proxy-headers",
+                "--forwarded-allow-ips",
+                "*",
+                "--no-server-header"
+              ],
+              "ports": [
+                {
+                  "containerPort": 8080.0,
+                  "name": "http1"
+                }
+              ],
+              "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:755bdf7047c1a40008c1f48ae2a42c72700daaeea5678e074a384d34d32d3c91",
+              "env": [
+                {
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "gemini-api-key"
+                    }
+                  },
+                  "name": "GOOGLE_API_KEY"
+                },
+                {
+                  "value": "gemini-3.1-flash-lite",
+                  "name": "GEMINI_MISSIONS_MODEL"
+                },
+                {
+                  "value": "gemini-3.1-flash-lite",
+                  "name": "GEMINI_MODEL"
+                },
+                {
+                  "value": "true",
+                  "name": "USE_GCP_LOGGING"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/prompts/",
+                  "name": "PROMPTS_API_URL"
+                },
+                {
+                  "value": "redis://172.31.48.3:6379/12",
+                  "name": "REDIS_URL"
+                },
+                {
+                  "value": "gcp",
+                  "name": "TRACE_EXPORTER"
+                },
+                {
+                  "value": "v0.4.21",
+                  "name": "APP_VERSION"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/users/",
+                  "name": "USERS_MCP_URL"
+                },
+                {
+                  "value": "0.1",
+                  "name": "TRACE_SAMPLING_RATE"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/cv/",
+                  "name": "CV_MCP_URL"
+                },
+                {
+                  "value": "prod-ia-staffing",
+                  "name": "GCP_PROJECT_ID"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/competencies/",
+                  "name": "COMPETENCIES_MCP_URL"
+                },
+                {
+                  "value": "86400",
+                  "name": "HITL_RESPONSE_TTL_SECONDS"
+                },
+                {
+                  "value": "/agent-missions-api",
+                  "name": "ROOT_PATH"
+                },
+                {
+                  "value": "http://api.internal.zenika/monitoring-mcp/",
+                  "name": "MONITORING_MCP_URL"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/analytics/",
+                  "name": "ANALYTICS_MCP_URL"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/missions/",
+                  "name": "MISSIONS_MCP_URL"
+                },
+                {
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "jwt-secret"
+                    }
+                  },
+                  "name": "SECRET_KEY"
+                },
+                {
+                  "value": "1800",
+                  "name": "HITL_PENDING_TTL_SECONDS"
+                },
+                {
+                  "value": "false",
+                  "name": "ENABLE_OUTPUT_SCHEMA"
+                },
+                {
+                  "value": "agent_missions_api",
+                  "name": "SERVICE_NAME"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/agent-missions",
+                  "name": "MISSIONS_API_URL"
+                }
+              ],
+              "command": [
+                "python3"
+              ],
+              "startupProbe": {
+                "failureThreshold": 20.0,
+                "periodSeconds": 5.0,
+                "initialDelaySeconds": 15.0,
+                "timeoutSeconds": 3.0,
+                "httpGet": {
+                  "port": 8080.0,
+                  "path": "/health"
+                }
+              },
+              "resources": {
+                "limits": {
+                  "memory": "1536Mi",
+                  "cpu": "1000m"
+                }
+              },
+              "name": "api"
+            }
+          ]
+        },
+        "@type": "type.googleapis.com/google.cloud.run.v1.Revision",
+        "apiVersion": "serving.knative.dev/v1",
+        "status": {
+          "conditions": [
+            {
+              "message": "Deploying revision succeeded in 46.38s.",
+              "type": "Ready",
+              "lastTransitionTime": "2026-05-21T16:16:23.383174Z",
+              "status": "True"
+            },
+            {
+              "type": "Active",
+              "severity": "Info",
+              "lastTransitionTime": "2026-05-21T16:16:21.960556Z",
+              "status": "True"
+            },
+            {
+              "message": "Containers became healthy in 15s.",
+              "type": "ContainerHealthy",
+              "lastTransitionTime": "2026-05-21T16:16:20.683086Z",
+              "status": "True"
+            },
+            {
+              "message": "Container image import completed in 25.34s.",
+              "type": "ContainerReady",
+              "lastTransitionTime": "2026-05-21T16:16:02.826013Z",
+              "status": "True"
+            },
+            {
+              "message": "Provisioning imported containers completed in 2.74s. Checking container health. This will wait for up to 1m55s for the configured startup probe, including an initial delay of 15s.",
+              "type": "ResourcesAvailable",
+              "lastTransitionTime": "2026-05-21T16:16:05.566150Z",
+              "status": "True"
+            }
+          ],
+          "containerStatuses": [
+            {
+              "imageDigest": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:755bdf7047c1a40008c1f48ae2a42c72700daaeea5678e074a384d34d32d3c91",
+              "name": "api"
+            }
+          ],
+          "imageDigest": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:755bdf7047c1a40008c1f48ae2a42c72700daaeea5678e074a384d34d32d3c91",
+          "logUrl": "https://console.cloud.google.com/logs/viewer?project=prod-ia-staffing&resource=cloud_run_revision/service_name/agent-missions-api-prd/revision_name/agent-missions-api-prd-00052-6hd&advancedFilter=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22agent-missions-api-prd%22%0Aresource.labels.revision_name%3D%22agent-missions-api-prd-00052-6hd%22",
+          "observedGeneration": 1.0
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T16:16:23.209693+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {
+        "message": "Ready condition status changed to True for Service agent-missions-api-prd."
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "/Services.UpdateService",
+      "resourceName": "namespaces/prod-ia-staffing/services/agent-missions-api-prd",
+      "response": {
+        "metadata": {
+          "name": "agent-missions-api-prd",
+          "uid": "7a9316a7-a0f5-4492-b3dd-0caac009fe97",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/815625034299/services/agent-missions-api-prd",
+          "creationTimestamp": "2026-04-24T09:50:22.231728Z",
+          "labels": {
+            "cloud.googleapis.com/location": "europe-west1"
+          },
+          "resourceVersion": "AAZSVju9aYA",
+          "annotations": {
+            "serving.knative.dev/lastModifier": "sebastien.lavayssiere@zenika.com",
+            "run.googleapis.com/urls": "[\"https://agent-missions-api-prd-815625034299.europe-west1.run.app\",\"https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app\"]",
+            "run.googleapis.com/operation-id": "47cd8785-46c0-4aa5-96c4-ef3bdcfa6e80",
+            "run.googleapis.com/ingress": "internal-and-cloud-load-balancing",
+            "run.googleapis.com/ingress-status": "internal-and-cloud-load-balancing",
+            "run.googleapis.com/maxScale": "50",
+            "serving.knative.dev/creator": "sebastien.lavayssiere@zenika.com"
+          },
+          "generation": 52.0,
+          "namespace": "815625034299"
+        },
+        "kind": "Service",
+        "spec": {
+          "template": {
+            "metadata": {
+              "labels": {
+                "run.googleapis.com/startupProbeType": "Custom"
+              },
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "50",
+                "run.googleapis.com/sessionAffinity": "false",
+                "run.googleapis.com/cpu-throttling": "false",
+                "autoscaling.knative.dev/minScale": "0",
+                "run.googleapis.com/network-interfaces": "[{\"network\":\"projects/prod-ia-staffing/global/networks/vpc-prd\",\"subnetwork\":\"projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd\",\"tags\":[\"cr-egress\"]}]",
+                "run.googleapis.com/vpc-access-egress": "private-ranges-only"
+              }
+            },
+            "spec": {
+              "containerConcurrency": 80.0,
+              "serviceAccountName": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+              "timeoutSeconds": 120.0,
+              "containers": [
+                {
+                  "livenessProbe": {
+                    "failureThreshold": 3.0,
+                    "periodSeconds": 10.0,
+                    "initialDelaySeconds": 15.0,
+                    "timeoutSeconds": 3.0,
+                    "httpGet": {
+                      "port": 8080.0,
+                      "path": "/health"
+                    }
+                  },
+                  "args": [
+                    "-m",
+                    "uvicorn",
+                    "main:app",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "8080",
+                    "--proxy-headers",
+                    "--forwarded-allow-ips",
+                    "*",
+                    "--no-server-header"
+                  ],
+                  "ports": [
+                    {
+                      "containerPort": 8080.0,
+                      "name": "http1"
+                    }
+                  ],
+                  "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api:v0.4.21",
+                  "env": [
+                    {
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "gemini-api-key"
+                        }
+                      },
+                      "name": "GOOGLE_API_KEY"
+                    },
+                    {
+                      "value": "gemini-3.1-flash-lite",
+                      "name": "GEMINI_MISSIONS_MODEL"
+                    },
+                    {
+                      "value": "gemini-3.1-flash-lite",
+                      "name": "GEMINI_MODEL"
+                    },
+                    {
+                      "value": "true",
+                      "name": "USE_GCP_LOGGING"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/prompts/",
+                      "name": "PROMPTS_API_URL"
+                    },
+                    {
+                      "value": "redis://172.31.48.3:6379/12",
+                      "name": "REDIS_URL"
+                    },
+                    {
+                      "value": "gcp",
+                      "name": "TRACE_EXPORTER"
+                    },
+                    {
+                      "value": "v0.4.21",
+                      "name": "APP_VERSION"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/users/",
+                      "name": "USERS_MCP_URL"
+                    },
+                    {
+                      "value": "0.1",
+                      "name": "TRACE_SAMPLING_RATE"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/cv/",
+                      "name": "CV_MCP_URL"
+                    },
+                    {
+                      "value": "prod-ia-staffing",
+                      "name": "GCP_PROJECT_ID"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/competencies/",
+                      "name": "COMPETENCIES_MCP_URL"
+                    },
+                    {
+                      "value": "86400",
+                      "name": "HITL_RESPONSE_TTL_SECONDS"
+                    },
+                    {
+                      "value": "/agent-missions-api",
+                      "name": "ROOT_PATH"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/monitoring-mcp/",
+                      "name": "MONITORING_MCP_URL"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/analytics/",
+                      "name": "ANALYTICS_MCP_URL"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/missions/",
+                      "name": "MISSIONS_MCP_URL"
+                    },
+                    {
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "jwt-secret"
+                        }
+                      },
+                      "name": "SECRET_KEY"
+                    },
+                    {
+                      "value": "1800",
+                      "name": "HITL_PENDING_TTL_SECONDS"
+                    },
+                    {
+                      "value": "false",
+                      "name": "ENABLE_OUTPUT_SCHEMA"
+                    },
+                    {
+                      "value": "agent_missions_api",
+                      "name": "SERVICE_NAME"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/agent-missions",
+                      "name": "MISSIONS_API_URL"
+                    }
+                  ],
+                  "command": [
+                    "python3"
+                  ],
+                  "startupProbe": {
+                    "failureThreshold": 20.0,
+                    "periodSeconds": 5.0,
+                    "initialDelaySeconds": 15.0,
+                    "timeoutSeconds": 3.0,
+                    "httpGet": {
+                      "port": 8080.0,
+                      "path": "/health"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "1536Mi",
+                      "cpu": "1000m"
+                    }
+                  },
+                  "name": "api"
+                }
+              ]
+            }
+          },
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100.0
+            }
+          ]
+        },
+        "@type": "type.googleapis.com/google.cloud.run.v1.Service",
+        "apiVersion": "serving.knative.dev/v1",
+        "status": {
+          "address": {
+            "url": "https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app"
+          },
+          "conditions": [
+            {
+              "type": "Ready",
+              "lastTransitionTime": "2026-05-21T16:16:23.198080Z",
+              "status": "True"
+            },
+            {
+              "type": "ConfigurationsReady",
+              "lastTransitionTime": "2026-05-21T16:16:02.928667Z",
+              "status": "True"
+            },
+            {
+              "type": "RoutesReady",
+              "lastTransitionTime": "2026-05-21T16:16:23.168348Z",
+              "status": "True"
+            }
+          ],
+          "url": "https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app",
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100.0,
+              "revisionName": "agent-missions-api-prd-00052-6hd"
+            }
+          ],
+          "latestCreatedRevisionName": "agent-missions-api-prd-00052-6hd",
+          "observedGeneration": 52.0,
+          "latestReadyRevisionName": "agent-missions-api-prd-00052-6hd"
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T16:16:21.869993+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {
+        "message": "Ready condition status changed to True for Revision agent-missions-api-prd-00052-6hd with message: Deploying revision succeeded in 44.85s."
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "/Services.UpdateService",
+      "resourceName": "namespaces/prod-ia-staffing/revisions/agent-missions-api-prd-00052-6hd",
+      "response": {
+        "metadata": {
+          "name": "agent-missions-api-prd-00052-6hd",
+          "uid": "67a537a4-0911-4da0-929d-5373b7272d2b",
+          "ownerReferences": [
+            {
+              "controller": true,
+              "kind": "Configuration",
+              "uid": "f4c83c65-942f-4c73-adaf-058cd0e2a75e",
+              "blockOwnerDeletion": true,
+              "apiVersion": "serving.knative.dev/v1",
+              "name": "agent-missions-api-prd"
+            }
+          ],
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/815625034299/revisions/agent-missions-api-prd-00052-6hd",
+          "creationTimestamp": "2026-05-21T16:15:37.010433Z",
+          "labels": {
+            "serving.knative.dev/route": "agent-missions-api-prd",
+            "run.googleapis.com/startupProbeType": "Custom",
+            "serving.knative.dev/service": "agent-missions-api-prd",
+            "serving.knative.dev/serviceUid": "7a9316a7-a0f5-4492-b3dd-0caac009fe97",
+            "serving.knative.dev/configurationGeneration": "52",
+            "cloud.googleapis.com/location": "europe-west1",
+            "serving.knative.dev/configuration": "agent-missions-api-prd"
+          },
+          "resourceVersion": "AAZSVjuo/jk",
+          "annotations": {
+            "run.googleapis.com/operation-id": "47cd8785-46c0-4aa5-96c4-ef3bdcfa6e80",
+            "autoscaling.knative.dev/minScale": "0",
+            "run.googleapis.com/network-interfaces": "[{\"network\":\"projects/prod-ia-staffing/global/networks/vpc-prd\",\"subnetwork\":\"projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd\",\"tags\":[\"cr-egress\"]}]",
+            "run.googleapis.com/vpc-access-egress": "private-ranges-only",
+            "autoscaling.knative.dev/maxScale": "50",
+            "run.googleapis.com/sessionAffinity": "false",
+            "run.googleapis.com/cpu-throttling": "false",
+            "run.googleapis.com/ingress": "internal-and-cloud-load-balancing",
+            "serving.knative.dev/creator": "sebastien.lavayssiere@zenika.com"
+          },
+          "generation": 1.0,
+          "namespace": "815625034299"
+        },
+        "kind": "Revision",
+        "spec": {
+          "containerConcurrency": 80.0,
+          "serviceAccountName": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+          "timeoutSeconds": 120.0,
+          "containers": [
+            {
+              "livenessProbe": {
+                "failureThreshold": 3.0,
+                "periodSeconds": 10.0,
+                "initialDelaySeconds": 15.0,
+                "timeoutSeconds": 3.0,
+                "httpGet": {
+                  "port": 8080.0,
+                  "path": "/health"
+                }
+              },
+              "args": [
+                "-m",
+                "uvicorn",
+                "main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--proxy-headers",
+                "--forwarded-allow-ips",
+                "*",
+                "--no-server-header"
+              ],
+              "ports": [
+                {
+                  "containerPort": 8080.0,
+                  "name": "http1"
+                }
+              ],
+              "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:755bdf7047c1a40008c1f48ae2a42c72700daaeea5678e074a384d34d32d3c91",
+              "env": [
+                {
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "gemini-api-key"
+                    }
+                  },
+                  "name": "GOOGLE_API_KEY"
+                },
+                {
+                  "value": "gemini-3.1-flash-lite",
+                  "name": "GEMINI_MISSIONS_MODEL"
+                },
+                {
+                  "value": "gemini-3.1-flash-lite",
+                  "name": "GEMINI_MODEL"
+                },
+                {
+                  "value": "true",
+                  "name": "USE_GCP_LOGGING"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/prompts/",
+                  "name": "PROMPTS_API_URL"
+                },
+                {
+                  "value": "redis://172.31.48.3:6379/12",
+                  "name": "REDIS_URL"
+                },
+                {
+                  "value": "gcp",
+                  "name": "TRACE_EXPORTER"
+                },
+                {
+                  "value": "v0.4.21",
+                  "name": "APP_VERSION"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/users/",
+                  "name": "USERS_MCP_URL"
+                },
+                {
+                  "value": "0.1",
+                  "name": "TRACE_SAMPLING_RATE"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/cv/",
+                  "name": "CV_MCP_URL"
+                },
+                {
+                  "value": "prod-ia-staffing",
+                  "name": "GCP_PROJECT_ID"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/competencies/",
+                  "name": "COMPETENCIES_MCP_URL"
+                },
+                {
+                  "value": "86400",
+                  "name": "HITL_RESPONSE_TTL_SECONDS"
+                },
+                {
+                  "value": "/agent-missions-api",
+                  "name": "ROOT_PATH"
+                },
+                {
+                  "value": "http://api.internal.zenika/monitoring-mcp/",
+                  "name": "MONITORING_MCP_URL"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/analytics/",
+                  "name": "ANALYTICS_MCP_URL"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/missions/",
+                  "name": "MISSIONS_MCP_URL"
+                },
+                {
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "jwt-secret"
+                    }
+                  },
+                  "name": "SECRET_KEY"
+                },
+                {
+                  "value": "1800",
+                  "name": "HITL_PENDING_TTL_SECONDS"
+                },
+                {
+                  "value": "false",
+                  "name": "ENABLE_OUTPUT_SCHEMA"
+                },
+                {
+                  "value": "agent_missions_api",
+                  "name": "SERVICE_NAME"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/agent-missions",
+                  "name": "MISSIONS_API_URL"
+                }
+              ],
+              "command": [
+                "python3"
+              ],
+              "startupProbe": {
+                "failureThreshold": 20.0,
+                "periodSeconds": 5.0,
+                "initialDelaySeconds": 15.0,
+                "timeoutSeconds": 3.0,
+                "httpGet": {
+                  "port": 8080.0,
+                  "path": "/health"
+                }
+              },
+              "resources": {
+                "limits": {
+                  "memory": "1536Mi",
+                  "cpu": "1000m"
+                }
+              },
+              "name": "api"
+            }
+          ]
+        },
+        "@type": "type.googleapis.com/google.cloud.run.v1.Revision",
+        "apiVersion": "serving.knative.dev/v1",
+        "status": {
+          "conditions": [
+            {
+              "message": "Deploying revision succeeded in 44.85s.",
+              "type": "Ready",
+              "lastTransitionTime": "2026-05-21T16:16:21.859897Z",
+              "status": "True"
+            },
+            {
+              "message": "Containers became healthy in 15s.",
+              "type": "ContainerHealthy",
+              "lastTransitionTime": "2026-05-21T16:16:20.683086Z",
+              "status": "True"
+            },
+            {
+              "message": "Container image import completed in 25.34s.",
+              "type": "ContainerReady",
+              "lastTransitionTime": "2026-05-21T16:16:02.826013Z",
+              "status": "True"
+            },
+            {
+              "message": "Provisioning imported containers completed in 2.74s. Checking container health. This will wait for up to 1m55s for the configured startup probe, including an initial delay of 15s.",
+              "type": "ResourcesAvailable",
+              "lastTransitionTime": "2026-05-21T16:16:05.566150Z",
+              "status": "True"
+            }
+          ],
+          "containerStatuses": [
+            {
+              "imageDigest": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:755bdf7047c1a40008c1f48ae2a42c72700daaeea5678e074a384d34d32d3c91",
+              "name": "api"
+            }
+          ],
+          "imageDigest": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:755bdf7047c1a40008c1f48ae2a42c72700daaeea5678e074a384d34d32d3c91",
+          "logUrl": "https://console.cloud.google.com/logs/viewer?project=prod-ia-staffing&resource=cloud_run_revision/service_name/agent-missions-api-prd/revision_name/agent-missions-api-prd-00052-6hd&advancedFilter=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22agent-missions-api-prd%22%0Aresource.labels.revision_name%3D%22agent-missions-api-prd-00052-6hd%22",
+          "observedGeneration": 1.0
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T16:16:20.666617+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 1 attempt for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T16:16:14.346480+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T16:16:14.346459+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T16:16:07.076042+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T16:16:05.044499+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: DEPLOYMENT_ROLLOUT - Instance started due to traffic shifting between revisions due to deployment, traffic split adjustment, or deployment health check."
+  },
+  {
+    "timestamp": "2026-05-21T16:15:52.072261+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 1 attempt for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T16:15:47.456588+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T16:15:47.456568+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T16:15:36.472278+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T16:15:36.457212+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T16:15:36.448601+00:00",
+    "severity": "NOTICE",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {},
+      "authenticationInfo": {
+        "principalEmail": "sebastien.lavayssiere@zenika.com",
+        "principalSubject": "user:sebastien.lavayssiere@zenika.com"
+      },
+      "requestMetadata": {
+        "callerIp": "2a01:e0a:80f:6120:a599:a9f1:2397:7875",
+        "callerSuppliedUserAgent": "Terraform/1.15.3 (+https://www.terraform.io) Terraform-Plugin-SDK/2.37.0 terraform-provider-google/6.50.0,gzip(gfe)",
+        "requestAttributes": {
+          "time": "2026-05-21T16:15:36.940892Z",
+          "auth": {}
+        },
+        "destinationAttributes": {}
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "google.cloud.run.v2.Services.UpdateService",
+      "authorizationInfo": [
+        {
+          "resource": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+          "permission": "run.services.update",
+          "granted": true,
+          "resourceAttributes": {},
+          "permissionType": "ADMIN_WRITE"
+        },
+        {
+          "resource": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+          "permission": "run.services.update",
+          "granted": true,
+          "resourceAttributes": {
+            "service": "run.googleapis.com/",
+            "name": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+            "type": "run.googleapis.com/Service"
+          },
+          "permissionType": "ADMIN_WRITE"
+        }
+      ],
+      "resourceName": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+      "request": {
+        "@type": "type.googleapis.com/google.cloud.run.v2.UpdateServiceRequest",
+        "service": {
+          "template": {
+            "vpcAccess": {
+              "egress": "PRIVATE_RANGES_ONLY",
+              "networkInterfaces": [
+                {
+                  "network": "projects/prod-ia-staffing/global/networks/vpc-prd",
+                  "tags": [
+                    "cr-egress"
+                  ],
+                  "subnetwork": "projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd"
+                }
+              ]
+            },
+            "scaling": {
+              "maxInstanceCount": 50.0
+            },
+            "timeout": "120s",
+            "serviceAccount": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+            "containers": [
+              {
+                "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api:v0.4.21",
+                "resources": {
+                  "limits": {
+                    "memory": "1536Mi",
+                    "cpu": "1000m"
+                  }
+                },
+                "name": "api"
+              }
+            ],
+            "maxInstanceRequestConcurrency": 80.0
+          },
+          "traffic": [
+            {
+              "type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST",
+              "percent": 100.0
+            }
+          ],
+          "scaling": {},
+          "ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+          "launchStage": "GA",
+          "name": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd"
+        }
+      },
+      "resourceLocation": {
+        "currentLocations": [
+          "europe-west1"
+        ]
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T16:04:41.380894+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 16:04:41,381",
+      "service": "agent_missions_api",
+      "levelname": "INFO",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api.",
+      "name": "main"
+    }
+  },
+  {
+    "timestamp": "2026-05-21T15:49:33.404973+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T15:49:23.673234+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T15:49:12.289086+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {
+        "message": "Ready condition status changed to True for Service agent-missions-api-prd."
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "/Services.UpdateService",
+      "resourceName": "namespaces/prod-ia-staffing/services/agent-missions-api-prd",
+      "response": {
+        "metadata": {
+          "name": "agent-missions-api-prd",
+          "uid": "7a9316a7-a0f5-4492-b3dd-0caac009fe97",
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/815625034299/services/agent-missions-api-prd",
+          "creationTimestamp": "2026-04-24T09:50:22.231728Z",
+          "labels": {
+            "cloud.googleapis.com/location": "europe-west1"
+          },
+          "resourceVersion": "AAZSVdqHjR8",
+          "annotations": {
+            "serving.knative.dev/lastModifier": "sebastien.lavayssiere@zenika.com",
+            "run.googleapis.com/urls": "[\"https://agent-missions-api-prd-815625034299.europe-west1.run.app\",\"https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app\"]",
+            "run.googleapis.com/operation-id": "793afc6f-a30e-4786-822e-3b03c4be96fa",
+            "run.googleapis.com/ingress": "internal-and-cloud-load-balancing",
+            "run.googleapis.com/ingress-status": "internal-and-cloud-load-balancing",
+            "run.googleapis.com/maxScale": "50",
+            "serving.knative.dev/creator": "sebastien.lavayssiere@zenika.com"
+          },
+          "generation": 51.0,
+          "namespace": "815625034299"
+        },
+        "kind": "Service",
+        "spec": {
+          "template": {
+            "metadata": {
+              "labels": {
+                "run.googleapis.com/startupProbeType": "Custom"
+              },
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "50",
+                "run.googleapis.com/sessionAffinity": "false",
+                "run.googleapis.com/cpu-throttling": "false",
+                "autoscaling.knative.dev/minScale": "0",
+                "run.googleapis.com/network-interfaces": "[{\"network\":\"projects/prod-ia-staffing/global/networks/vpc-prd\",\"subnetwork\":\"projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd\",\"tags\":[\"cr-egress\"]}]",
+                "run.googleapis.com/vpc-access-egress": "private-ranges-only"
+              }
+            },
+            "spec": {
+              "containerConcurrency": 80.0,
+              "serviceAccountName": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+              "timeoutSeconds": 120.0,
+              "containers": [
+                {
+                  "livenessProbe": {
+                    "failureThreshold": 3.0,
+                    "periodSeconds": 10.0,
+                    "initialDelaySeconds": 15.0,
+                    "timeoutSeconds": 3.0,
+                    "httpGet": {
+                      "port": 8080.0,
+                      "path": "/health"
+                    }
+                  },
+                  "args": [
+                    "-m",
+                    "uvicorn",
+                    "main:app",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "8080",
+                    "--proxy-headers",
+                    "--forwarded-allow-ips",
+                    "*",
+                    "--no-server-header"
+                  ],
+                  "ports": [
+                    {
+                      "containerPort": 8080.0,
+                      "name": "http1"
+                    }
+                  ],
+                  "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api:v0.4.20",
+                  "env": [
+                    {
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "gemini-api-key"
+                        }
+                      },
+                      "name": "GOOGLE_API_KEY"
+                    },
+                    {
+                      "value": "gemini-3.1-flash-lite",
+                      "name": "GEMINI_MISSIONS_MODEL"
+                    },
+                    {
+                      "value": "gemini-3.1-flash-lite",
+                      "name": "GEMINI_MODEL"
+                    },
+                    {
+                      "value": "true",
+                      "name": "USE_GCP_LOGGING"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/prompts/",
+                      "name": "PROMPTS_API_URL"
+                    },
+                    {
+                      "value": "v0.4.20",
+                      "name": "APP_VERSION"
+                    },
+                    {
+                      "value": "redis://172.31.48.3:6379/12",
+                      "name": "REDIS_URL"
+                    },
+                    {
+                      "value": "gcp",
+                      "name": "TRACE_EXPORTER"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/users/",
+                      "name": "USERS_MCP_URL"
+                    },
+                    {
+                      "value": "0.1",
+                      "name": "TRACE_SAMPLING_RATE"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/cv/",
+                      "name": "CV_MCP_URL"
+                    },
+                    {
+                      "value": "prod-ia-staffing",
+                      "name": "GCP_PROJECT_ID"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/competencies/",
+                      "name": "COMPETENCIES_MCP_URL"
+                    },
+                    {
+                      "value": "86400",
+                      "name": "HITL_RESPONSE_TTL_SECONDS"
+                    },
+                    {
+                      "value": "/agent-missions-api",
+                      "name": "ROOT_PATH"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/monitoring-mcp/",
+                      "name": "MONITORING_MCP_URL"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/analytics/",
+                      "name": "ANALYTICS_MCP_URL"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/missions/",
+                      "name": "MISSIONS_MCP_URL"
+                    },
+                    {
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "jwt-secret"
+                        }
+                      },
+                      "name": "SECRET_KEY"
+                    },
+                    {
+                      "value": "1800",
+                      "name": "HITL_PENDING_TTL_SECONDS"
+                    },
+                    {
+                      "value": "false",
+                      "name": "ENABLE_OUTPUT_SCHEMA"
+                    },
+                    {
+                      "value": "agent_missions_api",
+                      "name": "SERVICE_NAME"
+                    },
+                    {
+                      "value": "http://api.internal.zenika/api/agent-missions",
+                      "name": "MISSIONS_API_URL"
+                    }
+                  ],
+                  "command": [
+                    "python3"
+                  ],
+                  "startupProbe": {
+                    "failureThreshold": 20.0,
+                    "periodSeconds": 5.0,
+                    "initialDelaySeconds": 15.0,
+                    "timeoutSeconds": 3.0,
+                    "httpGet": {
+                      "port": 8080.0,
+                      "path": "/health"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "1536Mi",
+                      "cpu": "1000m"
+                    }
+                  },
+                  "name": "api"
+                }
+              ]
+            }
+          },
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100.0
+            }
+          ]
+        },
+        "@type": "type.googleapis.com/google.cloud.run.v1.Service",
+        "apiVersion": "serving.knative.dev/v1",
+        "status": {
+          "address": {
+            "url": "https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app"
+          },
+          "conditions": [
+            {
+              "type": "Ready",
+              "lastTransitionTime": "2026-05-21T15:49:12.278303Z",
+              "status": "True"
+            },
+            {
+              "type": "ConfigurationsReady",
+              "lastTransitionTime": "2026-05-21T15:48:48.972436Z",
+              "status": "True"
+            },
+            {
+              "type": "RoutesReady",
+              "lastTransitionTime": "2026-05-21T15:49:12.252863Z",
+              "status": "True"
+            }
+          ],
+          "url": "https://agent-missions-api-prd-hivg3xnuoa-ew.a.run.app",
+          "traffic": [
+            {
+              "latestRevision": true,
+              "percent": 100.0,
+              "revisionName": "agent-missions-api-prd-00051-d94"
+            }
+          ],
+          "latestCreatedRevisionName": "agent-missions-api-prd-00051-d94",
+          "observedGeneration": 51.0,
+          "latestReadyRevisionName": "agent-missions-api-prd-00051-d94"
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T15:49:08.746170+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {
+        "message": "Ready condition status changed to True for Revision agent-missions-api-prd-00051-d94 with message: Deploying revision succeeded in 20.62s."
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "/Services.UpdateService",
+      "resourceName": "namespaces/prod-ia-staffing/revisions/agent-missions-api-prd-00051-d94",
+      "response": {
+        "metadata": {
+          "name": "agent-missions-api-prd-00051-d94",
+          "uid": "405f7529-9297-43c1-b4c2-420f7ebc02b8",
+          "ownerReferences": [
+            {
+              "controller": true,
+              "kind": "Configuration",
+              "uid": "f4c83c65-942f-4c73-adaf-058cd0e2a75e",
+              "blockOwnerDeletion": true,
+              "apiVersion": "serving.knative.dev/v1",
+              "name": "agent-missions-api-prd"
+            }
+          ],
+          "selfLink": "/apis/serving.knative.dev/v1/namespaces/815625034299/revisions/agent-missions-api-prd-00051-d94",
+          "creationTimestamp": "2026-05-21T15:48:48.115355Z",
+          "labels": {
+            "serving.knative.dev/route": "agent-missions-api-prd",
+            "run.googleapis.com/startupProbeType": "Custom",
+            "serving.knative.dev/service": "agent-missions-api-prd",
+            "serving.knative.dev/serviceUid": "7a9316a7-a0f5-4492-b3dd-0caac009fe97",
+            "serving.knative.dev/configurationGeneration": "51",
+            "cloud.googleapis.com/location": "europe-west1",
+            "serving.knative.dev/configuration": "agent-missions-api-prd"
+          },
+          "resourceVersion": "AAZSVdpReNY",
+          "annotations": {
+            "run.googleapis.com/operation-id": "793afc6f-a30e-4786-822e-3b03c4be96fa",
+            "autoscaling.knative.dev/minScale": "0",
+            "run.googleapis.com/network-interfaces": "[{\"network\":\"projects/prod-ia-staffing/global/networks/vpc-prd\",\"subnetwork\":\"projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd\",\"tags\":[\"cr-egress\"]}]",
+            "run.googleapis.com/vpc-access-egress": "private-ranges-only",
+            "autoscaling.knative.dev/maxScale": "50",
+            "run.googleapis.com/sessionAffinity": "false",
+            "run.googleapis.com/cpu-throttling": "false",
+            "run.googleapis.com/ingress": "internal-and-cloud-load-balancing",
+            "serving.knative.dev/creator": "sebastien.lavayssiere@zenika.com"
+          },
+          "generation": 1.0,
+          "namespace": "815625034299"
+        },
+        "kind": "Revision",
+        "spec": {
+          "containerConcurrency": 80.0,
+          "serviceAccountName": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+          "timeoutSeconds": 120.0,
+          "containers": [
+            {
+              "livenessProbe": {
+                "failureThreshold": 3.0,
+                "periodSeconds": 10.0,
+                "initialDelaySeconds": 15.0,
+                "timeoutSeconds": 3.0,
+                "httpGet": {
+                  "port": 8080.0,
+                  "path": "/health"
+                }
+              },
+              "args": [
+                "-m",
+                "uvicorn",
+                "main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--proxy-headers",
+                "--forwarded-allow-ips",
+                "*",
+                "--no-server-header"
+              ],
+              "ports": [
+                {
+                  "containerPort": 8080.0,
+                  "name": "http1"
+                }
+              ],
+              "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:918a98c6970359454cc8c74e282358a07ba82e7209ac6ebd89d2bfa9a5dcf655",
+              "env": [
+                {
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "gemini-api-key"
+                    }
+                  },
+                  "name": "GOOGLE_API_KEY"
+                },
+                {
+                  "value": "gemini-3.1-flash-lite",
+                  "name": "GEMINI_MISSIONS_MODEL"
+                },
+                {
+                  "value": "gemini-3.1-flash-lite",
+                  "name": "GEMINI_MODEL"
+                },
+                {
+                  "value": "true",
+                  "name": "USE_GCP_LOGGING"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/prompts/",
+                  "name": "PROMPTS_API_URL"
+                },
+                {
+                  "value": "v0.4.20",
+                  "name": "APP_VERSION"
+                },
+                {
+                  "value": "redis://172.31.48.3:6379/12",
+                  "name": "REDIS_URL"
+                },
+                {
+                  "value": "gcp",
+                  "name": "TRACE_EXPORTER"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/users/",
+                  "name": "USERS_MCP_URL"
+                },
+                {
+                  "value": "0.1",
+                  "name": "TRACE_SAMPLING_RATE"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/cv/",
+                  "name": "CV_MCP_URL"
+                },
+                {
+                  "value": "prod-ia-staffing",
+                  "name": "GCP_PROJECT_ID"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/competencies/",
+                  "name": "COMPETENCIES_MCP_URL"
+                },
+                {
+                  "value": "86400",
+                  "name": "HITL_RESPONSE_TTL_SECONDS"
+                },
+                {
+                  "value": "/agent-missions-api",
+                  "name": "ROOT_PATH"
+                },
+                {
+                  "value": "http://api.internal.zenika/monitoring-mcp/",
+                  "name": "MONITORING_MCP_URL"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/analytics/",
+                  "name": "ANALYTICS_MCP_URL"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/missions/",
+                  "name": "MISSIONS_MCP_URL"
+                },
+                {
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "latest",
+                      "name": "jwt-secret"
+                    }
+                  },
+                  "name": "SECRET_KEY"
+                },
+                {
+                  "value": "1800",
+                  "name": "HITL_PENDING_TTL_SECONDS"
+                },
+                {
+                  "value": "false",
+                  "name": "ENABLE_OUTPUT_SCHEMA"
+                },
+                {
+                  "value": "agent_missions_api",
+                  "name": "SERVICE_NAME"
+                },
+                {
+                  "value": "http://api.internal.zenika/api/agent-missions",
+                  "name": "MISSIONS_API_URL"
+                }
+              ],
+              "command": [
+                "python3"
+              ],
+              "startupProbe": {
+                "failureThreshold": 20.0,
+                "periodSeconds": 5.0,
+                "initialDelaySeconds": 15.0,
+                "timeoutSeconds": 3.0,
+                "httpGet": {
+                  "port": 8080.0,
+                  "path": "/health"
+                }
+              },
+              "resources": {
+                "limits": {
+                  "memory": "1536Mi",
+                  "cpu": "1000m"
+                }
+              },
+              "name": "api"
+            }
+          ]
+        },
+        "@type": "type.googleapis.com/google.cloud.run.v1.Revision",
+        "apiVersion": "serving.knative.dev/v1",
+        "status": {
+          "conditions": [
+            {
+              "message": "Deploying revision succeeded in 20.62s.",
+              "type": "Ready",
+              "lastTransitionTime": "2026-05-21T15:49:08.734166Z",
+              "status": "True"
+            },
+            {
+              "message": "Containers became healthy in 15s.",
+              "type": "ContainerHealthy",
+              "lastTransitionTime": "2026-05-21T15:49:08.681051Z",
+              "status": "True"
+            },
+            {
+              "message": "Container image import completed.",
+              "type": "ContainerReady",
+              "lastTransitionTime": "2026-05-21T15:48:48.876988Z",
+              "status": "True"
+            },
+            {
+              "message": "Provisioning imported containers completed in 4.03s. Checking container health. This will wait for up to 1m55s for the configured startup probe, including an initial delay of 15s.",
+              "type": "ResourcesAvailable",
+              "lastTransitionTime": "2026-05-21T15:48:52.911727Z",
+              "status": "True"
+            }
+          ],
+          "containerStatuses": [
+            {
+              "imageDigest": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:918a98c6970359454cc8c74e282358a07ba82e7209ac6ebd89d2bfa9a5dcf655",
+              "name": "api"
+            }
+          ],
+          "imageDigest": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api@sha256:918a98c6970359454cc8c74e282358a07ba82e7209ac6ebd89d2bfa9a5dcf655",
+          "logUrl": "https://console.cloud.google.com/logs/viewer?project=prod-ia-staffing&resource=cloud_run_revision/service_name/agent-missions-api-prd/revision_name/agent-missions-api-prd-00051-d94&advancedFilter=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22agent-missions-api-prd%22%0Aresource.labels.revision_name%3D%22agent-missions-api-prd-00051-d94%22",
+          "observedGeneration": 1.0
+        }
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T15:49:08.670327+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 1 attempt for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T15:49:03.549445+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T15:49:03.549423+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T15:48:53.002853+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: DEPLOYMENT_ROLLOUT - Instance started due to traffic shifting between revisions due to deployment, traffic split adjustment, or deployment health check."
+  },
+  {
+    "timestamp": "2026-05-21T15:48:47.493187+00:00",
+    "severity": "NOTICE",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "status": {},
+      "authenticationInfo": {
+        "principalEmail": "sebastien.lavayssiere@zenika.com",
+        "principalSubject": "user:sebastien.lavayssiere@zenika.com"
+      },
+      "requestMetadata": {
+        "callerIp": "2a01:e0a:80f:6120:a599:a9f1:2397:7875",
+        "callerSuppliedUserAgent": "Terraform/1.15.3 (+https://www.terraform.io) Terraform-Plugin-SDK/2.37.0 terraform-provider-google/6.50.0,gzip(gfe)",
+        "requestAttributes": {
+          "time": "2026-05-21T15:48:48.033862Z",
+          "auth": {}
+        },
+        "destinationAttributes": {}
+      },
+      "serviceName": "run.googleapis.com",
+      "methodName": "google.cloud.run.v2.Services.UpdateService",
+      "authorizationInfo": [
+        {
+          "resource": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+          "permission": "run.services.update",
+          "granted": true,
+          "resourceAttributes": {},
+          "permissionType": "ADMIN_WRITE"
+        },
+        {
+          "resource": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+          "permission": "run.services.update",
+          "granted": true,
+          "resourceAttributes": {
+            "service": "run.googleapis.com/",
+            "name": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+            "type": "run.googleapis.com/Service"
+          },
+          "permissionType": "ADMIN_WRITE"
+        }
+      ],
+      "resourceName": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd",
+      "request": {
+        "@type": "type.googleapis.com/google.cloud.run.v2.UpdateServiceRequest",
+        "service": {
+          "template": {
+            "vpcAccess": {
+              "egress": "PRIVATE_RANGES_ONLY",
+              "networkInterfaces": [
+                {
+                  "network": "projects/prod-ia-staffing/global/networks/vpc-prd",
+                  "tags": [
+                    "cr-egress"
+                  ],
+                  "subnetwork": "projects/prod-ia-staffing/regions/europe-west1/subnetworks/subnet-prd"
+                }
+              ]
+            },
+            "scaling": {
+              "maxInstanceCount": 50.0
+            },
+            "timeout": "120s",
+            "serviceAccount": "sa-agent-missions-prd-5cc8@prod-ia-staffing.iam.gserviceaccount.com",
+            "maxInstanceRequestConcurrency": 80.0,
+            "containers": [
+              {
+                "image": "europe-west1-docker.pkg.dev/slavayssiere-sandbox-462015/z-gcp-summit-services-dev/agent_missions_api:v0.4.20",
+                "resources": {
+                  "limits": {
+                    "memory": "1536Mi",
+                    "cpu": "1000m"
+                  }
+                },
+                "name": "api"
+              }
+            ]
+          },
+          "traffic": [
+            {
+              "type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST",
+              "percent": 100.0
+            }
+          ],
+          "ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+          "scaling": {},
+          "launchStage": "GA",
+          "name": "projects/prod-ia-staffing/locations/europe-west1/services/agent-missions-api-prd"
+        }
+      },
+      "resourceLocation": {
+        "currentLocations": [
+          "europe-west1"
+        ]
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-21T15:40:10.846589+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 15:40:10,847",
+      "levelname": "INFO",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api.",
+      "service": "agent_missions_api",
+      "name": "main"
+    }
+  },
+  {
+    "timestamp": "2026-05-21T15:25:20.451620+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T15:25:05.449391+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T15:24:51.830908+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T15:24:51.830890+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T15:24:44.881737+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T15:24:44.863488+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T14:52:20.881253+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 14:52:20,882",
+      "service": "agent_missions_api",
+      "levelname": "INFO",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api.",
+      "name": "main"
+    }
+  },
+  {
+    "timestamp": "2026-05-21T14:37:34.957169+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T14:37:19.955016+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 1 attempt for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T14:37:14.553946+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T14:37:11.247874+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T14:37:11.247854+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T14:37:04.350289+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T14:37:04.318617+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T13:38:30.892229+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 13:38:30,892",
+      "service": "agent_missions_api",
+      "levelname": "INFO",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api.",
+      "name": "main"
+    }
+  },
+  {
+    "timestamp": "2026-05-21T13:23:43.961733+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T13:23:28.959562+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T13:23:14.981265+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T13:23:14.981245+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T13:23:08.388784+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T13:23:08.359579+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T13:03:20.818507+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 13:03:20,818",
+      "service": "agent_missions_api",
+      "levelname": "INFO",
+      "name": "main",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api."
+    }
+  },
+  {
+    "timestamp": "2026-05-21T12:48:26.219325+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T12:48:11.216779+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T12:47:57.124982+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T12:47:57.124967+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T12:47:50.997303+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T12:47:50.989420+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T12:44:10.877660+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 12:44:10,878",
+      "levelname": "INFO",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api.",
+      "service": "agent_missions_api",
+      "name": "main"
+    }
+  },
+  {
+    "timestamp": "2026-05-21T12:29:19.329011+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T12:29:04.326899+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T12:28:50.794371+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T12:28:50.794353+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T12:28:43.617445+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T12:28:43.596595+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  },
+  {
+    "timestamp": "2026-05-21T12:13:00.814080+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": {
+      "environment": "dev",
+      "asctime": "2026-05-21 12:13:00,814",
+      "service": "agent_missions_api",
+      "levelname": "INFO",
+      "name": "main",
+      "message": "[MISSIONS] 🛑 Shutting down agent_missions_api."
+    }
+  },
+  {
+    "timestamp": "2026-05-21T11:58:10.074264+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "LIVENESS HTTP probe succeeded for container \"api\" on port 8080 path \"/health\". Only the first successful liveness probe per revision is logged."
+  },
+  {
+    "timestamp": "2026-05-21T11:57:55.072164+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "STARTUP HTTP probe succeeded after 2 attempts for container \"api\" on port 8080 path \"/health\"."
+  },
+  {
+    "timestamp": "2026-05-21T11:57:41.387764+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "  check_feature_enabled()"
+  },
+  {
+    "timestamp": "2026-05-21T11:57:41.387743+00:00",
+    "severity": null,
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "/app/.venv/lib/python3.13/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled."
+  },
+  {
+    "timestamp": "2026-05-21T11:57:34.320279+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+  },
+  {
+    "timestamp": "2026-05-21T11:57:34.281659+00:00",
+    "severity": "INFO",
+    "cloud_run_service": "agent-missions-api-prd",
+    "message": null
+  }
+]

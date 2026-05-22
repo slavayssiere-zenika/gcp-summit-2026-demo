@@ -1,7 +1,9 @@
+import gemini_mock_patch  # noqa: F401 — must be first: patches genai.Client before config.py loads
 import os
 from contextlib import asynccontextmanager
 
 import shared.database as database
+
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from shared.fastapi_utils import instrument_app
@@ -99,7 +101,12 @@ app.include_router(router)
 
 
 @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)])
-@app.api_route("//mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], dependencies=[Depends(verify_jwt)], include_in_schema=False)
+@app.api_route(
+    "//mcp/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE"],
+    dependencies=[Depends(verify_jwt)],
+    include_in_schema=False,
+)
 async def proxy_mcp(path: str, request: Request):
     sidecar_url = os.getenv("MCP_SIDECAR_URL", "http://cv_mcp:8000")
     url = f"{sidecar_url.rstrip('/')}/mcp/{path}"

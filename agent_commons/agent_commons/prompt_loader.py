@@ -152,6 +152,9 @@ async def get_or_create_gemini_context_cache(
     - Valide l'existence du cache dans Gemini avant de le retourner.
     - Fallback silencieux sur None en cas d'erreur ou d'incompatibilité modèle.
     """
+    if os.getenv("ENABLE_GEMINI_CONTEXT_CACHE", "false").lower() != "true":
+        return None
+
     try:
         from shared.cache import get_cache, set_cache
         _cache_available = True

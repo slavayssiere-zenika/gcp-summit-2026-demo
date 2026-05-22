@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 import json
-import httpx
 import random
 import string
 from datetime import datetime, timezone
 import os
-
-AUTH_HEADERS = {}
+import psycopg2
 
 USERS_API = "http://localhost:8000"
 ITEMS_API = "http://localhost:8001"
@@ -85,139 +83,6 @@ COMPETENCIES_ZENIKA_TREE = {
     }
 }
 
-
-def get_db_url(dbname):
-    base_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
-    if "?" in base_url:
-        uri, params = base_url.split("?")
-        uri = uri.rsplit("/", 1)[0] + "/" + dbname
-        return f"{uri}?{params}"
-    else:
-        return base_url.rsplit("/", 1)[0] + "/" + dbname
-
-
-def random_string(length=8):
-    return ''.join(random.choices(string.ascii_lowercase, k=length))
-
-
-def create_category(name, description):
-    # Pre-check existence - reponse paginee {"items": [...]}
-    try:
-        resp = httpx.get(f"{ITEMS_API}/categories?limit=500", headers=AUTH_HEADERS)
-        if resp.status_code == 200:
-            data = resp.json()
-            categories = data.get("items", []) if isinstance(data, dict) else data
-            for c in categories:
-                if c.get("name") == name:
-                    print(f"  - Category {name} already exists. Skipping.")
-                    return c
-    except Exception:
-        pass
-
-    payload = {"name": name, "description": description}
-    try:
-        response = httpx.post(f"{ITEMS_API}/categories", json=payload, headers=AUTH_HEADERS)
-        if response.status_code == 400 and "already exists" in response.text.lower():
-            # Race condition ou seed idempotent : recuperer l existant
-            resp2 = httpx.get(f"{ITEMS_API}/categories?limit=500", headers=AUTH_HEADERS)
-            if resp2.status_code == 200:
-                data2 = resp2.json()
-                cats2 = data2.get("items", []) if isinstance(data2, dict) else data2
-                for c in cats2:
-                    if c.get("name") == name:
-                        print(f"  - Category {name} recovered from DB. Skipping.")
-                        return c
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"  ❌ Error creating category {name}: {str(e)}")
-        raise
-
-
-def create_competency(name, description, parent_id=None):
-
-    data = {"name": name, "description": description}
-    if parent_id is not None:
-        data["parent_id"] = parent_id
-
-    try:
-        response = httpx.post(f"{COMPETENCIES_API}/", json=data, headers=AUTH_HEADERS)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"  ❌ Error creating competency {name}: {str(e)}")
-        raise
-
-
-def assign_competency(user_id, comp_id):
-    try:
-        response = httpx.post(f"{COMPETENCIES_API}/user/{user_id}/assign/{comp_id}", headers=AUTH_HEADERS)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"  - Error assigning competency {comp_id} to user {user_id}: {str(e)}")
-        return None
-
-
-def import_cv(url):
-    try:
-        response = httpx.post(f"{CV_API}/import", json={"url": url}, headers=AUTH_HEADERS, timeout=60.0)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"  ❌ Error importing CV {url}: {str(e)}")
-        return None
-
-
-def create_user(first, last, allowed_category_ids=None, suffix=""):
-    if allowed_category_ids is None:
-        allowed_category_ids = []
-    username = f"{first[0].lower()}{last.lower()}{random.randint(10, 9999)}{suffix}"
-    email = f"{first.lower()}.{last.lower()}{suffix}@zenika.com"
-
-    # Check if user exists by email or username search
-    try:
-        search_res = httpx.get(f"{USERS_API}/", params={"skip": 0, "limit": 100}, headers=AUTH_HEADERS)
-        if search_res.status_code == 200:
-            data = search_res.json()
-            users_list = data.get("items", []) if isinstance(data, dict) else data
-            for u in users_list:
-                if u['email'] == email or u['username'] == username:
-                    print(f"  - User {email} already exists. Skipping.")
-                    return u
-    except Exception as e:
-        print(f"  - Error checking existing user {email}: {str(e)}")
-
-    data = {
-        "username": username,
-        "email": email,
-        "first_name": first,
-        "last_name": last,
-        "full_name": f"{first} {last}",
-        "password": "zenika123",
-        "allowed_category_ids": allowed_category_ids
-    }
-    response = httpx.post(f"{USERS_API}/", json=data, headers=AUTH_HEADERS)
-    if response.status_code >= 400:
-        print(f"  ❌ Error creating user {username}: {response.status_code} - {response.text}")
-        response.raise_for_status()
-    return response.json()
-
-
-def create_item(user_id, category_ids):
-    item_names = ["Laptop", "Monitor", "Keyboard", "Mouse", "Desk", "Chair", "License", "Server", "Consulting", "Workshop"]
-    name = f"{random.choice(item_names)} {random_string(4).upper()}"
-    data = {
-        "name": name,
-        "description": f"Standard {name.lower()} for professional use.",
-        "user_id": user_id,
-        "category_ids": category_ids
-    }
-    response = httpx.post(f"{ITEMS_API}/", json=data, headers=AUTH_HEADERS)
-    response.raise_for_status()
-    return response.json()
-
-
 TECH_STACKS = [
     ["Python", "FastAPI", "PostgreSQL", "Docker", "Kubernetes"],
     ["Java", "Spring Boot", "MySQL", "CI/CD", "AWS"],
@@ -237,108 +102,39 @@ CLIENTS_FAKE = [
 ]
 
 
-def seed_cv_profiles(user_ids: list) -> int:
-    """
-    Insere un CVProfile synthetique pour chaque user_id dans la liste.
-    Insertion directe en DB (base 'cv') sans passer par le pipeline LLM.
-    Idempotent : skip si user_id deja present dans cv_profiles.
-    Retourne le nombre de profils inseres.
-    """
-    if not user_ids:
-        return 0
+def get_db_url(dbname):
+    base_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+    if "?" in base_url:
+        uri, params = base_url.split("?")
+        uri = uri.rsplit("/", 1)[0] + "/" + dbname
+        return f"{uri}?{params}"
+    else:
+        return base_url.rsplit("/", 1)[0] + "/" + dbname
 
-    import psycopg2
-    import json as _json
 
-    db_url = get_db_url("cv")
-    inserted = 0
-    try:
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
+def random_string(length=8):
+    return ''.join(random.choices(string.ascii_lowercase, k=length))
 
-        # Recup les user_ids deja presents (idempotence)
-        cur.execute("SELECT DISTINCT user_id FROM cv_profiles")
-        existing = {row[0] for row in cur.fetchall()}
 
-        to_insert = [uid for uid in user_ids if uid not in existing]
-        print(f"  - {len(existing)} profils CV deja en base, {len(to_insert)} a creer.")
-
-        for uid in to_insert:
-            stack = random.choice(TECH_STACKS)
-            role = random.choice(ROLES)
-            yoe = random.randint(3, 15)
-            client1 = random.choice(CLIENTS_FAKE)
-            client2 = random.choice(CLIENTS_FAKE)
-            summary = (
-                f"{role} avec {yoe} ans d'experience. "
-                f"Expert en {', '.join(stack[:3])}. "
-                f"Missions recentes chez {client1} et {client2}."
-            )
-            missions = [
-                {
-                    "title": f"Mission {i + 1}",
-                    "client": random.choice(CLIENTS_FAKE),
-                    "duration_months": random.randint(6, 24),
-                    "skills": random.sample(stack, k=min(3, len(stack))),
-                    "description": f"Projet {i + 1} : architecture et developpement avec {stack[0]}.",
-                }
-                for i in range(random.randint(3, 8))
-            ]
-            raw = (
-                f"CV synthetique perf-test\n"
-                f"Role : {role}\n"
-                f"Experience : {yoe} ans\n"
-                f"Competences : {', '.join(stack)}\n"
-                f"Missions : {len(missions)} missions.\n"
-            )
-            cur.execute(
-                """
-                INSERT INTO cv_profiles
-                    (user_id, source_url, source_tag, extracted_competencies,
-                     "current_role", years_of_experience, summary,
-                     competencies_keywords, missions, raw_content,
-                     is_archived, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                """,
-                (
-                    uid,
-                    f"perf-test://synthetic/{uid}",
-                    "perf-test",
-                    _json.dumps([{"name": s, "level": "confirmed"} for s in stack]),
-                    role,
-                    yoe,
-                    summary,
-                    stack,
-                    _json.dumps(missions),
-                    raw,
-                    False,
-                ),
-            )
-            inserted += 1
-
-        conn.commit()
-        cur.close()
-        conn.close()
-        print(f"  - {inserted} profils CV synthetiques inseres.")
-    except Exception as e:
-        print(f"  ❌ Erreur seed CV profiles: {e}")
-    return inserted
+def sql_val(val):
+    if val is None:
+        return "NULL"
+    elif isinstance(val, bool):
+        return "TRUE" if val else "FALSE"
+    elif isinstance(val, (int, float)):
+        return str(val)
+    elif isinstance(val, datetime):
+        return f"'{val.strftime('%Y-%m-%d %H:%M:%S')}'"
+    elif isinstance(val, (dict, list)):
+        escaped = json.dumps(val).replace("'", "''")
+        return f"'{escaped}'"
+    else:
+        escaped = str(val).replace("'", "''")
+        return f"'{escaped}'"
 
 
 def erase_data() -> None:
-    """Purge toutes les données de test avant un nouveau seed.
-
-    Préserve :
-    - Les tables Liquibase (databasechangelog, databasechangeloglock)
-    - Les comptes admin@zenika.com et slavayssiere (recrees par main())
-
-    Utilise TRUNCATE ... RESTART IDENTITY CASCADE pour remettre les sequences
-    a zero et supprimer les donnees liees par FK en une seule passe.
-    """
-    import psycopg2
-
-    # (db_name, [tables a truncater dans l'ordre FK-safe])
-    # CASCADE gere les dependances, RESTART IDENTITY reset les sequences
+    """Purge toutes les données de test avant un nouveau seed."""
     ERASE_PLAN = [
         ("items", ["item_category", "items", "categories"]),
         ("competencies", [
@@ -349,7 +145,6 @@ def erase_data() -> None:
         ("missions", ["mission_status_history", "missions"]),
         ("drive", ["drive_sync_state", "drive_folders"]),
         ("prompts", ["prompts"]),
-        # users en dernier (FK entrantes depuis competencies.user_competency)
         ("users", ["user_audit_logs", "users"]),
     ]
 
@@ -373,176 +168,214 @@ def erase_data() -> None:
 
 
 def main(perf: bool = False) -> None:
-    print("🚀 Starting Zenika Seed Data Process...\n")
+    print(f"🚀 Starting Fast SQL-based Zenika Seed Data Process (perf={perf})...\n")
 
+    # 1. Purger les anciennes données
     erase_data()
 
-    print("🔑 Connecting to DB recursively to insert Root Admin...")
-    db_url = get_db_url("users")
-    try:
-        import psycopg2
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        # Stable bcrypt hash for 'admin'
-        admin_hash = "$2b$12$DmcLZx/FfS5ZVVpGVbYOZOM6a27EsafCWBmc26RTxfY5mnn0o/Usi"
-        # Removed DDL/ALTER TABLE since Liquibase handles schema management natively
+    # Définition des dossiers et chemins de fichiers SQL
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    sql_files = {
+        "users": os.path.join(_DATA_DIR, "users_seed.sql"),
+        "items": os.path.join(_DATA_DIR, "items_seed.sql"),
+        "competencies": os.path.join(_DATA_DIR, "competencies_seed.sql"),
+        "prompts": os.path.join(_DATA_DIR, "prompts_seed.sql"),
+        "cv": os.path.join(_DATA_DIR, "cv_seed.sql"),
+        "drive": os.path.join(_DATA_DIR, "drive_seed.sql")
+    }
 
-        cur.execute("SELECT id FROM users WHERE username = 'admin'")
-        if not cur.fetchone():
-            cur.execute("""
-                INSERT INTO users (username, email, first_name, last_name, full_name, hashed_password, role, is_active, allowed_category_ids, created_at)
-                VALUES ('admin', 'admin@zenika.com', 'Zenika', 'Admin', 'Zenika Admin', %s, 'admin', True, '1,2,3,4,5', %s)
-            """, (admin_hash, datetime.now(timezone.utc)))
-            conn.commit()
-            print("  - Admin inserted directly via SQL.")
-        else:
-            print("  - Admin user already exists in DB.")
+    # --- 2. GENERATION SQL USER & PERMISSIONS ---
+    print("\n📁 Generating Users & Permissions SQL seed...")
+    users_sql_lines = []
+    users_sql_lines.append("TRUNCATE TABLE users RESTART IDENTITY CASCADE;")
 
-        cur.execute("SELECT id FROM users WHERE email = 'sebastien.lavayssiere@zenika.com'")
-        if not cur.fetchone():
-            cur.execute("""
-                INSERT INTO users (username, email, first_name, last_name, full_name, hashed_password, role, is_active, created_at)
-                VALUES ('slavayssiere', 'sebastien.lavayssiere@zenika.com', 'Sébastien', 'Lavayssière', 'Sébastien Lavayssière', %s, 'admin', True, %s)
-            """, (admin_hash, datetime.now(timezone.utc)))
-            conn.commit()
-            print("  - Sébastien Lavayssière (slavayssiere) added as admin via SQL.")
-        else:
-            print("  - Sébastien Lavayssière already exists in DB.")
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"  - Database injection failed: {str(e)}")
+    # Hash bcrypt stable pré-calculé pour 'admin' et 'slavayssiere' (password: admin)
+    admin_hash = "$2b$12$DmcLZx/FfS5ZVVpGVbYOZOM6a27EsafCWBmc26RTxfY5mnn0o/Usi"
+    # Hash bcrypt stable pré-calculé pour les utilisateurs standards (password: zenika123)
+    user_hash = "$2b$12$XDDf/r.kJV61H29FJv5ayuWQFNrBfcz4A64ic8D7m9HkCnxt/8YC."
 
-    print("\n🔐 Authenticating Admin securely to retrieve JWT...")
-    try:
-        login_res = httpx.post(
-            f"{USERS_API}/login",
-            json={"email": "admin@zenika.com", "password": "admin"}
-        )
-        if login_res.status_code == 200:
-            token = login_res.json().get("access_token")
-            global AUTH_HEADERS
-            AUTH_HEADERS = {"Authorization": f"Bearer {token}"}
-            print("  - Authenticated successfully. JWT Captured.")
-        else:
-            print(f"  ❌ Admin login failed! HTTP {login_res.status_code}")
-            return
-    except Exception as e:
-        print(f"  ❌ Error requesting JWT: {str(e)}")
-        return
+    category_mapping = {}
+    for idx, (name, desc) in enumerate(CATEGORIES_LIST, start=1):
+        category_mapping[name] = idx
 
-    print("\n📁 Seeding Categories...")
-    category_ids = []
-    for name, desc in CATEGORIES_LIST:
-        cat = create_category(name, desc)
-        category_ids.append(cat['id'])
-        print(f"  - Created category: {name} (ID={cat['id']})")
+    category_ids = list(category_mapping.values())
+    ids_str = ",".join(map(str, category_ids))
 
-        # Create the dedicated user for this category
+    # ID 1 : Admin root
+    users_sql_lines.append(
+        f"INSERT INTO users (id, username, email, first_name, last_name, full_name, "
+        f"hashed_password, role, is_active, allowed_category_ids, created_at, is_anonymous) VALUES ("
+        f"1, 'admin', 'admin@zenika.com', 'Zenika', 'Admin', 'Zenika Admin', "
+        f"{sql_val(admin_hash)}, 'admin', TRUE, {sql_val(ids_str)}, NOW(), FALSE);"
+    )
+
+    # ID 2 : Sébastien
+    users_sql_lines.append(
+        f"INSERT INTO users (id, username, email, first_name, last_name, full_name, "
+        f"hashed_password, role, is_active, allowed_category_ids, created_at, is_anonymous) VALUES ("
+        f"2, 'slavayssiere', 'sebastien.lavayssiere@zenika.com', 'Sébastien', 'Lavayssière', "
+        f"'Sébastien Lavayssière', {sql_val(admin_hash)}, 'admin', TRUE, {sql_val(ids_str)}, NOW(), FALSE);"
+    )
+
+    # ID 3 à 7 : Category Managers
+    for idx, (name, desc) in enumerate(CATEGORIES_LIST, start=1):
         clean_name = name.lower().replace("é", "e").replace(" ", "")
-        cat_user_data = {
-            "username": clean_name,
-            "email": f"{clean_name}@zenika.com",
-            "first_name": name,
-            "last_name": "Catégorie",
-            "full_name": f"Manager {name}",
-            "password": name,
-            "allowed_category_ids": [cat['id']]
-        }
-        try:
-            res = httpx.post(f"{USERS_API}/", json=cat_user_data, headers=AUTH_HEADERS)
-            if res.status_code in [200, 201]:
-                print(f"    ↳ Created manager user: {clean_name} (password: {name})")
-        except Exception as e:
-            print(f"    ↳ Error creating manager {clean_name}: {str(e)}")
-
-    print("\n🔄 Upgrading Admin Category Permissions dynamically via SQL...")
-    try:
-        import psycopg2
-        db_url = get_db_url("users")
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        ids_str = ",".join(map(str, category_ids))
-        cur.execute("UPDATE users SET allowed_category_ids = %s WHERE email = 'admin@zenika.com'", (ids_str,))
-        conn.commit()
-        cur.close()
-        conn.close()
-
-        login_res = httpx.post(
-            f"{USERS_API}/login",
-            json={"email": "admin@zenika.com", "password": "admin"}
+        uid = 2 + idx
+        users_sql_lines.append(
+            f"INSERT INTO users (id, username, email, first_name, last_name, full_name, "
+            f"hashed_password, role, is_active, allowed_category_ids, created_at, is_anonymous) VALUES ("
+            f"{uid}, {sql_val(clean_name)}, {sql_val(f'{clean_name}@zenika.com')}, "
+            f"{sql_val(name)}, 'Catégorie', {sql_val(f'Manager {name}')}, "
+            f"{sql_val(user_hash)}, 'user', TRUE, {sql_val(str(idx))}, NOW(), FALSE);"
         )
-        if login_res.status_code == 200:
-            token = login_res.json().get("access_token")
-            AUTH_HEADERS["Authorization"] = f"Bearer {token}"
-            print("  - Admin payload re-baked successfully.")
-        else:
-            print(f"  ❌ Admin re-authentication failed! HTTP {login_res.status_code}")
-    except Exception as e:
-        print(f"  ❌ Error upgrading admin permissions: {str(e)}")
 
+    # ID 8+ : Utilisateurs standards
     user_count = 400 if perf else 12
-    item_count = 2000 if perf else 50
-
-    print(f"\n👤 Seeding {user_count} Zenika Users with Permissions...")
-    users = []
+    seeded_users = []
+    start_uid = 3 + len(CATEGORIES_LIST)
     for i in range(user_count):
         first = random.choice(FIRST_NAMES)
         last = random.choice(LAST_NAMES)
         suffix = f"{i}" if perf else ""
-        # Assign 3 to 5 random categories as allowed
+        username = f"{first[0].lower()}{last.lower()}{random.randint(10, 9999)}{suffix}"
+        email = f"{first.lower()}.{last.lower()}{suffix}@zenika.com"
+        full_name = f"{first} {last}"
+
+        # Assigne de 3 à 5 catégories aléatoires
         user_allowed_cats = random.sample(category_ids, k=random.randint(3, 5))
-        user = create_user(first, last, user_allowed_cats, suffix=suffix)
-        if user:
-            users.append(user)
-        print(f"  - Created user: {user['full_name']} (Allowed Cats: {len(user['allowed_category_ids']) if user else 0})")
+        user_allowed_cats_str = ",".join(map(str, user_allowed_cats))
+        uid = start_uid + i
 
-    print(f"\n📦 Seeding {item_count} Tagged Items (Respecting Permissions)...")
-    for i in range(item_count):
-        if not users:
-            break
-        user = random.choice(users)
-        # Randomly assign 1 to 2 categories from the user's ALLOWED ones
-        item_categories = random.sample(user['allowed_category_ids'], k=random.randint(1, min(2, len(user['allowed_category_ids']))))
-        item = create_item(user['id'], item_categories)
-        print(f"  - Created item {i+1}/{item_count}: {item['name']} (assigned to {user['username']})")
+        seeded_users.append({
+            "id": uid,
+            "username": username,
+            "email": email,
+            "first_name": first,
+            "last_name": last,
+            "full_name": full_name,
+            "allowed_category_ids": user_allowed_cats,
+            "allowed_category_ids_str": user_allowed_cats_str
+        })
 
-    print("\n🛠️ Seeding Competencies (Cleaning legacy flats...)")
-    try:
-        import psycopg2
-        db_url = get_db_url("competencies")
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        cur.execute("TRUNCATE TABLE competencies CASCADE;")
-        conn.commit()
-        cur.close()
-        conn.close()
-        print("  - Table 'competencies' successfully truncated.")
-    except Exception as e:
-        print(f"  ❌ Error truncating competencies: {str(e)}")
+        users_sql_lines.append(
+            f"INSERT INTO users (id, username, email, first_name, last_name, full_name, "
+            f"hashed_password, role, is_active, allowed_category_ids, created_at, is_anonymous) VALUES ("
+            f"{uid}, {sql_val(username)}, {sql_val(email)}, {sql_val(first)}, {sql_val(last)}, "
+            f"{sql_val(full_name)}, {sql_val(user_hash)}, 'user', TRUE, "
+            f"{sql_val(user_allowed_cats_str)}, NOW(), FALSE);"
+        )
 
-    comp_ids = []
+    users_sql_lines.append("SELECT setval(pg_get_serial_sequence('users', 'id'), coalesce(max(id), 1)) FROM users;")
 
-    def seed_tree(nodes, parent_id=None, level=1):
+    # --- 3. GENERATION SQL ITEMS ---
+    print("📁 Generating Items & Categories SQL seed...")
+    items_sql_lines = []
+    items_sql_lines.append("TRUNCATE TABLE categories RESTART IDENTITY CASCADE;")
+    items_sql_lines.append("TRUNCATE TABLE items RESTART IDENTITY CASCADE;")
+
+    # Categories insertion
+    for idx, (name, desc) in enumerate(CATEGORIES_LIST, start=1):
+        items_sql_lines.append(
+            f"INSERT INTO categories (id, name, description, created_at) "
+            f"VALUES ({idx}, {sql_val(name)}, {sql_val(desc)}, NOW());"
+        )
+
+    # Items insertion (2000 en mode perf, 50 sinon)
+    item_count = 2000 if perf else 50
+    item_names = [
+        "Laptop", "Monitor", "Keyboard", "Mouse", "Desk",
+        "Chair", "License", "Server", "Consulting", "Workshop"
+    ]
+    for idx in range(1, item_count + 1):
+        user = random.choice(seeded_users)
+        name = f"{random.choice(item_names)} {random_string(4).upper()}"
+        desc = f"Standard {name.lower()} for professional use."
+
+        items_sql_lines.append(
+            f"INSERT INTO items (id, name, description, user_id, created_at) "
+            f"VALUES ({idx}, {sql_val(name)}, {sql_val(desc)}, {user['id']}, NOW());"
+        )
+
+        # 1 à 2 catégories choisies parmi celles permises de l'utilisateur
+        assigned_cats = random.sample(
+            user["allowed_category_ids"],
+            k=random.randint(1, min(2, len(user["allowed_category_ids"])))
+        )
+        for cat_id in assigned_cats:
+            items_sql_lines.append(
+                f"INSERT INTO item_category (item_id, category_id) "
+                f"VALUES ({idx}, {cat_id});"
+            )
+
+    items_sql_lines.append(
+        "SELECT setval(pg_get_serial_sequence('categories', 'id'), coalesce(max(id), 1)) FROM categories;"
+    )
+    items_sql_lines.append("SELECT setval(pg_get_serial_sequence('items', 'id'), coalesce(max(id), 1)) FROM items;")
+
+    # --- 4. GENERATION SQL COMPETENCIES ---
+    print("📁 Generating Competencies Tree & User Assignments SQL seed...")
+    comp_sql_lines = []
+    comp_sql_lines.append("TRUNCATE TABLE competencies RESTART IDENTITY CASCADE;")
+    comp_sql_lines.append("TRUNCATE TABLE user_competency CASCADE;")
+
+    flat_competencies = []
+    next_comp_id = 1
+
+    def flatten_tree(nodes, parent_id=None):
+        nonlocal next_comp_id
         if isinstance(nodes, dict):
             for name, content in nodes.items():
                 desc = content["description"]
-                comp = create_competency(name, desc, parent_id)
-                comp_ids.append(comp['id'])
-                indent = "  " * level
-                print(f"{indent}- Created Level {level}: {name} (ID={comp['id']})")
+                comp_id = next_comp_id
+                next_comp_id += 1
+                flat_competencies.append({
+                    "id": comp_id,
+                    "name": name,
+                    "description": desc,
+                    "parent_id": parent_id
+                })
                 if "sub" in content:
-                    seed_tree(content["sub"], comp['id'], level + 1)
+                    flatten_tree(content["sub"], comp_id)
         elif isinstance(nodes, list):
             for name, desc in nodes:
-                comp = create_competency(name, desc, parent_id)
-                comp_ids.append(comp['id'])
-                indent = "  " * level
-                print(f"{indent}- Created Leaf: {name} (ID={comp['id']})")
+                comp_id = next_comp_id
+                next_comp_id += 1
+                flat_competencies.append({
+                    "id": comp_id,
+                    "name": name,
+                    "description": desc,
+                    "parent_id": parent_id
+                })
 
-    seed_tree(COMPETENCIES_ZENIKA_TREE)
+    flatten_tree(COMPETENCIES_ZENIKA_TREE)
 
-    print("\n📄 Loading External AI Prompts into Gateway...")
+    # Insertion des compétences
+    for comp in flat_competencies:
+        comp_sql_lines.append(
+            f"INSERT INTO competencies (id, name, description, parent_id, created_at) "
+            f"VALUES ({comp['id']}, {sql_val(comp['name'])}, {sql_val(comp['description'])}, "
+            f"{sql_val(comp['parent_id'])}, NOW());"
+        )
+
+    # Assignation de 2 à 4 compétences par utilisateur
+    comp_ids = [c["id"] for c in flat_competencies]
+    for user in seeded_users:
+        assigned_comp_ids = random.sample(comp_ids, k=random.randint(2, 4))
+        for cid in assigned_comp_ids:
+            comp_sql_lines.append(
+                f"INSERT INTO user_competency (user_id, competency_id, created_at) "
+                f"VALUES ({user['id']}, {cid}, NOW());"
+            )
+
+    comp_sql_lines.append(
+        "SELECT setval(pg_get_serial_sequence('competencies', 'id'), coalesce(max(id), 1)) FROM competencies;"
+    )
+
+    # --- 5. GENERATION SQL PROMPTS ---
+    print("📁 Generating Prompts SQL seed...")
+    prompts_sql_lines = []
+    prompts_sql_lines.append("TRUNCATE TABLE prompts CASCADE;")
+
     prompt_files = {
         "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
         "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
@@ -556,118 +389,154 @@ def main(perf: bool = False) -> None:
         "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
         "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"
     }
+
     for key, path in prompt_files.items():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-            res = httpx.put(f"{PROMPTS_API}/{key}", json={"value": content}, headers=AUTH_HEADERS)
-            if res.status_code < 400:
-                print(f"  - Successfully seeded prompt '{key}'")
-            else:
-                print(f"  ❌ Failed seeding prompt '{key}': HTTP {res.status_code} - {res.text}")
+            prompts_sql_lines.append(
+                f"INSERT INTO prompts (key, value, updated_at) "
+                f"VALUES ({sql_val(key)}, {sql_val(content)}, NOW());"
+            )
         except Exception as e:
-            print(f"  ❌ Error reading prompt '{key}': {e}")
+            print(f"  ❌ Warning: could not load prompt file '{path}': {e}")
 
-    print("\n🎯 Assigning Competencies to Users...")
-    for user in users:
-        # Assign 2 to 4 random competencies to each user
-        assigned = random.sample(comp_ids, k=random.randint(2, 4))
-        for cid in assigned:
-            assign_competency(user['id'], cid)
-        print(f"  - Assigned {len(assigned)} competencies to {user['username']}")
+    # --- 6. GENERATION SQL CV PROFILES ---
+    print("📁 Generating Synthetic CV Profiles SQL seed...")
+    cv_sql_lines = []
+    cv_sql_lines.append("TRUNCATE TABLE cv_profiles RESTART IDENTITY CASCADE;")
 
-    print("\n📄 Importing Initial Candidate CVs via RAG pipeline...")
-    cv_urls = [
-        "https://docs.google.com/document/d/1bIGg-17JMj9t7hO8jtB5G88yfF6eFJI-4vHiI1I4x3s/edit",
-        "https://docs.google.com/document/d/1SxWW-HN-cxGXBFerPRtvQpzfFKhKkKov/edit"
-    ]
-    for url in cv_urls:
-        print(f"  - Triggering Vectorial RAG Indexing for: {url}")
-        res = import_cv(url)
-        if res:
-            print(f"    ↳ Successfully imported CV mapping to User ID {res.get('user_id')} (Mapped {res.get('competencies_assigned')} competencies)")
+    user_ids_for_cv = [u["id"] for u in seeded_users]
+    for uid in user_ids_for_cv:
+        stack = random.choice(TECH_STACKS)
+        role = random.choice(ROLES)
+        yoe = random.randint(3, 15)
+        client1 = random.choice(CLIENTS_FAKE)
+        client2 = random.choice(CLIENTS_FAKE)
+        summary = (
+            f"{role} avec {yoe} ans d'experience. "
+            f"Expert en {', '.join(stack[:3])}. "
+            f"Missions recentes chez {client1} et {client2}."
+        )
+        missions = [
+            {
+                "title": f"Mission {i + 1}",
+                "client": random.choice(CLIENTS_FAKE),
+                "duration_months": random.randint(6, 24),
+                "skills": random.sample(stack, k=min(3, len(stack))),
+                "description": f"Projet {i + 1} : architecture et developpement avec {stack[0]}.",
+            }
+            for i in range(random.randint(3, 8))
+        ]
+        raw = (
+            f"CV synthetique perf-test\n"
+            f"Role : {role}\n"
+            f"Experience : {yoe} ans\n"
+            f"Competences : {', '.join(stack)}\n"
+            f"Missions : {len(missions)} missions.\n"
+        )
+        extracted = [{"name": s, "level": "confirmed"} for s in stack]
 
-    print("\n📁 Seeding Drive Folders for CV Intake...")
-    try:
-        import psycopg2
-        db_url = get_db_url("drive")
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        # Seed the Niort folder
-        cur.execute("SELECT id FROM drive_folders WHERE google_folder_id = '1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin'")
-        if not cur.fetchone():
-            cur.execute("""
-                INSERT INTO drive_folders (google_folder_id, tag, created_at)
-                VALUES ('1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin', 'Niort', %s)
-            """, (datetime.now(timezone.utc),))
+        pg_text_array = f"ARRAY[{', '.join(sql_val(s) for s in stack)}]::text[]"
+        cv_sql_lines.append(
+            f"INSERT INTO cv_profiles (user_id, source_url, source_tag, extracted_competencies, "
+            f"\"current_role\", years_of_experience, summary, competencies_keywords, missions, "
+            f"raw_content, is_archived, created_at) VALUES ("
+            f"{uid}, {sql_val(f'perf-test://synthetic/{uid}')}, 'perf-test', {sql_val(extracted)}, "
+            f"{sql_val(role)}, {yoe}, {sql_val(summary)}, {pg_text_array}, {sql_val(missions)}, "
+            f"{sql_val(raw)}, FALSE, NOW());"
+        )
+
+    cv_sql_lines.append(
+        "SELECT setval(pg_get_serial_sequence('cv_profiles', 'id'), "
+        "coalesce(max(id), 1)) FROM cv_profiles;"
+    )
+
+    # --- 7. GENERATION SQL DRIVE FOLDERS ---
+    print("📁 Generating Drive Mapping SQL seed...")
+    drive_sql_lines = []
+    drive_sql_lines.append("TRUNCATE TABLE drive_folders RESTART IDENTITY CASCADE;")
+    drive_sql_lines.append(
+        "INSERT INTO drive_folders (id, google_folder_id, tag, created_at) "
+        "VALUES (1, '1WdjkhFc41wYxU3KgirDUH6xYWDSFkDin', 'Niort', NOW());"
+    )
+    drive_sql_lines.append(
+        "SELECT setval(pg_get_serial_sequence('drive_folders', 'id'), "
+        "coalesce(max(id), 1)) FROM drive_folders;"
+    )
+
+    # --- 8. ECRITURE DES FICHIERS SQL PHYSIQUES ---
+    print("\n💾 Writing physical SQL seed files per database...")
+    for db_name, lines in [
+        ("users", users_sql_lines),
+        ("items", items_sql_lines),
+        ("competencies", comp_sql_lines),
+        ("prompts", prompts_sql_lines),
+        ("cv", cv_sql_lines),
+        ("drive", drive_sql_lines)
+    ]:
+        filepath = sql_files[db_name]
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        print(f"  - Wrote {filepath} ({len(lines)} lines)")
+
+    # --- 9. EXECUTION DIRECTE EN BD ---
+    print("\n⚡ Executing generated SQL seed files directly on PostgreSQL...")
+    for db_name, filepath in sql_files.items():
+        try:
+            conn = psycopg2.connect(get_db_url(db_name))
+            cur = conn.cursor()
+            with open(filepath, "r", encoding="utf-8") as f:
+                sql_content = f.read()
+            cur.execute(sql_content)
             conn.commit()
-            print("  - Inserted Drive mapping for 'Niort'.")
-        else:
-            print("  - Drive mapping 'Niort' already exists.")
+            cur.close()
+            conn.close()
+            print(f"  - [{db_name}] Successfully seeded directly from SQL file!")
+        except Exception as e:
+            print(f"  ❌ Error executing seed for [{db_name}] from {filepath}: {e}")
+
+    # --- 10. ECRITURE DU REFERENTIEL PARTAGE AVEC LOCUST ---
+    print("\n📄 Writing seeded_ids.json for locust referential...")
+
+    # Collecte rapide et propre des item_ids via SQL
+    item_ids = []
+    try:
+        conn = psycopg2.connect(get_db_url("items"))
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM items ORDER BY id LIMIT 50000;")
+        item_ids = [row[0] for row in cur.fetchall()]
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"  - Error seeding drive folder: {e}")
+        print(f"  ❌ Erreur collecte SQL item_ids: {e}")
 
-    # Injection de faux CVs pour eviter les 404 lors des tests de perf
-    print("\n🎭 Seeding synthetic CV profiles (perf-test, no LLM)...")
-    user_ids_for_cv = [u['id'] for u in users if u and u.get('id')]
-    seed_cv_profiles(user_ids_for_cv)
-
-    # --- Ecriture du referentiel partage avec locust ---
-    print("\n📄 Writing seeded_ids.json for locust referential...")
-
-    # Collecte de tous les item_ids via pagination complete (evite la limite hard de 500)
-    item_ids: list[int] = []
-    skip = 0
-    limit = 100  # max limite acceptee par l'endpoint items_api (le=100)
-    while True:
-        try:
-            resp = httpx.get(
-                f"{ITEMS_API}/",
-                params={"skip": skip, "limit": limit},
-                headers=AUTH_HEADERS,
-                timeout=30.0,
-            )
-            if resp.status_code != 200:
-                print(f"  ❌ GET /items/ HTTP {resp.status_code}: {resp.text[:120]}")
-                break
-            data = resp.json()
-            batch = [i["id"] for i in data.get("items", [])]
-            item_ids.extend(batch)
-            if len(batch) < limit:
-                break
-            skip += limit
-        except Exception as e:
-            print(f"  ❌ Erreur collecte item_ids (skip={skip}): {e}")
-            break
-
-    # Collecte des mission_ids directement via DB (evite les filtres JWT)
-    mission_ids: list[int] = []
+    # Collecte rapide et propre des mission_ids via SQL
+    mission_ids = []
     try:
-        import psycopg2
         conn = psycopg2.connect(get_db_url("missions"))
         cur = conn.cursor()
-        cur.execute("SELECT id FROM missions ORDER BY id LIMIT 5000;")
+        cur.execute("SELECT id FROM missions ORDER BY id LIMIT 50000;")
         mission_ids = [row[0] for row in cur.fetchall()]
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"  ❌ Erreur collecte mission_ids: {e}")
+        print(f"  ❌ Erreur collecte SQL mission_ids: {e}")
 
     seeded = {
         "_comment": "Genere par seed_data.py — source de verite pour locustfile.py. Ne pas editer.",
         "_generated_at": datetime.now(timezone.utc).isoformat(),
-        "user_ids": [u["id"] for u in users if u and u.get("id")],
+        "user_ids": [u["id"] for u in seeded_users],
         "cv_profile_user_ids": user_ids_for_cv,
         "category_ids": category_ids,
         "item_ids": item_ids,
         "mission_ids": mission_ids,
         "prompt_keys": list(_TEST_DATA.get("prompt_keys", [])),
     }
-    os.makedirs(_DATA_DIR, exist_ok=True)
+
     with open(_SEEDED_IDS_PATH, "w", encoding="utf-8") as sf:
         json.dump(seeded, sf, indent=2, ensure_ascii=False)
+
     print(
         f"  - seeded_ids.json ecrit : "
         f"{len(seeded['user_ids'])} users, "
@@ -676,12 +545,12 @@ def main(perf: bool = False) -> None:
         f"{len(seeded['mission_ids'])} missions"
     )
 
-    print("\n✨ Done! Zenika Seed process complete.")
+    print("\n✨ Done! Fast SQL-based Zenika Seed process complete.")
 
 
 if __name__ == "__main__":
     import argparse
-    _parser = argparse.ArgumentParser(description="Zenika Seed Data")
+    _parser = argparse.ArgumentParser(description="Zenika Seed Data (SQL-based)")
     _parser.add_argument("--perf", action="store_true", help="Mode perf : 400 users, 2000 items")
     _args = _parser.parse_args()
     main(perf=_args.perf)

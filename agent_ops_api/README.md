@@ -21,6 +21,9 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 | `SHARED_VERSION` | Comportement | `${SHARED_VERSION}` |
 | `PATH` | Comportement | `"/app/.venv/bin:$PATH"` |
 | `PYTHONPATH` | Comportement | `/app` |
+| `GEMINI_API_BASE_URL` | Infra | `""` |
+| `VERTEX_API_BASE_URL` | Infra | `""` |
+| `ENABLE_GEMINI_CONTEXT_CACHE` | Comportement | `false` |
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `GEMINI_OPS_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `ENABLE_OUTPUT_SCHEMA` | Comportement | `false` |

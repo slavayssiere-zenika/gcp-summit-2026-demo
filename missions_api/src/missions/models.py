@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from shared.database import Base
 from pgvector.sqlalchemy import Vector
@@ -58,7 +58,7 @@ class Mission(Base):
     semantic_embedding = Column(Vector(3072), nullable=True)
     # R1 — versionning du modèle d'embedding : invalide les recherches cross-modèle
     embedding_model = Column(String(100), nullable=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class MissionStatusHistory(Base):
@@ -70,4 +70,4 @@ class MissionStatusHistory(Base):
     new_status = Column(String(30), nullable=False)
     reason = Column(Text, nullable=True)
     changed_by = Column(String(255), nullable=False)
-    changed_at = Column(DateTime, default=datetime.utcnow)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

@@ -22,6 +22,8 @@ COPY cv_api/ .
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
+ENV GEMINI_API_BASE_URL=""
+ENV VERTEX_API_BASE_URL=""
 ENV GEMINI_MODEL=gemini-2.5-flash
 ENV GEMINI_PRO_MODEL=gemini-2.5-pro
 ENV GEMINI_BATCH_MODEL=gemini-2.5-flash

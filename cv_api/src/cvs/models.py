@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from shared.database import Base
 from pgvector.sqlalchemy import Vector
@@ -37,7 +37,7 @@ class CVProfile(Base):
     # [] = pas d'erreur, ["Echec d'assignation de 'Angular'"] = compétence manquante
     # Critique : une compétence non assignée rend le consultant invisible à la recherche
     processing_errors = Column(JSONB, nullable=True, default=list)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class CVMissionEmbedding(Base):
@@ -64,4 +64,4 @@ class CVMissionEmbedding(Base):
     chunk_embedding = Column(Vector(3072), nullable=True)
     embedding_model = Column(String(100), nullable=True, index=True)
     source_tag = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

@@ -3,7 +3,7 @@ test_mock_gemini_config.py — Tests unitaires pour config.py.
 
 Couvre les deux modes d'exécution :
   - PRD : GEMINI_API_BASE_URL et VERTEX_API_BASE_URL absents → comportement original.
-  - Perf-test local : variables présentes → HttpOptions avec baseUrl → redirection mock.
+  - Perf-test local : variables présentes → HttpOptions avec base_url → redirection mock.
 
 Ces tests rejouent l'initialisation de config.py via importlib.reload pour isoler
 l'effet de chaque variable d'environnement.
@@ -128,7 +128,7 @@ class TestConfigPerfTestMode:
     """
 
     def test_gemini_client_uses_mock_base_url(self):
-        """Perf : client Gemini créé avec HttpOptions(baseUrl=mock_gemini) et mock-key-local."""
+        """Perf : client Gemini créé avec HttpOptions(base_url=mock_gemini) et mock-key-local."""
         mock_client_cls = MagicMock()
         mock_http_opts_cls = MagicMock()
         mock_opts_instance = MagicMock()
@@ -141,8 +141,8 @@ class TestConfigPerfTestMode:
                 "GEMINI_API_BASE_URL": "http://mock_gemini:8099",
             })
 
-        # HttpOptions doit être instancié avec baseUrl=mock_gemini
-        mock_http_opts_cls.assert_called_once_with(baseUrl="http://mock_gemini:8099")
+        # HttpOptions doit être instancié avec base_url=mock_gemini (snake_case — champ Pydantic réel)
+        mock_http_opts_cls.assert_called_once_with(base_url="http://mock_gemini:8099")
 
         # Client doit être créé avec api_key=mock-key-local et http_options
         gemini_api_calls = [
@@ -155,7 +155,7 @@ class TestConfigPerfTestMode:
         assert cfg.GEMINI_API_BASE_URL == "http://mock_gemini:8099"
 
     def test_vertex_batch_client_uses_mock_base_url(self):
-        """Perf : vertex_batch_client créé avec HttpOptions(baseUrl=mock_gemini)."""
+        """Perf : vertex_batch_client créé avec HttpOptions(base_url=mock_gemini)."""
         mock_client_cls = MagicMock()
         mock_http_opts_cls = MagicMock()
         mock_opts_instance = MagicMock()
@@ -175,7 +175,7 @@ class TestConfigPerfTestMode:
         vertex_calls = [c for c in mock_client_cls.call_args_list if c.kwargs.get("vertexai") is True]
         assert vertex_calls, "genai.Client(vertexai=True) doit être appelé en mode perf"
         assert vertex_calls[0].kwargs.get("http_options") is mock_opts_instance, (
-            "vertex_batch_client doit recevoir http_options=HttpOptions(baseUrl=mock_gemini)"
+            "vertex_batch_client doit recevoir http_options=HttpOptions(base_url=mock_gemini)"
         )
         assert cfg.VERTEX_API_BASE_URL == "http://mock_gemini:8099"
 

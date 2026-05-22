@@ -6,6 +6,12 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from agent_commons.prompt_loader import get_or_create_gemini_context_cache
 
 
+@pytest.fixture(autouse=True)
+def enable_cache_env(monkeypatch):
+    """Active le cache par défaut pour conserver la validité des tests existants."""
+    monkeypatch.setenv("ENABLE_GEMINI_CONTEXT_CACHE", "true")
+
+
 @pytest.fixture
 def mock_cache():
     """Mock les fonctions get_cache et set_cache de shared.cache."""
@@ -103,6 +109,40 @@ async def test_cache_prompt_too_short(mock_cache, mock_genai_client):
     result = await get_or_create_gemini_context_cache(
         prompt_key="agent_hr_api.system_instruction",
         prompt_text="Short prompt",
+        model="gemini-2.5-flash",
+    )
+
+    assert result is None
+    mock_get.assert_not_called()
+    mock_genai_client.caches.create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cache_disabled_by_default(monkeypatch, mock_cache, mock_genai_client):
+    """Vérifie que si la variable d'environnement est à false, le cache renvoie None."""
+    monkeypatch.setenv("ENABLE_GEMINI_CONTEXT_CACHE", "false")
+    mock_get, mock_set = mock_cache
+
+    result = await get_or_create_gemini_context_cache(
+        prompt_key="agent_hr_api.system_instruction",
+        prompt_text="A" * 200,
+        model="gemini-2.5-flash",
+    )
+
+    assert result is None
+    mock_get.assert_not_called()
+    mock_genai_client.caches.create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cache_disabled_when_env_missing(monkeypatch, mock_cache, mock_genai_client):
+    """Vérifie que si la variable d'environnement est absente, le cache renvoie None."""
+    monkeypatch.delenv("ENABLE_GEMINI_CONTEXT_CACHE", raising=False)
+    mock_get, mock_set = mock_cache
+
+    result = await get_or_create_gemini_context_cache(
+        prompt_key="agent_hr_api.system_instruction",
+        prompt_text="A" * 200,
         model="gemini-2.5-flash",
     )
 

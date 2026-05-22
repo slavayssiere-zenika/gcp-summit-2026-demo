@@ -195,6 +195,18 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
           }
         }
       }
+      env {
+        name  = "GEMINI_API_BASE_URL"
+        value = ""
+      }
+      env {
+        name  = "VERTEX_API_BASE_URL"
+        value = ""
+      }
+      env {
+        name  = "ENABLE_GEMINI_CONTEXT_CACHE"
+        value = "false"
+      }
     }
   }
 
