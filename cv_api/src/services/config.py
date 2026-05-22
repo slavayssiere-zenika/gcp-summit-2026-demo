@@ -61,7 +61,7 @@ try:
     # VERTEX_API_BASE_URL : redirection vers mock_gemini pour les batch jobs (mode perf local).
     # En PRD : absent → None → appels Vertex AI normaux (ADC / service account).
     VERTEX_API_BASE_URL: str = os.getenv("VERTEX_API_BASE_URL", "")
-    _vertex_http_opts = HttpOptions(baseUrl=VERTEX_API_BASE_URL) if VERTEX_API_BASE_URL else None
+    _vertex_http_opts = HttpOptions(base_url=VERTEX_API_BASE_URL) if VERTEX_API_BASE_URL else None
     if GCP_PROJECT_ID and VERTEX_LOCATION:
         vertex_batch_client = genai.Client(
             vertexai=True,

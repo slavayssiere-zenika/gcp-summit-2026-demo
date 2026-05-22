@@ -58,9 +58,9 @@ def list_runs() -> list[tuple[str, Path]]:
     if not HISTORY_DIR.exists():
         return []
     seen: dict[str, Path] = {}
-    for f in sorted(HISTORY_DIR.glob("*_perf_stats_stats.csv"), reverse=True):
-        # Format : YYYYMMDD_HHMM_perf_stats_stats.csv
-        prefix = "_".join(f.name.split("_")[:2])  # YYYYMMDD_HHMM
+    for f in sorted(HISTORY_DIR.glob("*_stats.csv"), reverse=True):
+        # Le nom complet sans '_stats.csv' sert de clé (prefix) pour identifier de façon unique ce run/phase
+        prefix = f.name[:-10]
         if prefix not in seen:
             seen[prefix] = f
     return list(seen.items())
@@ -120,7 +120,12 @@ def compare(runs: list[tuple[str, Path]], output_md: bool = False) -> None:
             raw = agg.get(key, "0") or "0"
             try:
                 raw_vals.append(float(raw))
-                vals.append(_fmt_ms(raw) if "%" not in label else f"{float(raw):.1f}%")
+                if "(ms)" in label:
+                    vals.append(_fmt_ms(raw))
+                elif "%" in label:
+                    vals.append(f"{float(raw):.1f}%")
+                else:
+                    vals.append(f"{float(raw):.1f}")
             except (ValueError, TypeError):
                 raw_vals.append(0.0)
                 vals.append("—")
@@ -175,8 +180,11 @@ def compare(runs: list[tuple[str, Path]], output_md: bool = False) -> None:
         f"| Req/s | Fail% | ΔP95 | ΔP99 |"
     )
     print("|---|---|---|---|---|---|---|---|")
-    for name, p50_new, p95_new, p99_new, rps_new, fail_pct_new, delta_p95, delta_p99 in rows[:25]:
-        status = "✅" if p95_new < WARN_P95_MS else ("⚠️" if p95_new < CRIT_P95_MS else "❌")
+    for name, p50_new, p95_new, p99_new, rps_new, fail_pct_new, delta_p95, delta_p99 in rows[:50]:
+        if fail_pct_new > 1.0:
+            status = "❌"
+        else:
+            status = "✅" if p95_new < WARN_P95_MS else ("⚠️" if p95_new < CRIT_P95_MS else "❌")
         trend_p95 = f"+{delta_p95:.0f}% 📈" if delta_p95 > 10 else (
             f"{delta_p95:.0f}% 📉" if delta_p95 < -10 else f"{delta_p95:.0f}%"
         )
@@ -199,8 +207,8 @@ def compare(runs: list[tuple[str, Path]], output_md: bool = False) -> None:
     # Nouvelles erreurs
     print(f"\n### Nouvelles erreurs ({latest_ts} vs {prev_ts})\n")
     # Charger les failures
-    fail_path = HISTORY_DIR / f"{latest_ts}_perf_stats_failures.csv"
-    prev_fail_path = HISTORY_DIR / f"{prev_ts}_perf_stats_failures.csv"
+    fail_path = HISTORY_DIR / f"{latest_ts}_failures.csv"
+    prev_fail_path = HISTORY_DIR / f"{prev_ts}_failures.csv"
     new_errors = []
     if fail_path.exists():
         with fail_path.open(encoding="utf-8") as f:

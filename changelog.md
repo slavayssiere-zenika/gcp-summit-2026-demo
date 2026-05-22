@@ -1,3 +1,75 @@
+## Mise à jour automatique - 2026-05-22 13:42:34
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2620  | 585  |  78% |
+| agent_hr_api     | 1477  | 179  |  88% |
+| agent_missions_api | 1766  | 198  |  89% |
+| agent_ops_api    | 1348  | 187  |  86% |
+| agent_router_api | 3278  | 577  |  82% |
+| analytics_mcp    | 931   | 141  |  85% |
+| competencies_api | 4993  | 993  |  80% |
+| cv_api           | 9536  | 1584 |  83% |
+| drive_api        | 3493  | 425  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2168  | 227  |  90% |
+| monitoring_mcp   | 1162  | 128  |  89% |
+| platform-engineering | 1497  | 1212 |  19% |
+| prompts_api      | 1350  | 252  |  81% |
+| scratch          | N/A   | N/A  | N/A  |
+| shared           | 2935  | 300  |  90% |
+| tests            | 578   | 38   |  93% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Fix pipeline warnings and exclude virtualenvs
+
+#### Fichiers (non commités)
+- `gent_commons/agent_commons/__init__.py` (M)
+- `agent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/gemini_mock_patch.py` (M)
+- `cv_api/src/services/config.py` (M)
+- `docker-compose.yml` (M)
+- `drive_api/spec.md` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `missions_api/spec.md` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/spec.md` (M)
+- `scripts/compare_runs.py` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/local_up.py` (M)
+
+---
+
 ## Mise à jour automatique - 2026-05-22 11:19:55
 
 ### Couverture de Code

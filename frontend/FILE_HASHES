@@ -163,13 +163,13 @@ d4bc6496b8be3f49d2326d929aa59e9349eadf81  ./frontend/coverage/src/services/index
 d4fa57bf9dc066da87638a0d9120ab698ed5d55c  ./frontend/coverage/src/views/ImportCV.vue.html
 d67f146079ae13937e4d1a21b9e6e36cfc8c3332  ./frontend/index.html
 d69d889a0769514ff8f910d8a21337002b16b762  ./frontend/src/data/docs.ts
+d704df23f6b6037302358da167f2254f999d381e  ./frontend/vitest.log
 d7671e1b9706ad15301ff2cd718774ab1b8fb11a  ./frontend/coverage/src/components/DriveAdminPanel.vue.html
 d79d012b7ebee513e6111c6ffbfc3cbe05724394  ./frontend/coverage/src/views/AiOps.vue.html
 d825eeb4d513d858c51e06de98899f1c4667cee9  ./frontend/coverage/src/data/index.html
 d973ce52f14db14cd844b8c4677be10a3f017094  ./frontend/src/stores/__tests__/chatStore.spec.ts
 d9a48401c21325b78b99e7afabee0f140d576604  ./frontend/src/components/agent/__tests__/ItemCard.spec.ts
 da5c0ef467a330913336cd9b0da5f3c900af6c3e  ./frontend/coverage/sort-arrow-sprite.png
-db81ed7a360babac7cabc7cccd8e941aa3c45fb8  ./frontend/vitest.log
 dc8e4d271329feadc712d7f69c562a41495a01b4  ./frontend/coverage/src/components/index.html
 de48769f243677e77d535ee0b60ac009197b981e  ./frontend/package.json
 e0d0263fe312e2a673b155691909dc959fa542da  ./frontend/src/views/ExtractionQualityList.vue

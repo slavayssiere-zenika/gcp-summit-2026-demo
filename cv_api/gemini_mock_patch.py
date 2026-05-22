@@ -53,7 +53,7 @@ try:
                 http_opts = types.HttpOptions()
             elif isinstance(http_opts, dict):
                 http_opts = types.HttpOptions(**http_opts)
-            http_opts.baseUrl = base_url
+            http_opts.base_url = base_url
             kwargs["http_options"] = http_opts
 
             if not is_vertex and not kwargs.get("api_key"):

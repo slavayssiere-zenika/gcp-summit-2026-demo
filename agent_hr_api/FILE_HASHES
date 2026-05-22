@@ -26,7 +26,6 @@
 3150bbb348706913a15cb98d2842bddc16e5a8b3  ./agent_hr_api/requirements.txt
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 334148686822e2c057a1bb0454a5a6633e679cc2  ./agent_commons/agent_commons/schemas.py
-358f67a5a2a6979a8db5f26957ae234bc6b2a203  ./agent_commons/agent_commons/__init__.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 3a57f409c89539d715c90e9b1f914b8e91dc85df  ./agent_hr_api/tests/test_jwt_propagation.py
 3a6c326298eabc6070c6ff2dfae1be0a70f2d6fd  ./agent_hr_api/pytest.ini
@@ -78,6 +77,7 @@ c6678f4d4bf49c9483170176c42087f363bbd700  ./agent_commons/agent_commons/finops.p
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 c6ec114836b9c8e69e30c480b2e76150c55e3bba  ./agent_hr_api/tests/test_runner_propagation.py
 c8d2926fee2b4f9d526cb84381ecc9916adaabed  ./agent_commons/tests/test_exception_handler.py
+c8e2b15dd9eb64763a8a2349a1b95cffac979650  ./agent_commons/agent_commons/__init__.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb18b3f18a06ed361898a1af3c512a1384b2e362  ./agent_commons/tests/test_finops.py

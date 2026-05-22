@@ -609,6 +609,8 @@ services:
   # Infrastructure
   redis:
     image: redis:7-alpine
+    container_name: redis
+    hostname: redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -617,19 +619,27 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - redis
 
   redis_exporter:
     image: oliver006/redis_exporter:latest
+    container_name: redis_exporter
+    hostname: redis_exporter
     environment:
       - REDIS_ADDR=redis://redis:6379
     depends_on:
       - redis
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - redis_exporter
 
   postgres:
     image: pgvector/pgvector:pg15
+    container_name: postgres
+    hostname: postgres
     ports:
       - "5432:5432"
     environment:
@@ -655,16 +665,22 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - postgres
 
   postgres_exporter:
     image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres_exporter
+    hostname: postgres_exporter
     environment:
       - DATA_SOURCE_NAME=postgresql://postgres:postgres@postgres:5432/mydb?sslmode=disable
     depends_on:
       - postgres
     networks:
-      - monitoring_net
+      monitoring_net:
+        aliases:
+          - postgres_exporter
 
   prometheus:
     image: prom/prometheus:latest

@@ -164,6 +164,32 @@ def run(cmd: list, **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, **kwargs)
 
 
+def load_perf_env() -> None:
+    """Charge le fichier .env.perf dans os.environ pour propager les variables au compose."""
+    perf_env_path = ROOT / ".env.perf"
+    if not perf_env_path.exists():
+        print(f"⚠️  Fichier d'environnement de performance introuvable : {perf_env_path}")
+        return
+
+    print(f"\n⚙️  Chargement de l'environnement de performance depuis {perf_env_path.name}...")
+    with open(perf_env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            # Ignorer les commentaires et les lignes vides
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip()
+                # On ne surcharge pas si déjà défini dans l'environnement hôte, sauf si vide
+                if not os.environ.get(key):
+                    os.environ[key] = val
+                    print(f"  • {key}={val}")
+                else:
+                    print(f"  • {key} déjà défini dans l'hôte (conservation de la valeur)")
+
+
 def ar_image(service: str, tag: str = "latest") -> str:
     """Retourne le nom complet de l'image dans Artifact Registry."""
     return f"{AR_REPO}/{service}:{tag}"
@@ -312,14 +338,17 @@ def ensure_frontend(force: bool = False) -> None:
 
 # ── Docker Compose ────────────────────────────────────────────────────────────
 
-def compose_up(services: list) -> None:
+def compose_up(services: list, profile: str = None) -> None:
     """Lance docker-compose up -d en reutilisant les images existantes (pas de rebuild).
 
     Le vrai build appartient exclusivement a deploy.sh.
     --remove-orphans assure que les nouveaux env vars (DB_POOL_SIZE, etc.) sont pris en
     compte en recreant les conteneurs si la config docker-compose a change.
     """
-    cmd = ["docker-compose", "up", "-d", "--no-build", "--remove-orphans"]
+    cmd = ["docker-compose"]
+    if profile:
+        cmd += ["--profile", profile]
+    cmd += ["up", "-d", "--no-build", "--remove-orphans"]
     if services:
         cmd += services
     print(f"\n🚀 Démarrage : {' '.join(cmd)}")
@@ -1232,6 +1261,10 @@ def main() -> None:
         _mode = "up"
     _init_session_log(_mode)
 
+    # Charger l'environnement de performance si mode perf/stress/full actif
+    if parsed.full or parsed.perf or parsed.stress:
+        load_perf_env()
+
     # Modes seed standalone (sans docker-compose up)
     if parsed.seed or parsed.seed_perf:
         run_seed(perf=parsed.seed_perf)
@@ -1244,6 +1277,11 @@ def main() -> None:
     ensure_images(services, force_pull=not parsed.no_pull)
     ensure_frontend(force=not parsed.no_pull)
     compose_up(parsed.service or [])
+
+    if parsed.full or parsed.perf or parsed.stress:
+        # Demarre uniquement les services mock de support sans lancer locust en arriere-plan
+        _profile = "perf-stress" if (parsed.full or parsed.stress) else "perf"
+        compose_up(["mock_gemini", "pubsub-emulator"], profile=_profile)
 
     if parsed.full or parsed.perf or parsed.stress:
         wait_for_services(max_wait_s=90)

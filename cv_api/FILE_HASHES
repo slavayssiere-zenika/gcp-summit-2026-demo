@@ -33,6 +33,7 @@
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 36c490aeda838e6caf4793d95ab22a01c99225d8  ./cv_api/tests/test_outbound_propagation.py
 370674537fadb2bf1c81def24f56edaa44b817a9  ./cv_api/tests/test_taxonomy_batch_service_extended.py
+3e78ca4bd0b2a1fbd3bb17db59656c706fe7c63a  ./cv_api/gemini_mock_patch.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 427f9fe479b0c5fbea742d29153a80e3a35e406f  ./cv_api/tests/test_bulk_service.py
 42e837d86d24ae1aca0af9b3b0b3151ae4808a99  ./cv_api/tests/test_mcp_app.py
@@ -47,7 +48,6 @@
 58735d896388e6be20b445afe31c8f6632927a56  ./cv_api/tests/integration/test_bulk_pipeline_integration.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 5e3f2c568fa296cb4a7f635d6c628268ef99655c  ./cv_api/scripts/temp_analyze_map.py
-5f3c378bbba38d3c038e5d20f106771d19debc8f  ./cv_api/gemini_mock_patch.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 627b358d1b39c41950017f91bf8dadbddf195322  ./cv_api/src/services/retry_service.py
 635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
@@ -126,6 +126,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 dc876eecfd7b512c6af7c035696bd1fec63f401c  ./cv_api/src/services/profile_service.py
 df690dc162be4b0b20ccc206017de72827e178b2  ./cv_api/tests/test_data_quality_service.py
+e0768995ee9efea3a67230592640701e14d67469  ./cv_api/src/services/config.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e3edafca8d2ce49a50b8172812cdd18aa3a78f00  ./cv_api/eval/golden_queries.json
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
@@ -143,7 +144,6 @@ ee081e14d066d8ad171547a623d6e09bf7cd58b9  ./cv_api/tests/integration/test_search
 eecdeb503cbc67a568828a4ec91566f5f2abbdfb  ./cv_api/src/services/utils.py
 efdd7cbcb0a3db88c876839710e61f143c0973d7  ./cv_api/src/services/bulk_service.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
-f52a12a9164b390cea33feb6236725d866962be8  ./cv_api/src/services/config.py
 f892685680acaea53bce1d026f627ae497d33f5a  ./cv_api/tools/taxonomy_tools.py
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 f8e99266dc8fc26f2d14da376eb28838a434a88d  ./cv_api/src/cvs/bulk_task_state.py

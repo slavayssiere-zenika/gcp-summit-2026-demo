@@ -701,6 +701,55 @@ check_docker_available() {
 }
 
 # ==============================================================================
+# Push resilient vers Artifact Registry (retry + timeout)
+# ==============================================================================
+#
+# push_with_retry <image>
+#   Tente jusqu'à PUSH_MAX_RETRIES fois (défaut 3) avec un timeout de
+#   PUSH_TIMEOUT secondes (défaut 300) par tentative.
+#   Entre chaque tentative : backoff exponentiel (15s → 30s) + refresh
+#   du token gcloud pour ne pas échouer sur un token expiré.
+#
+#   Pourquoi : docker push n'a pas de timeout intégré. Un blocage réseau
+#   idle (VPN, Wi-Fi instable) suspend le process indéfiniment, forçant
+#   une relance complète de deploy.sh.
+
+push_with_retry() {
+  local image="$1"
+  local max_attempts="${PUSH_MAX_RETRIES:-3}"
+  local push_timeout="${PUSH_TIMEOUT:-300}"
+  local attempt=0
+
+  while [ $attempt -lt $max_attempts ]; do
+    attempt=$((attempt + 1))
+    echo -e "  → [Push] Tentative $attempt/$max_attempts : $image"
+
+    if timeout "$push_timeout" docker push "$image"; then
+      echo -e "  ${GREEN}✅ [Push] Succès : $image${RESET}"
+      return 0
+    fi
+
+    local exit_code=$?
+    if [ $attempt -lt $max_attempts ]; then
+      local wait_time=$(( attempt * 15 ))
+      if [ $exit_code -eq 124 ]; then
+        echo -e "  ${YELLOW}⚠️  [Push] Timeout (${push_timeout}s dépassé) — retry dans ${wait_time}s...${RESET}"
+      else
+        echo -e "  ${YELLOW}⚠️  [Push] Échec (exit $exit_code) — retry dans ${wait_time}s...${RESET}"
+      fi
+      sleep "$wait_time"
+      # Rafraîchit les credentials AR avant la prochaine tentative
+      # (le token gcloud expire après 1h, un long build peut l'invalider)
+      echo -e "  ${GREY}[Push] Rafraîchissement des credentials gcloud...${RESET}"
+      gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet 2>/dev/null || true
+    fi
+  done
+
+  echo -e "  ${RED}❌ [Push] Échec après $max_attempts tentatives : $image${RESET}"
+  return 1
+}
+
+# ==============================================================================
 # Test Gate (fail-fast avant chaque docker build)
 # ==============================================================================
 
@@ -1050,8 +1099,8 @@ build_and_push_standard() {
 
     TAG=$(get_service_tag "$SERVICE" "none")
     echo "--- Pushing $SERVICE ($TAG) ---"
-    docker push "${IMAGE_NAME}:${TAG}"
-    docker push "${IMAGE_NAME}:latest"
+    push_with_retry "${IMAGE_NAME}:${TAG}"
+    push_with_retry "${IMAGE_NAME}:latest"
     
     if [ "$SKIP_CLOUDRUN" = true ]; then
       echo "--- Skipping update_cloudrun/jobs for $SERVICE ---"
@@ -1581,8 +1630,8 @@ for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
     local_tag=$(get_service_tag "db_init" "none")
     db_init_image="${DOCKER_REPO}/db_init:${local_tag}"
     echo "--- Pushing db_init ---"
-    docker push "${DOCKER_REPO}/db_init:${local_tag}"
-    docker push "${DOCKER_REPO}/db_init:latest"
+    push_with_retry "${DOCKER_REPO}/db_init:${local_tag}"
+    push_with_retry "${DOCKER_REPO}/db_init:latest"
 
     if [ "$SKIP_CLOUDRUN" = true ]; then
       echo "--- Skipping update_cloudrun/jobs for db_init ---"
