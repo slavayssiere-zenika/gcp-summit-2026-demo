@@ -43,3 +43,28 @@ gemini_model:              "gemini-3.1-flash-lite"          # [LEGACY] fallback
 gemini_embedding_model:    "gemini-embedding-001"           # SEC-F06 Semantic Cache
 trace_sampling_rate: 1.0
 enable_output_schema: false  # Activer pour output_schema Pydantic (StaffingResponse/MissionAnalysis) comme source de vérité display_type
+
+# ── Projets externes (optionnel) ──────────────────────────────────────────────
+# Permet d'intégrer des projets hors mono-repo dans le cycle de déploiement de la plateforme.
+# Chaque projet doit respecter la structure minimale suivante :
+#   <path>/
+#   ├── Dockerfile          (image Docker du service)
+#   ├── database/           (migrations Liquibase)
+#   └── terraform/          (modules Terraform pour le déploiement Cloud Run)
+#
+# Contraintes de nommage :
+#   - name             : kebab-case, regex ^[a-z][a-z0-9-]{2,30}$  (ex: ia-dev-memory)
+#   - lb_path          : chemin LB commençant par '/'               (ex: /ia-dev-memory)
+#   - version          : semver strict                              (ex: v0.1.0)
+#   - alloydb_database : nom de la base PostgreSQL (défaut: name avec tirets→underscores)
+#
+# La plateforme crée automatiquement :
+#   - un utilisateur IAM AlloyDB (Service Account du projet externe)
+#   - les rôles alloydb.client + alloydb.databaseUser sur le projet GCP
+#
+extra_projects:
+  - name: mcp-claude-memory
+    path: /Users/sebastien.lavayssiere/Code/MCP-Claude-mem-local
+    lb_path: /mcp-claude-memory
+    version: v1.0.6
+    alloydb_database: mcp_claude_memory

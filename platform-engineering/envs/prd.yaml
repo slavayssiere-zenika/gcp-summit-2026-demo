@@ -32,7 +32,7 @@ drive_api_version:          "v0.1.17"
 analytics_mcp_version:      "v0.1.16"
 monitoring_mcp_version:     "v0.1.15"
 db_migrations_version:      "v0.0.69"
-db_init_version:            "v0.1.3"
+db_init_version:            "v0.1.7"
 missions_api_version:       "v0.1.18"
 frontend_version:           "v0.1.12"
 
@@ -84,3 +84,16 @@ extra_domains:
     parent_zone_project_id:  "prod-ia-staffing"
 trace_sampling_rate: 0.1
 enable_output_schema: false  # Activer pour output_schema Pydantic (StaffingResponse/MissionAnalysis) comme source de vérité display_type
+
+
+# ── Projets externes ──────────────────────────────────────────────────────────
+# Chaque projet doit avoir : Dockerfile, database/, terraform/
+# Champs : name (kebab-case), path (absolu), lb_path (/xxx), version (vX.Y.Z),
+#          alloydb_database (optionnel, défaut = name avec tirets→underscores)
+#
+extra_projects:
+  - name: mcp-claude-memory
+    path: /Users/sebastien.lavayssiere/Code/MCP-Claude-mem-local
+    lb_path: /mcp-claude-memory
+    version: v1.0.14
+    alloydb_database: mcp_claude_memory

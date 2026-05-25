@@ -1,8 +1,11 @@
 import ast
 import asyncio
 import json
+import logging
 import os
 import sys
+
+logger = logging.getLogger(__name__)
 
 from shared.database import close_db_connector, get_db, init_db_connector
 from sqlalchemy.future import select
@@ -37,8 +40,11 @@ async def cleanup():
             except Exception:
                 try:
                     data = json.loads(comp.name)
-                except Exception:
-                    pass
+                except Exception as json_err:
+                    logger.debug(
+                        "Could not parse name for competency ID %s: %s — error: %s",
+                        comp.id, comp.name, json_err
+                    )
 
             if isinstance(data, dict):
                 new_name = data.get("name")

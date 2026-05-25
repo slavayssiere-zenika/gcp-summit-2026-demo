@@ -424,3 +424,349 @@ class TestRealYamlFiles:
         assert "docker.pkg.dev" in registry, (
             f"{env_file} : image_registry '{registry}' ne pointe pas sur Artifact Registry GCP."
         )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests : _terraform_apply_with_retry()
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestTerraformApplyWithRetry:
+    """Valide la logique de retry triple de _terraform_apply_with_retry()."""
+
+    def _make_result(self, returncode, stdout=""):
+        r = MagicMock()
+        r.returncode = returncode
+        r.stdout = stdout
+        return r
+
+    @patch("manage_env.run_cmd")
+    @patch("manage_env.import_resources_on_409", return_value=0)
+    @patch("manage_env.time.sleep")
+    def test_success_on_first_attempt(self, mock_sleep, mock_import, mock_run):
+        """Si le premier apply reussit, pas de retry ni de sleep."""
+        mock_run.return_value = self._make_result(0)
+        me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+        assert mock_run.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("manage_env.run_cmd")
+    @patch("manage_env.import_resources_on_409", return_value=2)
+    @patch("manage_env.time.sleep")
+    def test_success_after_409_import(self, mock_sleep, mock_import, mock_run):
+        """Apres un apply rate + import 409, le 2eme apply reussit."""
+        mock_run.side_effect = [self._make_result(1, "409"), self._make_result(0)]
+        me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+        assert mock_run.call_count == 2
+
+    @patch("manage_env.run_cmd")
+    @patch("manage_env.import_resources_on_409", return_value=0)
+    @patch("manage_env.time.sleep")
+    def test_exits_after_three_failures(self, mock_sleep, mock_import, mock_run):
+        """Apres 3 applies rates sans import possible, sys.exit est appele."""
+        mock_run.return_value = self._make_result(1)
+        with pytest.raises(SystemExit):
+            me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+
+    @patch("manage_env.run_cmd")
+    @patch("manage_env.import_resources_on_409", return_value=0)
+    @patch("manage_env.time.sleep")
+    def test_sleep_called_when_no_409_import(self, mock_sleep, mock_import, mock_run):
+        """Si l'import 409 ne trouve rien, un sleep de 15s est applique."""
+        mock_run.side_effect = [self._make_result(1), self._make_result(0)]
+        me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+        mock_sleep.assert_called_with(15)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests : _sanity_check_api_login()
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestSanityCheckApiLogin:
+    """Valide _sanity_check_api_login() : succes, fail-fast, retry IAM."""
+
+    def _make_ctx(self):
+        import ssl
+        return ssl.create_default_context()
+
+    @patch("manage_env.urllib.request.urlopen")
+    def test_returns_token_on_success(self, mock_urlopen):
+        """Retourne le token JWT si le login HTTP 200 reussit."""
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = b'{"access_token": "tok123"}'
+        mock_urlopen.return_value = mock_resp
+        token = me._sanity_check_api_login("api.dev.example.com", "pwd", self._make_ctx())
+        assert token == "tok123"
+
+    @patch("manage_env.generate_antigravity_error_report")
+    @patch("manage_env.urllib.request.urlopen")
+    def test_exits_on_repeated_failures(self, mock_urlopen, mock_report):
+        """sys.exit(1) est appele si toutes les 16 tentatives echouent."""
+        import urllib.error
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused")
+        with patch("manage_env.time.sleep"):
+            with pytest.raises(SystemExit) as exc_info:
+                me._sanity_check_api_login("api.dev.example.com", "pwd", self._make_ctx())
+        assert exc_info.value.code == 1
+        mock_report.assert_called_once()
+
+    @patch("manage_env.urllib.request.urlopen")
+    @patch("manage_env.time.sleep")
+    def test_retries_on_5xx(self, mock_sleep, mock_urlopen):
+        """Un HTTP 503 transitoire est suivi d'un retry avant le succes."""
+        import urllib.error
+        mock_resp_ok = MagicMock()
+        mock_resp_ok.status = 200
+        mock_resp_ok.read.return_value = b'{"access_token": "tok"}'
+        http_err = urllib.error.HTTPError(
+            url="", code=503, msg="Service Unavailable", hdrs={}, fp=None)
+        mock_urlopen.side_effect = [http_err, mock_resp_ok]
+        token = me._sanity_check_api_login("api.dev.example.com", "pwd", self._make_ctx())
+        assert token == "tok"
+        assert mock_urlopen.call_count == 2
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests : _rag_load_state()
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestRagLoadState:
+    """Valide que _rag_load_state() ne silence pas les erreurs."""
+
+    def test_returns_empty_dict_if_file_missing(self, tmp_path, monkeypatch):
+        """Si .rag_model_state.json n'existe pas, retourne {}."""
+        monkeypatch.setattr(me, "_RAG_STATE_FILE", str(tmp_path / "nonexistent.json"))
+        result = me._rag_load_state()
+        assert result == {}
+
+    def test_returns_parsed_content(self, tmp_path, monkeypatch):
+        """Si le fichier existe et est valide, retourne son contenu."""
+        state_file = tmp_path / ".rag_model_state.json"
+        state_file.write_text('{"dev": "gemini-embedding-001"}')
+        monkeypatch.setattr(me, "_RAG_STATE_FILE", str(state_file))
+        result = me._rag_load_state()
+        assert result == {"dev": "gemini-embedding-001"}
+
+    def test_logs_warning_on_invalid_json(self, tmp_path, monkeypatch, caplog):
+        """Si le JSON est invalide, un warning est logue (pas de silence)."""
+        import logging
+        state_file = tmp_path / ".rag_model_state.json"
+        state_file.write_text("{invalid json")
+        monkeypatch.setattr(me, "_RAG_STATE_FILE", str(state_file))
+        with caplog.at_level(logging.WARNING, logger="manage_env"):
+            result = me._rag_load_state()
+        assert result == {}
+        assert any("rag_model_state.json" in msg for msg in caplog.messages), (
+            "Un warning devrait etre logue en cas de JSON invalide."
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests : extra_projects — validate_extra_project_structure() + discover_extra_projects()
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _make_valid_project(tmp_path, name="ia-dev-memory", lb_path="/ia-dev-memory", version="v0.1.0"):
+    """Cree un projet externe valide dans tmp_path et retourne ses parametres."""
+    proj_dir = tmp_path / name
+    proj_dir.mkdir(exist_ok=True)
+    (proj_dir / "Dockerfile").write_text("FROM python:3.12-slim")
+    (proj_dir / "database").mkdir(exist_ok=True)
+    (proj_dir / "terraform").mkdir(exist_ok=True)
+    return {"name": name, "path": str(proj_dir), "lb_path": lb_path, "version": version}
+
+
+class TestValidateExtraProjectStructure:
+    """Valide validate_extra_project_structure() - toutes les regles de validation."""
+
+    def test_valid_project_structure(self, tmp_path):
+        """Un projet complet et bien nomme doit etre valide sans erreur."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], p["version"])
+        assert result["valid"] is True
+        assert result["errors"] == []
+
+    def test_invalid_name_uppercase(self, tmp_path):
+        """Un name avec majuscule doit etre rejete."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure("MyService", p["path"], p["lb_path"], p["version"])
+        assert result["valid"] is False
+        assert any("name" in e and "invalide" in e for e in result["errors"])
+
+    def test_invalid_name_underscore(self, tmp_path):
+        """Un name avec underscore doit etre rejete (kebab-case uniquement)."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure("my_service", p["path"], p["lb_path"], p["version"])
+        assert result["valid"] is False
+        assert any("name" in e for e in result["errors"])
+
+    def test_invalid_name_too_short(self, tmp_path):
+        """Un name de 2 caracteres doit etre rejete (minimum 3)."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure("ab", p["path"], p["lb_path"], p["version"])
+        assert result["valid"] is False
+        assert any("name" in e for e in result["errors"])
+
+    def test_invalid_lb_path_no_slash(self, tmp_path):
+        """Un lb_path sans '/' initial doit etre rejete."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure(p["name"], p["path"], "ia-dev-memory", p["version"])
+        assert result["valid"] is False
+        assert any("lb_path" in e for e in result["errors"])
+
+    def test_invalid_lb_path_with_space(self, tmp_path):
+        """Un lb_path avec espace doit etre rejete."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure(p["name"], p["path"], "/ia dev memory", p["version"])
+        assert result["valid"] is False
+        assert any("lb_path" in e and "espace" in e for e in result["errors"])
+
+    def test_invalid_version_no_v_prefix(self, tmp_path):
+        """Une version sans prefixe v doit etre rejetee."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], "1.0.0")
+        assert result["valid"] is False
+        assert any("version" in e for e in result["errors"])
+
+    def test_invalid_version_partial(self, tmp_path):
+        """Une version incomplete (v1.0) doit etre rejetee."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], "v1.0")
+        assert result["valid"] is False
+        assert any("version" in e for e in result["errors"])
+
+    def test_nonexistent_path(self):
+        """Un chemin inexistant doit etre rejete."""
+        result = me.validate_extra_project_structure(
+            "ia-dev-memory", "/nonexistent/path/abc", "/ia-dev-memory", "v0.1.0"
+        )
+        assert result["valid"] is False
+        assert any("introuvable" in e or "inaccessible" in e for e in result["errors"])
+
+    def test_missing_dockerfile(self, tmp_path):
+        """Un projet sans Dockerfile doit etre invalide."""
+        proj_dir = tmp_path / "no-docker"
+        proj_dir.mkdir()
+        (proj_dir / "database").mkdir()
+        (proj_dir / "terraform").mkdir()
+        result = me.validate_extra_project_structure(
+            "no-docker", str(proj_dir), "/no-docker", "v0.1.0"
+        )
+        assert result["valid"] is False
+        assert any("Dockerfile" in e for e in result["errors"])
+
+    def test_missing_database_dir(self, tmp_path):
+        """Un projet sans repertoire database/ doit etre invalide."""
+        proj_dir = tmp_path / "no-database"
+        proj_dir.mkdir()
+        (proj_dir / "Dockerfile").write_text("FROM python:3.12-slim")
+        (proj_dir / "terraform").mkdir()
+        result = me.validate_extra_project_structure(
+            "no-database", str(proj_dir), "/no-database", "v0.1.0"
+        )
+        assert result["valid"] is False
+        assert any("database" in e for e in result["errors"])
+
+    def test_missing_terraform_dir(self, tmp_path):
+        """Un projet sans repertoire terraform/ doit etre invalide."""
+        proj_dir = tmp_path / "no-terraform"
+        proj_dir.mkdir()
+        (proj_dir / "Dockerfile").write_text("FROM python:3.12-slim")
+        (proj_dir / "database").mkdir()
+        result = me.validate_extra_project_structure(
+            "no-terraform", str(proj_dir), "/no-terraform", "v0.1.0"
+        )
+        assert result["valid"] is False
+        assert any("terraform" in e for e in result["errors"])
+
+    def test_multiple_errors_accumulated(self, tmp_path):
+        """Plusieurs violations doivent toutes apparaitre dans .errors."""
+        proj_dir = tmp_path / "valid-name"
+        proj_dir.mkdir()
+        result = me.validate_extra_project_structure(
+            "BadName", str(proj_dir), "no-slash", "1.0"
+        )
+        assert result["valid"] is False
+        assert len(result["errors"]) >= 4
+
+    def test_result_contains_all_fields(self, tmp_path):
+        """Le dict retourne doit contenir tous les champs attendus."""
+        p = _make_valid_project(tmp_path)
+        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], p["version"])
+        for field in ("name", "path", "lb_path", "version", "valid", "errors"):
+            assert field in result, f"Champ {field!r} absent du resultat."
+
+
+class TestDiscoverExtraProjects:
+    """Valide discover_extra_projects() - orchestration et comportements d erreur."""
+
+    def test_returns_empty_if_no_extra_projects(self):
+        """Sans cle extra_projects, retourne une liste vide sans erreur."""
+        result = me.discover_extra_projects({})
+        assert result == []
+
+    def test_returns_empty_if_extra_projects_is_none(self):
+        """Avec extra_projects null dans le YAML, retourne une liste vide."""
+        result = me.discover_extra_projects({"extra_projects": None})
+        assert result == []
+
+    def test_returns_validated_list_for_valid_project(self, tmp_path):
+        """Un projet valide est retourne dans la liste."""
+        p = _make_valid_project(tmp_path)
+        result = me.discover_extra_projects({"extra_projects": [p]})
+        assert len(result) == 1
+        assert result[0]["name"] == p["name"]
+        assert result[0]["valid"] is True
+
+    def test_raises_on_invalid_project(self, tmp_path):
+        """Un projet invalide (structure manquante) declenche DeploymentError."""
+        proj_dir = tmp_path / "ia-dev-memory"
+        proj_dir.mkdir()
+        config = {"extra_projects": [
+            {"name": "ia-dev-memory", "path": str(proj_dir), "lb_path": "/ia-dev-memory", "version": "v0.1.0"}
+        ]}
+        import pytest as _pytest
+        with _pytest.raises(me.DeploymentError, match="invalide"):
+            me.discover_extra_projects(config)
+
+    def test_raises_on_duplicate_names(self, tmp_path):
+        """Deux projets avec le meme name declenchent DeploymentError."""
+        p1 = _make_valid_project(tmp_path, name="ia-dev-memory", lb_path="/ia-dev-memory")
+        proj_dir2 = tmp_path / "ia-dev-memory-2"
+        proj_dir2.mkdir()
+        (proj_dir2 / "Dockerfile").write_text("FROM python:3.12-slim")
+        (proj_dir2 / "database").mkdir()
+        (proj_dir2 / "terraform").mkdir()
+        p2 = {"name": "ia-dev-memory", "path": str(proj_dir2), "lb_path": "/other-path", "version": "v0.1.0"}
+        config = {"extra_projects": [p1, p2]}
+        import pytest as _pytest
+        with _pytest.raises(me.DeploymentError, match="Doublon de name"):
+            me.discover_extra_projects(config)
+
+    def test_raises_on_duplicate_lb_paths(self, tmp_path):
+        """Deux projets avec le meme lb_path declenchent DeploymentError."""
+        p1 = _make_valid_project(tmp_path, name="service-a", lb_path="/shared-path")
+        p2 = _make_valid_project(tmp_path, name="service-b", lb_path="/shared-path")
+        config = {"extra_projects": [p1, p2]}
+        import pytest as _pytest
+        with _pytest.raises(me.DeploymentError, match="Doublon de lb_path"):
+            me.discover_extra_projects(config)
+
+    def test_raises_on_missing_required_field(self, tmp_path):
+        """Un projet sans champ version declenche DeploymentError."""
+        proj_dir = tmp_path / "ia-dev-memory"
+        proj_dir.mkdir()
+        config = {"extra_projects": [
+            {"name": "ia-dev-memory", "path": str(proj_dir), "lb_path": "/ia-dev-memory"}
+        ]}
+        import pytest as _pytest
+        with _pytest.raises(me.DeploymentError, match="manquants"):
+            me.discover_extra_projects(config)
+
+    def test_multiple_valid_projects(self, tmp_path):
+        """Deux projets valides et distincts sont tous les deux retournes."""
+        p1 = _make_valid_project(tmp_path, name="service-alpha", lb_path="/alpha")
+        p2 = _make_valid_project(tmp_path, name="service-beta", lb_path="/beta")
+        config = {"extra_projects": [p1, p2]}
+        result = me.discover_extra_projects(config)
+        assert len(result) == 2
+        names = {r["name"] for r in result}
+        assert names == {"service-alpha", "service-beta"}

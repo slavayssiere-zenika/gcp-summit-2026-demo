@@ -130,6 +130,46 @@ async def main() -> None:
         finally:
             await svc_conn.close()
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Étape 3 (optionnelle) : Base + GRANT pour un projet externe (extra_project)
+    # Déclenchée quand EXTRA_DB_NAME et EXTRA_IAM_USER sont définis par manage_env.py.
+    # ─────────────────────────────────────────────────────────────────────────
+    extra_db = get_env("EXTRA_DB_NAME", required=False)
+    extra_iam_user = get_env("EXTRA_IAM_USER", required=False)
+
+    if extra_db and extra_iam_user:
+        print(f"\n[DB INIT] ═══ Étape 3 : Extra project — base '{extra_db}' / SA '{extra_iam_user}' ═══",
+              flush=True)
+
+        # Création de la base si elle n'existe pas
+        try:
+            master_conn2 = await asyncpg.connect(master_dsn)
+            try:
+                await master_conn2.execute(f'CREATE DATABASE "{extra_db}";')
+                print(f"  ✓ Création de la base '{extra_db}'", flush=True)
+            except Exception as e:
+                if "already exists" in str(e).lower():
+                    print(f"  = Base '{extra_db}' déjà existante — ignoré", flush=True)
+                else:
+                    print(f"  ! Erreur création base '{extra_db}': {e}", flush=True)
+            finally:
+                await master_conn2.close()
+        except Exception as e:
+            print(f"  ! Connexion master impossible pour '{extra_db}': {e}", flush=True)
+
+        # GRANT IAM sur la base extra
+        extra_dsn = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/{extra_db}?sslmode=require"
+        try:
+            extra_conn = await asyncpg.connect(extra_dsn)
+            try:
+                await grant_permissions(extra_conn, extra_iam_user, extra_db, label="extra-project")
+                if admin_user:
+                    await grant_permissions(extra_conn, admin_user, extra_db, label="admin")
+            finally:
+                extra_conn.close()
+        except Exception as e:
+            print(f"  ! Impossible d'accorder les droits sur '{extra_db}': {e}", flush=True)
+
     print("\n[DB INIT] ✓ Initialisation terminée avec succès.", flush=True)
 
 

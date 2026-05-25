@@ -14,6 +14,14 @@ import sys
 import urllib.request
 from pathlib import Path
 
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    try:
+        import tomli as tomllib  # pip install tomli (fallback)
+    except ImportError:
+        tomllib = None  # Mode dégradé : pyproject.toml non lisible
+
 SERVICES = [
     "agent_hr_api", "agent_ops_api", "agent_missions_api", "agent_router_api",
     "analytics_mcp", "monitoring_mcp", "competencies_api", "cv_api",
@@ -84,6 +92,70 @@ def parse_requirements(filepath: Path) -> dict:
     return dependencies
 
 
+def parse_pyproject_toml(filepath: Path) -> dict:
+    """Parse un fichier pyproject.toml (PEP 517/518) et extrait les dépendances.
+
+    Supporte les formats suivants :
+      - [project] dependencies = ["pkg>=version", ...]
+      - [tool.poetry.dependencies] pkg = "^version"
+    """
+    dependencies = {}
+    if not filepath.exists():
+        return dependencies
+    if tomllib is None:
+        return dependencies  # Mode dégradé sans tomllib
+
+    try:
+        data = tomllib.loads(filepath.read_text(encoding="utf-8"))
+    except Exception:
+        return dependencies
+
+    # Format PEP 517 : [project].dependencies
+    pep517_deps = data.get("project", {}).get("dependencies", [])
+    for dep in pep517_deps:
+        dep = dep.strip()
+        match = re.match(r"^([a-zA-Z0-9_\-\[\]]+)(.*)$", dep)
+        if match:
+            pkg_name = match.group(1).lower().replace("_", "-")
+            dependencies[pkg_name] = {
+                "raw": dep,
+                "constraint": match.group(2).strip()
+            }
+
+    # Format Poetry : [tool.poetry.dependencies]
+    poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
+    for pkg, constraint in poetry_deps.items():
+        if pkg.lower() == "python":
+            continue
+        pkg_name = pkg.lower().replace("_", "-")
+        raw = f"{pkg}{constraint}" if isinstance(constraint, str) else pkg
+        dependencies[pkg_name] = {
+            "raw": raw,
+            "constraint": constraint if isinstance(constraint, str) else ""
+        }
+
+    return dependencies
+
+
+def load_service_dependencies(svc_dir: Path) -> tuple[dict, str]:
+    """Charge les dépendances d'un service depuis requirements.txt ou pyproject.toml.
+
+    Returns:
+        (deps_dict, source_file_name) — source indique le fichier utilisé.
+    """
+    req_path = svc_dir / "requirements.txt"
+    if req_path.exists():
+        return parse_requirements(req_path), "requirements.txt"
+
+    pyproject_path = svc_dir / "pyproject.toml"
+    if pyproject_path.exists():
+        deps = parse_pyproject_toml(pyproject_path)
+        if deps:
+            return deps, "pyproject.toml"
+
+    return {}, ""
+
+
 def audit_context_caching(base_dir: Path) -> list:
     """Vérifie la présence et le bon adressage du context caching Gemini."""
     caching_violations = []
@@ -122,18 +194,18 @@ def run_audit() -> bool:
         for pkg in KEY_PACKAGES:
             pypi_versions[pkg] = fetch_pypi_latest(pkg)
 
-    # 2. Analyse des requirements.txt par service
-    print("\n[2/5] Analyse des requirements.txt par service...")
+    # 2. Analyse des requirements.txt / pyproject.toml par service
+    print("\n[2/5] Analyse des fichiers de dépendances par service...")
     violations = []
     service_dependencies = {}
 
     for svc in SERVICES:
-        req_path = base_dir / svc / "requirements.txt"
-        if not req_path.exists():
-            print(f"  ⚠️  {svc} : requirements.txt ABSENT")
-            continue
+        svc_dir = base_dir / svc
+        deps, source = load_service_dependencies(svc_dir)
 
-        deps = parse_requirements(req_path)
+        if not deps:
+            print(f"  ⚠️  {svc} : Aucun fichier de dépendances trouvé (requirements.txt ni pyproject.toml)")
+            continue
         service_dependencies[svc] = deps
         svc_violations = []
 
@@ -165,12 +237,12 @@ def run_audit() -> bool:
                     )
 
         if svc_violations:
-            print(f"  ❌ {svc} : {len(svc_violations)} violation(s)")
+            print(f"  ❌ {svc} : {len(svc_violations)} violation(s) ({source})")
             for v in svc_violations:
                 print(v)
                 violations.append((svc, v))
         else:
-            print(f"  ✅ {svc} : Conforme")
+            print(f"  ✅ {svc} : Conforme ({source})")
 
     # 3. Validation des règles d'alignement minimales (PyJWT, google-genai, etc.)
     print("\n[3/5] Vérification des versions minimales obligatoires...")

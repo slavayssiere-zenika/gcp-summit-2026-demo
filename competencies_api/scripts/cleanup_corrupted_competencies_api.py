@@ -3,9 +3,12 @@ import ast
 import asyncio
 import getpass
 import json
+import logging
 import os
 import sys
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 import httpx
 
@@ -170,11 +173,18 @@ async def assign_competency_to_user(token: str, competency_id: int, user_id: int
     async with httpx.AsyncClient(verify=VERIFY_SSL) as client:
         try:
             resp = await client.post(url, headers=headers, timeout=10.0)
-            if resp.status_code != 201 and resp.status_code != 200:
-                # If already assigned, usually returns 409 or similar, which is fine
-                pass
+            if resp.status_code not in (200, 201):
+                # If already assigned (409 conflict), that is acceptable — skip silently
+                logger.debug(
+                    "assign_competency_to_user: unexpected status %s for user %s / competency %s",
+                    resp.status_code, user_id, competency_id
+                )
             return True
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "assign_competency_to_user: request failed for user %s / competency %s: %s",
+                user_id, competency_id, exc
+            )
             return False
 
 
@@ -202,16 +212,16 @@ def parse_corrupted_name(name_str: str) -> Dict[str, str]:
         data = ast.literal_eval(name_str)
         if isinstance(data, dict) and 'name' in data:
             return data
-    except Exception:
-        pass
+    except Exception as ast_err:
+        logger.debug("ast.literal_eval failed for name '%s': %s", name_str[:60], ast_err)
 
     try:
         # Try standard JSON
-        data = json.loads(name_str.replace("'", "\""))
+        data = json.loads(name_str.replace("'", '"'))
         if isinstance(data, dict) and 'name' in data:
             return data
-    except Exception:
-        pass
+    except Exception as json_err:
+        logger.debug("json.loads failed for name '%s': %s", name_str[:60], json_err)
 
     return None
 

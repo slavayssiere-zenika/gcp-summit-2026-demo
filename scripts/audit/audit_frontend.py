@@ -53,8 +53,29 @@ def audit_npm_packages(frontend_path: Path):
                 })
 
 
+# Endpoints connus comme non-paginés (retournent des objets métier scalaires, pas des listes)
+# Ces chemins d'URL sont exclus de la vérification parsePaginated()
+NON_PAGINATED_ENDPOINTS = {
+    "/bulk-reanalyse/data-quality",
+    "/data-quality",
+    "/health",
+    "/version",
+    "/ready",
+    "/stats",
+    "/summary",
+    "/me",
+    "/finops",
+}
+
+
 def audit_api_contract(filepath: Path):
-    """S'assure que les appels paginés utilisent parsePaginated()."""
+    """S'assure que les appels paginés utilisent parsePaginated().
+
+    Un appel est considéré paginement UNIQUEMENT si le fichier contient
+    simultanément les mots-clés 'items' ET ('skip' OU 'limit') dans un
+    contexte de liste. Les réponses métier scalaires (data-quality, stats,
+    etc.) sont explicitement exclues.
+    """
     try:
         content = filepath.read_text(encoding="utf-8", errors="ignore")
     except Exception:
@@ -62,24 +83,45 @@ def audit_api_contract(filepath: Path):
 
     lines = content.splitlines()
 
-    # Détection simplifiée : si le fichier fait référence à des structures paginées
-    # (ex: total, skip, limit, items) mais n'importe ni n'utilise parsePaginated.
-    if any(keyword in content for keyword in ["skip", "limit", "total"]) and "parsePaginated" not in content:
-        # Analyser si le fichier fait un appel HTTP (fetch ou axios ou api)
-        if any(call in content for call in ["fetch(", "axios.get(", "api.get(", "client.get("]):
-            # Trouver la ligne contenant l'appel
-            for idx, line in enumerate(lines, 1):
-                if any(call in line for call in ["fetch", "axios", "api.", "client."]):
-                    VIOLATIONS.append({
-                        "file": str(filepath),
-                        "line": idx,
-                        "rule": "Frontend §7 (Contrats d'interface)",
-                        "detail": (
-                            "Appel d'API potentiellement paginé détecté sans validation via parsePaginated(). "
-                            "Le non-respect de ce contrat d'interface inter-services rompt la résilience."
-                        ),
-                        "severity": "MAJEUR"
-                    })
+    # Un appel est paginné seulement si le fichier manipule explicitement
+    # des structures paginées (items + pagination params)
+    has_pagination_structure = (
+        "items" in content
+        and any(kw in content for kw in ["skip", "limit", "page"])
+        and "total" in content
+    )
+
+    if not has_pagination_structure:
+        return  # Pas de structure paginée dans ce fichier — pas de violation
+
+    if "parsePaginated" in content:
+        return  # Contrat déjà respecté
+
+    # Vérifier que les appels HTTP ne ciblent pas exclusivement des endpoints non-paginés
+    for idx, line in enumerate(lines, 1):
+        if not any(call in line for call in ["fetch(", "axios.get(", "api.get(", "client.get("]):
+            continue
+
+        # Exclure les lignes ciblant des endpoints non-paginés connus
+        if any(ep in line for ep in NON_PAGINATED_ENDPOINTS):
+            continue
+
+        # Exclure les commentaires
+        stripped = line.strip()
+        if stripped.startswith("//") or stripped.startswith("*"):
+            continue
+
+        VIOLATIONS.append({
+            "file": str(filepath),
+            "line": idx,
+            "rule": "Frontend §7 (Contrats d'interface)",
+            "detail": (
+                "Appel d'API retournant une liste paginée sans validation via parsePaginated(). "
+                "Utiliser parsePaginated<T>(response) de @/utils/apiContract.ts."
+            ),
+            "severity": "MAJEUR"
+        })
+        break  # Une seule violation par fichier pour éviter le bruit
 
 
 def audit_localhost_endpoints(filepath: Path):

@@ -14,4 +14,31 @@ output "admin_password" {
   sensitive   = true
 }
 
+# =========================================================
+# Références réseau — injectées automatiquement dans les
+# projets externes (extra_projects) via manage_env.py
+# =========================================================
+output "vpc_network_id" {
+  description = "ID complet du VPC principal (injecté dans les modules Terraform des extra_projects)"
+  value       = google_compute_network.main.id
+}
 
+output "vpc_subnet_id" {
+  description = "ID complet du sous-réseau principal (injecté dans les modules Terraform des extra_projects)"
+  value       = google_compute_subnetwork.main.id
+}
+
+output "alloydb_instance_uri" {
+  description = "URI complet de l'instance AlloyDB primaire (injecté dans les modules Terraform des extra_projects)"
+  value       = "projects/${var.project_id}/locations/${var.region}/clusters/${google_alloydb_cluster.main.cluster_id}/instances/${google_alloydb_instance.primary.instance_id}"
+}
+
+output "alloydb_ip" {
+  description = "Adresse IP privée de l'instance AlloyDB primaire (injectée dans les extra_projects)"
+  value       = google_alloydb_instance.primary.ip_address
+}
+
+output "tf_state_bucket" {
+  description = "Nom du bucket GCS utilisé comme backend Terraform (injecté dans les extra_projects pour leur propre backend)"
+  value       = "z-gcp-summit-tf-state"
+}

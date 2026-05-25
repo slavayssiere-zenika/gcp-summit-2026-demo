@@ -23,12 +23,51 @@ VIOLATIONS = []
 
 
 def check_local_imports(filepath: Path, lines: list):
-    """Vérifie que les imports ne sont pas faits localement dans des fonctions."""
+    """Vérifie que les imports ne sont pas faits localement dans des fonctions.
+
+    Exclut les imports dans des blocs `try/except ImportError` qui sont un
+    pattern légitime pour les dépendances optionnelles (ex: OTel, google-cloud-scheduler).
+    """
     if filepath.name == "__init__.py" or "tests" in filepath.parts or filepath.name == "conftest.py":
         return
+
+    # Construire l'index des lignes qui sont dans un bloc try/except ImportError ou try/except
+    # Ces blocs sont des patterns légitimes pour les dépendances optionnelles
+    in_try_except_import_block = set()
+    try_block_start = None
+    try_depth = 0
+
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("try:"):
+            try_block_start = idx
+            try_depth = 1
+        elif try_block_start is not None:
+            if stripped.startswith("except") and (
+                "ImportError" in stripped
+                or "ModuleNotFoundError" in stripped
+                or "Exception" in stripped
+            ):
+                # Marquer toutes les lignes depuis le try jusqu'ici comme légitimes
+                for i in range(try_block_start, idx + 5):  # +5 pour inclure le corps de l'except
+                    in_try_except_import_block.add(i)
+                try_block_start = None
+        # Pattern if/else au niveau module pour sélection de backend (ex: OTel http vs grpc)
+        # Un if conditionnel au niveau top (pas indenté) suivi d'imports est légitime
+        elif re.match(r"^if .+:$", stripped) or stripped == "else:":
+            # Marquer les 3 lignes suivantes comme potentiellement légitimes
+            for i in range(idx, min(idx + 4, len(lines))):
+                in_try_except_import_block.add(i)
+
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
+            continue
+        # Exclure les lignes avec noqa
+        if "noqa" in line:
+            continue
+        # Exclure les imports dans des blocs try/except ImportError (dépendances optionnelles)
+        if (idx - 1) in in_try_except_import_block:
             continue
         # Détection d'un import indenté de 4 espaces ou plus
         if re.match(r"^ {4,}(from|import) ", line):

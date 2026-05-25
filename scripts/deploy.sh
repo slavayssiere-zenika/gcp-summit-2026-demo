@@ -724,12 +724,20 @@ push_with_retry() {
     attempt=$((attempt + 1))
     echo -e "  → [Push] Tentative $attempt/$max_attempts : $image"
 
-    if timeout "$push_timeout" docker push "$image"; then
-      echo -e "  ${GREEN}✅ [Push] Succès : $image${RESET}"
-      return 0
+    local push_cmd=("docker" "push" "$image")
+    if command -v timeout >/dev/null 2>&1; then
+      push_cmd=("timeout" "$push_timeout" "${push_cmd[@]}")
+    elif command -v gtimeout >/dev/null 2>&1; then
+      push_cmd=("gtimeout" "$push_timeout" "${push_cmd[@]}")
     fi
 
-    local exit_code=$?
+    local exit_code=0
+    if "${push_cmd[@]}"; then
+      echo -e "  ${GREEN}✅ [Push] Succès : $image${RESET}"
+      return 0
+    else
+      exit_code=$?
+    fi
     if [ $attempt -lt $max_attempts ]; then
       local wait_time=$(( attempt * 15 ))
       if [ $exit_code -eq 124 ]; then
@@ -1581,31 +1589,44 @@ elif [ "$SKIP_TESTS" = true ]; then
 elif [ ${#ALL_TASKS[@]} -eq 0 ]; then
   echo -e "${YELLOW}[!] Aucun service ciblé : skip de la gate Locust locale.${RESET}"
 else
-  CURRENT_DEPLOYING_SERVICE="locust_local_gate"
-  echo -e "${GREY}[*] Teardown des conteneurs perf existants (pubsub_emulator, mock_gemini...)${RESET}"
-  docker-compose --profile perf --profile perf-stress down --remove-orphans 2>/dev/null || true
-  echo -e "${GREY}[*] Suppression du réseau monitoring_net pour recréation en mode isolé (internal: true)${RESET}"
-  docker network rm monitoring_net 2>/dev/null || true
+  # Vérifier si au moins un microservice ou agent est ciblé par le déploiement
+  local has_api_or_agent=false
+  for task in "${ALL_TASKS[@]}"; do
+    if [[ " ${APP_MICROSERVICES[*]} agent_router_api agent_hr_api agent_ops_api agent_missions_api frontend " == *" $task "* ]]; then
+      has_api_or_agent=true
+      break
+    fi
+  done
 
-  # Note : les images de services (cv_api, users_api, etc.) sont déjà correctes —
-  # Phase 3 du run précédent les a buildées et taguées :latest localement.
-  # L'image Locust est buildée par _build_locust_image() dans local_up.py.
-  # La variable GEMINI_API_BASE_URL est passée au conteneur cv_api via docker-compose.perf-override.yml.
-
-  GEMINI_API_BASE_URL=http://mock_gemini:8099 \
-  COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \
-  LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" python3 scripts/local_up.py --no-pull --perf --erase
-  LOCUST_EXIT=$?
-  
-  if [ "$LOCUST_EXIT" -ne 0 ]; then
-    echo -e "${RED}❌ La gate de performance locale (Locust) a échoué ! (Code de retour: $LOCUST_EXIT)${RESET}"
-    DEPLOYS_FAILED+=("locust_local_gate (Failure in local performance gate)")
-    exit 1
+  if [ "$has_api_or_agent" = false ]; then
+    echo -e "${YELLOW}[!] Aucun microservice ni agent ciblé (uniquement des tâches administratives/scripts) : skip de la gate Locust locale.${RESET}"
   else
-    echo -e "${GREEN}✅ Gate de performance locale validée avec succès !${RESET}"
-    DEPLOYS_SUCCESS+=("locust_local_gate")
+    CURRENT_DEPLOYING_SERVICE="locust_local_gate"
+    echo -e "${GREY}[*] Teardown des conteneurs perf existants (pubsub_emulator, mock_gemini...)${RESET}"
+    docker-compose --profile perf --profile perf-stress down --remove-orphans 2>/dev/null || true
+    echo -e "${GREY}[*] Suppression du réseau monitoring_net pour recréation en mode isolé (internal: true)${RESET}"
+    docker network rm monitoring_net 2>/dev/null || true
+
+    # Note : les images de services (cv_api, users_api, etc.) sont déjà correctes —
+    # Phase 3 du run précédent les a buildées et taguées :latest localement.
+    # L'image Locust est buildée par _build_locust_image() dans local_up.py.
+    # La variable GEMINI_API_BASE_URL est passée au conteneur cv_api via docker-compose.perf-override.yml.
+
+    GEMINI_API_BASE_URL=http://mock_gemini:8099 \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \
+    LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" python3 scripts/local_up.py --no-pull --perf --erase
+    LOCUST_EXIT=$?
+    
+    if [ "$LOCUST_EXIT" -ne 0 ]; then
+      echo -e "${RED}❌ La gate de performance locale (Locust) a échoué ! (Code de retour: $LOCUST_EXIT)${RESET}"
+      DEPLOYS_FAILED+=("locust_local_gate (Failure in local performance gate)")
+      exit 1
+    else
+      echo -e "${GREEN}✅ Gate de performance locale validée avec succès !${RESET}"
+      DEPLOYS_SUCCESS+=("locust_local_gate")
+    fi
+    CURRENT_DEPLOYING_SERVICE=""
   fi
-  CURRENT_DEPLOYING_SERVICE=""
 fi
 
 # ==============================================================================
