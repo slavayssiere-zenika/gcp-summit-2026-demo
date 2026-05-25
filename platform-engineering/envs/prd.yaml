@@ -32,7 +32,7 @@ drive_api_version:          "v0.1.17"
 analytics_mcp_version:      "v0.1.16"
 monitoring_mcp_version:     "v0.1.15"
 db_migrations_version:      "v0.0.69"
-db_init_version:            "v0.1.7"
+db_init_version:            "v0.1.8"
 missions_api_version:       "v0.1.18"
 frontend_version:           "v0.1.12"
 
@@ -95,5 +95,5 @@ extra_projects:
   - name: mcp-claude-memory
     path: /Users/sebastien.lavayssiere/Code/MCP-Claude-mem-local
     lb_path: /mcp-claude-memory
-    version: v1.0.14
+    version: v1.0.15
     alloydb_database: mcp_claude_memory

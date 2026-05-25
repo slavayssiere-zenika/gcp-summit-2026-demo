@@ -9,6 +9,7 @@
 1f4fe6603d631baffc00c40d3ec10b5bcff95256  ./shared/schemas/pagination.py
 29e62c52763a613694d3fcddc10c948df0891c4f  ./shared/redis_state.py
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
+2ff292839351a771c0a7d2f807d6b998c6a91f89  ./db_init/db_init.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
@@ -23,7 +24,6 @@
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
 8738bf4bf3bd8937c3677f11f438636cb777ea52  ./shared/exception_handler.py
 8c2be0dd32f1234dfe8cbf3182631bf72f11e6d7  ./db_init/pyproject.toml
-92822fb923fad75ef7e63b1ec3f9aca8feec3791  ./db_init/db_init.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py

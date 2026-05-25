@@ -166,7 +166,7 @@ async def main() -> None:
                 if admin_user:
                     await grant_permissions(extra_conn, admin_user, extra_db, label="admin")
             finally:
-                extra_conn.close()
+                await extra_conn.close()
         except Exception as e:
             print(f"  ! Impossible d'accorder les droits sur '{extra_db}': {e}", flush=True)
 
