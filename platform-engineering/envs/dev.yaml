@@ -68,3 +68,7 @@ extra_projects:
     lb_path: /mcp-claude-memory
     version: v1.0.6
     alloydb_database: mcp_claude_memory
+    token_iap: true
+    health_check_paths:
+      - /mcp-claude-memory/health
+      - /mcp-claude-memory/mcp/tools

@@ -326,3 +326,20 @@ variable "enable_output_schema" {
   type        = string
   default     = "false"
 }
+
+variable "extra_project_routes" {
+  description = <<-EOT
+    Routes LB pour les projets externes (extra_projects).
+    Chaque objet contient :
+      - name               : nom kebab-case du projet (ex: mcp-claude-memory)
+      - lb_path            : préfixe de routage LB (ex: /mcp-claude-memory)
+      - backend_service_id : self_link du Backend Service créé par le projet externe
+    Géré automatiquement par manage_env.py — ne pas modifier manuellement.
+  EOT
+  type = list(object({
+    name               = string
+    lb_path            = string
+    backend_service_id = string
+  }))
+  default = []
+}

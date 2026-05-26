@@ -308,6 +308,8 @@ def discover_extra_projects(config: dict) -> list:
         seen_names.add(name)
         seen_lb_paths.add(lb_path)
         result["alloydb_database"] = alloydb_database
+        result["health_check_paths"] = proj.get("health_check_paths") or []
+        result["token_iap"] = proj.get("token_iap") or False
         validated.append(result)
         logger.info(
             f"  [+] Projet externe validé : '{name}' ({path}) → "
@@ -346,6 +348,119 @@ def _get_platform_tf_outputs() -> dict:
     except Exception as exc:
         logger.warning(f"[extra_projects] Erreur lors de la lecture des outputs Terraform : {exc}")
         return {}
+
+
+_LB_ROUTES_STATE_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".lb_routes_state.json"
+)
+
+
+def _lb_routes_load(env: str) -> list:
+    """Lit la liste de routes extra-projects persistée pour un environnement donné."""
+    if os.path.exists(_LB_ROUTES_STATE_FILE):
+        try:
+            with open(_LB_ROUTES_STATE_FILE) as f:
+                state = json.load(f)
+                if isinstance(state, dict):
+                    return state.get(env) or []
+                # Fallback pour compatibilité si l'ancien fichier était une liste
+                return []
+        except Exception as exc:
+            logger.warning(f"[lb-routes] Impossible de lire .lb_routes_state.json : {exc}")
+    return []
+
+
+def _lb_routes_save(env: str, routes: list) -> None:
+    """Persiste la liste de routes extra-projects pour un environnement donné."""
+    state = {}
+    if os.path.exists(_LB_ROUTES_STATE_FILE):
+        try:
+            with open(_LB_ROUTES_STATE_FILE) as f:
+                content = json.load(f)
+                if isinstance(content, dict):
+                    state = content
+        except Exception:
+            pass
+    state[env] = routes
+    with open(_LB_ROUTES_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def _update_lb_routes_and_apply(
+    name: str,
+    lb_path: str,
+    tf_dir: str,
+    env: str,
+) -> None:
+    """Met à jour la route LB de l'extra-project via Terraform (apply ciblé).
+
+    Algorithme :
+      1. Lit backend_service_id depuis `terraform output -json` du projet externe.
+      2. Met à jour .lb_routes_state.json (upsert par name).
+      3. Écrit extra_project_routes dans le {env}.auto.tfvars.json de la plateforme.
+      4. Lance `terraform apply -target=google_compute_url_map.default -auto-approve`
+         depuis le répertoire Terraform de la plateforme.
+
+    Avantage : les routes survivent à tout `terraform apply` ultérieur de la plateforme,
+    car elles sont déclarées dans var.extra_project_routes et gérées par le bloc dynamic.
+    """
+    # ── 1. Lire backend_service_id ────────────────────────────────────────────
+    try:
+        res = subprocess.run(
+            ["terraform", "output", "-json"],
+            cwd=tf_dir, capture_output=True, text=True, timeout=30,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            logger.warning(f"  [lb-routes] Impossible de lire les outputs terraform de '{name}' — LB ignoré.")
+            return
+        tf_outputs = json.loads(res.stdout)
+        backend_service_id = (tf_outputs.get("backend_service_id") or {}).get("value", "")
+        if not backend_service_id:
+            logger.warning(f"  [lb-routes] Output 'backend_service_id' absent pour '{name}' — LB ignoré.")
+            return
+    except Exception as exc:
+        logger.warning(f"  [lb-routes] Erreur lecture outputs terraform '{name}' : {exc}")
+        return
+
+    logger.info(f"  [lb-routes] backend_service_id = {backend_service_id}")
+
+    # ── 2. Upsert dans le state ───────────────────────────────────────────────
+    routes = _lb_routes_load(env)
+    existing = next((r for r in routes if r["name"] == name), None)
+    if existing:
+        existing["backend_service_id"] = backend_service_id
+        existing["lb_path"] = lb_path
+    else:
+        routes.append({"name": name, "lb_path": lb_path, "backend_service_id": backend_service_id})
+    _lb_routes_save(env, routes)
+    logger.info(f"  [lb-routes] State mis à jour ({len(routes)} route(s)) → apply ciblé URL map...")
+
+    # ── 3. Mettre à jour extra_project_routes dans le tfvars de la plateforme ─
+    tfvars_path = os.path.join(TERRAFORM_DIR, f"{env}.auto.tfvars.json")
+    try:
+        with open(tfvars_path) as f:
+            tfvars = json.load(f)
+    except Exception as exc:
+        logger.warning(f"  [lb-routes] Impossible de lire {tfvars_path} : {exc} — apply ciblé annulé.")
+        return
+    tfvars["extra_project_routes"] = routes
+    with open(tfvars_path, "w") as f:
+        json.dump(tfvars, f, indent=2)
+
+    # ── 4. Apply ciblé sur le URL map uniquement ──────────────────────────────
+    apply_cmd = [
+        "terraform", "apply",
+        "-target=google_compute_url_map.default",
+        "-auto-approve", "-lock-timeout=60s",
+    ]
+    logger.info(f"  [lb-routes] Running: {' '.join(apply_cmd)}")
+    result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        logger.warning(
+            f"  [lb-routes] Apply ciblé échoué :\n{(result.stdout + result.stderr)[-500:]}"
+        )
+    else:
+        logger.info(f"  [lb-routes] ✓ URL map mis à jour — route '{lb_path}' active via Terraform.")
 
 
 def deploy_extra_project_terraform(
@@ -504,27 +619,36 @@ def deploy_extra_project_terraform(
     alloydb_iam_user = service_account_email.replace(".gserviceaccount.com", "") if service_account_email else ""
 
     if alloydb_iam_user and alloydb_ip and alloydb_database:
-        logger.info(
-            f"  [db-init] Exécution de {db_init_job} AVANT l'apply "
-            f"(base='{alloydb_database}' / user='{alloydb_iam_user}')"
-        )
-        db_init_cmd = [
-            "gcloud", "run", "jobs", "execute", db_init_job,
-            f"--region={region}",
-            f"--project={project_id}",
-            "--wait",
-            f"--update-env-vars=EXTRA_DB_NAME={alloydb_database},EXTRA_IAM_USER={alloydb_iam_user}",
-        ]
-        logger.info(f"  [*] Running: {' '.join(db_init_cmd)}  (elapsed: {elapsed()})")
-        result = subprocess.run(db_init_cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            # Non bloquant : on log et on continue — terraform apply tentera quand même
-            logger.warning(
-                f"  [db-init] Le job {db_init_job} a retourné une erreur (non bloquant) :\n"
-                f"{(result.stdout + result.stderr)[-500:]}"
+        fingerprint = _db_init_fingerprint(env, name, alloydb_database, alloydb_iam_user)
+        if not _db_init_needed(env, name, alloydb_database, alloydb_iam_user):
+            logger.info(
+                f"  [db-init] ⏭  Ignoré — empreinte inchangée pour '{name}' "
+                f"(db={alloydb_database}, sa={alloydb_iam_user}). "
+                "Forcez avec --extra-projects si nécessaire."
             )
         else:
-            logger.info(f"  [db-init] ✓ Base '{alloydb_database}' prête, droits IAM accordés.")
+            logger.info(
+                f"  [db-init] Exécution de {db_init_job} AVANT l'apply "
+                f"(base='{alloydb_database}' / user='{alloydb_iam_user}')"
+            )
+            db_init_cmd = [
+                "gcloud", "run", "jobs", "execute", db_init_job,
+                f"--region={region}",
+                f"--project={project_id}",
+                "--wait",
+                f"--update-env-vars=EXTRA_DB_NAME={alloydb_database},EXTRA_IAM_USER={alloydb_iam_user}",
+            ]
+            logger.info(f"  [*] Running: {' '.join(db_init_cmd)}  (elapsed: {elapsed()})")
+            result = subprocess.run(db_init_cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                logger.warning(
+                    f"  [db-init] Le job {db_init_job} a retourné une erreur (non bloquant) :\n"
+                    f"{(result.stdout + result.stderr)[-500:]}"
+                )
+            else:
+                logger.info(f"  [db-init] ✓ Base '{alloydb_database}' prête, droits IAM accordés.")
+                _db_init_save_state(env, name, fingerprint)
+
     else:
         logger.warning(
             f"  [db-init] Paramètres manquants (sa_email={alloydb_iam_user!r}, "
@@ -535,6 +659,9 @@ def deploy_extra_project_terraform(
     _run_extra(["terraform", "apply", "-auto-approve", "-lock-timeout=120s"] + tf_vars)
 
     logger.info(f"  [+] Terraform extra projet '{name}' appliqué avec succès.")
+
+    # ── Mise à jour route LB via Terraform (apply ciblé) ─────────────────────
+    _update_lb_routes_and_apply(name, project["lb_path"], tf_dir, env)
 
 
 def build_image_urls(registry: str, versions: dict) -> dict:
@@ -1591,7 +1718,179 @@ def _seed_prompts(api_dns_name, access_token, ctx_to_use):
                 err_msg, ["prompts_api", "sanity-check"])
 
 
-def _sanity_checks(env, base_domain, project_id, config, extra_domains):
+def _get_iap_identity_token(project_id: str, pname: str = "", env: str = "") -> str:
+    """Retourne un identity token Google pour l'authentification IAP.
+
+    Lit l'audience (IAP Client ID) depuis Secret Manager (secret: google-secret-id),
+    puis tente de générer le token en impersonnant le Service Account de l'extra-project
+    (si pname et env sont fournis) pour supporter les comptes gcloud utilisateur.
+    Fait un fallback sur l'appel direct pour les comptes de service natifs.
+
+    Retourne le token (str) ou une chaîne vide en cas d'erreur.
+    """
+    # Lit l'audience IAP depuis Secret Manager
+    try:
+        res = subprocess.run(
+            ["gcloud", "secrets", "versions", "access", "latest",
+             "--secret=google-secret-id", f"--project={project_id}"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            logger.warning(f"  [iap] Impossible de lire google-secret-id : {res.stderr.strip()}")
+            return ""
+        iap_client_id = res.stdout.strip()
+    except Exception as exc:
+        logger.warning(f"  [iap] Erreur lecture secret google-secret-id : {exc}")
+        return ""
+
+    # Génère un identity token avec l'audience IAP (Tentative 1 : Impersonation du SA pour User Account)
+    if pname and env:
+        sa_email = f"sa-{pname}-{env}@{project_id}.iam.gserviceaccount.com"
+        try:
+            logger.info(f"  [iap] Tentative génération token IAP via impersonation de '{sa_email}'...")
+            # 1. Récupère l'access token de l'utilisateur actif
+            res = subprocess.run(
+                ["gcloud", "auth", "print-access-token"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if res.returncode != 0 or not res.stdout.strip():
+                logger.info(f"  [iap] gcloud auth print-access-token échoué : {res.stderr.strip()}")
+                raise RuntimeError("Failed to get gcloud active access token")
+            access_token = res.stdout.strip()
+
+            # 2. Appelle l'API iamcredentials pour générer l'ID token avec includeEmail=True
+            url = f"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{sa_email}:generateIdToken"
+            req = urllib.request.Request(
+                url,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                data=json.dumps({
+                    "audience": iap_client_id,
+                    "includeEmail": True
+                }).encode("utf-8")
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                resp_data = json.loads(resp.read().decode("utf-8"))
+                token = resp_data.get("token", "")
+                if token:
+                    logger.info("  [iap] ✓ Identity token IAP obtenu via impersonation (REST API + includeEmail).")
+                    return token
+                logger.info("  [iap] Pas de token retourné par l'API iamcredentials.")
+        except Exception as exc:
+            logger.info(f"  [iap] Erreur impersonation SA '{sa_email}' via REST API : {exc}")
+
+    # Tentative 2 : Fallback sur appel direct (compte de service natif ou ADC local)
+    try:
+        logger.info("  [iap] Génération token IAP via compte actif natif...")
+        res = subprocess.run(
+            ["gcloud", "auth", "print-identity-token", f"--audiences={iap_client_id}"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            token = res.stdout.strip()
+            logger.info("  [iap] ✓ Identity token IAP obtenu de manière native.")
+            return token
+        logger.warning(f"  [iap] gcloud auth print-identity-token natif échoué : {res.stderr.strip()}")
+        return ""
+    except Exception as exc:
+        logger.warning(f"  [iap] Erreur génération identity token : {exc}")
+        return ""
+
+
+def _sanity_checks_extra_projects(
+    extra_projects: list,
+    api_dns_name: str,
+    ctx_to_use,
+    project_id: str = "",
+    env: str = "",
+) -> None:
+    """Vérifie les health_check_paths de chaque extra-project après déploiement.
+
+    Pour chaque extra-project déclarant des health_check_paths :
+      - Si token_iap: true → récupère un identity token Google (gcloud auth print-identity-token)
+        et l'injecte en Authorization: Bearer pour contourner l'IAP.
+      - Sinon → requête anonyme (pour les services non protégés par IAP).
+
+    3 tentatives par path. Rapport Antigravity généré sur tout échec.
+
+    Args:
+        extra_projects : liste des projets externes (depuis discover_extra_projects).
+        api_dns_name   : ex: api.prd.zenika.slavayssiere.fr.
+        ctx_to_use     : contexte SSL urllib (None = désactivé).
+        project_id     : GCP project ID (pour lire le secret IAP).
+        env            : nom de l'environnement (ex: prd, dev) pour impersonation SA.
+    """
+    projects_with_checks = [p for p in extra_projects if p.get("health_check_paths")]
+    if not projects_with_checks:
+        logger.info("[extra_projects] Aucun health_check_paths défini — checks ignorés.")
+        return
+
+    print("\n=======================================================")
+    print("[*] Post-Deploy: Sanity Checks — Extra Projects")
+    print("=======================================================")
+
+    # Cache des tokens IAP par projet (évite d'appeler gcloud plusieurs fois)
+    _iap_token_cache: dict = {}
+
+    def get_token_for_project(proj: dict) -> str:
+        if not proj.get("token_iap"):
+            return ""
+        pname = proj["name"]
+        if pname not in _iap_token_cache:
+            logger.info(f"  [iap] Récupération du token IAP pour '{pname}'...")
+            _iap_token_cache[pname] = _get_iap_identity_token(project_id, pname, env)
+        return _iap_token_cache[pname]
+
+    def check_path(proj: dict, path: str) -> str:
+        pname = proj["name"]
+        token = get_token_for_project(proj)
+        url = f"https://{api_dns_name}{path}"
+        req = urllib.request.Request(url, method="GET")
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
+        last_err = ""
+        for _attempt in range(3):
+            try:
+                resp = urllib.request.urlopen(req, timeout=30, context=ctx_to_use)
+                auth_label = " [IAP]" if token else ""
+                return f"  [+] [{pname}]{auth_label} {path:<40} -> OK (HTTP {resp.status})"
+            except urllib.error.HTTPError as e:
+                last_err = f"FAIL (HTTP {e.code}) sur {path}"
+                if e.code >= 500:
+                    time.sleep(10)
+                    continue
+                generate_antigravity_error_report(
+                    f"Sanity Check extra-project '{pname}'",
+                    last_err, ["extra-project", pname, f"HTTP_{e.code}"],
+                )
+                return f"  [-] [{pname}] {path:<40} -> {last_err}"
+            except Exception as exc:
+                last_err = f"FAIL ({type(exc).__name__}: {exc}) sur {path}"
+                time.sleep(10)
+        generate_antigravity_error_report(
+            f"Sanity Check extra-project '{pname}'",
+            last_err, ["extra-project", pname, "exception"],
+        )
+        return f"  [-] [{pname}] {path:<40} -> {last_err} (après 3 tentatives)"
+
+    tasks = []
+    for proj in projects_with_checks:
+        pname = proj["name"]
+        paths = proj.get("health_check_paths") or []
+        iap_label = " [token_iap=true]" if proj.get("token_iap") else ""
+        logger.info(f"\n  → Extra project '{pname}'{iap_label} : {len(paths)} path(s) à vérifier")
+        for p in paths:
+            tasks.append((proj, p))
+
+    # Séquentiel par projet pour que le cache IAP soit thread-safe
+    for proj, path in tasks:
+        logger.info(check_path(proj, path))
+
+
+def _sanity_checks(env, base_domain, project_id, config, extra_domains, extra_projects=None):
     """
     Orchestre les 9 sanity checks post-déploiement.
 
@@ -1716,6 +2015,10 @@ def _sanity_checks(env, base_domain, project_id, config, extra_domains):
         futures = {executor.submit(check_route, route): route for route in api_routes}
         for future in as_completed(futures):
             logger.info(future.result())
+
+    # --- CHECK 5.5 : EXTRA PROJECTS HEALTH CHECKS ---
+    if extra_projects:
+        _sanity_checks_extra_projects(extra_projects, api_dns_name, ctx_to_use, project_id, env)
 
     # --- CHECK 6/8: ZERO-TRUST VALIDATION (HTTP 401 WITHOUT TOKEN) ---
     logger.info("\n[*] Check 6/8: Validating Zero-Trust security (expecting 401 without token)...")
@@ -1951,6 +2254,19 @@ def _deploy_extra_projects_only(env: str, project_id: str, config: dict) -> None
 
     print(f"\n[+] Déploiement extra_projects terminé ({len(extra_projects)} projet(s)).")
 
+    # ── Sanity checks des extra-projects ─────────────────────────────────────
+    base_domain = config.get("base_domain", "")
+    if base_domain:
+        api_dns_name = f"api.{env}.{base_domain}"
+        # Contexte SSL souple (ignore les erreurs de CA macOS)
+        import ssl as _ssl
+        ctx_to_use = _ssl.create_default_context()
+        ctx_to_use.check_hostname = False
+        ctx_to_use.verify_mode = _ssl.CERT_NONE
+        _sanity_checks_extra_projects(extra_projects, api_dns_name, ctx_to_use, project_id, env)
+    else:
+        logger.warning("[extra_projects] base_domain absent de la config — sanity checks ignorés.")
+
 
 def deploy(env, base_domain, project_id, config, force=False):
     """
@@ -2028,7 +2344,7 @@ def deploy(env, base_domain, project_id, config, force=False):
         for ext_proj in extra_projects:
             deploy_extra_project_terraform(ext_proj, env, project_id, region)
 
-        access_token = _sanity_checks(env, base_domain, project_id, config, extra_domains)
+        access_token = _sanity_checks(env, base_domain, project_id, config, extra_domains, extra_projects)
 
         if SANITY_ERROR_COUNT > 0:
             raise DeploymentError(
@@ -2070,6 +2386,48 @@ def deploy(env, base_domain, project_id, config, force=False):
 
 
 # ── Fichier de suivi du modèle d'embedding déployé par env ───────────────────
+_DB_INIT_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".db_init_state.json")
+
+
+def _db_init_fingerprint(env: str, name: str, alloydb_database: str, alloydb_iam_user: str) -> str:
+    """Calcule une empreinte SHA1 des paramètres db-init d'un extra-project.
+
+    Déclencheurs de re-initialisation :
+      - Première fois (aucun state)
+      - alloydb_database a changé (ex : renommage)
+      - alloydb_iam_user a changé (ex : SA recréé avec nouveau suffixe)
+    """
+    import hashlib
+    raw = f"{env}|{name}|{alloydb_database}|{alloydb_iam_user}"
+    return hashlib.sha1(raw.encode()).hexdigest()[:16]
+
+
+def _db_init_load_state() -> dict:
+    """Lit le state db-init persisté (depuis .db_init_state.json)."""
+    if os.path.exists(_DB_INIT_STATE_FILE):
+        try:
+            with open(_DB_INIT_STATE_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"[db-init] Impossible de lire .db_init_state.json : {e}")
+    return {}
+
+
+def _db_init_save_state(env: str, name: str, fingerprint: str) -> None:
+    """Persiste l'empreinte db-init d'un extra-project pour un env donné."""
+    state = _db_init_load_state()
+    state[f"{env}/{name}"] = fingerprint
+    with open(_DB_INIT_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def _db_init_needed(env: str, name: str, alloydb_database: str, alloydb_iam_user: str) -> bool:
+    """Retourne True si le db-init doit être rejoué pour cet extra-project."""
+    current = _db_init_fingerprint(env, name, alloydb_database, alloydb_iam_user)
+    stored = _db_init_load_state().get(f"{env}/{name}", "")
+    return current != stored
+
+
 _RAG_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".rag_model_state.json")
 
 
@@ -2640,6 +2998,15 @@ if __name__ == "__main__":
 
         # Dump it as auto.tfvars.json for Terraform to ingest automatically
         tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")
+        # Injecte les routes LB des extra-projects connues depuis le state local
+        # afin qu'elles survivent à chaque apply plateforme.
+        known_lb_routes = _lb_routes_load(args.env)
+        if known_lb_routes:
+            final_config["extra_project_routes"] = known_lb_routes
+            logger.info(
+                f"[lb-routes] {len(known_lb_routes)} route(s) connue(s) injectée(s) dans le tfvars "
+                f"({[r['name'] for r in known_lb_routes]})."
+            )
         with open(tfvars_path, "w") as f:
             json.dump(final_config, f, indent=2)
         logger.info(f"[+] {args.env}.auto.tfvars.json généré ({len(final_config)} variables).")

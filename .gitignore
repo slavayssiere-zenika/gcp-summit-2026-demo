@@ -146,3 +146,10 @@ shared/build/
 # Locust Load Testing
 # =========================
 locust/results/
+
+# =========================
+# manage_env.py — State files locaux (jamais committés)
+# =========================
+platform-engineering/.rag_model_state.json
+platform-engineering/.db_init_state.json
+platform-engineering/.lb_routes_state.json

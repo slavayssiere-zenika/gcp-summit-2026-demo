@@ -254,8 +254,6 @@ resource "google_compute_url_map" "default" {
       }
     }
 
-
-
     # SPA routing for all frontend views to avoid 404s on direct navigation or refresh
     # We rewrite these known frontend paths to / so that GCS serves index.html
     route_rules {
@@ -375,6 +373,23 @@ resource "google_compute_url_map" "default" {
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    # ── Extra Projects — routes injectées par manage_env.py ──────────────────
+    # Priorités 3700-3799 : après les services plateforme et les routes SPA.
+    # backend_service_id provient de l'output terraform de chaque projet externe.
+    dynamic "route_rules" {
+      for_each = { for idx, r in var.extra_project_routes : r.name => merge(r, { priority = 3700 + idx }) }
+      content {
+        priority = route_rules.value.priority
+        match_rules { prefix_match = route_rules.value.lb_path }
+        service = route_rules.value.backend_service_id
+        route_action {
+          url_rewrite {
+            path_prefix_rewrite = "/"
+          }
         }
       }
     }

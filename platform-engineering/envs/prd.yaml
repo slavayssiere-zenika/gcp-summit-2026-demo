@@ -95,5 +95,10 @@ extra_projects:
   - name: mcp-claude-memory
     path: /Users/sebastien.lavayssiere/Code/MCP-Claude-mem-local
     lb_path: /mcp-claude-memory
-    version: v1.0.15
+    version: v1.0.21
     alloydb_database: mcp_claude_memory
+    token_iap: true
+    health_check_paths:
+      - /mcp-claude-memory/health
+      - /mcp-claude-memory/ready
+      - /mcp-claude-memory/mcp/tools
