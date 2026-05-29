@@ -82,10 +82,16 @@
       "id": "ARCHITECT_CLOUD_001",
       "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
       "expected_user_ids": [
+        45,
         66,
+        8,
+        34,
+        25,
         37,
         18,
-        43
+        43,
+        29,
+        15
       ],
       "min_recall_at_k": 0.5,
       "tags": [
