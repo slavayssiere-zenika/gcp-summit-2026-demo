@@ -46,6 +46,11 @@ waf_rate_limit: 1000
 admin_user:               "sebastien.lavayssiere@zenika.com"
 finops_anomaly_threshold: 500000
 
+# Liste des emails notifiés par les alertes SRE GCP (Cloud Monitoring)
+# Utilisée par Terraform (alerting.tf) pour créer les notification_channels.
+sre_alert_emails:
+  - "sebastien.lavayssiere@zenika.com"
+
 # ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
 # Migration 2026-05-12 : gemini-3.1-flash-lite est passé GA (sans -preview).
 # gemini-3.1-pro reste en preview (pas de GA 3.1-pro disponible).

@@ -287,6 +287,7 @@ async def run_agent_query(
                 router_input_tokens = max(router_input_tokens, it)
                 router_output_tokens = max(router_output_tokens, ot)
                 total_input_tokens = max(total_input_tokens, it)
+                total_output_tokens = max(total_output_tokens, ot)
 
     except ValueError as adk_err:
         # OPS-002 — Session history corruption (orphaned function_response in Redis)

@@ -339,6 +339,17 @@ async def _score_all_bg(
                 ev.ai_scored_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 ev.scoring_version = "v2"
                 ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+                # Auto-clear du flag is_to_acquire dès qu'un consultant maîtrise cette compétence
+                if score is not None and score > 0.0:
+                    comp_obj = await db.get(Competency, comp_id)
+                    if comp_obj and comp_obj.is_to_acquire:
+                        comp_obj.is_to_acquire = False
+                        logger.info(
+                            f"[AI Score BG] Compétence '{comp_name}' n'est plus à acquérir "
+                            f"(score={score} pour user={user_id})"
+                        )
+
                 await db.commit()
 
             if score is not None:

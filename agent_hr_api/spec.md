@@ -16,7 +16,7 @@ Il gère exclusivement les profils consultants, leurs CVs et leurs compétences.
 | MCP | Outils principaux |
 |-----|------------------|
 | `users_mcp` | `list_users`, `get_user`, `search_users`, `get_users_by_tag` |
-| `competencies_mcp` | `get_competency_tree`, `get_user_competencies`, `list_user_competencies` |
+| `competencies_mcp` | `list_competencies`, `list_user_competencies`, `get_user_competency_evaluations` |
 | `cv_mcp` | `search_best_candidates`, `get_candidate_rag_context`, `analyze_cv`, `get_user_missions` |
 | `items_mcp` | `list_items`, `get_item` (équipements, tags) |
 | `missions_mcp` | `get_user_missions` — lecture seule pour enrichissement de profil uniquement |
@@ -28,7 +28,7 @@ Il gère exclusivement les profils consultants, leurs CVs et leurs compétences.
 
 1. **Recherche sémantique** : "Qui maîtrise React + TypeScript ?" → `search_best_candidates`
 2. **Profil utilisateur** : "Donne-moi le profil de Jean Martin" → `search_users` + `get_user`
-3. **Compétences** : "Quelles sont les compétences de [nom] ?" → `get_user_competencies`
+3. **Compétences** : "Quelles sont les compétences de [nom] ?" → `list_user_competencies`
 4. **Import CV** : "Import les CVs du dossier Drive" → `sync_drive_folder` + `analyze_cv`
 5. **Historique consultant** : "Quelles missions a faites Sophie ?" → `get_user_missions` (lecture seule)
 
@@ -91,8 +91,8 @@ Après chaque appel outil retournant une **liste de consultants ou de profils**,
 - **POST** `/query` : Query
 - **POST** `/a2a/query` : A2A Query
 - **GET** `/mcp/registry` : Mcp Registry
-- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
-- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **GET** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
 - **DELETE** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PUT** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **PATCH** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp
+- **POST** `/mcp/proxy/{server_name}/{path}` : Proxy Mcp

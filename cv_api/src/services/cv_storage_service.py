@@ -19,7 +19,7 @@ from src.services.utils import _coerce_to_str
 from shared.schemas.users import UsersResponse
 from pydantic import ValidationError
 from shared.schemas.pagination import PaginationResponse
-from shared.database import SessionLocal
+import shared.database as shared_db
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +297,15 @@ class CVStorageService:
                         'NFKD', text) if unicodedata.category(c) != 'Mn')
 
                 async def resolve_comp_id(name: str) -> Optional[int]:
+                    """Résout un nom de compétence vers un ID existant.
+
+                    Stratégie en 2 passes :
+                    1. Recherche directe + exact-match nom/alias (comportement existant).
+                    2. RC1 fix — Fallback token-par-token : si le nom extrait est une
+                       expansion de marque (ex: 'Google Kubernetes Engine'), chaque token
+                       significatif (>= 5 chars) est recherché individuellement. Si un token
+                       correspond exactement au nom d'une compétence existante, on le retourne.
+                    """
                     try:
                         res = await bg_http_client.get(
                             f"{COMPETENCIES_API_URL.rstrip('/')}/search",
@@ -309,13 +318,39 @@ class CVStorageService:
                             # sont des dicts compétences partiels (name, aliases) — parsing manuel OK
                             data = PaginationResponse[dict].model_validate(res.json())
                             for item in data.items:
-                                if normalize_comp(
-                                        item.get("name", "")) == n_norm:
+                                if normalize_comp(item.get("name", "")) == n_norm:
                                     return item["id"]
                                 aliases_raw = item.get("aliases") or ""
                                 for alias in aliases_raw.split(","):
                                     if normalize_comp(alias.strip()) == n_norm:
                                         return item["id"]
+
+                            # ── RC1 fix : fallback token-par-token ───────────────────
+                            # Pour les expansions de nom ('Google Kubernetes Engine'),
+                            # chercher chaque token significatif individuellement.
+                            TOKEN_MIN_LEN = 5
+                            tokens = [t for t in n_norm.split() if len(t) >= TOKEN_MIN_LEN]
+                            for token in tokens:
+                                if token == n_norm:
+                                    continue  # évite la boucle infinie sur un mot unique
+                                try:
+                                    tok_res = await bg_http_client.get(
+                                        f"{COMPETENCIES_API_URL.rstrip('/')}/search",
+                                        params={"query": token, "limit": 5},
+                                        headers=bg_headers, timeout=5.0
+                                    )
+                                    if tok_res.status_code == 200:
+                                        tok_data = PaginationResponse[dict].model_validate(tok_res.json())
+                                        for item in tok_data.items:
+                                            if normalize_comp(item.get("name", "")) == token:
+                                                logger.info(
+                                                    "[import] RC1 token-match : '%s' résolu vers '%s' (id=%d) "
+                                                    "via token '%s'.",
+                                                    name, item.get("name"), item["id"], token
+                                                )
+                                                return item["id"]
+                                except Exception as tok_e:
+                                    logger.debug("[import] Token lookup '%s' failed: %s", token, tok_e)
                     except Exception as e:
                         logger.debug(
                             "[import] Competency alias lookup failed: %s", e)
@@ -500,7 +535,7 @@ class CVStorageService:
         # ── Persistance en base (TOUJOURS, même si pas d'erreur) ────────────────
         # Une compétence non assignée = consultant invisible à la recherche = critique
         try:
-            async with SessionLocal() as db_bg:
+            async with shared_db.SessionLocal() as db_bg:
                 async with db_bg.begin():
                     await db_bg.execute(
                         sa_update(CVProfile)

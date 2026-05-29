@@ -6,9 +6,10 @@ import re
 import httpx
 from opentelemetry.propagate import inject
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.cache import clear_namespace
 from shared.database import get_db
 from src.auth import verify_admin
 
@@ -173,4 +174,32 @@ async def clear_processing_errors(
     except Exception as exc:
         await db.rollback()
         logger.error("[clear-processing-errors] Erreur: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/purge-data")
+async def purge_data(
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    (Admin only) Supprime tous les CVProfiles et CVMissionEmbeddings de la base de données.
+    Invalide ensuite les namespaces Redis liés aux profils et aux recherches.
+    """
+    try:
+        from src.cvs.models import CVMissionEmbedding, CVProfile
+        await db.execute(delete(CVMissionEmbedding))
+        await db.execute(delete(CVProfile))
+        await db.commit()
+        logger.info("[purge-data] Purge complète effectuée (CVMissionEmbedding et CVProfile).")
+
+        # Invalidation globale du cache Redis pour cv_api
+        await clear_namespace("cv:profile:")
+        await clear_namespace("cv:search:")
+        await clear_namespace("cv:taxonomy:")
+        await clear_namespace("cv:list:")
+
+        return {"status": "success", "message": "CV profiles and mission embeddings purged."}
+    except Exception as exc:
+        await db.rollback()
+        logger.error("[purge-data] Erreur lors de la purge: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))

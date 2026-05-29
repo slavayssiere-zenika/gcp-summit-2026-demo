@@ -9,3 +9,4 @@ testcontainers[postgres,redis]
 greenlet
 pytest-mock
 fakeredis
+openapi-spec-validator

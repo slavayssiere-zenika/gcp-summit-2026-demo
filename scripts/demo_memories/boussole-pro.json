@@ -1,0 +1,147 @@
+[
+  {
+    "content": "# Restructuration projet La Boussole Pro — 2026-02-22\n\n## Changement\nProjet deplace de `boussole_pro/` (sous-dossier) vers la racine `34_boussole/`.\nLe repo git est maintenant directement a la racine du workspace.\n\n## Actions effectuees\n1. Suppression `morphi_experiment/` (experience Moshi voice AI, hors git)\n2. Suppression branche `moshi-mlx-test` (locale + remote, 1 commit de diff = bruit)\n3. Switch sur `main`\n4. Remontee de tous les fichiers de `boussole_pro/` vers la racine (mobile/, backend/, docs/, AGENTS.md, etc.)\n5. Suppression du sous-dossier `boussole_pro/` vide\n6. Merge des deux `.claude/settings.local.json` (root + boussole_pro)\n7. Creation CLAUDE.md a la racine depuis template `~/.claude/CLAUDE-template.md` (17 sections, 34 placeholders remplis)\n8. Correction section Antigravity Skills : 9/10 skills inventes remplaces par 37 skills verifies du catalogue reel\n9. Mise a jour AGENTS.md : arbre projet, status 9/17 (53%), footer\n10. Mise a jour claudedocs/PROJECT_CONTEXT.md : session history, decisions, note memoire\n\n## Nouvelle structure\n```\n./                    # Project root (git repo)\n├── CLAUDE.md         # SuperClaude template complet\n├── AGENTS.md         # Config agents AI\n├── mobile/           # React Native + Expo\n├── backend/          # FastAPI microservices\n├── docs/             # Documentation 9.5/10\n├── claudedocs/       # Session persistence\n├── .taskmaster/      # Ralph-loop tasks\n└── 00_cursor-rules/  # Quality rules\n```\n\n## Commits\n- `f82a3d8` — refactor: restructure project to root level and upgrade CLAUDE.md\n- `0db3064` — docs: update AGENTS.md to reflect root-level project structure\n- `8eec05b` — docs: update PROJECT_CONTEXT.md for root-level structure\n\n## Decisions cles\n- Suppression nesting `boussole_pro/` : simplification, git repo a la racine\n- CLAUDE.md template SuperClaude : 17 sections standardisees, decision matrix, 37 antigravity skills verifies\n- Deux CLAUDE.md fusionnes en un seul (root)",
+    "summary": "Restructuration projet La Boussole Pro : boussole_pro/ remonte a la racine, CLAUDE.md upgrade template SuperClaude, 3 co",
+    "category": "refactor",
+    "tags": [
+      "boussole-pro",
+      "restructuration",
+      "claude-md",
+      "template",
+      "antigravity",
+      "arborescence",
+      "git"
+    ],
+    "importance": 0.9,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "NativeWind v4 utilise UNIQUEMENT le Metro transformer (withNativeWind dans metro.config.js). Le plugin babel 'nativewind/babel' est pour NativeWind v2 et provoque l'erreur \".plugins is not a valid Plugin property\" si ajouté dans babel.config.js avec la v4. Fix : supprimer 'nativewind/babel' de babel.config.js.",
+    "summary": "NativeWind v4 : pas de plugin babel, Metro transformer uniquement",
+    "category": "error_solution",
+    "tags": [
+      "nativewind",
+      "babel",
+      "metro",
+      "react-native",
+      "configuration"
+    ],
+    "importance": 0.9,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "react-native-reanimated 4.x nécessite le package séparé 'react-native-worklets' (PAS 'react-native-worklets-core'). Sans ce package, l'erreur \"Cannot find module 'react-native-worklets/plugin'\" apparaît au démarrage. Installation : npx expo install react-native-worklets",
+    "summary": "Reanimated 4.x requiert react-native-worklets séparé",
+    "category": "error_solution",
+    "tags": [
+      "reanimated",
+      "react-native-worklets",
+      "dependency",
+      "expo"
+    ],
+    "importance": 0.8,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Le tool Write de Claude Code encode les caractères accentués français en séquences d'échappement Unicode \\u00XX (ex: \\u00e9 pour é, \\u00e0 pour à). Ces séquences sont rendues littéralement dans JSX au lieu des vrais caractères. Fix : après écriture, lancer un remplacement perl/sed pour convertir les escapes en UTF-8 réel : perl -pi -e 's/\\\\u([0-9a-fA-F]{4})/chr(hex($1))/ge' fichier.tsx",
+    "summary": "Write tool encode les accents français en \\u00XX — fix avec perl",
+    "category": "error_solution",
+    "tags": [
+      "unicode",
+      "write-tool",
+      "french",
+      "jsx",
+      "encoding",
+      "claude-code"
+    ],
+    "importance": 0.9,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Composants atoms AppText et AppButton — API de référence :\n\nAppText variants valides : caption, label, display, headingL, headingM, headingS, bodyL, bodyM, bodyS. PAS \"body\", \"bodySmall\", \"heading\", etc.\n\nAppButton props : iconLeft/iconRight (type LucideIcon), PAS \"icon\". Variants : primary, secondary, danger, ghost.\n\nJAMAIS utiliser fontWeight avec les polices custom (Poppins/Inter) — utiliser fontFamily directement pour la sélection du poids (ex: 'Poppins-Bold' au lieu de fontWeight: 'bold').",
+    "summary": "API atoms : AppText variants, AppButton props, pas de fontWeight",
+    "category": "pattern",
+    "tags": [
+      "apptext",
+      "appbutton",
+      "atoms",
+      "api",
+      "typescript",
+      "fonts"
+    ],
+    "importance": 0.9,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Stratégie de migration styles.ts lors du refactoring UI :\n- Supprimer complètement le styles.ts quand TOUS les consommateurs (index + sous-composants) sont migrés vers les composants atoms/molecules/organisms\n- Garder le styles.ts (trimmed) quand des sous-composants l'importent encore (ex: AnchorCard, ChatInterface)\n- Supprimer du styles.ts uniquement les styles qui étaient utilisés par index.tsx (remplacés par localStyles dans index)\n- Toujours supprimer les propriétés fontWeight des styles gardés (incompatible polices custom)",
+    "summary": "Stratégie migration styles.ts : supprimer ou trimmer selon les consommateurs",
+    "category": "pattern",
+    "tags": [
+      "styles",
+      "migration",
+      "refactoring",
+      "pattern"
+    ],
+    "importance": 0.7,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Pattern ScrollView pour contenu scrollable avec navigation fixe en bas :\n- ScrollView avec style={{flex: 1}} pour prendre l'espace disponible\n- contentContainerStyle={{flexGrow: 1, justifyContent: 'center'}} pour centrer le contenu quand il est petit ET permettre le scroll quand il dépasse\n- Garder les boutons de navigation EN DEHORS du ScrollView pour qu'ils restent fixés en bas\n- bounces={false} pour éviter le rebond sur iOS\n- Utilisé sur AncresCarriere/index.tsx pour fixer le problème de boutons invisibles sur petits écrans",
+    "summary": "ScrollView + nav fixe : flex:1, flexGrow:1, nav hors ScrollView",
+    "category": "pattern",
+    "tags": [
+      "scrollview",
+      "layout",
+      "react-native",
+      "navigation",
+      "responsive"
+    ],
+    "importance": 0.8,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Refactoring UI Total terminé avec succès — 4 phases complètes :\n- Phase 0 : Fondations (expo-font, NativeWind réactivé, icons.ts Lucide, tokens enrichis)\n- Phase 1 : 8 composants atoms (AppIcon, AppText, AppButton, AppCard, AppInput, PremiumBadge, Skeleton, Chip)\n- Phase 2 : 5 molecules (ScreenHeader, AssessmentNavigation, FeatureCard, LoadingScreen, ProgressBar) + 2 organisms (GradientScreen, PremiumGate)\n- Phase 3 : 11 écrans migrés (Onboarding, Auth, Home, BilanDashboard, JournalCompetences, Ikigai, AncresCarriere, PremiumHub, ChatbotAdvisor, DaySimulator, Subscription) — 5 styles.ts supprimés, 5 trimmés\n- Phase 4 : Polish (useScreenEntrance, useHaptic hooks, ErrorBoundary premium)\n\nPackages ajoutés : lucide-react-native, moti, expo-font, expo-blur, expo-haptics, expo-splash-screen, react-native-worklets\n--legacy-peer-deps nécessaire pour tous les npm install (conflit peer eslint)",
+    "summary": "Refactoring UI Total complété : 4 phases, 11 écrans, 15+ composants",
+    "category": "feature",
+    "tags": [
+      "refactoring",
+      "ui",
+      "atoms",
+      "molecules",
+      "organisms",
+      "migration",
+      "milestone"
+    ],
+    "importance": 1.0,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Version réelle du projet La Boussole Pro : Expo SDK 51 / React Native 0.75.5 (package.json fait foi). Le CLAUDE.md indique SDK 54 / RN 0.81 mais c'est incorrect — ne pas se fier au CLAUDE.md pour les versions. Toujours vérifier package.json.\n\nAussi : --legacy-peer-deps est obligatoire pour npm install à cause d'un conflit de peer dependency eslint. ESLint 10 requiert flat config (eslint.config.js) mais le projet utilise encore le pattern .eslintrc — problème pré-existant, pas causé par le refactoring.",
+    "summary": "Versions réelles : Expo SDK 51, RN 0.75.5, --legacy-peer-deps obligatoire",
+    "category": "discovery",
+    "tags": [
+      "versions",
+      "expo",
+      "react-native",
+      "eslint",
+      "npm",
+      "configuration"
+    ],
+    "importance": 0.8,
+    "project": "boussole-pro"
+  },
+  {
+    "content": "Lors de la délégation de migration d'écrans à des agents Task parallèles, les erreurs récurrentes sont :\n1. variant=\"body\" au lieu de \"bodyM\" (AppText)\n2. variant=\"bodySmall\" au lieu de \"bodyS\" (AppText)  \n3. prop icon={X} au lieu de iconLeft={X} ou iconRight={X} (AppButton)\n4. fontWeight dans les styles inline (incompatible polices custom)\n\nToujours lancer npm run typecheck après chaque batch de migrations par agents pour détecter et corriger ces erreurs systématiquement.",
+    "summary": "Erreurs récurrentes des agents : variants AppText, props AppButton, fontWeight",
+    "category": "learning",
+    "tags": [
+      "agents",
+      "delegation",
+      "typescript",
+      "erreurs",
+      "migration"
+    ],
+    "importance": 0.8,
+    "project": "boussole-pro"
+  }
+]

@@ -44,4 +44,6 @@
 - [ ] **[ADR12-6] Consumer-Driven Contract Tests (A2A)** : Tests de contrat Router/Sous-agents.
 - [ ] **[ADR12-7] Agent Discovery dynamique** : Registre de services Redis/Consul.
 - [ ] **[ADR12-8] Agent Generalist** : Créer `agent_general_api` (ex: `gemini-flash`).
-- [ ] **[ADR12-9] Parallélisation des appels A2A multi-domaine**.
+- [ ] **[ADR12-9] Parallélisation des appels A2A multi-domaine** : Exécuter `agent_hr_api` et `agent_ops_api` en parallèle (`asyncio.gather`) depuis `agent_router_api` quand la requête est multi-domaine. Fusionner les `A2AResponse` en un résultat cohérent.
+- [ ] **[ADR12-10] Négociation A2A** : Protocole de ré-affectation dynamique si un sous-agent retourne `{"status": "uncertain", "confidence": < 0.5}` — le router peut réassigner à un agent plus spécialisé ou demander une clarification.
+- [ ] **[ADK-Tracing] Observabilité Avancée des Agents** : ~~ADK Tracing OTel dans `agent_commons/runner.py`~~ ✅ Réalisé. Prochaine étape : Dashboard Cloud Trace custom montrant le ratio `thought_count / tool_call_count` par agent comme signal de qualité du raisonnement.

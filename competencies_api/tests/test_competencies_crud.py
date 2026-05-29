@@ -264,8 +264,16 @@ def test_create_competency_success(mocker):
 
     mocker.patch("src.competencies.competencies_router.check_grammatical_conflict", return_value=None)
     mocker.patch("src.competencies.competencies_router._generate_aliases_for_competency", return_value=[])
-    mocker.patch("src.competencies.competencies_router.serialize_competency",
-                 return_value={"id": 10, "name": "React", "children": [], "created_at": "2024-01-01T00:00:00", "sub_competencies": []})
+    mocker.patch(
+        "src.competencies.competencies_router.serialize_competency",
+        return_value={
+            "id": 10,
+            "name": "React",
+            "children": [],
+            "created_at": "2024-01-01T00:00:00",
+            "sub_competencies": []
+        }
+    )
 
     async def override_db():
         yield mock_db
@@ -276,6 +284,46 @@ def test_create_competency_success(mocker):
         resp = client.post("/", json={"name": "React", "category_id": 1}, headers=AUTH)
 
     assert resp.status_code in (200, 201)
+    app.dependency_overrides.pop(get_db, None)
+
+
+def test_create_competency_fuzzy_deduplication(mocker):
+    """POST / -> Retourne la compétence existante avec l'alias mis à jour si correspondance floue >= 0.6."""
+    _patch_cache(mocker)
+
+    existing_comp = _make_comp(5, "Docker")
+    existing_comp.aliases = "docker engine"
+
+    mock_db = _make_sync_db(
+        first_results=[None],  # parent_id check
+        all_results=[existing_comp]  # fuzzy deduplication check
+    )
+
+    mocker.patch("src.competencies.competencies_router.check_grammatical_conflict", return_value=None)
+    mocker.patch(
+        "src.competencies.competencies_router.serialize_competency",
+        return_value={
+            "id": 5,
+            "name": "Docker",
+            "aliases": "docker engine, Docker Container",
+            "children": [],
+            "created_at": "2024-01-01T00:00:00",
+            "sub_competencies": []
+        }
+    )
+
+    async def override_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_db
+
+    with get_client() as client:
+        resp = client.post("/", json={"name": "Docker Container", "category_id": 1}, headers=AUTH)
+
+    assert resp.status_code in (200, 201)
+    data = resp.json()
+    assert data["id"] == 5
+    assert "Docker Container" in existing_comp.aliases
     app.dependency_overrides.pop(get_db, None)
 
 

@@ -274,7 +274,8 @@ class CompetencySuggestionResponse(BaseModel):
     context: Optional[str] = None
     status: str
     occurrence_count: int
-    created_at: datetime
+    # Optional : les lignes créées avant l'ajout du server_default peuvent avoir NULL
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

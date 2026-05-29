@@ -30,7 +30,7 @@ from src.competencies.ai_scoring import (
     _serialize_evaluation,
 )
 from src.competencies.models import Competency, CompetencyEvaluation, user_competency
-from shared.database import SessionLocal
+import shared.database as shared_db
 from shared.schemas.auth import TokenResponse
 from src.competencies.schemas import (
     AiScoreAllResponse,
@@ -352,7 +352,7 @@ async def trigger_ai_score_single(
         )
 
     # Phase 1 : lecture courte — vérifier que la compétence existe
-    async with SessionLocal() as db:
+    async with shared_db.SessionLocal() as db:
         comp = (
             (await db.execute(select(Competency).where(Competency.id == competency_id)))
             .scalars()
@@ -371,7 +371,7 @@ async def trigger_ai_score_single(
     score, justification = await _compute_ai_score(user_id, comp_name, headers)
 
     # Phase 3 : écriture courte — persister le résultat
-    async with SessionLocal() as db:
+    async with shared_db.SessionLocal() as db:
         ev = await _get_or_create_evaluation(db, user_id, competency_id)
         ev.ai_score = score
         ev.ai_justification = justification

@@ -47,14 +47,14 @@ async def test_check_batch_succeeded_map():
                     mock_parse.return_value = ({"Pillar": [{"name": "Skill"}]}, MagicMock())
 
                     with patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
-                         patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-                               ".generate_autonomous_service_token",
-                               new_callable=AsyncMock, return_value="token"), \
-                         patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
-                               new_callable=AsyncMock), \
-                         patch("src.services.taxonomy_batch_service.asyncio.create_task") as mock_create_task, \
-                         patch("src.services.taxonomy_batch_service.BATCH_GCS_BUCKET", "test_bucket"), \
-                         patch.dict(os.environ, _MODEL_ENV):
+                            patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                                  ".generate_autonomous_service_token",
+                                  new_callable=AsyncMock, return_value="token"), \
+                            patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
+                                  new_callable=AsyncMock), \
+                            patch("src.services.taxonomy_batch_service.asyncio.create_task") as mock_create_task, \
+                            patch("src.services.taxonomy_batch_service.BATCH_GCS_BUCKET", "test_bucket"), \
+                            patch.dict(os.environ, _MODEL_ENV):
 
                         res = await TaxonomyBatchService.check_batch("Bearer x", "user")
                         assert res["success"] is True
@@ -65,8 +65,8 @@ async def test_check_batch_succeeded_map():
 
                         with patch("src.services.taxonomy_batch_service._fetch_prompt",
                                    new_callable=AsyncMock, return_value="prompt {{MAP_RESULT}} {{CURRENT_PILLAR}}"), \
-                             patch("src.services.taxonomy_batch_service.generate_content_with_retry",
-                                   new_callable=AsyncMock) as mock_gen_content:
+                            patch("src.services.taxonomy_batch_service.generate_content_with_retry",
+                                  new_callable=AsyncMock) as mock_gen_content:
 
                             mock_resp = MagicMock()
                             mock_resp.text = '{"pillars": [{"name": "Pillar"}]}'
@@ -117,25 +117,25 @@ async def test_check_batch_succeeded_reduce():
                 sys.modules["json_repair"].loads.return_value = {"Pillar": {"categories": []}}
 
                 with patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
-                     patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
-                           new_callable=AsyncMock), \
-                     patch("src.services.taxonomy_batch_service._fetch_prompt",
-                           new_callable=AsyncMock, return_value="prompt {{REDUCE_RESULT}}"), \
-                     patch("src.services.taxonomy_batch_service._get_existing_competencies",
-                           new_callable=AsyncMock, return_value=["Skill1", "Skill2"]), \
-                     patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-                           ".generate_autonomous_service_token",
-                           new_callable=AsyncMock, return_value=""), \
-                     patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-                           "._get_oidc_token_for_service",
-                           new_callable=AsyncMock, return_value=""), \
-                     patch("src.services.taxonomy_batch_service.BATCH_GCS_BUCKET", "test_bucket"), \
-                     patch.dict(os.environ, {
-                         **_MODEL_ENV,
-                         "USE_IAM_AUTH": "false",
-                         "PROMPTS_API_URL": "http://api",
-                         "COMPETENCIES_API_URL": "http://api",
-                     }):
+                        patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
+                              new_callable=AsyncMock), \
+                        patch("src.services.taxonomy_batch_service._fetch_prompt",
+                              new_callable=AsyncMock, return_value="prompt {{REDUCE_RESULT}}"), \
+                        patch("src.services.taxonomy_batch_service._get_existing_competencies_with_archive",
+                              new_callable=AsyncMock, return_value=(["Skill1", "Skill2"], set())), \
+                        patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                              ".generate_autonomous_service_token",
+                              new_callable=AsyncMock, return_value=""), \
+                        patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                              "._get_oidc_token_for_service",
+                              new_callable=AsyncMock, return_value=""), \
+                        patch("src.services.taxonomy_batch_service.BATCH_GCS_BUCKET", "test_bucket"), \
+                        patch.dict(os.environ, {
+                            **_MODEL_ENV,
+                            "USE_IAM_AUTH": "false",
+                            "PROMPTS_API_URL": "http://api",
+                            "COMPETENCIES_API_URL": "http://api",
+                        }):
 
                     res = await TaxonomyBatchService.check_batch("Bearer x", "user")
                     assert res["success"] is True, f"Failed: {res}"
@@ -174,13 +174,13 @@ async def test_check_batch_succeeded_sweep():
                 mock_gcs.return_value.bucket.return_value = mock_bucket
 
                 with patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
-                     patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
-                           new_callable=AsyncMock), \
-                     patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
-                     patch.dict(os.environ, {
-                         **_MODEL_ENV,
-                         "COMPETENCIES_API_URL": "http://api",
-                     }):
+                        patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
+                              new_callable=AsyncMock), \
+                        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
+                        patch.dict(os.environ, {
+                            **_MODEL_ENV,
+                            "COMPETENCIES_API_URL": "http://api",
+                        }):
 
                     mock_resp = MagicMock()
                     mock_resp.status_code = 200

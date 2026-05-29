@@ -65,7 +65,8 @@ async def query(request: QueryRequest, http_request: Request,
             AGENT_QUERIES_TOTAL.inc()
             jwt_user_id = jwt_sub or "unknown@zenika.com"
 
-            cached_response = await _semantic_cache.get(request.query)
+            bypass_cache = http_request.headers.get("x-bypass-semantic-cache") == "true"
+            cached_response = None if bypass_cache else await _semantic_cache.get(request.query)
             if cached_response is not None:
                 span.set_attribute("agent.source", "semantic_cache")
                 span.set_attribute("semantic_cache.hit", True)
@@ -102,7 +103,8 @@ async def query(request: QueryRequest, http_request: Request,
             )
             span.set_attribute("agent.source", result.get("source", "unknown"))
 
-            asyncio.create_task(_semantic_cache.set(request.query, result))
+            if not bypass_cache:
+                asyncio.create_task(_semantic_cache.set(request.query, result))
 
             return result
 
@@ -385,6 +387,9 @@ async def delete_history(request: Request, auth: HTTPAuthorizationCredentials = 
         raise HTTPException(status_code=401, detail="Token invalide")
 
     session_id = request.query_params.get("session_id") or jwt_user_id
+
+    # Invalider le cache sémantique global à chaque reset d'historique
+    await _semantic_cache.clear()
 
     session_service = get_session_service()
     session = await session_service.get_session(

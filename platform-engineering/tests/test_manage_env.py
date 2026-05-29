@@ -12,10 +12,10 @@ Exécution :
   cd platform-engineering
   pytest tests/test_manage_env.py -v
 """
+
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -26,7 +26,7 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import après ajustement du path
-import manage_env as me
+import manage_env as me  # noqa: E402
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -34,6 +34,7 @@ import manage_env as me
 # ──────────────────────────────────────────────────────────────────────────────
 
 REGISTRY = "europe-west1-docker.pkg.dev/test-project/test-repo"
+
 
 @pytest.fixture
 def local_versions():
@@ -52,7 +53,7 @@ def tmp_project(tmp_path):
     for svc in ["agent_router_api", "users_api", "analytics_mcp"]:
         svc_dir = tmp_path / svc
         svc_dir.mkdir()
-        (svc_dir / "VERSION").write_text(f"v1.2.3")
+        (svc_dir / "VERSION").write_text("v1.2.3")
     return tmp_path
 
 
@@ -333,7 +334,7 @@ class TestVersionPriority:
     def test_final_config_has_no_image_registry_key(self, dev_yaml, local_versions):
         """La clé 'image_registry' est consommée par manage_env et ne doit pas
         apparaître dans le tfvars.json final (Terraform ne la connaît pas)."""
-        final = self._run(str(dev_yaml), local_versions)
+        self._run(str(dev_yaml), local_versions)
         # image_registry ne doit pas leak dans le final_config
         # (le __main__ fait config.get() mais ne le retire pas explicitement du base_config —
         # on vérifie ici que l'URL n'est pas dans une clé 'image_registry')
@@ -428,6 +429,7 @@ class TestRealYamlFiles:
 # ──────────────────────────────────────────────────────────────────────────────
 # Tests : _terraform_apply_with_retry()
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestTerraformApplyWithRetry:
     """Valide la logique de retry triple de _terraform_apply_with_retry()."""
@@ -770,3 +772,57 @@ class TestDiscoverExtraProjects:
         assert len(result) == 2
         names = {r["name"] for r in result}
         assert names == {"service-alpha", "service-beta"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests : _post_deploy_frontend_sync()
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestPostDeployFrontendSync:
+    """Valide la logique de synchronisation et filtrage des versions du frontend."""
+
+    @patch("manage_env.subprocess.run")
+    def test_post_deploy_frontend_sync_filters_by_version(self, mock_run):
+        """Vérifie que la version demandée est correctement extraite et filtrée."""
+        # 1. Mock terraform output pour frontend_bucket_name
+        r1 = MagicMock()
+        r1.returncode = 0
+        r1.stdout = json.dumps({"frontend_bucket_name": {"value": "my-bucket"}})
+
+        # 2. Mock gcloud storage ls pour lister les fichiers
+        r2 = MagicMock()
+        r2.returncode = 0
+        r2.stdout = (
+            "gs://z-gcp-summit-frontend/frontend-20260407152348-v0.0.2.tar.gz\n"
+            "gs://z-gcp-summit-frontend/frontend-20260413125855-v0.0.12.tar.gz\n"
+            "gs://z-gcp-summit-frontend/frontend-20260522112523-v0.1.12.tar.gz\n"
+        )
+
+        # 3. Mock gcloud storage ls --long pour trier par date
+        r3 = MagicMock()
+        r3.returncode = 0
+        r3.stdout = (
+            "    143250  2026-04-07T13:23:49Z  "
+            "gs://z-gcp-summit-frontend/frontend-20260407152348-v0.0.2.tar.gz\n"
+            "   1266917  2026-04-13T10:58:57Z  "
+            "gs://z-gcp-summit-frontend/frontend-20260413125855-v0.0.12.tar.gz\n"
+            "   1265017  2026-05-22T09:29:54Z  "
+            "gs://z-gcp-summit-frontend/frontend-20260522112523-v0.1.12.tar.gz\n"
+        )
+
+        # Mock subprocess.run
+        mock_run.side_effect = [
+            r1, r2, r3, MagicMock(returncode=0),
+            MagicMock(returncode=0), MagicMock(returncode=0)
+        ]
+
+        with patch("manage_env.tempfile.TemporaryDirectory") as mock_tmp:
+            mock_tmp.return_value.__enter__.return_value = "/tmp/fake-dir"
+            with patch("manage_env.os.makedirs"):
+                with patch("manage_env.tarfile.open"):
+                    with patch("manage_env.os.walk", return_value=[("/tmp/fake-dir", [], ["index.html"])]):
+                        me._post_deploy_frontend_sync("prd", "my-project", frontend_version="v0.1.12")
+
+        # Vérifie que la commande de téléchargement a bien utilisé l'URL filtrée de la version v0.1.12
+        cp_calls = [c for c in mock_run.mock_calls if "cp" in str(c)]
+        assert any("frontend-20260522112523-v0.1.12.tar.gz" in str(c) for c in cp_calls)

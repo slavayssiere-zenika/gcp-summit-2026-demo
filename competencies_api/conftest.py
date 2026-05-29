@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
 import pytest
@@ -79,3 +79,25 @@ def wipe_db():
     Base.metadata.create_all(bind=sync_engine)
     asyncio.run(_fake_redis_client.flushdb())
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_gemini_alias_globally():
+    """Mocke _generate_aliases_for_competency pour tous les tests.
+
+    Sans cette fixture, le client google-genai est instancié sans clé API,
+    ce qui provoque un AttributeError lors du teardown asyncio
+    (aclose() sur un _async_httpx_client jamais initialisé).
+    Patcher dans les modules appelants (pas dans helpers.py source),
+    car les routers importent la fonction avec `from ... import`.
+    """
+    with patch(
+        "src.competencies.competencies_router._generate_aliases_for_competency",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "src.competencies.suggestions_router._generate_aliases_for_competency",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield

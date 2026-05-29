@@ -1,0 +1,3249 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CV Analysis API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "summary": "Get Version",
+        "operationId": "get_version_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spec": {
+      "get": {
+        "summary": "Get Spec",
+        "operationId": "get_spec_spec_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pubsub/import-cv": {
+      "post": {
+        "tags": [
+          "CV_Public",
+          "CV_Public"
+        ],
+        "summary": "Handle Pubsub Cv Import",
+        "operationId": "handle_pubsub_cv_import_pubsub_import_cv_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pubsub/user-events": {
+      "post": {
+        "tags": [
+          "CV_Public",
+          "CV_Public"
+        ],
+        "summary": "Handle User Pubsub Events",
+        "description": "Handle GCP Pub/Sub Push Notifications for CV API.",
+        "operationId": "handle_user_pubsub_events_pubsub_user_events_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pubsub/data-quality-snapshot": {
+      "post": {
+        "tags": [
+          "CV_Public",
+          "Data Quality"
+        ],
+        "summary": "Trigger Data Quality Snapshot",
+        "description": "D\u00e9clenche le calcul et la publication d'un snapshot de data quality.\n\nAppel\u00e9 par Cloud Scheduler (toutes les 4h) ou par le pipeline batch post-COMPLETED.\nRetourne 202 imm\u00e9diatement \u2014 le snapshot est calcul\u00e9 et publi\u00e9 en arri\u00e8re-plan.",
+        "operationId": "trigger_data_quality_snapshot_pubsub_data_quality_snapshot_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalculate_tree/batch/start": {
+      "post": {
+        "tags": [
+          "CV_Public",
+          "CV Taxonomy Public"
+        ],
+        "summary": "Lance le processus batch asynchrone (Map)",
+        "operationId": "recalculate_tree_batch_start_recalculate_tree_batch_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalculate_tree/batch/check": {
+      "post": {
+        "tags": [
+          "CV_Public",
+          "CV Taxonomy Public"
+        ],
+        "summary": "V\u00e9rifie l'\u00e9tat du batch et avance la machine \u00e0 \u00e9tats",
+        "operationId": "recalculate_tree_batch_check_recalculate_tree_batch_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cache/invalidate-taxonomy": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Force Invalidate Taxonomy Cache",
+        "description": "Invalide sp\u00e9cifiquement le contexte s\u00e9mantique de l'arbre des comp\u00e9tences (Taxonomy Event).",
+        "operationId": "force_invalidate_taxonomy_cache_cache_invalidate_taxonomy_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/import": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Import And Analyze Cv",
+        "operationId": "import_and_analyze_cv_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CVImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CVResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/users/tags/map": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Get All User Tags",
+        "description": "Retourne un mapping global {str(user_id): source_tag} pour tous les CVs.\nPratique pour afficher l'agence dans la liste des utilisateurs du panel admin\nsans probl\u00e8me de N+1 requ\u00eates.",
+        "operationId": "get_all_user_tags_users_tags_map_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Get All User Tags Users Tags Map Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/users/tag/{tag}": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Get Users By Tag",
+        "operationId": "get_users_by_tag_users_tag__tag__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_CVProfileResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Get User Cv",
+        "operationId": "get_user_cv_user__user_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_CVProfileResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}/missions": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Get User Missions",
+        "operationId": "get_user_missions_user__user_id__missions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_ExtractedMission_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}/details": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Get User Cv Details",
+        "operationId": "get_user_cv_details_user__user_id__details_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CVFullProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/users/merge": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Merge Users",
+        "description": "Internal endpoint to merge user data.\nUpdates cv_profiles.user_id = target_id where user_id = source_id.",
+        "operationId": "merge_users_internal_users_merge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/remediate-anonymous-profiles": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Profiles"
+        ],
+        "summary": "Remediate Anonymous Profiles",
+        "operationId": "remediate_anonymous_profiles_internal_remediate_anonymous_profiles_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Si True, ne modifie rien \u2014 retourne seulement le compte de profils \u00e0 corriger.",
+              "default": true,
+              "title": "Dry Run"
+            },
+            "description": "Si True, ne modifie rien \u2014 retourne seulement le compte de profils \u00e0 corriger."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Search"
+        ],
+        "summary": "Search Candidates",
+        "operationId": "search_candidates_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 5,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Skills"
+            }
+          },
+          {
+            "name": "agency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agency"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_SearchCandidateResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Search"
+        ],
+        "summary": "Search Candidates Post",
+        "operationId": "search_candidates_post_search_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchCandidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_SearchCandidateResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}/similar": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Search"
+        ],
+        "summary": "Find Similar Consultants",
+        "description": "Retourne les N consultants dont le profil s\u00e9mantique est le plus proche d'un consultant donn\u00e9.\nUtile pour : cloner un profil de staffing, trouver des rempla\u00e7ants potentiels, constituer une \u00e9quipe.\nZ\u00e9ro appel LLM \u2014 r\u00e9sultat O(log N) gr\u00e2ce \u00e0 l'index HNSW pgvector.",
+        "operationId": "find_similar_consultants_user__user_id__similar_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "default": 5,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "agency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agency"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/multi-criteria": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Search"
+        ],
+        "summary": "Search Candidates Multi Criteria",
+        "description": "Recherche s\u00e9mantique multi-crit\u00e8res : trouve les consultants correspondant \u00e0\nPLUSIEURS dimensions simultan\u00e9ment via une moyenne pond\u00e9r\u00e9e de distances cosine.\nRemplace N appels search_best_candidates s\u00e9quentiels par une seule requ\u00eate SQL.\nExemple : queries=[\"expert GCP\", \"migration legacy\"], weights=[0.7, 0.3]",
+        "operationId": "search_candidates_multi_criteria_search_multi_criteria_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiCriteriaSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/user/{user_id}/rag-snippet": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Search"
+        ],
+        "summary": "Get Rag Snippet",
+        "description": "Retourne les passages les plus pertinents du CV d'un consultant pour une query donn\u00e9e.\nUtilise un chunking du distilled_content + re-ranking par similarit\u00e9 cosine.\nPermet de JUSTIFIER une recommandation avec des preuves textuelles pr\u00e9cises.\nTimeout MCP : 30s (embedding de la query + N passages).",
+        "operationId": "get_rag_snippet_user__user_id__rag_snippet_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "La requ\u00eate pour laquelle chercher les passages pertinents",
+              "title": "Query"
+            },
+            "description": "La requ\u00eate pour laquelle chercher les passages pertinents"
+          },
+          {
+            "name": "top_k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5,
+              "default": 3,
+              "title": "Top K"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/mission-match": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Search"
+        ],
+        "summary": "Match Mission To Candidates",
+        "description": "Matching direct mission \u2192 candidats via le semantic_embedding de la mission.\nPlus pr\u00e9cis que search_best_candidates pour le staffing car utilise le contexte\ncomplet de la mission (description + comp\u00e9tences extraites). Z\u00e9ro appel LLM.\nRequiert que la mission ait \u00e9t\u00e9 analys\u00e9e par l'IA (semantic_embedding aliment\u00e9).",
+        "operationId": "match_mission_to_candidates_search_mission_match_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mission_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "ID de la mission \u00e0 staffer",
+              "title": "Mission Id"
+            },
+            "description": "ID de la mission \u00e0 staffer"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "default": 10,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "agency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agency"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ranking/experience": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Analytics"
+        ],
+        "summary": "Get Consultants Experience Ranking",
+        "description": "Retourne la liste des consultants les plus exp\u00e9riment\u00e9s bas\u00e9s sur les ann\u00e9es d'exp\u00e9rience extraites des CVs.",
+        "operationId": "get_consultants_experience_ranking_ranking_experience_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 5,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "agency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agency"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankedExperienceResponse"
+                  },
+                  "title": "Response Get Consultants Experience Ranking Ranking Experience Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reindex-embeddings": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Analytics"
+        ],
+        "summary": "Reindex Embeddings",
+        "description": "(Admin Only) Re-calcule les embeddings vectoriels de tous les CVs avec le nouveau\ndistilled_content structur\u00e9 (missions + comp\u00e9tences), SANS relancer l'extraction LLM.\nTraitement en arri\u00e8re-plan \u2014 retour imm\u00e9diat. Suivre via GET /reanalyze/status.",
+        "operationId": "reindex_embeddings_reindex_embeddings_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtre par tag (agence)",
+              "title": "Tag"
+            },
+            "description": "Filtre par tag (agence)"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtre par user_id",
+              "title": "User Id"
+            },
+            "description": "Filtre par user_id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/extraction-scores": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Analytics"
+        ],
+        "summary": "Get Extraction Scores",
+        "description": "Retourne la liste pagin\u00e9e des scores de fiabilit\u00e9 d'extraction par CV.\nstatus peut valoir \"calculated\" (par d\u00e9faut) ou \"uncalculated\"",
+        "operationId": "get_extraction_scores_extraction_scores_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "sort_desc",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Sort Desc"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "calculated",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reanalyze/status": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Analytics"
+        ],
+        "summary": "Get Reanalyze Status",
+        "description": "Proxy vers drive_api /status \u2014 retourne les compteurs PENDING/QUEUED/PROCESSING/IMPORTED_CV/ERROR.\n\nRemplace l'ancien statut Redis depuis la migration vers le pipeline Pub/Sub unifi\u00e9.\nLa progression est d\u00e9sormais observable directement dans le scanner Drive.",
+        "operationId": "get_reanalyze_status_reanalyze_status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/skills-coverage": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Analytics"
+        ],
+        "summary": "Get Skills Coverage",
+        "description": "Analyse la couverture de comp\u00e9tences du corpus de consultants Zenika.\nRetourne les N comp\u00e9tences les plus repr\u00e9sent\u00e9es et le nombre de consultants.\nZ\u00e9ro appel LLM \u2014 agr\u00e9gation SQL sur la colonne competencies_keywords[] (ARRAY).\nR\u00e9ponse < 200ms. Id\u00e9al pour les requ\u00eates strat\u00e9giques de couverture.",
+        "operationId": "get_skills_coverage_analytics_skills_coverage_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtre par agence/tag",
+              "title": "Agency"
+            },
+            "description": "Filtre par agence/tag"
+          },
+          {
+            "name": "top_n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "default": 50,
+              "title": "Top N"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reanalyze": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Analytics"
+        ],
+        "summary": "Reanalyze Cvs",
+        "description": "(Admin Only) Replanie le traitement d'UN SEUL consultant via le pipeline Pub/Sub.\n\nR\u00e8gle d'architecture : 1 CV = appel direct (ce endpoint).\nPour N CVs > 1 (agence enti\u00e8re ou tous) \u2192 utiliser POST /bulk-reanalyse/start\nqui s'appuie sur Vertex AI Batch (co\u00fbt divis\u00e9 par 2, pas de saturation).\n\n\u00c9tapes :\n1. Guard-rail : rejette si count > REANALYZE_DIRECT_THRESHOLD (d\u00e9faut=1)\n2. Efface les comp\u00e9tences existantes pour le user_id concern\u00e9\n3. Remet le DriveSyncState en PENDING dans drive_api\n4. D\u00e9clenche imm\u00e9diatement drive_api /sync\n\nLa progression est observable via GET /reanalyze/status ou le scanner Drive.",
+        "operationId": "reanalyze_cvs_reanalyze_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalculate_tree/step": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Recalculate Competencies Tree Step",
+        "operationId": "recalculate_competencies_tree_step_recalculate_tree_step_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculateStepRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recalculate_tree": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Recalculate Competencies Tree",
+        "operationId": "recalculate_competencies_tree_recalculate_tree_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resume",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Resume"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalculate_tree/status": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Get Recalculate Tree Status",
+        "description": "R\u00e9cup\u00e8re le statut du recalcul de l'arbre.\n\nSynth\u00e8tise 'batch_running' quand mode=batch && status=running pour que\nle frontend d\u00e9clenche checkBatchProgress() et fasse avancer le pipeline.",
+        "operationId": "get_recalculate_tree_status_recalculate_tree_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recalculate_tree/batch/list": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Liste l'historique des jobs batch de taxonomie",
+        "operationId": "recalculate_tree_batch_list_recalculate_tree_batch_list_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recalculate_tree/batch/{job_id}": {
+      "delete": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Supprime un job batch GCP de l'historique",
+        "operationId": "recalculate_tree_batch_delete_recalculate_tree_batch__job_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalculate_tree/cancel": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Annule le traitement interactif en cours",
+        "operationId": "recalculate_tree_cancel_recalculate_tree_cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recalculate_tree/batch/cancel": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Annule le batch en cours",
+        "operationId": "recalculate_tree_batch_cancel_recalculate_tree_batch_cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recalculate_tree/batch/recover": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "Tente de r\u00e9cup\u00e9rer un batch bloqu\u00e9 en erreur",
+        "operationId": "recalculate_tree_batch_recover_recalculate_tree_batch_recover_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recalculate_tree/batch/reset": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "CV Taxonomy"
+        ],
+        "summary": "R\u00e9initialise forc\u00e9 l'\u00e9tat Redis du batch (d\u00e9blocage d'urgence)",
+        "description": "Efface l'\u00e9tat Redis du pipeline Batch pour permettre un nouveau d\u00e9marrage.\nA utiliser quand l'interface est bloqu\u00e9e et que Cancel/Recover ne suffisent pas.\nLe job GCP en cours n'est PAS annul\u00e9 \u2014 utilisez Cancel d'abord si n\u00e9cessaire.",
+        "operationId": "recalculate_tree_batch_reset_recalculate_tree_batch_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/start": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Start Bulk Reanalyse",
+        "description": "(Admin only) Lance la r\u00e9-analyse via Vertex AI Batch.\n\nBody JSON optionnel :\n- `cv_ids` (list[int]) : si fourni, seuls ces CVs sont trait\u00e9s.\n  Utilis\u00e9 pour r\u00e9cup\u00e9rer les CVs sans r\u00e9sultat GCS apr\u00e8s un batch partial.\n  Si absent ou liste vide \u2192 tous les CVs sont trait\u00e9s (comportement par d\u00e9faut).\n\nRetourne 202 imm\u00e9diatement \u2014 traitement asynchrone.\nSuivre via GET /bulk-reanalyse/status.",
+        "operationId": "start_bulk_reanalyse_bulk_reanalyse_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkReanalyseRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/status": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Get Bulk Reanalyse Status",
+        "description": "Retourne le statut courant du pipeline de r\u00e9-analyse globale.\nSi status='batch_running', interroge Vertex pour les completion_stats.",
+        "operationId": "get_bulk_reanalyse_status_bulk_reanalyse_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/cancel": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Cancel Bulk Reanalyse",
+        "description": "(Admin only) Annule le job Vertex AI Batch en cours.\nUtilise un 'cancel doux' : l'\u00e9tat passe \u00e0 'cancelled' mais dest_uri est\npr\u00e9serv\u00e9 en Redis \u2014 le bouton 'Retry Apply' pourra rejouer la phase apply\ndepuis les r\u00e9sultats GCS sans relancer Vertex AI.\nPour un reset complet (suppression de l'\u00e9tat), appeler /bulk-reanalyse/reset.",
+        "operationId": "cancel_bulk_reanalyse_bulk_reanalyse_cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/reset": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Reset Bulk Reanalyse",
+        "description": "(Admin only) R\u00e9initialisation compl\u00e8te de l'\u00e9tat Redis \u2014 supprime aussi dest_uri.\nLe retry-apply ne sera plus possible apr\u00e8s cette action.\nUtiliser uniquement pour d\u00e9bloquer un pipeline corrompu.",
+        "operationId": "reset_bulk_reanalyse_bulk_reanalyse_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/data-quality": {
+      "get": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Get Data Quality Report",
+        "description": "Rapport de qualit\u00e9 des donn\u00e9es peupl\u00e9es par le pipeline bulk.\nV\u00e9rifie : missions, embeddings, comp\u00e9tences, summary, current_role,\n          competency_assignment et ai_scoring (\u226510 \u00e9valuations IA).\nRetourne un score 0-100 et un grade A-D.\nCache in-process 30s (align\u00e9 sur le polling frontend).",
+        "operationId": "get_data_quality_report_bulk_reanalyse_data_quality_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/retry-apply": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Retry Bulk Apply",
+        "description": "(Admin only) Rejoue la phase apply depuis les r\u00e9sultats GCS du dernier batch Vertex.\nNe relance pas Vertex \u2014 \u00e9conomise temps (~35 min) et co\u00fbt.\nPr\u00e9requis : un job pr\u00e9c\u00e9dent doit avoir stock\u00e9 dest_uri en Redis.",
+        "operationId": "retry_bulk_apply_bulk_reanalyse_retry_apply_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-reanalyse/reindex-mission-chunks": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Bulk Reanalyse"
+        ],
+        "summary": "Reindex Mission Chunks",
+        "description": "(Admin only) R7 \u2014 Lance la r\u00e9-indexation des chunks de missions en arri\u00e8re-plan.\n\nPour chaque CVProfile :\n- 1 chunk 'profile_summary' (ROLE + SUMMARY + COMPETENCIES, sans missions)\n- N chunks 'mission' (1 par mission, toutes missions sans limite)\n\nforce=false (d\u00e9faut) : skip les profils d\u00e9j\u00e0 index\u00e9s (reprise s\u00fbr apr\u00e8s restart).\nforce=true : supprime et recr\u00e9e tous les chunks (re-indexation compl\u00e8te).\n\nDur\u00e9e estim\u00e9e : 30-90 min selon la taille du corpus.\nActiver le mode chunked avec RAG_CHUNKED_SEARCH=true apr\u00e8s indexation compl\u00e8te.",
+        "operationId": "reindex_mission_chunks_bulk_reanalyse_reindex_mission_chunks_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filtre optionnel par agence (source_tag)",
+              "title": "Tag"
+            },
+            "description": "Filtre optionnel par agence (source_tag)"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Filtre optionnel par user_id",
+              "title": "User Id"
+            },
+            "description": "Filtre optionnel par user_id"
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Si true, supprime et recr\u00e9e tous les chunks (d\u00e9faut: false = skip d\u00e9j\u00e0 index\u00e9s)",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Si true, supprime et recr\u00e9e tous les chunks (d\u00e9faut: false = skip d\u00e9j\u00e0 index\u00e9s)"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/remediate-legacy": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Admin"
+        ],
+        "summary": "Remediate Legacy Errors",
+        "description": "Endpoint d'administration pour r\u00e9concilier les CVs historiques avec des erreurs silencieuses.\n\u00c9quivalent \u00e0 scripts/mark_legacy_errors.py mais ex\u00e9cutable sur le cluster.",
+        "operationId": "remediate_legacy_errors_admin_remediate_legacy_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/clear-processing-errors": {
+      "post": {
+        "tags": [
+          "CV Analysis",
+          "Admin"
+        ],
+        "summary": "Clear Processing Errors",
+        "description": "Vide les erreurs de traitement historiques (processing_errors) en base.\n\nCible uniquement les CVs dont le statut Drive est IMPORTED_CV (import r\u00e9ussi)\nou qui ont un user_id (profil li\u00e9 \u00e0 un consultant).\nOp\u00e9ration idempotente et non-destructive : ne supprime que l'historique\nd'erreurs pass\u00e9es, pas les donn\u00e9es m\u00e9tier.\n\nRetourne le nombre de profils nettoy\u00e9s.",
+        "operationId": "clear_processing_errors_admin_clear_processing_errors_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/purge-data": {
+      "delete": {
+        "tags": [
+          "CV Analysis",
+          "Admin"
+        ],
+        "summary": "Purge Data",
+        "description": "(Admin only) Supprime tous les CVProfiles et CVMissionEmbeddings de la base de donn\u00e9es.\nInvalide ensuite les namespaces Redis li\u00e9s aux profils et aux recherches.",
+        "operationId": "purge_data_admin_purge_data_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/mcp/{path}": {
+      "post": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BulkReanalyseRequest": {
+        "properties": {
+          "cv_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cv Ids"
+          }
+        },
+        "type": "object",
+        "title": "BulkReanalyseRequest"
+      },
+      "CVFullProfileResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "current_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Role"
+          },
+          "seniority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seniority"
+          },
+          "years_of_experience": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Years Of Experience"
+          },
+          "competencies_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Competencies Keywords",
+            "default": []
+          },
+          "missions": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractedMission"
+            },
+            "type": "array",
+            "title": "Missions",
+            "default": []
+          },
+          "educations": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractedEducation"
+            },
+            "type": "array",
+            "title": "Educations",
+            "default": []
+          },
+          "is_anonymous": {
+            "type": "boolean",
+            "title": "Is Anonymous",
+            "default": false
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "processing_errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Processing Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "CVFullProfileResponse"
+      },
+      "CVImportRequest": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "google_access_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Access Token"
+          },
+          "source_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tag"
+          },
+          "folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Name"
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "direct_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direct User Id"
+          }
+        },
+        "type": "object",
+        "title": "CVImportRequest"
+      },
+      "CVImportStep": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "title": "Step"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step",
+          "label",
+          "status"
+        ],
+        "title": "CVImportStep",
+        "description": "Repr\u00e9sente une \u00e9tape du pipeline d'ingestion CV avec son statut et sa dur\u00e9e."
+      },
+      "CVProfileResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tag"
+          },
+          "imported_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported By Id"
+          },
+          "is_anonymous": {
+            "type": "boolean",
+            "title": "Is Anonymous",
+            "default": false
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "processing_errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Processing Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "CVProfileResponse"
+      },
+      "CVResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "competencies_assigned": {
+            "type": "integer",
+            "title": "Competencies Assigned"
+          },
+          "extracted_info": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Info"
+          },
+          "structured_cv": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Cv"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/CVImportStep"
+            },
+            "type": "array",
+            "title": "Steps",
+            "default": []
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "user_id",
+          "competencies_assigned"
+        ],
+        "title": "CVResponse"
+      },
+      "ExtractedEducation": {
+        "properties": {
+          "degree": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degree"
+          },
+          "school": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "School"
+          }
+        },
+        "type": "object",
+        "title": "ExtractedEducation"
+      },
+      "ExtractedMission": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "mission_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mission Type",
+            "default": "build"
+          },
+          "competencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Competencies",
+            "default": []
+          },
+          "is_sensitive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Sensitive",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ExtractedMission"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MultiCriteriaSearchRequest": {
+        "properties": {
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weights"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 10
+          },
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "queries"
+        ],
+        "title": "MultiCriteriaSearchRequest",
+        "description": "Request body for POST /search/multi-criteria."
+      },
+      "PaginationResponse_CVProfileResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CVProfileResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginationResponse[CVProfileResponse]"
+      },
+      "PaginationResponse_ExtractedMission_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractedMission"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginationResponse[ExtractedMission]"
+      },
+      "PaginationResponse_SearchCandidateResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchCandidateResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginationResponse[SearchCandidateResponse]"
+      },
+      "RankedExperienceResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "years_of_experience": {
+            "type": "integer",
+            "title": "Years Of Experience"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "current_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Role"
+          },
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "is_anonymous": {
+            "type": "boolean",
+            "title": "Is Anonymous",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "years_of_experience"
+        ],
+        "title": "RankedExperienceResponse"
+      },
+      "RecalculateStepRequest": {
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/TaxonomyStep"
+          },
+          "target_pillar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Pillar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step"
+        ],
+        "title": "RecalculateStepRequest",
+        "description": "Request body pour POST /recalculate_tree/step."
+      },
+      "SearchCandidateRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip",
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 5
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          },
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchCandidateRequest"
+      },
+      "SearchCandidateResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "similarity_score": {
+            "type": "number",
+            "title": "Similarity Score"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "similarity_score"
+        ],
+        "title": "SearchCandidateResponse"
+      },
+      "TaxonomyStep": {
+        "type": "string",
+        "enum": [
+          "map",
+          "deduplicate",
+          "reduce",
+          "sweep",
+          "apply"
+        ],
+        "title": "TaxonomyStep",
+        "description": "Valeurs l\u00e9gales pour l'\u00e9tape du pipeline de recalcul taxonomique.\n\nPipeline officiel : map \u2192 deduplicate \u2192 reduce \u2192 sweep \u2192 apply.\nPydantic rejette automatiquement toute autre valeur (y compris cha\u00eene vide)\navec un HTTP 422 avant que le router ne soit ex\u00e9cut\u00e9."
+      },
+      "UserMergeRequest": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "target_id": {
+            "type": "integer",
+            "title": "Target Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "target_id"
+        ],
+        "title": "UserMergeRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 | `conftest.py` | 40 | ✅ |
 | `metrics.py` | 3 | ✅ |
 | `src/missions/analysis_router.py` | 201 | ✅ |
-| `src/missions/crud_router.py` | 208 | ✅ |
+| `src/missions/crud_router.py` | 279 | ✅ |
 | `src/missions/router.py` | 16 | ✅ |
 | `src/missions/user_router.py` | 109 | ✅ |
 
@@ -57,6 +57,7 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 - `GET /missions/{mission_id}`
 - `DELETE /missions`
 - `DELETE /missions/{mission_id}`
+- `POST /missions/recover-stuck`
 - `GET /missions/user/{user_id}/active`
 - `GET /users/`
 - `GET /items/`
@@ -65,7 +66,6 @@ Gestion des missions client (appels d'offre, documents), analyse multimodale des
 - `DELETE /items/{item_id}`
 - `PATCH /items/`
 - `POST /send-notification/{email}`
-- `POST /files/`
 
 ## MCP tools exposés
 - `create_mission`, `delete_all_missions`, `get_mission`, `get_mission_candidates`, `get_mission_status_history`, `get_mission_task_status`, `get_user_active_missions`, `list_missions`, `reanalyze_mission`, `update_mission_status`

@@ -258,6 +258,16 @@ FINOPS_MONITORING_TOOLS: frozenset = frozenset({
     "run_bigquery_query",
     "execute_sql_query",
     "search_cloud_logs_by_trace",
+    "list_drive_folders",
+    "get_drive_status",
+    "list_drive_files",
+    "get_ingestion_kpis",
+    "get_folder_ingestion_kpis",
+    "get_recent_500_errors",
+    "get_ingestion_pipeline_status",
+    "inspect_pubsub_dlq",
+    "get_redis_invalidation_state",
+    "execute_read_only_query",
 })
 
 

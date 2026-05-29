@@ -1,0 +1,237 @@
+# SRE Triage Playbook — Zenika Platform
+# ═══════════════════════════════════════════════════════════════════════
+# Ce fichier est la source de vérité des patterns d'erreurs récurrents
+# de la plateforme Zenika et de leurs remédiations connues.
+# Il est chargé par l'Agent SRE Triage à chaque exécution (Phase 0).
+# L'agent DOIT croiser ses observations avec ces patterns avant de
+# conclure et DOIT citer le code de playbook applicable dans le rapport.
+# ═══════════════════════════════════════════════════════════════════════
+
+## FORMAT DE RÉFÉRENCE PLAYBOOK
+
+Chaque pattern est identifié par un code unique : SRE-XXX-NNN
+Pour chaque anomalie détectée, l'agent DOIT inclure dans le rapport :
+  → Playbook appliqué : [SRE-XXX-NNN] <nom>
+  → Remédiation recommandée : <action>
+
+═══════════════════════════════════════════════════════════════════════
+## CATÉGORIE BASE DE DONNÉES — AlloyDB / PostgreSQL
+═══════════════════════════════════════════════════════════════════════
+
+### [SRE-DB-001] AlloyDB Connection Pool Exhausted
+Symptômes :
+  - Erreurs "too many connections" ou "connection refused" dans les logs
+  - Latence > 5s sur les endpoints /ready ou /health des APIs data
+  - Erreurs 5xx en rafale sur users_api, items_api, competencies_api, cv_api
+Cause probable : Pool de connexions SQLAlchemy saturé (max_overflow dépassé)
+  lors d'un pic de trafic ou d'une fuite de connexion (session non fermée).
+Remédiation :
+  1. Vérifier le nombre de connexions actives : SELECT count(*) FROM pg_stat_activity;
+  2. Killer les connexions idle > 5min : SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query_start < NOW() - INTERVAL '5 minutes';
+  3. Si récurrent : augmenter pool_size dans les services (variable env SQLALCHEMY_POOL_SIZE)
+  4. Action urgente : redémarrer le service concerné via Cloud Run revision update
+
+### [SRE-DB-002] AlloyDB IAM Auth Propagation Delay
+Symptômes :
+  - Erreurs 503 au démarrage d'un nouveau service (cold start) uniquement
+  - Log contenant "IAM authentication failed" ou "pg_iam_auth: permission denied"
+  - Se résout seul après ~60-120 secondes
+Cause probable : Propagation IAM AlloyDB peut prendre jusqu'à 2 minutes après
+  le déploiement d'un nouveau service ou après une rotation de SA.
+Remédiation :
+  1. Attendre 2-3 minutes et vérifier si l'erreur persiste
+  2. Si persistant > 5min : vérifier que le SA dispose du rôle roles/alloydb.client
+  3. Forcer un redémarrage du service (nouveau deploy sans changement)
+
+### [SRE-DB-003] AlloyDB High Latency (Slow Queries)
+Symptômes :
+  - Latence des endpoints > 2s de manière persistante
+  - Logs contenant "slow query" ou latence > 500ms sur les requêtes SQL
+Cause probable : Index manquant, requête N+1, ou statistiques pg obsolètes.
+Remédiation :
+  1. Identifier les requêtes lentes : SELECT query, mean_exec_time FROM pg_stat_statements ORDER BY mean_exec_time DESC LIMIT 10;
+  2. Lancer ANALYZE sur les tables concernées
+  3. Si N+1 : vérifier les endpoints de liste (pagination obligatoire — voir AGENTS.md §3)
+
+═══════════════════════════════════════════════════════════════════════
+## CATÉGORIE CACHE — Redis
+═══════════════════════════════════════════════════════════════════════
+
+### [SRE-CACHE-001] Redis OOM (Out of Memory)
+Symptômes :
+  - Erreurs "OOM command not allowed when used memory > 'maxmemory'" dans les logs
+  - Cache miss rate > 80% (toutes les requêtes passent en base)
+  - Latence dégradée sur les endpoints utilisant le cache sémantique (agent_router_api)
+Cause probable : Cache Redis saturé — politique d'éviction non configurée ou
+  clés sans TTL accumulées (notamment le cache sémantique des embeddings).
+Remédiation :
+  1. Vérifier l'usage mémoire : redis-cli INFO memory | grep used_memory_human
+  2. Inspecter les namespaces les plus volumineux : redis-cli --scan --pattern '*' | xargs redis-cli MEMORY USAGE
+  3. Flush le cache sémantique si saturé : redis-cli -n 0 FLUSHDB ASYNC (attention : DB 0 = router cache)
+  4. Action long terme : augmenter la taille Redis ou réduire les TTL
+
+### [SRE-CACHE-002] Redis Connection Refused
+Symptômes :
+  - Erreurs "Connection refused" ou "Redis connection timeout" sur tous les services
+  - Toutes les APIs data retournent des 5xx simultanément
+Cause probable : Instance Redis Cloud Memorystore redémarrée ou indisponible
+  (maintenance GCP planifiée ou OOM critique avec kill du processus).
+Remédiation :
+  1. Vérifier le statut Cloud Memorystore dans la console GCP
+  2. Si maintenance en cours : attendre la fin (généralement < 5 minutes)
+  3. Si l'instance est KO : vérifier via gcloud redis instances describe cache-${env} --region=europe-west1
+  4. Les services continueront de fonctionner sans cache (dégradé mais pas KO)
+
+═══════════════════════════════════════════════════════════════════════
+## CATÉGORIE MESSAGING — Pub/Sub
+═══════════════════════════════════════════════════════════════════════
+
+### [SRE-PUBSUB-001] Dead Letter Queue (DLQ) Backlog
+Symptômes :
+  - Messages dans la DLQ > 0 (topic: zenika-dlq-{env} ou cv-processing-dlq-{env})
+  - Erreurs dans cv_api ou drive_api liées au traitement asynchrone
+  - CVs ou dossiers Drive non traités (statut bloqué)
+Cause probable : Erreur répétée dans le consumer (format message invalide,
+  erreur d'extraction CV, ou timeout Gemini lors du batch processing).
+Remédiation :
+  1. Inspecter le contenu DLQ via le tool monitoring get_pubsub_dlq_messages
+  2. Identifier le type d'erreur dans les messages
+  3. Si erreur transitoire : republier les messages vers le topic principal
+  4. Si erreur structurelle : corriger le code du consumer avant de republier
+
+### [SRE-PUBSUB-002] Pub/Sub Subscriber Lag
+Symptômes :
+  - Backlog > 1000 messages sur un topic de traitement (cv_processing, drive_sync)
+  - Latence de traitement > 30 minutes pour les nouvelles soumissions
+Cause probable : Consumer trop lent (Gemini rate limit, cold start) ou
+  burst de soumissions (import massif de CVs ou sync Drive volumineuse).
+Remédiation :
+  1. Vérifier le taux de traitement actuel dans Cloud Monitoring
+  2. Augmenter temporairement max_instances du service consumer (cv_api ou drive_api)
+  3. Si Gemini rate limit : vérifier les quotas dans la console Vertex AI
+
+═══════════════════════════════════════════════════════════════════════
+## CATÉGORIE AGENTS IA — LLM & ADK
+═══════════════════════════════════════════════════════════════════════
+
+### [SRE-AI-001] Gemini Context Window Overflow (OPS-003)
+Symptômes :
+  - Erreurs "context window exceeded" ou "token limit" dans les logs agent_*
+  - Réponses tronquées ou arrêt prématuré de l'agent après de longues sessions
+Cause probable : Accumulation de tool calls dans une session ADK sans reset —
+  l'historique de session dépasse la limite de contexte Gemini.
+Remédiation :
+  1. Les sessions ADK sont éphémères par design (UUID par requête) — vérifier que session_id=None est bien passé
+  2. Si l'erreur persiste : vérifier que les tools MCP ne retournent pas de payloads trop volumineux (limiter les champs retournés)
+  3. Suggérer à l'utilisateur de reformuler avec une requête plus ciblée
+
+### [SRE-AI-002] Gemini API Rate Limit / Quota Exceeded
+Symptômes :
+  - Erreurs 429 "Resource exhausted" dans les logs des agents
+  - Réponses en timeout sur /query endpoints (agent_router_api, agent_hr_api, agent_ops_api)
+  - FinOps : consommation tokens anormalement haute sur la période
+Cause probable : Pic de trafic utilisateurs ou boucle de tool calls excessive
+  (agent en mode "loop" sur un outil sans résultat satisfaisant).
+Remédiation :
+  1. Vérifier les quotas Vertex AI dans la console GCP (Quotas & limits)
+  2. Identifier les sessions en loop via get_service_logs (tool calls repetitifs)
+  3. Si quota projet atteint : contacter Google Cloud pour augmentation
+  4. Court terme : activer le rate limiting au niveau du agent_router_api
+
+### [SRE-AI-003] ADK Tool Call Failure — MCP HTTP 422
+Symptômes :
+  - Erreurs HTTP 422 dans les logs d'un agent
+  - L'agent échoue systématiquement sur un outil spécifique
+Cause probable : L'agent passe un type ou un paramètre invalide à un tool MCP
+  (ex: string au lieu d'int, champ manquant, ID inventé non vérifié).
+Remédiation :
+  1. Identifier l'outil en erreur dans les logs
+  2. Vérifier la signature du tool dans mcp_server.py du service concerné
+  3. Mettre à jour la docstring ADK de l'outil pour contraindre le LLM (AGENTS.md §3)
+  4. Si l'agent "invente" des IDs : vérifier la règle anti-hallucination dans le system prompt
+
+### [SRE-AI-004] FinOps Anomalie — Consommation IA Excessive
+Symptômes :
+  - Coût journalier IA > seuil finops_anomaly_threshold (configurable par env)
+  - Consommation tokens en rupture avec la baseline historique (> +200%)
+Cause probable : Session agent en boucle infinie, pic de trafic utilisateur,
+  ou batch Vertex AI (taxonomy scoring) déclenché en dehors des heures creuses.
+Remédiation :
+  1. Identifier le service consommateur via get_finops_report(period="daily")
+  2. Si boucle agent : consulter les logs de la session concernée, identifier le pattern répétitif
+  3. Si batch Vertex AI : vérifier le schedule BigQuery batch job
+  4. Ajuster finops_anomaly_threshold dans le YAML d'environnement si le seuil est trop bas
+
+═══════════════════════════════════════════════════════════════════════
+## CATÉGORIE INFRASTRUCTURE — Cloud Run / Réseau
+═══════════════════════════════════════════════════════════════════════
+
+### [SRE-INFRA-001] Cold Start Cascadé (Warm-up Dégradé)
+Symptômes :
+  - Log [SRE-WARMUP] SERVICE DEGRADED sur plusieurs services simultanément
+  - Latence élevée sur les 2-3 premières requêtes post-connexion utilisateur
+  - Ne se reproduit pas après les premières requêtes (auto-guérison)
+Cause probable : Toutes les instances Cloud Run ont été scaled-to-zero
+  (trafic nul > 15 min avec min_instances=0) et redémarrent en même temps.
+Remédiation :
+  1. Si récurrent en heures ouvrées : augmenter cloudrun_min_instances à 1 dans le YAML
+  2. Si ponctuel (nuit/weekend) : comportement normal, aucune action requise
+  3. Vérifier que le warm-up endpoint /ready répond correctement sur tous les services
+
+### [SRE-INFRA-002] Service Mesh Internal LB — DNS Resolution Failure
+Symptômes :
+  - Erreurs "Name or service not known" sur api.internal.zenika dans les logs
+  - Un service ne peut pas appeler un autre via le LB interne
+  - Erreurs 5xx sur les agents (qui appellent les APIs data en interne)
+Cause probable : DNS interne VPC non propagé après un changement d'infrastructure
+  ou bug transitoire du Cloud DNS dans la VPC.
+Remédiation :
+  1. Vérifier la configuration DNS interne : gcloud dns managed-zones list --project=${project_id}
+  2. Vérifier que la zone interne "api.internal.zenika" existe et pointe vers le LB interne
+  3. Si le LB interne a été recréé : vérifier que l'IP a été mise à jour dans la zone DNS
+
+### [SRE-INFRA-003] Cloud Run — Memory Limit Exceeded (OOM Kill)
+Symptômes :
+  - Redémarrages fréquents d'un service (restart count élevé dans Cloud Run)
+  - Log "Memory limit of XXXMiB exceeded" dans Cloud Logging
+  - Erreurs 503 transitoires dues aux redémarrages
+Cause probable : Traitement de gros payloads (PDF multi-pages dans cv_api,
+  export de missions volumineuse dans missions_api) dépassant la limite mémoire.
+Remédiation :
+  1. Identifier le service concerné et augmenter sa limite mémoire dans cr_*.tf
+  2. cv_api : 2048Mi recommandé pour les CVs > 50 pages
+  3. Court terme : activer le streaming pour les gros payloads
+
+═══════════════════════════════════════════════════════════════════════
+## CATÉGORIE SÉCURITÉ — JWT / Authentification
+═══════════════════════════════════════════════════════════════════════
+
+### [SRE-SEC-001] JWT Secret Rotation — Invalidation de Sessions
+Symptômes :
+  - Pic soudain d'erreurs 401 sur TOUS les endpoints
+  - Tous les utilisateurs déconnectés simultanément
+  - Commence exactement au moment d'un déploiement Terraform
+Cause probable : La rotation du secret JWT (SECRET_KEY) a invalidé tous les
+  tokens en cours de validité. Comportement normal lors d'une rotation.
+Remédiation :
+  1. Informer les utilisateurs de se reconnecter (comportement attendu)
+  2. Si la rotation n'était pas prévue : vérifier pourquoi le secret a changé (deploy.sh ?)
+  3. Considérer une période de grâce (support de l'ancien et du nouveau secret simultanément)
+
+### [SRE-SEC-002] WAF Rate Limit — Faux Positifs
+Symptômes :
+  - Erreurs 429 sur certains utilisateurs uniquement (pas globales)
+  - Pattern d'erreurs lié à une IP ou un User-Agent spécifique
+  - Les agents IA générant beaucoup de requêtes MCP peuvent déclencher le WAF
+Cause probable : Le WAF Google Cloud Armor rate limit (waf_rate_limit req/min)
+  est trop bas pour les workloads IA intensifs ou un utilisateur test.
+Remédiation :
+  1. Vérifier les logs WAF dans Cloud Armor
+  2. Si faux positif IA : augmenter waf_rate_limit dans le YAML d'environnement
+  3. Si attaque réelle : ne pas augmenter, investiguer l'IP source
+
+═══════════════════════════════════════════════════════════════════════
+## FIN DU PLAYBOOK
+═══════════════════════════════════════════════════════════════════════
+# Mise à jour : alimenté au fil des incidents réels via le workflow /post-mortem
+# Chaque nouvel incident résolu doit générer une entrée dans ce playbook.

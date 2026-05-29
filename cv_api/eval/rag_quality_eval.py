@@ -144,10 +144,26 @@ def api_reachable() -> bool:
         return False
 
 
+@pytest.fixture(scope="session")
+def corpus_empty() -> bool:
+    """Vérifie si le corpus de CVs est vide (ex: première construction de l'environnement)."""
+    headers = {}
+    if API_TOKEN:
+        headers["Authorization"] = f"Bearer {API_TOKEN}"
+    try:
+        r = httpx.get(f"{BASE_URL.rstrip('/')}/users/tags/map", headers=headers, timeout=5.0)
+        if r.status_code == 200:
+            tags_map = r.json()
+            return len(tags_map) == 0
+    except Exception:
+        pass
+    return False
+
+
 # ── Tests ──────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("case", _load_golden_cases(), ids=lambda c: c["id"])
-def test_rag_recall_at_k(case: dict, api_reachable: bool):
+def test_rag_recall_at_k(case: dict, api_reachable: bool, corpus_empty: bool):
     """
     Pour chaque cas golden, vérifie que Recall@K >= seuil configuré.
 
@@ -158,6 +174,8 @@ def test_rag_recall_at_k(case: dict, api_reachable: bool):
     """
     if not api_reachable:
         pytest.skip(f"API non accessible sur {BASE_URL} — vérifiez RAG_EVAL_BASE_URL")
+    if corpus_empty:
+        pytest.skip("Corpus de CV vide — Évaluation RAG ignorée (première construction)")
 
     query = case["query"]
     expected_ids = case.get("expected_user_ids", [])
@@ -209,13 +227,15 @@ def test_rag_recall_at_k(case: dict, api_reachable: bool):
 
 
 @pytest.mark.parametrize("case", _load_golden_cases(), ids=lambda c: c["id"])
-def test_rag_results_have_source_url(case: dict, api_reachable: bool):
+def test_rag_results_have_source_url(case: dict, api_reachable: bool, corpus_empty: bool):
     """
     R5 — Vérifie que chaque résultat contient un champ source_url non nul.
     Garantit que la traçabilité documentaire est opérationnelle.
     """
     if not api_reachable:
         pytest.skip(f"API non accessible sur {BASE_URL}")
+    if corpus_empty:
+        pytest.skip("Corpus de CV vide — Évaluation RAG ignorée")
 
     results = _search(case["query"], limit=3)
 
@@ -232,13 +252,15 @@ def test_rag_results_have_source_url(case: dict, api_reachable: bool):
 
 
 @pytest.mark.parametrize("case", _load_golden_cases(), ids=lambda c: c["id"])
-def test_rag_results_have_embedding_model(case: dict, api_reachable: bool):
+def test_rag_results_have_embedding_model(case: dict, api_reachable: bool, corpus_empty: bool):
     """
     R1 — Vérifie que chaque résultat expose embedding_model.
     Garantit que le versionning du modèle est opérationnel.
     """
     if not api_reachable:
         pytest.skip(f"API non accessible sur {BASE_URL}")
+    if corpus_empty:
+        pytest.skip("Corpus de CV vide — Évaluation RAG ignorée")
 
     results = _search(case["query"], limit=3)
 
@@ -252,13 +274,15 @@ def test_rag_results_have_embedding_model(case: dict, api_reachable: bool):
         )
 
 
-def test_rag_threshold_header_present(api_reachable: bool):
+def test_rag_threshold_header_present(api_reachable: bool, corpus_empty: bool):
     """
     R6 — Vérifie que les headers X-Threshold-Filtered-Count et X-Distance-Threshold
     sont présents dans la réponse HTTP /search.
     """
     if not api_reachable:
         pytest.skip(f"API non accessible sur {BASE_URL}")
+    if corpus_empty:
+        pytest.skip("Corpus de CV vide — Évaluation RAG ignorée")
 
     headers_auth = {}
     if API_TOKEN:

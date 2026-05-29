@@ -68,9 +68,12 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/bulk-scoring-all/resume` : Resume Bulk Scoring
 - **POST** `/suggestions` : Create Competency Suggestion
 - **GET** `/suggestions` : List Competency Suggestions
+- **DELETE** `/suggestions` : Clear All Competency Suggestions
 - **PATCH** `/suggestions/{suggestion_id}/review` : Review Competency Suggestion
 - **GET** `/` : List Competencies
 - **POST** `/` : Create Competency
+- **GET** `/to-acquire` : List Competencies To Acquire
+- **PUT** `/{competency_id}/to-acquire` : Set Competency To Acquire
 - **GET** `/search` : Search Competencies
 - **GET** `/{competency_id}` : Get Competency
 - **PUT** `/{competency_id}` : Update Competency

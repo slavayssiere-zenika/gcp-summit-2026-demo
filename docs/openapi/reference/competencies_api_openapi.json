@@ -1,0 +1,3166 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Competencies API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "summary": "Get Version",
+        "operationId": "get_version_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spec": {
+      "get": {
+        "summary": "Get Spec",
+        "operationId": "get_spec_spec_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pubsub/user-events": {
+      "post": {
+        "tags": [
+          "assignments_public"
+        ],
+        "summary": "Handle User Pubsub Events",
+        "description": "Handle GCP Pub/Sub Push Notifications pour les \u00e9v\u00e9nements utilisateurs.",
+        "operationId": "handle_user_pubsub_events_pubsub_user_events_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bulk-scoring-all/resume/manual": {
+      "post": {
+        "tags": [
+          "analytics_scheduler"
+        ],
+        "summary": "Resume Bulk Scoring",
+        "description": "Endpoint de r\u00e9silient keepalive \u2014 deux points d'entr\u00e9e :\n- /resume        : Cloud Scheduler OIDC (toutes les 15 min, sans JWT applicatif)\n- /resume/manual : bouton frontend (JWT applicatif, router prot\u00e9g\u00e9)\n\nComportement :\n- Si aucun job batch en cours \u2192 retourne imm\u00e9diatement (no-op).\n- Si status=batch_running et batch_job_id pr\u00e9sent \u2192 poll Vertex :\n    * SUCCEEDED \u2192 d\u00e9clenche _resume_apply_bg en background\n    * RUNNING/QUEUED/PENDING \u2192 log l'\u00e9tat et retourne\n      si mort, ce m\u00eame endpoint sera rappel\u00e9 dans 2 min)\n    * FAILED/CANCELLED \u2192 marque error en Redis\n- Si status=applying \u2192 ne fait rien (apply d\u00e9j\u00e0 en cours via BG ou r\u00e9sum\u00e9)",
+        "operationId": "resume_bulk_scoring_bulk_scoring_all_resume_manual_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bulk-scoring-all/resume": {
+      "post": {
+        "tags": [
+          "analytics_scheduler"
+        ],
+        "summary": "Resume Bulk Scoring",
+        "description": "Endpoint de r\u00e9silient keepalive \u2014 deux points d'entr\u00e9e :\n- /resume        : Cloud Scheduler OIDC (toutes les 15 min, sans JWT applicatif)\n- /resume/manual : bouton frontend (JWT applicatif, router prot\u00e9g\u00e9)\n\nComportement :\n- Si aucun job batch en cours \u2192 retourne imm\u00e9diatement (no-op).\n- Si status=batch_running et batch_job_id pr\u00e9sent \u2192 poll Vertex :\n    * SUCCEEDED \u2192 d\u00e9clenche _resume_apply_bg en background\n    * RUNNING/QUEUED/PENDING \u2192 log l'\u00e9tat et retourne\n      si mort, ce m\u00eame endpoint sera rappel\u00e9 dans 2 min)\n    * FAILED/CANCELLED \u2192 marque error en Redis\n- Si status=applying \u2192 ne fait rien (apply d\u00e9j\u00e0 en cours via BG ou r\u00e9sum\u00e9)",
+        "operationId": "resume_bulk_scoring_bulk_scoring_all_resume_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suggestions": {
+      "post": {
+        "tags": [
+          "competencies",
+          "competency-suggestions"
+        ],
+        "summary": "Create Competency Suggestion",
+        "description": "Soumet une suggestion de comp\u00e9tence (idempotente avec d\u00e9duplication floue SequenceMatcher).",
+        "operationId": "create_competency_suggestion_suggestions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompetencySuggestionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencySuggestionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "competencies",
+          "competency-suggestions"
+        ],
+        "summary": "List Competency Suggestions",
+        "description": "Liste les suggestions tri\u00e9es par occurrence d\u00e9croissante (signal march\u00e9).",
+        "operationId": "list_competency_suggestions_suggestions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "PENDING_REVIEW",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompetencySuggestionResponse"
+                  },
+                  "title": "Response List Competency Suggestions Suggestions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "competencies",
+          "competency-suggestions"
+        ],
+        "summary": "Clear All Competency Suggestions",
+        "description": "(Admin) Supprime d\u00e9finitivement toutes les suggestions de comp\u00e9tences de la base.",
+        "operationId": "clear_all_competency_suggestions_suggestions_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/suggestions/{suggestion_id}/review": {
+      "patch": {
+        "tags": [
+          "competencies",
+          "competency-suggestions"
+        ],
+        "summary": "Review Competency Suggestion",
+        "description": "(Admin) Accepte ou rejette une suggestion. Si ACCEPT : cr\u00e9e la comp\u00e9tence dans la taxonomie.",
+        "operationId": "review_competency_suggestion_suggestions__suggestion_id__review_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Suggestion Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestionReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencySuggestionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "List Competencies",
+        "description": "Retourne l'arbre complet de comp\u00e9tences (structure hi\u00e9rarchique pagin\u00e9e sur les racines).",
+        "operationId": "list_competencies__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2000,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_CompetencyResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Create Competency",
+        "description": "Cr\u00e9e une nouvelle comp\u00e9tence (r\u00f4les : admin, rh, service_account).",
+        "operationId": "create_competency__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompetencyCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/to-acquire": {
+      "get": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "List Competencies To Acquire",
+        "description": "\u00c9tape d\u00e9di\u00e9e RH : liste toutes les comp\u00e9tences marqu\u00e9es is_to_acquire=True.\n\nEnrichit chaque comp\u00e9tence avec son data-lineage : suggestions ACCEPTED\nde source 'mission' ayant g\u00e9n\u00e9r\u00e9 cette cr\u00e9ation, avec le contexte (titre\nde la mission) et le nombre d'occurrences cumul\u00e9es (signal march\u00e9).",
+        "operationId": "list_competencies_to_acquire_to_acquire_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Competencies To Acquire To Acquire Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/{competency_id}/to-acquire": {
+      "put": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Set Competency To Acquire",
+        "description": "(Admin/RH) Force ou d\u00e9sactive manuellement le flag is_to_acquire d'une comp\u00e9tence.",
+        "operationId": "set_competency_to_acquire__competency_id__to_acquire_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          },
+          {
+            "name": "to_acquire",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "title": "To Acquire"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Set Competency To Acquire  Competency Id  To Acquire Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Search Competencies",
+        "description": "Recherche full-text sur le nom et les aliases de comp\u00e9tences.",
+        "operationId": "search_competencies_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Query"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_CompetencyResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{competency_id}": {
+      "get": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Get Competency",
+        "description": "Retourne une comp\u00e9tence par son ID.",
+        "operationId": "get_competency__competency_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Update Competency",
+        "description": "Met \u00e0 jour une comp\u00e9tence (d\u00e9tection de conflits grammaticaux).",
+        "operationId": "update_competency__competency_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompetencyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Delete Competency",
+        "description": "(Admin) Supprime une comp\u00e9tence.",
+        "operationId": "delete_competency__competency_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{competency_id}/users": {
+      "get": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "List Competency Users",
+        "description": "Retourne les user_ids associ\u00e9s \u00e0 cette comp\u00e9tence et ses descendants (CTE r\u00e9cursif).",
+        "operationId": "list_competency_users__competency_id__users_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "title": "Response List Competency Users  Competency Id  Users Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/counts": {
+      "post": {
+        "tags": [
+          "competencies",
+          "competencies"
+        ],
+        "summary": "Get Competency Stats",
+        "description": "Statistiques de comp\u00e9tences (comptage par utilisateur, filtrable sur une cohorte).",
+        "operationId": "get_competency_stats_stats_counts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyStatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk_tree": {
+      "post": {
+        "tags": [
+          "competencies",
+          "competency-tree"
+        ],
+        "summary": "Bulk Import Tree",
+        "description": "(Admin) Import atomique de la taxonomie compl\u00e8te avec fusion, sweep et archivage des orphelins.",
+        "operationId": "bulk_import_tree_bulk_tree_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TreeImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bulk/cleanup-orphans": {
+      "post": {
+        "tags": [
+          "competencies",
+          "competency-tree"
+        ],
+        "summary": "Supprime toutes les comp\u00e9tences feuilles orphelines (sans consultants)",
+        "description": "Supprime les comp\u00e9tences feuilles qui ne sont li\u00e9es \u00e0 aucun consultant (Quality Gate).",
+        "operationId": "cleanup_orphan_competencies_bulk_cleanup_orphans_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/batch/search": {
+      "post": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "Search Batch Evaluations",
+        "description": "R\u00e9cup\u00e8re en masse les \u00e9valuations pour un utilisateur et une liste de comp\u00e9tences.",
+        "operationId": "search_batch_evaluations_evaluations_batch_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchEvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/evaluations/batch/users": {
+      "post": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "Search Batch Users Evaluations",
+        "description": "R\u00e9cup\u00e8re en masse les \u00e9valuations pour une comp\u00e9tence et une liste d'utilisateurs.",
+        "operationId": "search_batch_users_evaluations_evaluations_batch_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchUsersEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchEvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/evaluations/user/{user_id}": {
+      "get": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "List User Evaluations",
+        "description": "Liste toutes les evaluations (feuilles uniquement) pour un utilisateur.",
+        "operationId": "list_user_evaluations_evaluations_user__user_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_CompetencyEvaluationResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/user/{user_id}/competency/{competency_id}": {
+      "get": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "Get User Competency Evaluation",
+        "description": "Evaluation d'une competence specifique pour un utilisateur.",
+        "operationId": "get_user_competency_evaluation_evaluations_user__user_id__competency__competency_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyEvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/user/{user_id}/competency/{competency_id}/user-score": {
+      "post": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "Set User Competency Score",
+        "description": "Saisie de la note manuelle du consultant pour une competence.",
+        "operationId": "set_user_competency_score_evaluations_user__user_id__competency__competency_id__user_score_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserScoreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyEvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/user/{user_id}/competency/{competency_id}/ai-score": {
+      "post": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "Trigger Ai Score Single",
+        "description": "Declenche le calcul IA pour une competence specifique.\n\nImpl\u00e9mente le pattern \"short-lived session\" pour \u00e9viter la starvation du pool\nde connexions DB (AGENTS.md \u00a78) : la connexion est acquise uniquement le temps\nde la lecture initiale, rel\u00e2ch\u00e9e avant l'appel IA (potentiellement long : 5-15s),\npuis r\u00e9acquise pour la seule \u00e9criture du r\u00e9sultat.",
+        "operationId": "trigger_ai_score_single_evaluations_user__user_id__competency__competency_id__ai_score_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetencyEvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/user/{user_id}/ai-score-all": {
+      "post": {
+        "tags": [
+          "competencies",
+          "evaluations"
+        ],
+        "summary": "Trigger Ai Score All",
+        "description": "Declenche le calcul IA pour toutes les competences feuilles d'un utilisateur (BackgroundTask).\n\nObtient un service token longue dur\u00e9e via /internal/service-token avant de lancer la t\u00e2che\npour \u00e9viter l'expiration du JWT en mid-flight (r\u00e8gle AGENTS.md \u00a74).",
+        "operationId": "trigger_ai_score_all_evaluations_user__user_id__ai_score_all_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "only_missing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Only Missing"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiScoreAllResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bulk-scoring-all/debug-config": {
+      "get": {
+        "tags": [
+          "competencies",
+          "scoring"
+        ],
+        "summary": "Get Scoring Debug Config",
+        "description": "Debug endpoint admin : retourne la configuration Vertex Batch active.\n\nPermet de diagnostiquer les 400 INVALID_ARGUMENT sans acc\u00e9der aux logs Cloud Run.\nLes valeurs sensibles (cl\u00e9s) ne sont pas expos\u00e9es.",
+        "operationId": "get_scoring_debug_config_bulk_scoring_all_debug_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/evaluations/bulk-scoring-all": {
+      "post": {
+        "tags": [
+          "competencies",
+          "scoring"
+        ],
+        "summary": "Trigger Bulk Scoring All",
+        "description": "D\u00e9clenche le scoring IA pour les consultants sous le seuil (ou tous si force=True).\n\nModes :\n- delta_only=True  (d\u00e9faut) : ne score QUE les comp\u00e9tences sans ai_score \u2192 \u00e9conomique\n- delta_only=False          : re-score toutes les comp\u00e9tences feuilles (co\u00fbteux)\n- force=True                : inclut TOUS les users, pas seulement ceux sous le seuil\n\nObtient un service token longue dur\u00e9e avant de lancer la background task (AGENTS.md \u00a74).",
+        "operationId": "trigger_bulk_scoring_all_evaluations_bulk_scoring_all_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Si True, re-score TOUS les consultants avec comp\u00e9tences assign\u00e9es",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Si True, re-score TOUS les consultants avec comp\u00e9tences assign\u00e9es"
+          },
+          {
+            "name": "delta_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Si True (d\u00e9faut), ne score que les comp\u00e9tences sans ai_score (delta). Si False, re-score toutes les comp\u00e9tences feuilles (m\u00eame celles d\u00e9j\u00e0 scor\u00e9es).",
+              "default": true,
+              "title": "Delta Only"
+            },
+            "description": "Si True (d\u00e9faut), ne score que les comp\u00e9tences sans ai_score (delta). Si False, re-score toutes les comp\u00e9tences feuilles (m\u00eame celles d\u00e9j\u00e0 scor\u00e9es)."
+          },
+          {
+            "name": "semaphore_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5,
+              "minimum": 1,
+              "default": 2,
+              "title": "Semaphore Limit"
+            }
+          },
+          {
+            "name": "min_scored_threshold",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10,
+              "title": "Min Scored Threshold"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkScoringStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bulk-scoring-all/status": {
+      "get": {
+        "tags": [
+          "competencies",
+          "scoring"
+        ],
+        "summary": "Get Bulk Scoring Status",
+        "description": "Retourne l'\u00e9tat courant du batch de scoring en arri\u00e8re-plan.",
+        "operationId": "get_bulk_scoring_status_bulk_scoring_all_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/bulk-scoring-all/cancel": {
+      "post": {
+        "tags": [
+          "competencies",
+          "scoring"
+        ],
+        "summary": "Cancel Bulk Scoring",
+        "description": "Annule et r\u00e9initialise l'\u00e9tat Redis du scoring (ne kill pas le BG task en cours).",
+        "operationId": "cancel_bulk_scoring_bulk_scoring_all_cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/stats/coverage": {
+      "get": {
+        "tags": [
+          "competencies",
+          "analytics"
+        ],
+        "summary": "Get Competency Coverage",
+        "description": "Retourne le nombre de consultants ayant au moins 1 comp\u00e9tence assign\u00e9e (Data Quality Dashboard).\n\ntotal_users est r\u00e9cup\u00e9r\u00e9 depuis users_api (non-anonymes) pour refl\u00e9ter la population r\u00e9elle.\nFallback sur users_with_competencies si users_api est indisponible.",
+        "operationId": "get_competency_coverage_stats_coverage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/evaluations/scoring-stats": {
+      "get": {
+        "tags": [
+          "competencies",
+          "analytics"
+        ],
+        "summary": "Get Scoring Stats",
+        "description": "Statistiques agr\u00e9g\u00e9es du scoring IA \u2014 utilis\u00e9 par le Data Quality Dashboard.",
+        "operationId": "get_scoring_stats_evaluations_scoring_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "min_scored_count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10,
+              "title": "Min Scored Count"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/agency-coverage": {
+      "get": {
+        "tags": [
+          "competencies",
+          "analytics"
+        ],
+        "summary": "Get Agency Competency Coverage",
+        "description": "Heatmap comp\u00e9tences x agences \u2014 pour chaque paire (agence, comp\u00e9tence feuille), count + score IA moyen.",
+        "operationId": "get_agency_competency_coverage_analytics_agency_coverage_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "min_count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Min Count"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgencyCompetencyCoverage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/skill-gaps": {
+      "get": {
+        "tags": [
+          "competencies",
+          "analytics"
+        ],
+        "summary": "Get Skill Gaps",
+        "description": "Gap de comp\u00e9tences dans un pool d'utilisateurs (score Jaccard / taux de couverture).",
+        "operationId": "get_skill_gaps_analytics_skill_gaps_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "title": "User Ids"
+            }
+          },
+          {
+            "name": "competency_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Competency Ids"
+            }
+          },
+          {
+            "name": "min_coverage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "default": 0.0,
+              "title": "Min Coverage"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillGapResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/similar-consultants/{user_id}": {
+      "get": {
+        "tags": [
+          "competencies",
+          "analytics"
+        ],
+        "summary": "Get Similar Consultants",
+        "description": "Trouve les consultants les plus similaires via similarit\u00e9 de Jaccard sur les comp\u00e9tences feuilles.",
+        "operationId": "get_similar_consultants_analytics_similar_consultants__user_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "top_n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 5,
+              "title": "Top N"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarConsultantsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/taxonomy-quality": {
+      "get": {
+        "tags": [
+          "competencies",
+          "analytics"
+        ],
+        "summary": "Get Taxonomy Quality",
+        "description": "\u00c9value la qualit\u00e9 globale de la taxonomie (concentration, orphelines, archives).",
+        "operationId": "get_taxonomy_quality_analytics_taxonomy_quality_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/user/{user_id}/assign/bulk": {
+      "post": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "Assign Competencies Bulk",
+        "description": "Assigne en masse une liste de comp\u00e9tences \u00e0 un utilisateur (idempotent via ON CONFLICT DO NOTHING).\n\nProt\u00e9g\u00e9 par ASSIGN_BULK_SEMAPHORE : retourne HTTP 429 si le pool est satur\u00e9,\nce qui permet aux appelants (cv_storage_service, bulk_service) de retenter\navec backoff exponentiel au lieu de r\u00e9cup\u00e9rer un 500 pool overflow non retriable.\nRetourne 503 si un service aval (users_api) est temporairement injoignable.",
+        "operationId": "assign_competencies_bulk_user__user_id__assign_bulk_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}/assign/{competency_id}": {
+      "post": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "Assign Competency To User",
+        "description": "Assigne une comp\u00e9tence unique \u00e0 un utilisateur (idempotent).",
+        "operationId": "assign_competency_to_user_user__user_id__assign__competency_id__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}/evaluations": {
+      "delete": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "Clear User Evaluations",
+        "description": "(Admin Only) Supprime toutes les CompetencyEvaluation pour un utilisateur.",
+        "operationId": "clear_user_evaluations_user__user_id__evaluations_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}/remove/{competency_id}": {
+      "delete": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "Remove Competency From User",
+        "description": "Supprime l'assignation d'une comp\u00e9tence pour un utilisateur.",
+        "operationId": "remove_competency_from_user_user__user_id__remove__competency_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "competency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Competency Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}": {
+      "get": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "List User Competencies",
+        "description": "Retourne toutes les comp\u00e9tences assign\u00e9es \u00e0 un utilisateur.",
+        "operationId": "list_user_competencies_user__user_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginationResponse_CompetencyResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/users/merge": {
+      "post": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "Merge Users",
+        "description": "Endpoint interne : fusionne les comp\u00e9tences de source_id vers target_id.",
+        "operationId": "merge_users_internal_users_merge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/user/{user_id}/clear": {
+      "delete": {
+        "tags": [
+          "competencies",
+          "assignments"
+        ],
+        "summary": "Clear User Competencies",
+        "description": "(Admin Only) Supprime toutes les assignations de comp\u00e9tences pour un utilisateur.",
+        "operationId": "clear_user_competencies_user__user_id__clear_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgencyCompetencyCoverage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgencyCompetencyItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_consultants": {
+            "type": "integer",
+            "title": "Total Consultants"
+          },
+          "total_agencies": {
+            "type": "integer",
+            "title": "Total Agencies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_consultants",
+          "total_agencies"
+        ],
+        "title": "AgencyCompetencyCoverage",
+        "description": "R\u00e9ponse de /analytics/agency-coverage."
+      },
+      "AgencyCompetencyItem": {
+        "properties": {
+          "agency": {
+            "type": "string",
+            "title": "Agency"
+          },
+          "competency": {
+            "type": "string",
+            "title": "Competency"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "avg_ai_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Ai Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agency",
+          "competency",
+          "count"
+        ],
+        "title": "AgencyCompetencyItem",
+        "description": "Un (agence, comp\u00e9tence, count) dans la heatmap."
+      },
+      "AiScoreAllResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "triggered": {
+            "type": "integer",
+            "title": "Triggered"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "triggered",
+          "message"
+        ],
+        "title": "AiScoreAllResponse",
+        "description": "R\u00e9sultat du d\u00e9clenchement du scoring IA batch."
+      },
+      "BatchEvaluationRequest": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "competency_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Competency Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "competency_ids"
+        ],
+        "title": "BatchEvaluationRequest",
+        "description": "\u00c9valuations d'un consultant pour plusieurs comp\u00e9tences.\nAccepte 'user_id' (int) ou 'user_ids' (list \u2192 premier \u00e9l\u00e9ment utilis\u00e9).\nAccepte 'competency_ids' (list)."
+      },
+      "BatchEvaluationResponse": {
+        "properties": {
+          "evaluations": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CompetencyEvaluationResponse"
+            },
+            "type": "object",
+            "title": "Evaluations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluations"
+        ],
+        "title": "BatchEvaluationResponse"
+      },
+      "BatchUsersEvaluationRequest": {
+        "properties": {
+          "competency_id": {
+            "type": "integer",
+            "title": "Competency Id"
+          },
+          "user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "User Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "competency_id",
+          "user_ids"
+        ],
+        "title": "BatchUsersEvaluationRequest",
+        "description": "\u00c9valuations de plusieurs consultants pour une comp\u00e9tence.\nAccepte 'competency_id' (int) ou 'competency_ids' (list \u2192 premier \u00e9l\u00e9ment utilis\u00e9).\nAccepte 'user_ids' (list)."
+      },
+      "BulkScoringStatus": {
+        "properties": {
+          "triggered": {
+            "type": "integer",
+            "title": "Triggered"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "total_users": {
+            "type": "integer",
+            "title": "Total Users"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "triggered",
+          "skipped",
+          "total_users",
+          "message"
+        ],
+        "title": "BulkScoringStatus"
+      },
+      "CompetencyCount": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "count"
+        ],
+        "title": "CompetencyCount"
+      },
+      "CompetencyCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "aliases": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompetencyCreate"
+      },
+      "CompetencyEvaluationResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "competency_id": {
+            "type": "integer",
+            "title": "Competency Id"
+          },
+          "competency_name": {
+            "type": "string",
+            "title": "Competency Name"
+          },
+          "ai_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Score"
+          },
+          "ai_justification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Justification"
+          },
+          "ai_scored_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Scored At"
+          },
+          "user_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Score"
+          },
+          "user_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Comment"
+          },
+          "user_scored_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Scored At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "competency_id",
+          "competency_name"
+        ],
+        "title": "CompetencyEvaluationResponse",
+        "description": "R\u00e9ponse compl\u00e8te d'une \u00e9valuation : note IA + note utilisateur."
+      },
+      "CompetencyResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "aliases": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "sub_competencies": {
+            "items": {
+              "$ref": "#/components/schemas/CompetencyResponse"
+            },
+            "type": "array",
+            "title": "Sub Competencies",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "id",
+          "created_at"
+        ],
+        "title": "CompetencyResponse"
+      },
+      "CompetencyStatsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompetencyCount"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CompetencyStatsResponse"
+      },
+      "CompetencySuggestionCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "mission"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompetencySuggestionCreate",
+        "description": "Payload pour soumettre une nouvelle suggestion de comp\u00e9tence."
+      },
+      "CompetencySuggestionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "occurrence_count": {
+            "type": "integer",
+            "title": "Occurrence Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "source",
+          "status",
+          "occurrence_count",
+          "created_at"
+        ],
+        "title": "CompetencySuggestionResponse",
+        "description": "R\u00e9ponse d'une suggestion de comp\u00e9tence."
+      },
+      "CompetencyUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "aliases": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "type": "object",
+        "title": "CompetencyUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MergeInstruction": {
+        "properties": {
+          "canonical": {
+            "type": "string",
+            "title": "Canonical"
+          },
+          "merge_from": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Merge From"
+          }
+        },
+        "type": "object",
+        "required": [
+          "canonical",
+          "merge_from"
+        ],
+        "title": "MergeInstruction",
+        "description": "Instruction de fusion d'un doublon s\u00e9mantique vers un canonique.\n\nG\u00e9n\u00e9r\u00e9e par Gemini Pro lors du recalcul de l'arbre de comp\u00e9tences.\nLe `canonical` doit exister dans la taxonomie apr\u00e8s l'upsert du bulk_tree."
+      },
+      "PaginationResponse_CompetencyEvaluationResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompetencyEvaluationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginationResponse[CompetencyEvaluationResponse]"
+      },
+      "PaginationResponse_CompetencyResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompetencyResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginationResponse[CompetencyResponse]"
+      },
+      "SimilarConsultant": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "common_competencies": {
+            "type": "integer",
+            "title": "Common Competencies"
+          },
+          "jaccard_score": {
+            "type": "number",
+            "title": "Jaccard Score"
+          },
+          "shared_competency_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Shared Competency Names"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "common_competencies",
+          "jaccard_score",
+          "shared_competency_names"
+        ],
+        "title": "SimilarConsultant",
+        "description": "Un consultant similaire avec son score de similarit\u00e9 Jaccard."
+      },
+      "SimilarConsultantsResult": {
+        "properties": {
+          "reference_user_id": {
+            "type": "integer",
+            "title": "Reference User Id"
+          },
+          "reference_competency_count": {
+            "type": "integer",
+            "title": "Reference Competency Count"
+          },
+          "similar_consultants": {
+            "items": {
+              "$ref": "#/components/schemas/SimilarConsultant"
+            },
+            "type": "array",
+            "title": "Similar Consultants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reference_user_id",
+          "reference_competency_count",
+          "similar_consultants"
+        ],
+        "title": "SimilarConsultantsResult",
+        "description": "R\u00e9ponse de /analytics/similar-consultants/{user_id}."
+      },
+      "SkillGapItem": {
+        "properties": {
+          "competency_id": {
+            "type": "integer",
+            "title": "Competency Id"
+          },
+          "competency_name": {
+            "type": "string",
+            "title": "Competency Name"
+          },
+          "consultants_with_skill": {
+            "type": "integer",
+            "title": "Consultants With Skill"
+          },
+          "consultants_in_pool": {
+            "type": "integer",
+            "title": "Consultants In Pool"
+          },
+          "coverage_pct": {
+            "type": "number",
+            "title": "Coverage Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "competency_id",
+          "competency_name",
+          "consultants_with_skill",
+          "consultants_in_pool",
+          "coverage_pct"
+        ],
+        "title": "SkillGapItem",
+        "description": "Une comp\u00e9tence manquante dans le pool cibl\u00e9."
+      },
+      "SkillGapResult": {
+        "properties": {
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/SkillGapItem"
+            },
+            "type": "array",
+            "title": "Gaps"
+          },
+          "pool_size": {
+            "type": "integer",
+            "title": "Pool Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gaps",
+          "pool_size"
+        ],
+        "title": "SkillGapResult",
+        "description": "R\u00e9ponse de /analytics/skill-gaps."
+      },
+      "StatsRequest": {
+        "properties": {
+          "user_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Ids"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 10
+          },
+          "sort_order": {
+            "type": "string",
+            "title": "Sort Order",
+            "default": "desc"
+          }
+        },
+        "type": "object",
+        "title": "StatsRequest"
+      },
+      "SuggestionReviewRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "SuggestionReviewRequest",
+        "description": "Payload pour la validation ou le rejet d'une suggestion."
+      },
+      "SweepAssignment": {
+        "properties": {
+          "competency": {
+            "type": "string",
+            "title": "Competency"
+          },
+          "pillar": {
+            "type": "string",
+            "title": "Pillar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "competency",
+          "pillar"
+        ],
+        "title": "SweepAssignment",
+        "description": "Assignation d'une comp\u00e9tence orpheline vers un pilier existant.\n\nG\u00e9n\u00e9r\u00e9e par le LLM lors de la phase Sweep du recalcul de la taxonomie.\nPermet de reclassifier les comp\u00e9tences absentes du Reduce dans un pilier existant\nplut\u00f4t que de les laisser tomber dans les 'Archives / Non class\u00e9es'."
+      },
+      "TreeImportRequest": {
+        "properties": {
+          "tree": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ],
+            "title": "Tree"
+          },
+          "merges": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MergeInstruction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merges",
+            "default": []
+          },
+          "sweep_assignments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SweepAssignment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sweep Assignments",
+            "default": []
+          },
+          "drops": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drops",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "tree"
+        ],
+        "title": "TreeImportRequest"
+      },
+      "UserMergeRequest": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "target_id": {
+            "type": "integer",
+            "title": "Target Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "target_id"
+        ],
+        "title": "UserMergeRequest"
+      },
+      "UserScoreRequest": {
+        "properties": {
+          "score": {
+            "type": "number",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Note de 0 \u00e0 5 (multiples de 0.5 recommand\u00e9s)"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score"
+        ],
+        "title": "UserScoreRequest",
+        "description": "Saisie manuelle de la note auto-\u00e9valu\u00e9e par le consultant."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

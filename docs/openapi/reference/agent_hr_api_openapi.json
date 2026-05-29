@@ -1,0 +1,876 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ADK HR Agent (A2A)",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spec": {
+      "get": {
+        "summary": "Get Spec",
+        "operationId": "get_spec_spec_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "summary": "Get Version",
+        "operationId": "get_version_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history": {
+      "get": {
+        "summary": "Get History",
+        "operationId": "get_history_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Delete History",
+        "operationId": "delete_history_history_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/query": {
+      "post": {
+        "summary": "Query",
+        "operationId": "query_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/a2a/query": {
+      "post": {
+        "summary": "A2A Query",
+        "description": "Point d'entr\u00e9e A2A \u2014 appel\u00e9 exclusivement par agent_router_api.",
+        "operationId": "a2a_query_a2a_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ARequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/A2AResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/mcp/registry": {
+      "get": {
+        "summary": "Mcp Registry",
+        "operationId": "mcp_registry_mcp_registry_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/mcp/proxy/{server_name}/{path}": {
+      "put": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp_proxy__server_name___path__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Server Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp_proxy__server_name___path__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Server Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp_proxy__server_name___path__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Server Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp_proxy__server_name___path__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Server Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp_proxy__server_name___path__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Server Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "A2ARequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query",
+            "description": "La requ\u00eate en langage naturel \u00e0 traiter."
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Identifiant de session ADK. Si absent, le sous-agent utilise le sub JWT comme session_id (comportement par d\u00e9faut)."
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "Identifiant utilisateur propag\u00e9 par le Router depuis le JWT sub. Utilis\u00e9 pour l'isolation des sessions et le tracking FinOps."
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "A2ARequest",
+        "description": "Payload envoy\u00e9 par le Router \u00e0 un sous-agent sur POST /a2a/query.",
+        "example": {
+          "query": "Quels consultants sont disponibles ?",
+          "user_id": "alice@zenika.com"
+        }
+      },
+      "A2AResponse": {
+        "properties": {
+          "response": {
+            "type": "string",
+            "title": "Response",
+            "description": "R\u00e9ponse textuelle de l'agent en langage naturel."
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Donn\u00e9es structur\u00e9es optionnelles (liste d'utilisateurs, missions, comp\u00e9tences\u2026) pour l'affichage frontend. Le displayType est r\u00e9solu depuis le render_ui_widgets de l'ADK via la taxonomie s\u00e9mantique : ui://consultants, ui://missions, ui://competencies, ui://evaluations, ui://candidates, ui://items, ui://availabilities, ui://tree, ui://health, ui://empty (aucun rendu)."
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AgentStep"
+            },
+            "type": "array",
+            "title": "Steps",
+            "description": "Trace d'ex\u00e9cution des tools (mode Expert du frontend)."
+          },
+          "thoughts": {
+            "type": "string",
+            "title": "Thoughts",
+            "description": "Cha\u00eene de pens\u00e9e Gemini (Thinking mode), concat\u00e9n\u00e9e.",
+            "default": ""
+          },
+          "usage": {
+            "$ref": "#/components/schemas/TokenUsage",
+            "description": "Consommation de tokens pour le tracking FinOps."
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Source de la r\u00e9ponse : 'adk_agent', 'semantic_cache', 'error'\u2026"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Session ADK utilis\u00e9e pour cette requ\u00eate."
+          },
+          "semantic_cache_hit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Cache Hit",
+            "description": "True si la r\u00e9ponse a \u00e9t\u00e9 servie depuis le cache s\u00e9mantique."
+          },
+          "degraded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded",
+            "description": "True si le sous-agent a r\u00e9pondu en mode d\u00e9grad\u00e9 (erreur r\u00e9seau)."
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Niveau de confiance de la r\u00e9ponse (0.0 \u2013 1.0). 1.0 = toutes les m\u00e9triques issues d'appels d'outils FinOps r\u00e9els, aucun guardrail d\u00e9clench\u00e9. < 0.8 = un guardrail a \u00e9t\u00e9 d\u00e9clench\u00e9 (hallucination suspicion, TOOL_BUDGET, COM-006...). None = information non disponible (mode d\u00e9grad\u00e9 ou erreur)."
+          },
+          "display_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Type",
+            "description": "Hint UI \u00e9mis par le sous-agent via render_ui_widgets ADK. Slug s\u00e9mantique apr\u00e8s 'ui://' : 'consultants', 'profile', 'evaluations', 'missions', 'competencies', 'candidates', 'items', 'tree', 'cloudrun_logs'. None = affichage texte uniquement."
+          }
+        },
+        "type": "object",
+        "required": [
+          "response"
+        ],
+        "title": "A2AResponse",
+        "description": "R\u00e9ponse retourn\u00e9e par un sous-agent sur POST /a2a/query.",
+        "example": {
+          "confidence": 1.0,
+          "data": {
+            "items": [
+              {
+                "id": 1,
+                "name": "Alice Martin"
+              }
+            ]
+          },
+          "response": "J'ai trouv\u00e9 3 consultants disponibles pour votre mission.",
+          "source": "adk_agent",
+          "steps": [
+            {
+              "args": {
+                "skills": [
+                  "Python"
+                ]
+              },
+              "tool": "search_users",
+              "type": "call"
+            }
+          ],
+          "thoughts": "",
+          "usage": {
+            "estimated_cost_usd": 3.3e-05,
+            "total_input_tokens": 120,
+            "total_output_tokens": 80
+          }
+        }
+      },
+      "AgentStep": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "call",
+              "result",
+              "warning",
+              "cache"
+            ],
+            "title": "Type",
+            "description": "Type de step : appel outil (call), r\u00e9sultat (result), avertissement guardrail (warning), hit cache (cache)."
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool",
+            "description": "Nom du tool appel\u00e9 (pour type=call/warning/cache)."
+          },
+          "args": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Args",
+            "description": "Arguments pass\u00e9s au tool ou m\u00e9tadonn\u00e9es du step."
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Donn\u00e9es retourn\u00e9es par le tool (pour type=result)."
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Nom du sous-agent source si d\u00e9l\u00e9gation A2A (ex: 'hr_agent')."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AgentStep",
+        "description": "Un step de la trace d'ex\u00e9cution visible dans le mode Expert du frontend."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "QueryRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query",
+            "description": "La requ\u00eate en langage naturel."
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Identifiant de session ADK. Si absent, le sub JWT est utilis\u00e9 comme session_id (comportement par d\u00e9faut)."
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "Identifiant utilisateur propag\u00e9 depuis le JWT sub. Utilis\u00e9 pour l'isolation des sessions et le tracking FinOps."
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "QueryRequest",
+        "description": "Payload envoy\u00e9 par le frontend ou le Router au endpoint POST /query d'un agent.\n\nDiff\u00e9rent de A2ARequest (communication inter-agents) : QueryRequest est destin\u00e9\naux appels initi\u00e9s par un utilisateur humain via le frontend.",
+        "example": {
+          "query": "Quels consultants sont disponibles ?"
+        }
+      },
+      "TokenUsage": {
+        "properties": {
+          "total_input_tokens": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Input Tokens",
+            "description": "Tokens d'entr\u00e9e consomm\u00e9s (prompt).",
+            "default": 0
+          },
+          "total_output_tokens": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Output Tokens",
+            "description": "Tokens de sortie g\u00e9n\u00e9r\u00e9s (completion).",
+            "default": 0
+          },
+          "estimated_cost_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Estimated Cost Usd",
+            "description": "Co\u00fbt estim\u00e9 en USD pour ce tour.",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "TokenUsage",
+        "description": "Consommation de tokens Gemini pour ce tour de conversation (FinOps)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

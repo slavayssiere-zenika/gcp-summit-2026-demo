@@ -1,5 +1,6 @@
 export default {
   nav: {
+    skip_to_content: 'Skip to main content',
     agent: 'Agent',
     competencies: 'Skills',
     missions: 'Missions',
@@ -37,6 +38,7 @@ export default {
     dq_warning: 'Warning:',
     dq_message: 'Data quality is currently degraded. An analysis is in progress...',
     dq_detail: 'View details',
+    degraded_services_tip: 'SRE Warning: {count} cold or degraded service(s) ({list}). Click to analyze.',
   },
   chat: {
     welcome_title: 'Zenika Operational Assistant',
@@ -482,5 +484,21 @@ export default {
     col_agency: 'Agency / Role',
     empty: 'No results found.',
     reimport: 'Re-import',
+  },
+  warming: {
+    title: 'Preparing console',
+    subtitle: 'Please wait while Cloud Run services are warming up and your workspace is being hydrated.',
+    ping_attempt: 'Ping {service} (attempt {current}/{total})...',
+    starting_protocol: 'Launching Zenika AI Console Warm-up protocol...',
+    failed_gateway: "❌ Critical Failure: Gateway Router is not responding.",
+    failed_agents: "❌ Critical Failure: Multi-Agent Engines failed to start.",
+    degraded_mode: '⚠ Some data services are slow or unavailable. Activating degraded mode.',
+    hydrating_cache: 'Hydrating active chat session cache and history...',
+    history_ready: '✓ Chat history pre-loaded successfully!',
+    history_failed: '⚠ Unable to pre-load chat history (degraded mode).',
+    complete_redirect: 'Everything is ready! Initializing your workspace...',
+    tip_title: 'Did you know?',
+    critical_error: 'Critical failure during service initialization.',
+    retry_btn: 'Retry starting',
   },
 }

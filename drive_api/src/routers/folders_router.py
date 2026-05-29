@@ -12,7 +12,7 @@ from src.drive_service import DriveService
 from src.models import DriveSyncStatus
 from src.schemas import FolderCreate, FolderResponse, FolderStats, FolderUpdate, PaginatedFoldersResponse
 from src.services.folder_service import FolderService
-from shared.database import SessionLocal
+import shared.database as shared_db
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,12 @@ async def add_folder(folder: FolderCreate, db: AsyncSession = Depends(get_db), _
 
 
 @router.patch("/folders/{folder_id}", response_model=FolderResponse)
-async def update_folder(folder_id: int, folder_update: FolderUpdate, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
+async def update_folder(
+    folder_id: int,
+    folder_update: FolderUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
+):
     service = FolderService(db)
     folder = await service.update_folder(folder_id, folder_update)
     f_response = FolderResponse.model_validate(folder)
@@ -69,14 +74,22 @@ async def list_folders(db: AsyncSession = Depends(get_db), skip: int = 0, limit:
 
 
 @router.post("/folders/reset-sync")
-async def reset_folder_sync(tag: str | None = None, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
+async def reset_folder_sync(
+    tag: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
+):
     service = FolderService(db)
     rows_updated = await service.reset_folder_sync(tag)
     return {"status": "success", "rows_updated": rows_updated}
 
 
 @router.post("/folders/rebuild-tree")
-async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), _: dict = Depends(_require_admin)):
+async def rebuild_folder_tree(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
+):
     """
     Force un scan complet de l'arbre Drive pour réparer les structures parent_folder_name manquantes,
     SANS repasser les statuts en PENDING pour les fichiers déjà importés et non modifiés.
@@ -84,7 +97,7 @@ async def rebuild_folder_tree(background_tasks: BackgroundTasks, db: AsyncSessio
     async def run_rebuild():
         try:
             await set_cache("drive:sync:rebuild_running", "1", 1800)  # 30 min max
-            async with SessionLocal() as session:
+            async with shared_db.SessionLocal() as session:
                 service = DriveService(session)
                 await service.discover_files(force_full=True)
         finally:

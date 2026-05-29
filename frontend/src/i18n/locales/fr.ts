@@ -1,5 +1,6 @@
 export default {
   nav: {
+    skip_to_content: 'Aller au contenu principal',
     agent: 'Agent',
     competencies: 'Compétences',
     missions: 'Missions',
@@ -37,6 +38,7 @@ export default {
     dq_warning: 'Attention :',
     dq_message: 'La qualité des données est actuellement dégradée. Une analyse est en cours...',
     dq_detail: 'Voir le détail',
+    degraded_services_tip: 'Avertissement SRE : {count} service(s) froid(s) ou dégradé(s) ({list}). Cliquez pour analyser.',
   },
   chat: {
     welcome_title: 'Assistant Opérationnel Zenika',
@@ -482,5 +484,21 @@ export default {
     col_agency: 'Agence / Rôle',
     empty: 'Aucun résultat trouvé.',
     reimport: 'Ré-importer',
+  },
+  warming: {
+    title: 'Préparation de la console',
+    subtitle: 'Veuillez patienter pendant le pré-chauffage des services Cloud Run et la réhydratation de votre espace.',
+    ping_attempt: 'Ping {service} (tentative {current}/{total})...',
+    starting_protocol: 'Lancement du protocole de Warm-up Zenika AI Console...',
+    failed_gateway: "❌ Échec critique : La Gateway Router ne répond pas.",
+    failed_agents: "❌ Échec critique : Les sous-agents IA n'ont pas pu démarrer.",
+    degraded_mode: '⚠ Certains services de données sont lents ou indisponibles. Activation du mode dégradé.',
+    hydrating_cache: "Réhydratation du cache des sessions et de l'historique actif...",
+    history_ready: '✓ Historique de conversation pré-chargé avec succès !',
+    history_failed: "⚠ Impossible de pré-charger l'historique (mode dégradé).",
+    complete_redirect: 'Tout est prêt ! Initialisation de votre espace de travail...',
+    tip_title: 'Le saviez-vous ?',
+    critical_error: "Échec d'initialisation des services critiques.",
+    retry_btn: 'Réessayer le démarrage',
   },
 }

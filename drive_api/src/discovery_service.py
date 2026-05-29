@@ -52,7 +52,7 @@ class DiscoveryService:
         else:
             uninitialized_folders = (
                 await self.db.execute(
-                    select(DriveFolder).filter(not DriveFolder.is_initial_sync_done)
+                    select(DriveFolder).filter(DriveFolder.is_initial_sync_done.is_(False))
                 )
             ).scalars().all()
 
@@ -230,7 +230,8 @@ class DiscoveryService:
 
         if latest_file:
             safe_time = latest_file - timedelta(minutes=1)
-            date_query = f" and modifiedTime > '{safe_time.isoformat()}Z'"
+            formatted_time = safe_time.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            date_query = f" and modifiedTime > '{formatted_time}'"
         else:
             date_query = ""
 

@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: "010-fix-suggestions-created-at-nullable"
+      author: "antigravity"
+      comment: >
+        Correction SRE-DB-2026-05-29 : La colonne created_at de competency_suggestions
+        pouvait contenir NULL pour les lignes insérées avant l'enforcement du server_default.
+        Ce changeset backfille les NULL existants et ajoute la contrainte NOT NULL + server_default
+        pour garantir l'intégrité à l'avenir.
+        Root cause : ValidationError Pydantic sur CompetencySuggestionResponse.created_at (>30 HTTP 500).
+      changes:
+        # 1. Backfiller les lignes existantes avec NULL
+        - sql:
+            sql: >
+              UPDATE competency_suggestions
+              SET created_at = NOW()
+              WHERE created_at IS NULL;
+        # 2. Ajouter le server_default pour les nouvelles insertions
+        - sql:
+            sql: >
+              ALTER TABLE competency_suggestions
+              ALTER COLUMN created_at SET DEFAULT NOW();
+        # 3. Enforcer NOT NULL (après backfill)
+        - sql:
+            sql: >
+              ALTER TABLE competency_suggestions
+              ALTER COLUMN created_at SET NOT NULL;
+      rollback:
+        - sql:
+            sql: >
+              ALTER TABLE competency_suggestions
+              ALTER COLUMN created_at DROP NOT NULL;
+        - sql:
+            sql: >
+              ALTER TABLE competency_suggestions
+              ALTER COLUMN created_at DROP DEFAULT;

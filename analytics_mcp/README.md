@@ -9,7 +9,7 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `mcp_server.py` | 358 | ✅ |
+| `mcp_server.py` | 416 | ⚠️ |
 | `conftest.py` | 37 | ✅ |
 
 ## Variables d'environnement
@@ -39,7 +39,7 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 - **Pas de sidecar stdio** — exposition HTTP directe
 
 ## MCP tools exposés
-- `detect_usage_anomalies`, `get_aiops_dashboard_data`, `get_finops_report`, `get_market_demand_volume`, `get_rag_quality_history`, `get_top_market_skills`, `log_ai_consumption`, `log_rag_quality_snapshot`
+- `detect_usage_anomalies`, `get_aiops_dashboard_data`, `get_finops_report`, `get_market_demand_volume`, `get_rag_quality_history`, `get_sre_trends`, `get_top_market_skills`, `log_ai_consumption`, `log_rag_quality_snapshot`, `log_sre_triage`
 
 ## Gotchas connus
 - **ADR12 Axe 3** : À terme, ce service sera scindé en `analytics_mcp` + `monitoring_mcp` (voir `todo.md`)

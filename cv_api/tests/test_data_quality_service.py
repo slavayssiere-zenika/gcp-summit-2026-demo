@@ -11,6 +11,7 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./cv_test.db")
@@ -202,6 +203,30 @@ async def test_report_competencies_api_unavailable():
     assert "grade" in report
     # Les métriques manquantes génèrent des issues
     assert isinstance(report["issues"], list)
+
+
+@pytest.mark.asyncio
+async def test_report_competencies_api_unavailable_httpx_retry():
+    """Si competencies_api lève une HTTPError -> tente 3 fois avant d'échouer gracieusement."""
+    db = _make_mock_db(total_cvs=5, missions_ok=5, embedding_ok=5,
+                       competencies_ok=5, summary_ok=5, current_role_ok=5)
+
+    mock_hc = AsyncMock()
+    mock_hc.__aenter__ = AsyncMock(return_value=mock_hc)
+    mock_hc.__aexit__ = AsyncMock(return_value=False)
+    # Simule HTTPError
+    mock_hc.get.side_effect = httpx.ConnectError("Connection timed out")
+
+    with patch("src.services.data_quality_service.httpx.AsyncClient", return_value=mock_hc):
+        with patch("src.services.data_quality_service.inject"):
+            from src.services.data_quality_service import \
+                compute_data_quality_report
+            report = await compute_data_quality_report(db, "Bearer test")
+
+    # 3 essais par appel (2 appels distincts = 6 appels au total)
+    assert mock_hc.get.call_count == 6
+    assert "score" in report
+    assert "grade" in report
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: "add-competency-to-acquire-flag"
+      author: "antigravity"
+      changes:
+        - addColumn:
+            tableName: "competencies"
+            columns:
+              - column:
+                  name: "is_to_acquire"
+                  type: "boolean"
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropColumn:
+            tableName: "competencies"
+            columnName: "is_to_acquire"

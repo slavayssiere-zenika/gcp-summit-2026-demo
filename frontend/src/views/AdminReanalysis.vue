@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 // parsePaginated bypass (endpoints fetched here are not paginated: bulk reanalysis trigger/status)
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/ui/PageHeader.vue'
 import TaxonomySuggestions from '../components/TaxonomySuggestions.vue'
-import { Server, Settings, CheckCircle, RefreshCcw, Search, Network, X, Trash2 } from 'lucide-vue-next'
+import { Server, Settings, CheckCircle, RefreshCcw, Search, Network, X, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 
 const { t } = useI18n()
@@ -193,7 +193,12 @@ const checkTreeTaskStatus = async () => {
         treeStatus.value = data.status
         treeArtifacts.value = {
             batch_job_id: data.batch_job_id,
-            batch_step: data.batch_step
+            batch_step: data.batch_step,
+            map_result: data.map_result,
+            res_tree: data.res_tree,
+            sweep_result: data.sweep_result,
+            missing_competencies: data.missing_competencies,
+            completed_pillars: data.completed_pillars
         }
         treeCost.value = data.usage?.estimated_cost_usd || null
 
@@ -230,6 +235,101 @@ const checkTreeTaskStatus = async () => {
     }
   } catch (e) {
     console.error('Failed to check tree task status', e)
+  }
+}
+
+const currentInteractiveStep = computed(() => {
+  // 1. Priorité absolue : État explicite via batch_step
+  if (treeArtifacts.value.batch_step) {
+    if (treeArtifacts.value.batch_step === 'deduplicating') return 'map'
+    if (treeArtifacts.value.batch_step === 'sweeping') return 'reduce'
+    return treeArtifacts.value.batch_step
+  }
+
+  // 2. Scan robuste des journaux (sécurité contre les incohérences de format de données)
+  if (logs.value && logs.value.length > 0) {
+    const logTexts = logs.value.map(l => l.normalize('NFC').toLowerCase() + ' ' + l.normalize('NFD').toLowerCase())
+    for (const log of logTexts) {
+      if (log.includes('sweep terminé') || log.includes('sweep terminé') || log.includes('sweep fini')) {
+        return 'sweep'
+      }
+      if (log.includes('reduce terminée') || log.includes('reduce terminée') || log.includes('reduce terminé') || log.includes('reduce termine')) {
+        return 'reduce'
+      }
+      if (log.includes('déduplication terminée') || log.includes('déduplication terminée') || log.includes('deduplication')) {
+        return 'deduplicate'
+      }
+      if (log.includes('map terminé') || log.includes('map terminé') || log.includes('map fini')) {
+        return 'map'
+      }
+    }
+  }
+
+  // 3. Fallback de sécurité historique sur les objets de données
+  if (treeArtifacts.value.sweep_result !== null && treeArtifacts.value.sweep_result !== undefined) return 'sweep'
+  if (treeArtifacts.value.res_tree && Object.keys(treeArtifacts.value.res_tree).length > 0) return 'reduce'
+  if (treeArtifacts.value.map_result && Object.keys(treeArtifacts.value.map_result).length > 0) {
+    return 'map'
+  }
+  return 'idle'
+})
+
+const nextInteractiveStep = computed(() => {
+  const step = currentInteractiveStep.value
+  if (step === 'idle') return 'map'          // pipeline pas démarré → démarrer avec map
+  if (step === 'map') return 'deduplicate'
+  if (step === 'deduplicate') return 'reduce'
+  if (step === 'reduce') return 'sweep'
+  if (step === 'sweep') return 'apply'
+  return ''                                   // 'apply' terminé → plus rien à faire
+})
+
+const executeTreeStep = async (stepName: string) => {
+  if (!stepName) {
+    console.warn('[AdminReanalysis] executeTreeStep appelé avec un stepName vide — étape ignorée')
+    return
+  }
+  isTreeLoading.value = true
+  error.value = ''
+  successMessage.value = ''
+  addLog(`Lancement de l'étape interactive : ${stepName}...`)
+  try {
+    const resp = await axios.post('/api/cv/recalculate_tree/step', {
+      step: stepName
+    })
+    if (resp.data && resp.data.status) {
+      treeStatus.value = resp.data.status
+      addLog(`Étape ${stepName} lancée avec succès.`)
+      await checkTreeTaskStatus()
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || e.message || `Erreur lors de l'exécution de l'étape ${stepName}`
+    addLog(`ERREUR: ${error.value}`)
+  } finally {
+    isTreeLoading.value = false
+  }
+}
+
+const cancelInteractiveJob = async () => {
+  if (!confirm('Êtes-vous sûr de vouloir annuler ce calcul interactif de l\'arbre ?')) return
+  isTreeLoading.value = true
+  error.value = ''
+  successMessage.value = ''
+  addLog('Annulation du traitement interactif...')
+  try {
+    const resp = await axios.post('/api/cv/recalculate_tree/cancel')
+    if (resp.data && resp.data.success) {
+      treeStatus.value = 'cancelled'
+      addLog('Calcul interactif annulé par l\'utilisateur.')
+      await checkTreeTaskStatus()
+    } else {
+      addLog(`Erreur annulation: ${resp.data?.error || 'Inconnue'}`)
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || e.message || 'Erreur lors de l\'annulation'
+    addLog(`ERREUR: ${error.value}`)
+  } finally {
+    isTreeLoading.value = false
   }
 }
 
@@ -322,6 +422,17 @@ onUnmounted(() => {
               <Network size="20" :class="{ 'pulse-animation': treeStatus === 'batch_running' }" />
               {{ treeStatus === 'batch_running' ? 'Processus Batch en cours côté serveur...' : "Planifier un recalcul complet (Mode Batch - Coût Réduit)" }}
             </button>
+
+            <button 
+              class="action-btn primary-btn" 
+              @click="executeTreeStep('map')"
+              :disabled="isLoading || isTreeLoading || treeStatus === 'batch_running' || !isAdmin()"
+              :title="!isAdmin() ? 'Réservé aux administrateurs' : 'Lancer un recalcul interactif (Étape par étape avec validation)'"
+              style="background: #0ea5e9; margin-top: 0.75rem;"
+            >
+              <Network size="20" />
+              Lancer le recalcul interactif (Human-in-the-Loop)
+            </button>
             
             <button 
               v-if="treeStatus !== 'idle' && treeStatus !== 'batch_running'"
@@ -355,6 +466,98 @@ onUnmounted(() => {
             >
               🔄 Réinitialiser l'état (Efface l'historique Redis)
             </button>
+          </div>
+
+          <!-- Panel de Validation Interactive (Human-in-the-Loop) -->
+          <div v-if="treeStatus === 'waiting_for_user'" class="interactive-validation-box fade-in">
+             <div class="interactive-header">
+                <span class="step-badge">Étape Actuelle : {{ currentInteractiveStep.toUpperCase() }}</span>
+                <h4>Validation Requise</h4>
+                <p class="interactive-desc">
+                  L'IA a terminé l'étape <strong>{{ currentInteractiveStep }}</strong>. Veuillez examiner les résultats générés ci-dessous avant de passer à l'étape suivante.
+                </p>
+             </div>
+
+             <!-- Visualisation des Artéfacts Générés par Étape -->
+             <div class="artifact-visualizer">
+                <!-- 1. Pour Map ou Deduplicate -->
+                <div v-if="currentInteractiveStep === 'map' || currentInteractiveStep === 'deduplicate'" class="step-details">
+                   <h5>Piliers et Compétences Mappées ({{ Object.keys(treeArtifacts.map_result || {}).length }} piliers)</h5>
+                   <div class="pillars-grid">
+                      <div v-for="(skills, pillar) in treeArtifacts.map_result || {}" :key="pillar" class="pillar-card">
+                         <div class="pillar-title">{{ pillar }}</div>
+                         <div class="skills-count">{{ skills ? skills.length : 0 }} compétences</div>
+                         <div class="skills-list">
+                            <span v-for="skill in skills" :key="skill" class="skill-pill">{{ skill }}</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                <!-- 2. Pour Reduce (Arbre de Compétences final) -->
+                <div v-else-if="currentInteractiveStep === 'reduce'" class="step-details">
+                   <h5>Arbre Hiérarchique Structuré (Reduce)</h5>
+                   <p class="sub-desc" style="font-size: 0.82rem; color: #64748b; margin-bottom: 0.5rem;">Voici la structure imbriquée générée pour les catégories et compétences :</p>
+                   <div class="json-box">
+                      <pre>{{ JSON.stringify(treeArtifacts.res_tree, null, 2) }}</pre>
+                   </div>
+                </div>
+
+                <!-- 3. Pour Sweep (Fusions et compétences orphelines) -->
+                <div v-else-if="currentInteractiveStep === 'sweep'" class="step-details">
+                   <h5>Rattrapage des Compétences Orphelines (Sweep)</h5>
+                   
+                   <div v-if="treeArtifacts.missing_competencies && treeArtifacts.missing_competencies.length > 0" class="sweep-section">
+                      <h6 style="font-size: 0.85rem; font-weight: 700; color: #475569; margin: 0 0 0.5rem 0;">Compétences Orphelines Détectées ({{ treeArtifacts.missing_competencies.length }})</h6>
+                      <div class="skills-list" style="margin-bottom: 1rem;">
+                         <span v-for="skill in treeArtifacts.missing_competencies" :key="skill" class="skill-pill orphan">{{ skill }}</span>
+                      </div>
+                   </div>
+
+                   <div v-if="treeArtifacts.sweep_result && treeArtifacts.sweep_result.length > 0" class="sweep-section" style="margin-top: 1rem;">
+                      <h6 style="font-size: 0.85rem; font-weight: 700; color: #475569; margin: 0 0 0.5rem 0;">Suggestions de Rattrapage / Fusions</h6>
+                      <div class="sweep-cards">
+                         <div v-for="(suggestion, idx) in treeArtifacts.sweep_result || []" :key="idx" class="sweep-card">
+                            <div class="sweep-card-header">
+                               <span class="canonical-name">➡️ Nom Canonique : <strong>{{ suggestion.name }}</strong></span>
+                            </div>
+                            <div class="sweep-card-body">
+                               <p class="sweep-desc">Compétences fusionnées sous ce nom :</p>
+                               <div class="skills-list">
+                                  <span v-for="m in suggestion.merge_from" :key="m" class="skill-pill merged">{{ m }}</span>
+                                </div>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+                   <div v-else class="sweep-empty">
+                      <p>Aucune suggestion de rattrapage nécessaire ou générée.</p>
+                   </div>
+                </div>
+             </div>
+
+             <!-- Actions de Validation / Annulation -->
+             <div class="interactive-actions">
+                <button 
+                  class="action-btn success-btn" 
+                  @click="executeTreeStep(nextInteractiveStep)"
+                  :disabled="isTreeLoading || !isAdmin() || !nextInteractiveStep"
+                  style="flex: 1;"
+                >
+                  <CheckCircle size="18" />
+                  Valider et passer à l'étape [{{ nextInteractiveStep ? nextInteractiveStep.toUpperCase() : '...' }}]
+                </button>
+                
+                <button 
+                  class="action-btn cancel-btn" 
+                  @click="cancelInteractiveJob()"
+                  :disabled="isTreeLoading || !isAdmin()"
+                  style="flex: 1;"
+                >
+                  <X size="18" />
+                  Annuler le recalcul
+                </button>
+             </div>
           </div>
           
           <div v-if="treeStatus === 'batch_running'" class="step-box" style="margin-top: 1.5rem; background: rgba(99, 102, 241, 0.1); border: 1px solid #6366f1;">
@@ -1016,5 +1219,212 @@ onUnmounted(() => {
 }
 .artifact-cards::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Interactive Validation UI */
+.interactive-validation-box {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.08);
+}
+
+.interactive-header {
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  padding-bottom: 1rem;
+}
+
+.step-badge {
+  display: inline-block;
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  padding: 0.3rem 0.75rem;
+  border-radius: 30px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.interactive-header h4 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+}
+
+.interactive-desc {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.artifact-visualizer {
+  margin-bottom: 1.5rem;
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.step-details h5 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #334155;
+  margin: 0 0 1rem 0;
+}
+
+.pillars-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.pillar-card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.01);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.pillar-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.03);
+}
+
+.pillar-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1e293b;
+  margin-bottom: 0.25rem;
+}
+
+.skills-count {
+  font-size: 0.75rem;
+  color: #6366f1;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-pill {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.skill-pill.orphan {
+  background: #fff7ed;
+  border-color: #ffedd5;
+  color: #ea580c;
+}
+
+.skill-pill.merged {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #ef4444;
+}
+
+.json-box {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 1rem;
+  overflow: auto;
+  max-height: 300px;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.json-box pre {
+  margin: 0;
+  color: #38bdf8;
+  font-family: 'Fira Code', 'Monaco', monospace;
+  font-size: 0.8rem;
+}
+
+.sweep-section h6 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #475569;
+  margin: 0 0 0.75rem 0;
+}
+
+.sweep-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sweep-card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+
+.sweep-card-header {
+  margin-bottom: 0.5rem;
+}
+
+.canonical-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #0f172a;
+}
+
+.sweep-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0 0 0.5rem 0;
+}
+
+.sweep-empty {
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  padding: 1.5rem;
+}
+
+.interactive-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.success-btn {
+  background: #10b981;
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.success-btn:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.cancel-btn {
+  background: transparent;
+  border: 1px solid #64748b;
+  color: #64748b;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
 }
 </style>

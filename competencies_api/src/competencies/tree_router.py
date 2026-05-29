@@ -105,9 +105,16 @@ async def bulk_import_tree(
             if existing:
                 existing.parent_id = parent_id
                 if aliases:
-                    existing.aliases = aliases
+                    # RC3 fix : merger les aliases (union) plutôt qu'écraser.
+                    # Garantit que chaque bulk_tree enrichit la base sans perte.
+                    existing_raw = [a.strip() for a in (existing.aliases or "").split(",") if a.strip()]
+                    payload_raw = [a.strip() for a in aliases.split(",") if a.strip()]
+                    existing_lower = {a.lower() for a in existing_raw}
+                    merged = existing_raw + [a for a in payload_raw if a.lower() not in existing_lower]
+                    existing.aliases = ", ".join(merged) if merged else None
                 node_id = existing.id
                 touched_ids.add(node_id)
+
             else:
                 sub = (
                     data.get("sub") or data.get("sub_competencies")
@@ -456,12 +463,13 @@ async def cleanup_orphan_competencies(
                 .distinct()
             )
 
-            # Trouver les compétences feuilles n'ayant aucune liaison
+            # Trouver les compétences feuilles n'ayant aucune liaison et non marquées à acquérir
             orphan_query = (
                 select(Competency.id)
                 .where(Competency.id.not_in(parent_ids_query))
                 .where(Competency.id.not_in(uc_ids_query))
                 .where(Competency.id.not_in(ce_ids_query))
+                .where(Competency.is_to_acquire.is_(False))
             )
 
             orphans = (await db.execute(orphan_query)).scalars().all()

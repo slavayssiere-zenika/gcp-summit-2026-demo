@@ -23,6 +23,7 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from src.cvs.models import CVProfile
+from tenacity import AsyncRetrying, before_sleep_log, stop_after_attempt, wait_exponential, retry_if_exception
 
 logger = logging.getLogger(__name__)
 
@@ -177,14 +178,23 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         h = {"Authorization": auth_header}
         inject(h)
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as hc:
-            res = await hc.get(
-                f"{competencies_api_url.rstrip('/')}/stats/coverage",
-                headers=h,
-            )
-            if res.status_code == 200:
-                data = res.json()
-                competency_assignment_ok = data.get("users_with_competencies", 0)
-                competency_assignment_total = data.get("total_users", users_with_cv) or users_with_cv
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1.5, min=1.0, max=5.0),
+                stop=stop_after_attempt(3),
+                retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPError)),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            ):
+                with attempt:
+                    res = await hc.get(
+                        f"{competencies_api_url.rstrip('/')}/stats/coverage",
+                        headers=h,
+                    )
+                    res.raise_for_status()
+
+            data = res.json()
+            competency_assignment_ok = data.get("users_with_competencies", 0)
+            competency_assignment_total = data.get("total_users", users_with_cv) or users_with_cv
     except Exception as exc:
         logger.warning(f"[data-quality] competencies_api /stats/coverage indisponible: {exc}")
 
@@ -194,15 +204,24 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         h_ai = {"Authorization": auth_header}
         inject(h_ai)
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as hc:
-            res = await hc.get(
-                f"{competencies_api_url.rstrip('/')}/evaluations/scoring-stats",
-                params={"min_scored_count": MIN_SCORED_COUNT},
-                headers=h_ai,
-            )
-            if res.status_code == 200:
-                data = res.json()
-                ai_scoring_ok = data.get("users_with_min_scored", 0)
-                ai_scoring_avg = round(data.get("avg_scored_per_user", 0.0), 1)
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1.5, min=1.0, max=5.0),
+                stop=stop_after_attempt(3),
+                retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPError)),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            ):
+                with attempt:
+                    res = await hc.get(
+                        f"{competencies_api_url.rstrip('/')}/evaluations/scoring-stats",
+                        params={"min_scored_count": MIN_SCORED_COUNT},
+                        headers=h_ai,
+                    )
+                    res.raise_for_status()
+
+            data = res.json()
+            ai_scoring_ok = data.get("users_with_min_scored", 0)
+            ai_scoring_avg = round(data.get("avg_scored_per_user", 0.0), 1)
     except Exception as exc:
         logger.warning(f"[data-quality] competencies_api /evaluations/scoring-stats indisponible: {exc}")
 

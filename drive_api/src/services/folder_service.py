@@ -23,15 +23,20 @@ class FolderService:
         if match:
             raw_id = match.group(1)
 
-        existing = (await self.db.execute(select(DriveFolder).filter(DriveFolder.google_folder_id == raw_id))).scalars().first()
+        existing = (await self.db.execute(
+            select(DriveFolder).filter(DriveFolder.google_folder_id == raw_id)
+        )).scalars().first()
         if existing:
             raise HTTPException(status_code=400, detail="Folder ID already registered.")
 
-        existing_tag = (await self.db.execute(select(DriveFolder).filter(DriveFolder.tag == folder.tag.strip()))).scalars().first()
+        existing_tag = (await self.db.execute(
+            select(DriveFolder).filter(DriveFolder.tag == folder.tag.strip())
+        )).scalars().first()
         if existing_tag:
+            name_or_id = existing_tag.folder_name or existing_tag.google_folder_id
             raise HTTPException(
                 status_code=409,
-                detail=f"Tag '{folder.tag.strip()}' already used by folder '{existing_tag.folder_name or existing_tag.google_folder_id}'. Tags must be unique."
+                detail=f"Tag '{folder.tag.strip()}' already used by folder '{name_or_id}'. Tags must be unique."
             )
 
         resolved_folder_name = folder.folder_name
@@ -60,17 +65,22 @@ class FolderService:
         return db_f
 
     async def update_folder(self, folder_id: int, folder_update: FolderUpdate) -> DriveFolder:
-        folder = (await self.db.execute(select(DriveFolder).filter(DriveFolder.id == folder_id))).scalars().first()
+        folder = (await self.db.execute(
+            select(DriveFolder).filter(DriveFolder.id == folder_id)
+        )).scalars().first()
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
 
         if folder_update.tag is not None:
             new_tag = folder_update.tag.strip()
-            existing_tag = (await self.db.execute(select(DriveFolder).filter(DriveFolder.tag == new_tag, DriveFolder.id != folder_id))).scalars().first()
+            existing_tag = (await self.db.execute(
+                select(DriveFolder).filter(DriveFolder.tag == new_tag, DriveFolder.id != folder_id)
+            )).scalars().first()
             if existing_tag:
+                name_or_id = existing_tag.folder_name or existing_tag.google_folder_id
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Tag '{new_tag}' already used by folder '{existing_tag.folder_name or existing_tag.google_folder_id}'. Tags must be unique."
+                    detail=f"Tag '{new_tag}' already used by folder '{name_or_id}'. Tags must be unique."
                 )
             folder.tag = new_tag
 
@@ -114,6 +124,10 @@ class FolderService:
             stmt = stmt.where(DriveFolder.tag.ilike(f"%{tag}%"))
         res = await self.db.execute(stmt)
         await self.db.commit()
+        try:
+            await delete_cache("drive:roots")
+        except Exception as e_redis:
+            logger.warning(f"[Cache] Impossible d'invalider drive:roots (Redis indisponible): {e_redis}")
         return res.rowcount
 
     async def delete_folder(self, folder_id: int) -> int:
@@ -121,11 +135,15 @@ class FolderService:
         if not f:
             raise HTTPException(status_code=404, detail="Not Found")
 
-        files_count_result = await self.db.execute(select(func.count()).select_from(DriveSyncState).filter(DriveSyncState.folder_id == folder_id))
+        files_count_result = await self.db.execute(
+            select(func.count()).select_from(DriveSyncState).filter(DriveSyncState.folder_id == folder_id)
+        )
         files_count = files_count_result.scalar() or 0
         if files_count > 0:
             await self.db.execute(
-                DriveSyncState.__table__.delete().where(DriveSyncState.folder_id == folder_id)
+                DriveSyncState.__table__.delete().where(
+                    DriveSyncState.folder_id == folder_id
+                )
             )
             logger.info(f"[delete_folder] {files_count} fichiers de sync supprimés pour le dossier {folder_id}.")
 
@@ -142,10 +160,11 @@ class FolderService:
 
     @staticmethod
     async def invalidate_drive_cache() -> int:
-        """Invalide le cache Drive (graphe, oos, noms) via shared.cache (async)."""
+        """Invalide le cache Drive (graphe, oos, noms, roots) via shared.cache (async)."""
         deleted = 0
         for pattern in ["drive:graph:", "drive:oos:", "drive:name:"]:
             deleted += await clear_namespace(pattern)
         await delete_cache("drive:sync:rebuild_running")
+        await delete_cache("drive:roots")
         logger.info(f"Purge du cache Redis Drive : {deleted} clés supprimées.")
         return deleted

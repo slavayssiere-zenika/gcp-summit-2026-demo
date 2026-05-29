@@ -37,7 +37,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `conftest.py` | 88 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `src/cvs/router.py` | 47 | ✅ |
-| `src/cvs/routers/admin_router.py` | 176 | ✅ |
+| `src/cvs/routers/admin_router.py` | 205 | ✅ |
 | `src/cvs/routers/analytics_router.py` | 464 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 312 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 56 | ✅ |
@@ -85,6 +85,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 ## Endpoints clés
 - `POST /remediate-legacy`
 - `POST /clear-processing-errors`
+- `DELETE /purge-data`
 - `GET /ranking/experience`
 - `POST /reindex-embeddings`
 - `GET /extraction-scores`
@@ -102,7 +103,6 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 - `POST /import`
 - `GET /users/tags/map`
 - `GET /users/tag/{tag}`
-- `GET /user/{user_id}`
 
 ## Architecture Service Layer
 ```

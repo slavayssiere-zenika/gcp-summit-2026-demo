@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
 import axios from 'axios'
+import markdownit from 'markdown-it'
 import { Briefcase, ChevronLeft, ArrowRight, Loader2, User as UserIcon, Users, Calendar, CheckCircle2, Clock, AlertTriangle, Target, History, ChevronDown, XCircle, Send, Trophy, TrendingDown, Ban, FileText, Trash2 } from 'lucide-vue-next'
 import { useHead } from '@vueuse/head'
 import { useRouter } from 'vue-router'
@@ -13,12 +14,23 @@ const props = defineProps<{
   id: string
 }>()
 
+const md = markdownit({
+  html: true,
+  linkify: true,
+  typographer: true
+})
+
 const router = useRouter()
 const { t } = useI18n()
 const isNew = computed(() => props.id === 'new')
 
 const mission = ref<any>(null)
 const loading = ref(false)
+
+const renderedDescription = computed(() => {
+  if (!mission.value?.description) return ''
+  return md.render(mission.value.description)
+})
 
 const draftTitle = ref('')
 const draftDescription = ref('')
@@ -437,9 +449,7 @@ const statusText = computed(() => {
               <h2>{{ mission.title }}</h2>
             </div>
             <div class="card-body">
-              <div class="desc-box">
-                <p>{{ mission.description }}</p>
-              </div>
+              <div class="desc-box markdown-content" v-html="renderedDescription"></div>
               
               <div class="section-title">
                 <CheckCircle2 size="18" class="text-green" /> Compétences requises (Extract IA)
@@ -754,8 +764,26 @@ h1 { font-size: 1.8rem; font-weight: 800; color: #1a1a1a; margin-bottom: 4px; }
   font-size: 0.95rem;
   color: #444;
   line-height: 1.6;
-  white-space: pre-wrap;
   margin-bottom: 2rem;
+}
+
+.markdown-content :deep(p) {
+  margin-bottom: 0.8rem;
+}
+.markdown-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.markdown-content :deep(h1), .markdown-content :deep(h2), .markdown-content :deep(h3) {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+.markdown-content :deep(ul), .markdown-content :deep(ol) {
+  margin-left: 1.5rem;
+  margin-bottom: 0.8rem;
+}
+.markdown-content :deep(li) {
+  margin-bottom: 0.25rem;
 }
 
 .section-title {

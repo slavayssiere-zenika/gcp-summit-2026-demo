@@ -5,8 +5,9 @@ from contextlib import asynccontextmanager
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from shared.auth.jwt import verify_jwt_bearer as verify_jwt
 from shared.fastapi_utils import instrument_app
 from shared.observability import setup_logging
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -214,6 +215,28 @@ async def get_me(request: Request):
             raise HTTPException(status_code=res.status_code, detail="Non connecté")
         return res.json()
 
+
+# ── Router protégé (JWT requis) — endpoints SRE internes ────────────────────
+_protected_router = APIRouter(dependencies=[Depends(verify_jwt)])
+
+
+@_protected_router.post("/warmup/degraded")
+async def log_warmup_degraded(request: Request):
+    """SRE — Logs warming degradation from frontend to stdout (JWT required)."""
+    try:
+        data = await request.json()
+        service = data.get("service", "unknown")
+        _logger.warning(
+            "[SRE-WARMUP] SERVICE DEGRADED: Service '%s' failed to respond during login.",
+            service,
+        )
+        return {"status": "logged"}
+    except Exception as e:
+        _logger.error("[SRE-WARMUP] Failed to log degraded warmup: %s", e)
+        return {"status": "error"}
+
+
+app.include_router(_protected_router)
 app.include_router(api_router)
 app.include_router(mcp_router)
 

@@ -14,6 +14,7 @@ import ToastNotification from '@/components/ui/ToastNotification.vue'
 import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import OnboardingTour from '@/components/onboarding/OnboardingTour.vue'
 import { useOnboardingStore } from '@/stores/onboardingStore'
+import { useUxStore } from '@/stores/uxStore'
 import axios from 'axios'
 
 const { t } = useI18n()
@@ -35,6 +36,7 @@ const isAdmin = () => authService.state.user?.role === 'admin'
 const isRh = () => authService.state.user?.role === 'rh' || isAdmin()
 
 const onboardingStore = useOnboardingStore()
+const uxStore = useUxStore()
 
 const isMobileMenuOpen = ref(false)
 const toggleMobileMenu = () => {
@@ -118,12 +120,12 @@ onUnmounted(() => {
         <div class="subtitle hide-on-mobile">Console Intelligent Agent</div>
       </div>
       
-      <button class="mobile-menu-btn" @click="toggleMobileMenu" v-if="authService.state.isAuthenticated" aria-label="Menu">
+      <button class="mobile-menu-btn" @click="toggleMobileMenu" v-if="authService.state.isAuthenticated && router.currentRoute.value.path !== '/warming'" aria-label="Menu">
         <X v-if="isMobileMenuOpen" size="24" />
         <Menu v-else size="24" />
       </button>
 
-      <div class="nav-links" :class="{ 'is-open': isMobileMenuOpen }">
+      <div class="nav-links" :class="{ 'is-open': isMobileMenuOpen }" v-if="router.currentRoute.value.path !== '/warming'">
         <div class="nav-pills" v-if="authService.state.isAuthenticated">
 
           <!-- Agent IA -->
@@ -138,7 +140,7 @@ onUnmounted(() => {
 
           <!-- Hub RH (consultants, compétences) -->
           <div class="dropdown" v-if="isRh()">
-            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/admin/deduplication', '/admin/availability'].some(p => router.currentRoute.value.path.startsWith(p)) }" aria-label="Hub RH">
+            <button class="nav-pill dropdown-btn" :class="{ active: ['/user', '/admin/deduplication', '/admin/availability', '/admin/skills-to-acquire'].some(p => router.currentRoute.value.path.startsWith(p)) }" aria-label="Hub RH">
               <Users size="15" /> {{ t('nav.hub_rh') }} <ChevronDown size="13" />
             </button>
             <div class="dropdown-content">
@@ -152,6 +154,9 @@ onUnmounted(() => {
               </RouterLink>
               <RouterLink to="/admin/deduplication" class="nav-pill" active-class="dropdown-active" :aria-label="t('nav.hr_dedup')">
                 <GitMerge size="13" /> {{ t('nav.hr_dedup') }}
+              </RouterLink>
+              <RouterLink to="/admin/skills-to-acquire" class="nav-pill" active-class="dropdown-active" aria-label="Compétences clés à acquérir">
+                <BrainCircuit size="13" /> Compétences clés à acquérir
               </RouterLink>
             </div>
           </div>
@@ -270,6 +275,17 @@ onUnmounted(() => {
 
         <!-- Sélecteur de langue -->
         <LanguageSwitcher v-if="authService.state.isAuthenticated" />
+
+        <!-- SRE Admin-only degraded services warning pill -->
+        <button
+          v-if="authService.state.user?.role === 'admin' && uxStore.degradedServices.length > 0"
+          class="sre-degraded-badge"
+          @click="router.push('/data-quality')"
+          :title="t('nav.degraded_services_tip', { count: uxStore.degradedServices.length, list: uxStore.degradedServices.join(', ') }) || `Avertissement SRE : ${uxStore.degradedServices.length} service(s) froid(s) ou dégradé(s) (${uxStore.degradedServices.join(', ')}). Cliquez pour analyser.`"
+        >
+          <AlertTriangle size="16" class="sre-warning-icon" />
+          <span class="sre-badge-count">{{ uxStore.degradedServices.length }}</span>
+        </button>
 
         <!-- Bouton "?" — relance le tour guidé à tout moment -->
         <button
@@ -615,6 +631,53 @@ body {
   border-color: rgba(227, 25, 55, 0.25);
   color: var(--zenika-red);
   transform: rotate(15deg);
+}
+
+/* SRE Degraded Badge for Admin */
+.sre-degraded-badge {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1.5px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+  height: 38px;
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  animation: srePulse 2s infinite;
+}
+
+.sre-degraded-badge:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.sre-warning-icon {
+  animation: sreShake 4s infinite;
+}
+
+.sre-badge-count {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@keyframes srePulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.2); }
+  70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+@keyframes sreShake {
+  0%, 90%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(-8deg); }
+  94% { transform: rotate(8deg); }
+  96% { transform: rotate(-8deg); }
+  98% { transform: rotate(8deg); }
 }
 
 .separator {

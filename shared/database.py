@@ -28,7 +28,16 @@ if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
 Base = declarative_base()
 connector = None
 engine = None
-SessionLocal = None
+
+
+def SessionLocalPlaceholder(*args, **kwargs):
+    raise RuntimeError(
+        "Database session maker 'SessionLocal' is not initialized. "
+        "Make sure to call 'await init_db_connector()' before using the database."
+    )
+
+
+SessionLocal = SessionLocalPlaceholder
 
 
 async def init_db_connector():

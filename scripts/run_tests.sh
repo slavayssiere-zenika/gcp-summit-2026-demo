@@ -59,7 +59,7 @@ apis=()
 echo "Détection dynamique des modules de test..."
 for dir in */; do
     # On ignore test_env, scratch et les dossiers cachés
-    if [[ "$dir" != "test_env/" ]] && [[ "$dir" != "scratch/" ]] && [[ "$dir" != .* ]]; then
+    if [[ "$dir" != "test_env/" ]] && [[ "$dir" != "scratch/" ]] && [[ "$dir" != "scripts/" ]] && [[ "$dir" != .* ]]; then
         # On vérifie s'il y a un pytest.ini ou des fichiers test_*.py dans le dossier
         if find "$dir" -maxdepth 3 \( -name 'test_*.py' -o -name '*_test.py' -o -name 'pytest.ini' \) 2>/dev/null | grep -q .; then
             clean_name="${dir%/}"

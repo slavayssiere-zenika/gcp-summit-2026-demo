@@ -131,7 +131,7 @@ Structure le tout avec des retours à la ligne propres, et un titre. Fais en sor
         text = response.text
         if text:
             return text
-        logger.warning(f"      -> Avertissement: réponse vide de Gemini, utilisation du template par défaut.")
+        logger.warning("      -> Avertissement: réponse vide de Gemini, utilisation du template par défaut.")
     except Exception as e:
         logger.warning(f"      -> Erreur avec Gemini, utilisation d'un template par défaut: {e}")
 
@@ -209,7 +209,7 @@ def main():
     is_resume = bool(progress)
 
     if is_resume:
-        logger.info(f"✔  Fichier de progression détecté — reprise en cours (sans suppression de l'historique).")
+        logger.info("✔  Fichier de progression détecté — reprise en cours (sans suppression de l'historique).")
         root_folder_id = progress.get("root_folder_id")
         if not root_folder_id:
             logger.error("Erreur: root_folder_id manquant dans progress.json. Relancez sans le fichier.")
@@ -266,16 +266,33 @@ def main():
             progress[agency] = agency_progress
             save_progress(progress)
 
+        # Share the agency folder with the microservice service account
+        try:
+            _, project_id = google.auth.default()
+            sa_email = f"sa-drive-dev-v2@{project_id}.iam.gserviceaccount.com"
+            service.permissions().create(
+                fileId=agency_folder_id,
+                body={
+                    'type': 'user',
+                    'role': 'reader',
+                    'emailAddress': sa_email
+                },
+                supportsAllDrives=True
+            ).execute()
+            logger.info(f"  -> Partagé le dossier '{agency}' avec le Service Account {sa_email}")
+        except Exception as share_err:
+            logger.debug(f"  -> Note de partage pour le dossier '{agency}' : {share_err}")
+
         agency_local_dir = os.path.join(LOCAL_PROFILES_DIR, agency)
         os.makedirs(agency_local_dir, exist_ok=True)
 
         done_names = {f"{c['first_name']} {c['last_name']}" for c in done_consultants}
-        
+
         # Copie du CV réel pour l'agence de Paris
         if agency == "Paris":
             user_cv_name = "Sébastien Lavayssière"
             if user_cv_name not in done_names:
-                logger.info(f"  -> Copie du CV réel de Sébastien dans l'agence Paris...")
+                logger.info("  -> Copie du CV réel de Sébastien dans l'agence Paris...")
                 try:
                     user_folder_id = get_or_create_folder(service, user_cv_name, agency_folder_id)
                     service.files().copy(
@@ -294,7 +311,7 @@ def main():
                     save_progress(progress)
                 except Exception as e:
                     logger.error(f"  -> Erreur lors de la copie du CV réel: {e}")
-        
+
         remaining = [c for c in planned if f"{c['first_name']} {c['last_name']}" not in done_names]
 
         if not remaining:

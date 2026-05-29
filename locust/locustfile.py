@@ -1220,3 +1220,101 @@ class CVIngestionPipelineUser(HttpUser):
                 resp.failure(
                     f"Endpoint /pubsub/import-cv inattendu : HTTP {resp.status_code}"
                 )
+
+
+# ── Classe 3 : Pipeline d'ingestion de missions (sans IA) ─────────────────────────────
+
+
+class MissionsIngestionPipelineUser(HttpUser):
+    """
+    Simule le pipeline d'ingestion de missions (sans vraie IA/multimodal).
+
+    Désactivé en mode LOCUST_SCENARIO=navigation (weight=0).
+    Chaque worker simule l'ingestion en boucle de 10 appels d'offres (missions) :
+      1. S'authentifie.
+      2. Crée 10 missions en envoyant des descriptions textuelles longues.
+      3. Interroge la liste des missions pour valider l'insertion.
+    """
+    weight = 0 if _SCENARIO in ("navigation",) else 1
+
+    wait_time = between(0.5, 1.5)
+
+    _missions_count: int = 0
+    MISSIONS_TARGET: int = int(os.getenv("LOCUST_MISSIONS_TARGET", "500"))
+
+    def on_start(self):
+        self.users_api = os.getenv("USERS_API_URL", "http://users_api:8000")
+        self.missions_api = os.getenv("MISSIONS_API_URL", "http://missions_api:8009")
+        self._login()
+
+        # Intercept requests to refresh token and update headers dynamically
+        original_request = self.client.request
+
+        def custom_request(*args, **kwargs):
+            url = args[1] if len(args) > 1 else kwargs.get("url", "")
+            if "/login" not in str(url):
+                self._ensure_fresh_token()
+                if "headers" in kwargs and self.headers:
+                    kwargs["headers"] = self.headers
+            return original_request(*args, **kwargs)
+        self.client.request = custom_request
+
+    def _login(self):
+        res = self.client.post(
+            f"{self.users_api}/login",
+            json={"email": "admin@zenika.com", "password": "admin"},
+            name="/login",
+        )
+        if res.status_code == 200:
+            self.token = res.json().get("access_token")
+            self.headers = {"Authorization": f"Bearer {self.token}"}
+            self._token_issued_at = time.monotonic()
+        else:
+            self.token = None
+            self.headers = {}
+            self._token_issued_at = 0.0
+            print(f"[MissionsIngestion] Auth failed: HTTP {res.status_code} — {res.text[:120]}")
+
+    def _ensure_fresh_token(self):
+        """Re-login proactif si le token approche de son expiration."""
+        ttl_seconds = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")) * 60
+        threshold = max(10, int(ttl_seconds * 0.8))
+        age = time.monotonic() - getattr(self, "_token_issued_at", 0.0)
+        if not self.token or age >= threshold:
+            self._login()
+
+    @task
+    def ingest_missions_pipeline(self):
+        self._ensure_fresh_token()
+
+        for i in range(10):
+            MissionsIngestionPipelineUser._missions_count += 1
+            m_num = MissionsIngestionPipelineUser._missions_count
+
+            topic = random.choice(MISSION_TITLES)
+            client_name = random.choice(CLIENTS)
+            skills = random.sample(MISSION_SKILLS, k=random.randint(2, 5))
+            duration_months = random.randint(3, 12)
+
+            form_data = {
+                "title": f"Appel d'offre : {topic} chez {client_name} - {m_num}",
+                "description": (
+                    f"Contexte : {client_name} souhaite réaliser une {topic}.\n"
+                    f"Technologies attendues : {', '.join(skills)}.\n"
+                    f"Durée : {duration_months} mois. Profils DevOps et Cloud requis."
+                ),
+            }
+
+            self.client.post(
+                f"{self.missions_api}/missions",
+                data=form_data,
+                headers=self.headers,
+                name="[MissionsIngestion] POST /missions",
+            )
+
+        # Lecture de validation pour vérifier la liste
+        self.client.get(
+            f"{self.missions_api}/missions?skip=0&limit=20",
+            headers=self.headers,
+            name="[MissionsIngestion] GET /missions",
+        )

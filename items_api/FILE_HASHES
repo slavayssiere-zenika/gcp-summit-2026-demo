@@ -1,5 +1,4 @@
 019b00c8fd44f5e1b0328d229502bc0656fc6f82  ./items_api/tests/test_edge_cases.py
-03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
@@ -30,9 +29,9 @@
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 5dcee65c514212a58d9066d9bc0249315b61db52  ./items_api/tests/test_main.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
-635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
 667cbd66308dd9bf08ca28f574b06ff274f28987  ./items_api/tests/test_admin_router.py
 66e35816b98f7013b13f68792623a9972ff3faec  ./items_api/uv.lock
+69c83abcfafb946076c74da166b28a1da96290f3  ./shared/database.py
 756906d87600a150be6208823ea1d24ce0f70649  ./items_api/pyproject.toml
 7a121d04816cc831ed91bd09857eba95ad816f85  ./items_api/src/items/admin_router.py
 7d774c68f44ab6c08e304d2eb8635d3757ddcda8  ./items_api/src/items/routers/search_router.py
@@ -69,6 +68,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./items_api/tests/integration/__init__
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./items_api/tools/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
+df0108d780bd5648c1672b391c524728ca57cad7  ./shared/pyproject.toml
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 e63433ec35067ca10f000560167b5a81a8783e18  ./items_api/scripts/cleanup_items.py

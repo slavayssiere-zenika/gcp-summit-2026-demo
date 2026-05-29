@@ -12,6 +12,7 @@ Consommé par router.py pour les endpoints :
     GET  /recalculate_tree/status
 """
 
+import difflib
 import json
 import logging
 import os
@@ -32,6 +33,18 @@ from sqlalchemy.future import select as sa_select
 from google.genai import types
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_json_text(text: str) -> str:
+    """Nettoie le texte JSON retourné par Gemini, notamment les balises Markdown."""
+    text = text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
 
 
 async def fetch_prompt(prompt_name: str, auth_header: str) -> str:
@@ -66,6 +79,81 @@ async def fetch_prompt(prompt_name: str, auth_header: str) -> str:
         ) from e
 
 
+async def _fetch_all_comps_with_cv_enrichment(auth_header: str) -> tuple[list[dict], list[str]]:
+    """Récupère toutes les compétences depuis competencies_api + enrichissement CV.
+
+    Fonction interne partagée entre get_existing_competencies et
+    get_existing_competencies_with_archive pour éviter la duplication.
+
+    Returns:
+        (all_comps, existing_names) :
+          - all_comps  : liste brute des objets compétences (dict avec id, name, parent_id…)
+          - existing_names : liste plate de tous les noms (y compris mots-clés CV)
+    """
+    async with httpx.AsyncClient(timeout=45.0) as http_client:
+        headers = {"Authorization": auth_header}
+        inject(headers)
+        all_comps: list[dict] = []
+        skip = 0
+        limit = 100
+
+        while True:
+            comp_res = await http_client.get(
+                f"{COMPETENCIES_API_URL.rstrip('/')}/",
+                params={"skip": skip, "limit": limit},
+                headers=headers,
+                timeout=10.0,
+            )
+            comp_res.raise_for_status()
+
+            try:
+                comp_data = PaginationResponse[dict].model_validate(comp_res.json())
+            except ValidationError as ve:
+                logger.error(
+                    "[taxonomy_service] Rupture de contrat API competencies",
+                    extra={"error": str(ve), "raw_keys": list(comp_res.json().keys())},
+                )
+                break
+
+            items = comp_data.items
+            all_comps.extend(items)
+
+            if len(all_comps) >= comp_data.total:
+                break
+            elif len(items) < limit:
+                break
+            skip += limit
+
+        def get_all_names(nodes: list) -> list[str]:
+            names = []
+            for n in nodes:
+                names.append(n["name"])
+                if "sub_competencies" in n and n["sub_competencies"]:
+                    names.extend(get_all_names(n["sub_competencies"]))
+            return names
+
+        existing_names = get_all_names(all_comps)
+
+        # Enrichissement avec les compétences détectées dans les CVs
+        try:
+            async for db_session in database.get_db():
+                profiles = (
+                    await db_session.execute(sa_select(CVProfile))
+                ).scalars().all()
+                for p in profiles:
+                    if p.competencies_keywords:
+                        for k in p.competencies_keywords:
+                            if k and isinstance(k, str):
+                                k = k.strip()
+                                if k and k not in existing_names:
+                                    existing_names.append(k)
+                break
+        except Exception as ex_cv:
+            logger.warning(f"Impossible de récupérer les compétences des CV: {ex_cv}")
+
+        return all_comps, existing_names
+
+
 async def get_existing_competencies(auth_header: str) -> list[str]:
     """Liste toutes les compétences depuis competencies_api (avec pagination).
 
@@ -78,74 +166,66 @@ async def get_existing_competencies(auth_header: str) -> list[str]:
     Returns:
         Liste de noms de compétences (strings). Vide si l'API est indisponible.
     """
-
     try:
-        async with httpx.AsyncClient(timeout=45.0) as http_client:
-            headers = {"Authorization": auth_header}
-            inject(headers)
-            all_comps = []
-            skip = 0
-            limit = 100
-
-            while True:
-                comp_res = await http_client.get(
-                    f"{COMPETENCIES_API_URL.rstrip('/')}/",
-                    params={"skip": skip, "limit": limit},
-                    headers=headers,
-                    timeout=10.0,
-                )
-                comp_res.raise_for_status()
-
-                try:
-                    comp_data = PaginationResponse[dict].model_validate(comp_res.json())
-                except ValidationError as ve:
-                    logger.error(
-                        "[taxonomy_service] Rupture de contrat API competencies",
-                        extra={"error": str(ve), "raw_keys": list(comp_res.json().keys())},
-                    )
-                    break
-
-                items = comp_data.items
-                all_comps.extend(items)
-
-                if len(all_comps) >= comp_data.total:
-                    break
-                elif len(items) < limit:
-                    break
-                skip += limit
-
-            def get_all_names(nodes: list) -> list[str]:
-                names = []
-                for n in nodes:
-                    names.append(n["name"])
-                    if "sub_competencies" in n and n["sub_competencies"]:
-                        names.extend(get_all_names(n["sub_competencies"]))
-                return names
-
-            existing_names = get_all_names(all_comps)
-
-            # Enrichissement avec les compétences détectées dans les CVs
-            try:
-                async for db_session in database.get_db():
-                    profiles = (
-                        await db_session.execute(sa_select(CVProfile))
-                    ).scalars().all()
-                    for p in profiles:
-                        if p.competencies_keywords:
-                            for k in p.competencies_keywords:
-                                if k and isinstance(k, str):
-                                    k = k.strip()
-                                    if k and k not in existing_names:
-                                        existing_names.append(k)
-                    break
-            except Exception as ex_cv:
-                logger.warning(f"Impossible de récupérer les compétences des CV: {ex_cv}")
-
-            return existing_names
-
+        _, existing_names = await _fetch_all_comps_with_cv_enrichment(auth_header)
+        return existing_names
     except Exception as e:
         logger.warning(f"Failed to fetch existing competencies: {e}", exc_info=True)
         return []
+
+
+# Fragment de nom identifiant le nœud Archives (insensible à la casse non nécessaire car stable)
+_ARCHIVE_NODE_NAME_FRAGMENT = "Archives"
+
+
+async def get_existing_competencies_with_archive(
+    auth_header: str,
+) -> tuple[list[str], set[str]]:
+    """Comme get_existing_competencies, avec détection des orphelins archivés.
+
+    Les nœuds sous "Compétences Archives / Non classées" ont tous des consultants
+    assignés (cleanup-orphans a déjà supprimé les vides en début de pipeline).
+    Ils ne doivent donc JAMAIS être supprimés par le Sweep — seulement placés.
+
+    Args:
+        auth_header: Header Authorization pour l'appel HTTP.
+
+    Returns:
+        (existing_names, archived_names) :
+          - existing_names  : liste plate de tous les noms (identique à get_existing_competencies)
+          - archived_names  : ensemble des noms directement sous le nœud Archives
+    """
+    try:
+        all_comps, existing_names = await _fetch_all_comps_with_cv_enrichment(auth_header)
+
+        # Trouver l'id du nœud Archives racine
+        archive_id: int | None = None
+        for comp in all_comps:
+            if _ARCHIVE_NODE_NAME_FRAGMENT in (comp.get("name") or ""):
+                archive_id = comp.get("id")
+                break
+
+        # Collecter les noms de ses enfants directs (depth=1 seulement)
+        archived_names: set[str] = set()
+        if archive_id is not None:
+            for comp in all_comps:
+                if comp.get("parent_id") == archive_id:
+                    name = (comp.get("name") or "").strip()
+                    if name:
+                        archived_names.add(name)
+
+        if archived_names:
+            logger.info(
+                "[taxonomy_service] %d nœuds archivés détectés (avec consultants) : %s",
+                len(archived_names),
+                sorted(archived_names)[:10],
+            )
+
+        return existing_names, archived_names
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch existing competencies with archive: {e}", exc_info=True)
+        return [], set()
 
 
 async def run_taxonomy_step(
@@ -196,6 +276,12 @@ async def run_taxonomy_step(
                 new_log="Étape 1a: Récupération des compétences existantes..."
             )
             existing_names = await get_existing_competencies(auth_header)
+            if not existing_names:
+                await tree_task_manager.update_progress(
+                    error="Aucune compétence disponible en base de données pour recalculer la taxonomie.",
+                    status="error"
+                )
+                return
 
             await tree_task_manager.update_progress(
                 new_log="Étape 1b: Catégorisation des compétences en grands piliers (Map)..."
@@ -261,7 +347,7 @@ async def run_taxonomy_step(
                 )
 
                 try:
-                    raw_map = json.loads(response_map.text)
+                    raw_map = json.loads(_clean_json_text(response_map.text))
                     if isinstance(raw_map, dict) and "items" in raw_map:
                         raw_map = raw_map["items"]
 
@@ -288,6 +374,7 @@ async def run_taxonomy_step(
                 completed_pillars=[],
                 sweep_result=None,
                 status="waiting_for_user",
+                batch_step="map",
                 new_log=f"Map terminé. {len(map_result.keys())} piliers générés. En attente de validation.",
             )
 
@@ -343,21 +430,64 @@ async def run_taxonomy_step(
                 auth_token=auth_token,
             )
 
-            raw_dedup = json.loads(response_dedup.text)
-            if isinstance(raw_dedup, dict) and "items" in raw_dedup:
-                raw_dedup = raw_dedup["items"]
+            raw_dedup = json.loads(_clean_json_text(response_dedup.text))
+
+            # Extract list from wrapper dictionary if present
+            if isinstance(raw_dedup, dict):
+                for wrapper_key in ["items", "pillars", "piliers"]:
+                    if wrapper_key in raw_dedup and isinstance(raw_dedup[wrapper_key], list):
+                        raw_dedup = raw_dedup[wrapper_key]
+                        break
 
             new_map_result = {}
+            final_pillars = []
+
             if isinstance(raw_dedup, list):
-                for item in raw_dedup:
-                    if isinstance(item, dict):
-                        new_map_result.update(item)
+                if all(isinstance(x, str) for x in raw_dedup):
+                    final_pillars = raw_dedup
+                else:
+                    for item in raw_dedup:
+                        if isinstance(item, dict):
+                            new_map_result.update(item)
             elif isinstance(raw_dedup, dict):
                 new_map_result.update(raw_dedup)
+
+            if final_pillars:
+                final_pillars = [p.strip() for p in final_pillars if p and p.strip()]
+                if not final_pillars:
+                    final_pillars = ["Divers"]
+
+                # Heuristic mapping of original pillars to final pillars
+                for orig_pillar, skills in map_result.items():
+                    # 1. Exact match (case insensitive)
+                    matched = next((f for f in final_pillars if f.lower() == orig_pillar.lower()), None)
+                    if not matched:
+                        # 2. Containment match (one contains the other)
+                        matched = next(
+                            (f for f in final_pillars if orig_pillar.lower() in f.lower()
+                             or f.lower() in orig_pillar.lower()),
+                            None
+                        )
+                    if not matched:
+                        # 3. String similarity match
+                        close_matches = difflib.get_close_matches(orig_pillar, final_pillars, n=1, cutoff=0.2)
+                        if close_matches:
+                            matched = close_matches[0]
+                    if not matched:
+                        matched = final_pillars[0]
+
+                    if matched not in new_map_result:
+                        new_map_result[matched] = []
+                    new_map_result[matched].extend(skills)
+
+            if not new_map_result:
+                logger.warning("[recalculate_tree] Déduplication vide, fallback sur map_result d'origine.")
+                new_map_result = map_result
 
             await tree_task_manager.update_progress(
                 map_result=new_map_result,
                 status="waiting_for_user",
+                batch_step="deduplicate",
                 new_log="Déduplication terminée. En attente de validation.",
             )
 
@@ -421,7 +551,7 @@ async def run_taxonomy_step(
                     auth_token=auth_token,
                 )
 
-                raw_reduce = json.loads(response_reduce.text)
+                raw_reduce = json.loads(_clean_json_text(response_reduce.text))
                 if isinstance(raw_reduce, dict) and "items" in raw_reduce:
                     raw_reduce = raw_reduce["items"]
 
@@ -437,6 +567,7 @@ async def run_taxonomy_step(
 
             await tree_task_manager.update_progress(
                 status="waiting_for_user",
+                batch_step="reduce",
                 new_log="Étape Reduce terminée. En attente de validation.",
             )
 
@@ -465,7 +596,15 @@ async def run_taxonomy_step(
                 return used
 
             used_names = get_all_used_names(res_tree)
-            missing = list(set(existing_names) - used_names)
+
+            def normalize_name(name: str) -> str:
+                return name.strip().lower()
+
+            used_names_normalized = {normalize_name(name) for name in used_names}
+            missing = [
+                name for name in existing_names
+                if normalize_name(name) not in used_names_normalized
+            ]
 
             await tree_task_manager.update_progress(missing_competencies=missing)
 
@@ -473,6 +612,7 @@ async def run_taxonomy_step(
                 await tree_task_manager.update_progress(
                     sweep_result=[],
                     status="waiting_for_user",
+                    batch_step="sweep",
                     new_log="Sweep terminé : Aucune compétence orpheline.",
                 )
                 return
@@ -510,19 +650,20 @@ async def run_taxonomy_step(
                 auth_token=auth_token,
             )
 
-            raw_sweep = json.loads(response_sweep.text)
+            raw_sweep = json.loads(_clean_json_text(response_sweep.text))
             if isinstance(raw_sweep, dict) and "items" in raw_sweep:
                 raw_sweep = raw_sweep["items"]
 
             sweep_res_list = []
             if isinstance(raw_sweep, list):
                 sweep_res_list = raw_sweep
-            elif isinstance(raw_sweep, dict):
+            elif isinstance(raw_sweep, dict) and raw_sweep:
                 sweep_res_list = [raw_sweep]
 
             await tree_task_manager.update_progress(
                 sweep_result=sweep_res_list,
                 status="waiting_for_user",
+                batch_step="sweep",
                 new_log=f"Sweep terminé. {len(sweep_res_list)} suggestions de rattrapage générées.",
             )
 
@@ -582,20 +723,40 @@ async def run_taxonomy_step(
                             f"Fusions: {bulk_merge_result}"
                         )
                     else:
-                        logger.warning(
-                            f"[recalculate_tree] bulk_tree HTTP {bulk_res.status_code}: "
-                            f"{bulk_res.text[:200]}"
+                        error_msg = (
+                            f"Erreur lors de la synchronisation de la taxonomie "
+                            f"(Status {bulk_res.status_code}) : {bulk_res.text[:200]}"
                         )
+                        logger.error(f"[recalculate_tree] {error_msg}")
+                        await tree_task_manager.update_progress(
+                            error=error_msg,
+                            status="error"
+                        )
+                        return
             except Exception as e:
-                logger.warning(
-                    f"[recalculate_tree] Erreur lors de l'appel bulk_tree: {e}", exc_info=True
+                error_msg = f"Erreur lors de l'appel bulk_tree: {e}"
+                logger.error(f"[recalculate_tree] {error_msg}", exc_info=True)
+                await tree_task_manager.update_progress(
+                    error=error_msg,
+                    status="error"
                 )
+                return
 
             await tree_task_manager.update_progress(
                 new_log=f"Terminé. {len(bulk_merge_result)} doublon(s) fusionné(s).",
                 tree=res_tree,
                 usage={"merges_applied": len(bulk_merge_result)},
                 status="completed",
+                batch_step="apply",
+            )
+
+        # ── Étape INCONNUE (fail-fast) ────────────────────────────────────────
+        else:
+            unknown_label = repr(step) if step else "(vide)"
+            logger.error(f"[recalculate_tree] Étape inconnue reçue : {unknown_label} — abandon.")
+            await tree_task_manager.update_progress(
+                error=f"Étape inconnue : {unknown_label}. Valeurs acceptées : map, deduplicate, reduce, sweep, apply.",
+                status="error",
             )
 
     except Exception as e:

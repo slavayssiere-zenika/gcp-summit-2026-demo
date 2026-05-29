@@ -558,8 +558,10 @@ compute_service_hash() {
     ! -path "*/.venv*/*" ! -path "*/venv*/*" ! -path "*/env*/*" ! -path "*/test_env*/*" ! -path "*/node_modules/*" \
     ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.DS_Store" ! -path "*/.hypothesis/*" \
     ! -path "*/htmlcov/*" ! -path "*/test_data/*" ! -path "*/tests/data/*" ! -path "*/tests/mock_data/*" \
+    ! -path "*/coverage/*" ! -path "*/.nyc_output/*" \
     ! -path "*/*.egg-info/*" \
     -exec shasum {} + | sort > "/tmp/hash_${SERVICE}"
+
   shasum "/tmp/hash_${SERVICE}" | awk '{print $1}'
 }
 
@@ -1254,9 +1256,20 @@ build_and_upload_frontend() {
     DEV_BUCKET=$(cd platform-engineering/terraform && terraform workspace select dev >/dev/null 2>&1 && terraform output -raw frontend_bucket_name 2>/dev/null || echo "")
 
     if [[ -n "$DEV_BUCKET" && ! "$DEV_BUCKET" =~ "Warning:" ]]; then
+      # IMPORTANT : local_up.py (Phase 2 / Locust) peut avoir extrait une ancienne archive
+      # dans frontend/dist/, écrasant le build Phase 1. On extrait donc l'archive fraîche
+      # dans un répertoire temporaire pour garantir que c'est bien la bonne version qui part sur GCS.
+      local FRONTEND_TEMP_DIR
+      FRONTEND_TEMP_DIR=$(mktemp -d)
+      echo "-> Extraction de l'archive ${ARCHIVE_NAME} dans un répertoire temporaire (isolation Phase 2)..."
+      tar -xzf "$ARCHIVE_NAME" -C "$FRONTEND_TEMP_DIR"
+      local DIST_SRC="${FRONTEND_TEMP_DIR}/frontend/dist"
+
       echo "-> Synchronisation des fichiers vers gs://${DEV_BUCKET}..."
-      gcloud storage rsync frontend/dist/ "gs://${DEV_BUCKET}/" --recursive --delete-unmatched-destination-objects
-      
+      gcloud storage rsync "${DIST_SRC}/" "gs://${DEV_BUCKET}/" --recursive --delete-unmatched-destination-objects
+
+      rm -rf "$FRONTEND_TEMP_DIR"
+
       echo "-> Configuration des entêtes Cache-Control..."
       # Désactiver le cache pour index.html
       gcloud storage objects update "gs://${DEV_BUCKET}/index.html" --cache-control="no-store, no-cache, must-revalidate, max-age=0"
@@ -1529,6 +1542,12 @@ echo -e "\n${RED}============================================================${R
 echo -e "${RED}=== PHASE 1: Build Local & Smoke Tests                      ===${RESET}"
 echo -e "${RED}============================================================${RESET}"
 
+echo -e "${GREY}[*] Arrêt complet de la stack Docker (libère la RAM avant testcontainers en Phase 1)${RESET}"
+docker-compose down --remove-orphans 2>/dev/null || true
+docker-compose --profile perf --profile perf-stress down --remove-orphans 2>/dev/null || true
+docker container prune -f 2>/dev/null || true
+docker network rm monitoring_net 2>/dev/null || true
+
 for TARGET_SERVICE in "${ALL_TASKS[@]}"; do
   CURRENT_DEPLOYING_SERVICE="$TARGET_SERVICE"
   if [[ " ${APP_MICROSERVICES[*]} " == *" $TARGET_SERVICE "* || "$TARGET_SERVICE" == "db_migrations" ]]; then
@@ -1576,10 +1595,36 @@ if [ ${#DEPLOYS_FAILED[@]} -gt 0 ]; then
 fi
 
 # ==============================================================================
+# Phase 1.5: Gate de Validation de Contrat d'Interface OpenAPI
+# ==============================================================================
+echo -e "\n${RED}============================================================${RESET}"
+echo -e "${RED}=== PHASE 1.5: Gate de Validation des Contrats OpenAPI      ===${RESET}"
+echo -e "${RED}============================================================${RESET}"
+
+if [ "$SKIP_TESTS" = true ]; then
+  echo -e "${YELLOW}[!] Gate de validation OpenAPI bypassée via --skip-tests.${RESET}"
+else
+  CURRENT_DEPLOYING_SERVICE="openapi_contract_gate"
+  echo -e "${GREY}[*] Validation de la rétrocompatibilité des spécifications OpenAPI...${RESET}"
+  
+  # Exécution du script de validation
+  if ! python3 scripts/validate_openapi.py; then
+    echo -e "${RED}❌ Échec de la validation de contrat OpenAPI (breaking changes détectés) !${RESET}"
+    DEPLOYS_FAILED+=("openapi_contract_gate (Rupture de contrat OpenAPI)")
+    exit 1
+  else
+    echo -e "${GREEN}✅ Tous les contrats d'interface OpenAPI ont été validés avec succès !${RESET}"
+    DEPLOYS_SUCCESS+=("openapi_contract_gate")
+  fi
+  CURRENT_DEPLOYING_SERVICE=""
+fi
+
+# ==============================================================================
 # Phase 2: Gate de Performance & Charge Locale (Locust)
 # ==============================================================================
 echo -e "\n${RED}============================================================${RESET}"
 echo -e "${RED}=== PHASE 2: Gate de Performance & Charge Locale (Locust)   ===${RESET}"
+
 echo -e "${RED}============================================================${RESET}"
 
 if [ "$SKIP_PERF" = true ]; then
@@ -1589,44 +1634,89 @@ elif [ "$SKIP_TESTS" = true ]; then
 elif [ ${#ALL_TASKS[@]} -eq 0 ]; then
   echo -e "${YELLOW}[!] Aucun service ciblé : skip de la gate Locust locale.${RESET}"
 else
-  # Vérifier si au moins un microservice ou agent est ciblé par le déploiement
-  local has_api_or_agent=false
+  # Vérifier si au moins un microservice ou agent BACKEND est ciblé
+  # (frontend exclu : Locust ne teste pas le frontend)
+  has_api_or_agent=false
   for task in "${ALL_TASKS[@]}"; do
-    if [[ " ${APP_MICROSERVICES[*]} agent_router_api agent_hr_api agent_ops_api agent_missions_api frontend " == *" $task "* ]]; then
+    if [[ " ${APP_MICROSERVICES[*]} agent_router_api agent_hr_api agent_ops_api agent_missions_api " == *" $task "* ]]; then
       has_api_or_agent=true
       break
     fi
   done
 
   if [ "$has_api_or_agent" = false ]; then
-    echo -e "${YELLOW}[!] Aucun microservice ni agent ciblé (uniquement des tâches administratives/scripts) : skip de la gate Locust locale.${RESET}"
+    echo -e "${YELLOW}[!] Aucun microservice ni agent backend ciblé (uniquement frontend/tâches admin) : skip de la gate Locust locale.${RESET}"
   else
-    CURRENT_DEPLOYING_SERVICE="locust_local_gate"
-    echo -e "${GREY}[*] Teardown des conteneurs perf existants (pubsub_emulator, mock_gemini...)${RESET}"
-    docker-compose --profile perf --profile perf-stress down --remove-orphans 2>/dev/null || true
-    echo -e "${GREY}[*] Suppression du réseau monitoring_net pour recréation en mode isolé (internal: true)${RESET}"
-    docker network rm monitoring_net 2>/dev/null || true
+    # Vérifier si au moins un microservice/agent BACKEND ciblé a réellement changé (non skippé)
+    # (frontend exclu : pas de test Locust dessus)
+    any_api_changed=false
+    for task in "${ALL_TASKS[@]}"; do
+      if [[ " ${APP_MICROSERVICES[*]} agent_router_api agent_hr_api agent_ops_api agent_missions_api " == *" $task "* ]]; then
+        if [[ " ${DEPLOYS_SKIPPED[*]} " != *" $task "* ]]; then
+          any_api_changed=true
+          break
+        fi
+      fi
+    done
 
-    # Note : les images de services (cv_api, users_api, etc.) sont déjà correctes —
-    # Phase 3 du run précédent les a buildées et taguées :latest localement.
-    # L'image Locust est buildée par _build_locust_image() dans local_up.py.
-    # La variable GEMINI_API_BASE_URL est passée au conteneur cv_api via docker-compose.perf-override.yml.
-
-    GEMINI_API_BASE_URL=http://mock_gemini:8099 \
-    COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \
-    LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" python3 scripts/local_up.py --no-pull --perf --erase
-    LOCUST_EXIT=$?
-    
-    if [ "$LOCUST_EXIT" -ne 0 ]; then
-      echo -e "${RED}❌ La gate de performance locale (Locust) a échoué ! (Code de retour: $LOCUST_EXIT)${RESET}"
-      DEPLOYS_FAILED+=("locust_local_gate (Failure in local performance gate)")
-      exit 1
+    if [ "$any_api_changed" = false ]; then
+      echo -e "${YELLOW}[!] Aucune API ni agent n'a changé (tous skippés — hash identique) : gate Locust locale ignorée.${RESET}"
+      DEPLOYS_SKIPPED+=("locust_local_gate (no code change)")
     else
-      echo -e "${GREEN}✅ Gate de performance locale validée avec succès !${RESET}"
-      DEPLOYS_SUCCESS+=("locust_local_gate")
+      CURRENT_DEPLOYING_SERVICE="locust_local_gate"
+      echo -e "${GREY}[*] Teardown complet (postgres inclus) pour éviter les états corrompus (postmaster.pid orphelin)${RESET}"
+      docker-compose down -v --remove-orphans 2>/dev/null || true
+      echo -e "${GREY}[*] Teardown des conteneurs perf existants (pubsub_emulator, mock_gemini...)${RESET}"
+      docker-compose --profile perf --profile perf-stress down --remove-orphans 2>/dev/null || true
+      echo -e "${GREY}[*] Suppression du réseau monitoring_net pour recréation en mode isolé (internal: true)${RESET}"
+      docker network rm monitoring_net 2>/dev/null || true
+
+      # Pré-flight : s'assurer que les images locales non gérées par deploy.sh sont buildées.
+      # Ces images sont supprimées par docker system prune et ne se re-buildent pas automatiquement (--no-build).
+      # - loki_mcp     : build depuis GitHub (grafana/loki-mcp)
+      # - mock_gemini  : build depuis contexte local (./mock_gemini/)
+      declare -A LOCAL_ONLY_IMAGES=(
+        ["loki_mcp"]="test-open-code-loki_mcp:latest"
+        ["mock_gemini"]="test-open-code-mock_gemini:latest"
+      )
+      for svc in "${!LOCAL_ONLY_IMAGES[@]}"; do
+        img="${LOCAL_ONLY_IMAGES[$svc]}"
+        if ! docker image inspect "$img" > /dev/null 2>&1; then
+          echo -e "${GREY}[*] Image $img absente — build du service '$svc'...${RESET}"
+          docker-compose build "$svc"
+          if [ $? -ne 0 ]; then
+            echo -e "${RED}❌ Build $svc échoué — gate Locust impossible.${RESET}"
+            DEPLOYS_FAILED+=("locust_local_gate ($svc build failure)")
+            exit 1
+          fi
+          echo -e "${GREEN}✅ $img buildée avec succès.${RESET}"
+        else
+          echo -e "${GREY}[*] Image $img présente localement — skip build.${RESET}"
+        fi
+      done
+
+      # Note : les images de services (cv_api, users_api, etc.) sont déjà correctes —
+      # Phase 3 du run précédent les a buildées et taguées :latest localement.
+      # L'image Locust est buildée par _build_locust_image() dans local_up.py.
+      # La variable GEMINI_API_BASE_URL est passée au conteneur cv_api via docker-compose.perf-override.yml.
+
+      GEMINI_API_BASE_URL=http://mock_gemini:8099 \
+      COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \
+      LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" python3 scripts/local_up.py --no-pull --perf --erase
+      LOCUST_EXIT=$?
+
+      if [ "$LOCUST_EXIT" -ne 0 ]; then
+        echo -e "${RED}❌ La gate de performance locale (Locust) a échoué ! (Code de retour: $LOCUST_EXIT)${RESET}"
+        DEPLOYS_FAILED+=("locust_local_gate (Failure in local performance gate)")
+        exit 1
+      else
+        echo -e "${GREEN}✅ Gate de performance locale validée avec succès !${RESET}"
+        DEPLOYS_SUCCESS+=("locust_local_gate")
+      fi
+      CURRENT_DEPLOYING_SERVICE=""
     fi
-    CURRENT_DEPLOYING_SERVICE=""
   fi
+
 fi
 
 # ==============================================================================

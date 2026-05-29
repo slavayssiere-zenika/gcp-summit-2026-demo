@@ -30,6 +30,9 @@ from tools.logs_tools import (get_recent_500_errors_internal,
 from tools.pipeline_tools import (check_all_components_health_internal,
                                   check_component_health_internal,
                                   get_ingestion_pipeline_status_internal)
+from tools.gcp_monitoring_tools import (list_alert_policies_internal,
+                                        list_alerts_internal,
+                                        list_timeseries_internal)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -138,6 +141,63 @@ async def list_tools() -> list[Tool]:
                 "required": ["query"],
             },
         ),
+        Tool(
+            name="list_alert_policies",
+            description="Lister les alert policies configurées dans un projet Google Cloud.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Required. Format: projects/[PROJECT_ID]"},
+                    "filter": {"type": "string", "description": "Optional. Criteria to filter policies."},
+                    "orderBy": {"type": "string", "description": "Optional. Sort order."},
+                    "pageSize": {"type": "integer", "description": "Optional. Page size limit."},
+                    "pageToken": {"type": "string", "description": "Optional. Page token."},
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="list_alerts",
+            description="Lister les alertes/violations (incidents) actives ou passées dans un projet Google Cloud.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "parent": {"type": "string", "description": "Required. Format: projects/[PROJECT_ID]"},
+                    "filter": {"type": "string", "description": "Optional. Filter string (ex: state=\"OPEN\")."},
+                    "orderBy": {"type": "string", "description": "Optional. Sort order."},
+                    "pageSize": {"type": "integer", "description": "Optional. Page size limit."},
+                    "pageToken": {"type": "string", "description": "Optional. Page token."},
+                },
+                "required": ["parent"],
+            },
+        ),
+        Tool(
+            name="list_timeseries",
+            description="Interroger les séries temporelles de métriques GCP (CPU, 5xx, latences, etc.).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Required. Format: projects/[PROJECT_ID]"},
+                    "filter_str": {"type": "string", "description": "Required. Google Monitoring filter string."},
+                    "interval": {
+                        "type": "object",
+                        "description": "Required. Format: {startTime: ISO, endTime: ISO}",
+                        "properties": {
+                            "startTime": {"type": "string"},
+                            "endTime": {"type": "string"},
+                        },
+                        "required": ["startTime", "endTime"],
+                    },
+                    "view": {"type": "string", "description": "Optional. HEADERS or FULL.", "default": "FULL"},
+                    "aggregation": {"type": "object", "description": "Optional aggregation config."},
+                    "secondaryAggregation": {"type": "object", "description": "Optional secondary aggregation config."},
+                    "orderBy": {"type": "string", "description": "Optional. Sort order."},
+                    "pageSize": {"type": "integer", "description": "Optional. Page size limit."},
+                    "pageToken": {"type": "string", "description": "Optional. Page token."},
+                },
+                "required": ["name", "filter_str", "interval"],
+            },
+        ),
     ]
 
 
@@ -190,6 +250,37 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             data = await execute_read_only_query_internal(
                 arguments.get("query"),
                 arguments.get("db_name", "zenika"),
+            )
+
+        elif name == "list_alert_policies":
+            data = await list_alert_policies_internal(
+                arguments.get("name"),
+                arguments.get("filter"),
+                arguments.get("orderBy"),
+                arguments.get("pageSize"),
+                arguments.get("pageToken"),
+            )
+
+        elif name == "list_alerts":
+            data = await list_alerts_internal(
+                arguments.get("parent"),
+                arguments.get("filter"),
+                arguments.get("orderBy"),
+                arguments.get("pageSize", 50),
+                arguments.get("pageToken"),
+            )
+
+        elif name == "list_timeseries":
+            data = await list_timeseries_internal(
+                arguments.get("name"),
+                arguments.get("filter_str"),
+                arguments.get("interval"),
+                arguments.get("view", "FULL"),
+                arguments.get("aggregation"),
+                arguments.get("secondaryAggregation"),
+                arguments.get("orderBy"),
+                arguments.get("pageSize"),
+                arguments.get("pageToken"),
             )
 
         else:

@@ -76,14 +76,82 @@ CV_API_URL = os.getenv("CV_API_URL", "http://cv_api:8000")
 USERS_API_URL = os.getenv("USERS_API_URL", "http://users_api:8000")
 
 
-async def process_mission_core(title: str, description: str, url: str, file_bytes: bytes, file_mime: str, headers: dict, user_email: str, auth_token: str, task_id: str, mission_id: int = None):
+def sanitize_null_bytes(data):
+    """Recursively removes NUL bytes (\u0000 and \x00) from string and nested structures."""
+    if isinstance(data, str):
+        return data.replace("\u0000", "").replace("\x00", "")
+    elif isinstance(data, list):
+        return [sanitize_null_bytes(x) for x in data]
+    elif isinstance(data, dict):
+        return {k: sanitize_null_bytes(v) for k, v in data.items()}
+    return data
+
+
+async def _reset_mission_to_draft(mission_id: int, reason: str, user_email: str) -> None:
+    """Failsafe : remet une mission de ANALYSIS_IN_PROGRESS → DRAFT en cas d'erreur fatale.
+
+    Appelée depuis le bloc except de process_mission_core pour éviter les missions zombies.
+    Utilise une session DB indépendante pour ne pas dépendre d'une session déjà en erreur.
+    """
+    logger = logging.getLogger(__name__)
+    if not mission_id:
+        return
+    try:
+        async for db in database.get_db():
+            result = await db.execute(select(Mission).where(Mission.id == mission_id))
+            mission = result.scalars().first()
+            if mission and mission.status == MissionStatus.ANALYSIS_IN_PROGRESS:
+                mission.status = MissionStatus.DRAFT
+                history_entry = MissionStatusHistory(
+                    mission_id=mission_id,
+                    old_status=MissionStatus.ANALYSIS_IN_PROGRESS,
+                    new_status=MissionStatus.DRAFT,
+                    reason=f"Erreur analyse IA — reset auto : {reason[:200]}",
+                    changed_by=user_email,
+                )
+                db.add(history_entry)
+                await db.commit()
+                logger.warning(
+                    f"[analysis_service] Mission {mission_id} remise en DRAFT (was ANALYSIS_IN_PROGRESS)."
+                )
+            break
+    except Exception as reset_e:
+        logger.error(
+            f"[analysis_service] Impossible de reset la mission {mission_id} en DRAFT : {reset_e}"
+        )
+
+
+async def process_mission_core(
+    title: str, description: str, url: str, file_bytes: bytes,
+    file_mime: str, headers: dict, user_email: str, auth_token: str,
+    task_id: str, mission_id: int = None,
+):
     logger = logging.getLogger(__name__)
     if not client:
         await task_manager.update_status_failed(task_id, "Gemini non configuré.")
         return
 
+    # Garde idempotence : si la mission est déjà STAFFED (retry après scale-to-zero)
+    # on ne relance pas l'analyse mais on met à jour le task_manager.
+    if mission_id:
+        try:
+            async for db in database.get_db():
+                result = await db.execute(select(Mission).where(Mission.id == mission_id))
+                existing = result.scalars().first()
+                if existing and existing.status == MissionStatus.STAFFED:
+                    logger.info(
+                        f"[analysis_service] Mission {mission_id} déjà STAFFED — skip analyse (idempotence)."
+                    )
+                    await task_manager.update_status_success(task_id, mission_id)
+                    return
+                break
+        except Exception as idp_e:
+            logger.warning(f"[analysis_service] Vérification idempotence échouée (non bloquant) : {idp_e}")
+
     try:
-        async with httpx.AsyncClient(timeout=300.0) as http_client:
+        # NOTE : timeout 280s < timeout Cloud Run 300s pour garantir que l'except
+        # a le temps de reset la mission en DRAFT avant que le container soit tué.
+        async with httpx.AsyncClient(timeout=280.0) as http_client:
             # 1. Fetch from Cache
             extract_prompt = await get_cached_prompt(http_client, "missions_api.extract_mission_info", headers)
             base_staffing_prompt = await get_cached_prompt(http_client, "missions_api.staffing_heuristics", headers)
@@ -146,12 +214,19 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                             "competencies": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Liste de domaines ou compétences parentes larges (ex: Frontend, DevOps, Cloud) au lieu de technologies de niche."
+                                "description": (  # noqa: E501
+                                    "Liste de domaines ou compétences parentes larges "
+                                    "(ex: Frontend, DevOps, Cloud) au lieu de technologies de niche."
+                                )
                             },
-                            "summary": {"type": "string", "description": "Résume explicitement le contexte de la mission pour les archives, très utile s'il s'agit d'un PDF."},
+                            "summary": {"type": "string", "description": "Résume explicitement le contexte de la mission pour les archives, très utile s'il s'agit d'un PDF."},  # noqa: E501
                             "mission_duration_days": {
                                 "type": "integer",
-                                "description": "Durée totale estimée de la mission en jours ouvrés. Extraire depuis des mentions comme '3 mois', '6 semaines', '1 an', '2 sprints'. Convertir : 1 mois = 20 jours, 1 semaine = 5 jours. Retourner 0 si aucune durée n'est mentionnée."
+                                "description": (  # noqa: E501
+                                    "Durée totale estimée de la mission en jours ouvrés. Extraire depuis des mentions "
+                                    "comme '3 mois', '6 semaines', '1 an', '2 sprints'. Convertir : 1 mois = 20 jours, "
+                                    "1 semaine = 5 jours. Retourner 0 si aucune durée n'est mentionnée."
+                                )
                             }
                         },
                         "required": ["competencies", "summary", "mission_duration_days"]
@@ -232,17 +307,30 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                 payload["skills"] = extracted_competencies
 
             logger.info("Recherche CV_API avec requête POST intégrale")
-            cv_res = await http_client.post(f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers, timeout=10.0)
+            cv_res = await http_client.post(  # noqa: E501
+                f"{CV_API_URL.rstrip('/')}/search", json=payload, headers=headers, timeout=10.0
+            )
             is_fallback = False
             if cv_res.status_code == 200:
                 is_fallback = (cv_res.headers.get("X-Fallback-Full-Scan", "false").lower() == "true")
                 missing_embeddings = cv_res.headers.get("X-Missing-Embeddings-Count")
                 if missing_embeddings and int(missing_embeddings) > 0:
                     logger.warning(
-                        f"⚠️ DATA ANOMALY: {missing_embeddings} profils exclus de la recherche CV en raison d'embeddings manquants. Utilisez la ré-analyse de masse.")
-                cv_res_json = cv_res.json()
+                        f"⚠️ DATA ANOMALY: {missing_embeddings} profils exclus de la recherche CV "
+                        "en raison d'embeddings manquants. Utilisez la ré-analyse de masse."
+                    )
+                try:
+                    search_data = PaginationResponse[dict].model_validate(cv_res.json())
+                    candidates_list = search_data.items
+                except ValidationError as ve:
+                    logger.error(
+                        "[missions_api] Rupture de contrat API cv_api /search",
+                        extra={"error": str(ve), "raw_keys": list(cv_res.json().keys())},
+                    )
+                    candidates_list = []
+
                 logger.info(
-                    f"CV_API a répondu avec {len(cv_res_json)} résultats bruts. Fallback_full_scan={is_fallback}")
+                    f"CV_API a répondu avec {len(candidates_list)} résultats bruts. Fallback_full_scan={is_fallback}")
 
                 async def _enrich_candidate(p: dict) -> dict | None:
                     """Enrichit un candidat avec ses données users_api ET cv_api (seniority, skills)."""
@@ -269,7 +357,9 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         cv_details = cv_details_res.json()
                     else:
                         logger.debug(
-                            f"cv_api /user/{u_id}/details indisponible (HTTP {cv_details_res.status_code}), seniority sera inféré.")
+                            f"cv_api /user/{u_id}/details indisponible "
+                            f"(HTTP {cv_details_res.status_code}), seniority sera inféré."
+                        )
 
                     # Inférer la seniority depuis years_of_experience si non fournie par l'utilisateur
                     seniority = u_info.get("seniority") or cv_details.get("seniority")
@@ -303,7 +393,7 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         "unavailabilities": u_info.get("unavailability_periods", []),
                     }
 
-                enriched = await asyncio.gather(*[_enrich_candidate(p) for p in cv_res_json])
+                enriched = await asyncio.gather(*[_enrich_candidate(p) for p in candidates_list])
                 candidates_data = [c for c in enriched if c is not None]
                 logger.info(f"Candidats enrichis (seniority+skills) : {[c['user_id'] for c in candidates_data]}")
             else:
@@ -318,7 +408,10 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     "user_id": 0,
                     "full_name": "Aucun profil disponible",
                     "role": "Non staffé",
-                    "justification": f"Aucun consultant qualifié n'a été trouvé dans la base de connaissance pour les compétences requises : {skills_str}.",
+                    "justification": (
+                        f"Aucun consultant qualifié n'a été trouvé dans la base de connaissance "
+                        f"pour les compétences requises : {skills_str}."
+                    ),
                     "estimated_days": 0
                 }]
             else:
@@ -331,8 +424,11 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     f"{base_staffing_prompt}\n"
                     f"Mission: '{title}'. Description: '{final_description}'.\n"
                     f"Required Skills: {extracted_competencies}.\n"
-                    f"mission_duration_days: {mission_duration_days} (0 means not explicitly specified in the document — apply role-based heuristics).\n"
-                    f"Candidates (each mapped with their specific 'skills' and broad 'skill_domains'): {json.dumps(candidates_data)}."
+                    f"mission_duration_days: {mission_duration_days} "
+                    "(0 means not explicitly specified in the document "
+                    "\u2014 apply role-based heuristics).\n"
+                    f"Candidates (each mapped with their specific 'skills' and broad "
+                    f"'skill_domains'): {json.dumps(candidates_data)}."
                 )
                 res_staffing = await generate_content_with_retry(
                     client,
@@ -340,8 +436,20 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     contents=staffing_prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        response_schema={"type": "array", "items": {"type": "object", "properties": {"user_id": {"type": "integer"}, "full_name": {"type": "string"}, "role": {
-                            "type": "string"}, "justification": {"type": "string"}, "estimated_days": {"type": "integer"}}, "required": ["user_id", "full_name", "role", "justification", "estimated_days"]}}
+                        response_schema={  # noqa: E501
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "user_id": {"type": "integer"},
+                                    "full_name": {"type": "string"},
+                                    "role": {"type": "string"},
+                                    "justification": {"type": "string"},
+                                    "estimated_days": {"type": "integer"},
+                                },
+                                "required": ["user_id", "full_name", "role", "justification", "estimated_days"],
+                            },
+                        }
                     )
                 )
                 await fast_log_finops("RAG_Mission_Staffing", model_staffing, res_staffing.usage_metadata)
@@ -366,12 +474,12 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                     existing_mission = result.scalars().first()
                     if existing_mission:
                         old_status = existing_mission.status
-                        existing_mission.title = title
-                        existing_mission.description = final_description
-                        existing_mission.extracted_competencies = extracted_competencies
-                        existing_mission.competencies_keywords = extracted_competencies
-                        existing_mission.prefiltered_candidates = candidates_data
-                        existing_mission.proposed_team = proposed_team
+                        existing_mission.title = sanitize_null_bytes(title)
+                        existing_mission.description = sanitize_null_bytes(final_description)
+                        existing_mission.extracted_competencies = sanitize_null_bytes(extracted_competencies)
+                        existing_mission.competencies_keywords = sanitize_null_bytes(extracted_competencies)
+                        existing_mission.prefiltered_candidates = sanitize_null_bytes(candidates_data)
+                        existing_mission.proposed_team = sanitize_null_bytes(proposed_team)
                         existing_mission.fallback_full_scan = is_fallback
                         existing_mission.semantic_embedding = vector_data
                         # R1 — MàJ du modèle d'embedding
@@ -392,12 +500,12 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
                         break
 
                 new_mission = Mission(
-                    title=title,
-                    description=final_description,
-                    extracted_competencies=extracted_competencies,
-                    competencies_keywords=extracted_competencies,
-                    prefiltered_candidates=candidates_data,
-                    proposed_team=proposed_team,
+                    title=sanitize_null_bytes(title),
+                    description=sanitize_null_bytes(final_description),
+                    extracted_competencies=sanitize_null_bytes(extracted_competencies),
+                    competencies_keywords=sanitize_null_bytes(extracted_competencies),
+                    prefiltered_candidates=sanitize_null_bytes(candidates_data),
+                    proposed_team=sanitize_null_bytes(proposed_team),
                     semantic_embedding=vector_data,
                     # R1 — Enregistre le modèle d'embedding utilisé
                     embedding_model=_embedding_model,
@@ -424,3 +532,6 @@ async def process_mission_core(title: str, description: str, url: str, file_byte
         logger.error(f"Erreur task {task_id}: {traceback.format_exc()}")
         await task_manager.update_status_failed(task_id, str(e))
         MISSIONS_CREATED_TOTAL.labels(status="staffing_failed").inc()
+        # Reset la mission en DRAFT pour éviter l'état zombie ANALYSIS_IN_PROGRESS.
+        # Utilise une session DB fraîche indépendante du chemin en erreur.
+        await _reset_mission_to_draft(mission_id, str(e), user_email)

@@ -1,4 +1,3 @@
-from unittest.mock import patch
 """
 Tests d'intégration competencies_api — nécessitent Docker.
 
@@ -10,6 +9,7 @@ Valide les comportements PostgreSQL-specific invisibles en SQLite :
 
 Note : Les routes competencies_api sont montées à la racine (pas de préfixe).
 """
+from unittest.mock import patch, AsyncMock
 import sys
 import os
 
@@ -21,6 +21,28 @@ from sqlalchemy import create_engine, text
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def mock_gemini_alias():
+    """Mocke _generate_aliases_for_competency pour éviter l'instanciation du client
+    google-genai sans clé API — ce qui cause un AttributeError asyncio lors du teardown
+    (aclose() sur un _async_httpx_client jamais initialisé).
+
+    IMPORTANT : la fonction est importée via `from helpers import ...` dans les routers,
+    il faut donc patcher dans CHAQUE module appelant (pas dans le module source helpers).
+    Les appels IA externes doivent toujours être mockés en tests d'intégration.
+    """
+    with patch(
+        "src.competencies.competencies_router._generate_aliases_for_competency",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "src.competencies.suggestions_router._generate_aliases_for_competency",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -101,27 +123,37 @@ def test_isolation_between_tests_no_state_leak(client):
 
 
 def test_cleanup_orphans_real_postgres(client, postgres_container):
-    """Valide que /bulk/cleanup-orphans supprime correctement les évaluations liées aux orphelins."""
-    from unittest.mock import patch
-    # 1. Créer une compétence parente
-    resp = client.post("/", json={"name": "Parent", "category": "Tech"})
+    """Valide que /bulk/cleanup-orphans supprime correctement les évaluations liées aux orphelins.
+
+    IMPORTANT : les noms de compétences doivent avoir un ratio de similarité floue < 0.6
+    entre eux pour éviter la déduplication automatique dans create_competency.
+    Ratio "orpheline_*" ≈ 0.67 → tous fusionnés sur le premier → test cassé.
+    Solution : noms sémantiquement très distincts.
+    """
+    # 1. Créer une compétence racine (aura un enfant → non-feuille)
+    resp = client.post("/", json={"name": "RootNode", "category": "Tech"})
     parent_id = resp.json()["id"]
 
-    # 2. Créer une compétence enfant (avec parent -> non orpheline)
-    resp = client.post("/", json={"name": "Enfant", "parent_id": parent_id})
+    # 2. Créer un enfant (leaf sans éval → orphelin à supprimer)
+    resp = client.post("/", json={"name": "ChildLeaf", "parent_id": parent_id})
     resp.json()["id"]
 
-    # 3. Créer une compétence orpheline AVEC une évaluation score > 0 (doit être gardée)
-    resp = client.post("/", json={"name": "Orpheline_Valide"})
-    valid_id = resp.json()["id"]
+    # 3. Feuille racine AVEC score > 0 (doit être gardée)
+    resp = client.post("/", json={"name": "KeptComp"})
+    kept_id = resp.json()["id"]
 
-    # 4. Créer une compétence orpheline AVEC une évaluation score 0 (doit être supprimée en cascade)
-    resp = client.post("/", json={"name": "Orpheline_Zero"})
+    # 4. Feuille racine AVEC score = 0 (doit être supprimée)
+    resp = client.post("/", json={"name": "ZeroScore"})
     zero_id = resp.json()["id"]
 
-    # 5. Créer une orpheline vraie SANS aucune liaison (doit être supprimée)
-    resp = client.post("/", json={"name": "Orpheline_Vraie"})
-    zero_id = resp.json()["id"]
+    # 5. Feuille racine SANS évaluation (doit être supprimée)
+    resp = client.post("/", json={"name": "Unlisted"})
+    lone_id = resp.json()["id"]
+
+    # Guard : 4 IDs distincts = 4 compétences réellement créées (déduplication floue évitée)
+    assert len({parent_id, kept_id, zero_id, lone_id}) == 4, (
+        "Les noms utilisés déclenchent la déduplication floue — choisir des noms plus distincts."
+    )
 
     # Insérer les évaluations manuellement (pour by-pass l'A2A)
     from sqlalchemy import create_engine, text
@@ -133,7 +165,7 @@ def test_cleanup_orphans_real_postgres(client, postgres_container):
                 "INSERT INTO competency_evaluations (user_id, competency_id, ai_score, user_score) "
                 "VALUES (1, :cid, 1.0, 0.0)"
             ),
-            {"cid": valid_id}
+            {"cid": kept_id}
         )
         conn.execute(
             text(
@@ -161,21 +193,21 @@ def test_cleanup_orphans_real_postgres(client, postgres_container):
         resp = client.post("/bulk/cleanup-orphans")
         assert resp.status_code == 200, f"Erreur nettoyage: {resp.json()}"
 
-    # Explication du count de 4:
-    # - Orpheline_Zero : a un score 0, donc considérée orpheline -> supprimée
-    # - Orpheline_Vraie : aucune liaison -> supprimée
-    # - Enfant : aucune liaison, considérée orpheline (leaf) -> supprimée
-    # - Parent : perd son enfant, devient leaf, n'a aucune liaison -> supprimée en cascade
+    # Explication du count de 4 :
+    # - ZeroScore : eval score 0 → orpheline → supprimée (iter 1)
+    # - Unlisted  : aucune éval → orpheline → supprimée (iter 1)
+    # - ChildLeaf : leaf sans éval → orpheline → supprimée (iter 1)
+    # - RootNode  : perd ChildLeaf, devient leaf sans éval → supprimé (iter 2)
     assert resp.json()["deleted_count"] == 4
 
-    # Vérifier que seule Orpheline_Valide (et les catégories par défaut) existent toujours
+    # Vérifier que seule KeptComp (et les catégories système éventuelles) existent toujours
     remaining = client.get("/").json()["items"]
     names = [c["name"] for c in remaining]
-    assert "Orpheline_Valide" in names
-    assert "Parent" not in names
-    assert "Enfant" not in names
-    assert "Orpheline_Zero" not in names
-    assert "Orpheline_Vraie" not in names
+    assert "KeptComp" in names
+    assert "RootNode" not in names
+    assert "ChildLeaf" not in names
+    assert "ZeroScore" not in names
+    assert "Unlisted" not in names
 
 
 def test_bulk_tree_drops_real_postgres(client, postgres_container):

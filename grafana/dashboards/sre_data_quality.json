@@ -1,0 +1,197 @@
+{
+  "uid": "sre-data-quality",
+  "title": "SRE & Data Quality — Zenika Platform",
+  "description": "Historique des triages SRE automatiques, tendances Data Quality (ValidationError), sévérités et FinOps du triage.",
+  "tags": ["sre", "data-quality", "bigquery", "zenika"],
+  "timezone": "Europe/Paris",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "label": "Environnement",
+        "type": "custom",
+        "query": "dev,prd",
+        "current": { "value": "dev", "text": "dev" },
+        "options": [
+          { "value": "dev", "text": "dev" },
+          { "value": "prd", "text": "prd" }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "🔴 Triages CRITICAL (7j)",
+      "description": "Nombre de triages SRE classifiés CRITICAL sur les 7 derniers jours.",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT COUNTIF(severity = 'CRITICAL') as value FROM `${project}.finops_$env.sre_triage_history` WHERE triggered_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) AND env = '$env'",
+          "format": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "⚠️ DQ Errors total (7j)",
+      "description": "Total des ValidationError détectées par tous les triages sur 7 jours.",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT SUM(dq_errors_count) as value FROM `${project}.finops_$env.sre_triage_history` WHERE triggered_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) AND env = '$env'",
+          "format": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "💰 Coût IA Triage (7j)",
+      "description": "Coût total estimé des triages LLM sur 7 jours en USD.",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT ROUND(SUM(cost_usd), 4) as value FROM `${project}.finops_$env.sre_triage_history` WHERE triggered_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) AND env = '$env'",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "📊 Taux de santé (7j)",
+      "description": "Pourcentage de triages classifiés OK sur 7 jours.",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT ROUND(COUNTIF(severity = 'OK') * 100.0 / COUNT(*), 1) as value FROM `${project}.finops_$env.sre_triage_history` WHERE triggered_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) AND env = '$env'",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "📈 Sévérité des triages dans le temps",
+      "description": "Distribution CRITICAL / WARNING / OK par triage, triée chronologiquement.",
+      "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT TIMESTAMP_TRUNC(triggered_at, HOUR) as time, COUNTIF(severity='CRITICAL') as critical, COUNTIF(severity='WARNING') as warning, COUNTIF(severity='OK') as ok FROM `${project}.finops_$env.sre_triage_history` WHERE triggered_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) AND env = '$env' GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "critical" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+          { "matcher": { "id": "byName", "options": "warning" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+          { "matcher": { "id": "byName", "options": "ok" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+        ]
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "🧪 Data Quality — ValidationError par triage",
+      "description": "Nombre de ValidationError détectées à chaque triage. Une hausse indique une migration manquante ou une rupture de contrat Pydantic.",
+      "gridPos": { "x": 0, "y": 12, "w": 16, "h": 8 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT triggered_at as time, dq_errors_count as dq_errors, total_5xx as erreurs_5xx FROM `${project}.finops_$env.sre_triage_history` WHERE triggered_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) AND env = '$env' ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "dq_errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }, { "id": "displayName", "value": "ValidationError" }] },
+          { "matcher": { "id": "byName", "options": "erreurs_5xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }, { "id": "displayName", "value": "Erreurs 5xx" }] }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "mean", "last"] }
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "📋 Derniers rapports SRE",
+      "description": "Les 20 derniers triages avec sévérité, DQ errors, 5xx et résumé exécutif.",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 10 },
+      "datasource": "BigQuery",
+      "targets": [
+        {
+          "rawQuery": true,
+          "rawSql": "SELECT FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', triggered_at, 'Europe/Paris') as horodatage, severity as sévérité, dq_errors_count as dq_errors, total_5xx as erreurs_5xx, ROUND(cost_usd, 5) as coût_usd, CASE playbook_used WHEN TRUE THEN '✅' ELSE '❌' END as playbook, CASE followup_scheduled WHEN TRUE THEN '⚡' ELSE '' END as followup, LEFT(report_excerpt, 200) as résumé FROM `${project}.finops_$env.sre_triage_history` WHERE env = '$env' ORDER BY triggered_at DESC LIMIT 20",
+          "format": "table"
+        }
+      ],
+      "options": { "sortBy": [{ "displayName": "horodatage", "desc": true }] },
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "sévérité" }, "properties": [{ "id": "custom.width", "value": 90 }, { "id": "mappings", "value": [{ "type": "value", "options": { "CRITICAL": { "text": "🔴 CRITICAL", "color": "red", "index": 0 }, "WARNING": { "text": "⚠️ WARNING", "color": "orange", "index": 1 }, "OK": { "text": "✅ OK", "color": "green", "index": 2 } } }] }] }
+        ]
+      }
+    }
+  ]
+}

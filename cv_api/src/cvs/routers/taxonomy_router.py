@@ -5,7 +5,7 @@ import logging
 import src.services.config as _svc_config  # _svc_config.client/_svc_config.vertex_batch_client via attribute access
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Request)
 from src.cvs.routers._shared import (GCP_PROJECT_ID, VERTEX_LOCATION,
-                                     RecalculateStepRequest)
+                                     RecalculateStepRequest, TaxonomyStep)
 from src.cvs.task_state import tree_task_manager
 from src.services.bulk_service import bg_retry_apply
 from src.services.taxonomy_service import (fetch_prompt,
@@ -40,14 +40,19 @@ async def recalculate_competencies_tree_step(
     auth_header = request.headers.get("Authorization")
     user_caller = token_payload.get("sub", "unknown")
 
-    if req_body.step == "map":
+    if req_body.step == TaxonomyStep.map:
         await tree_task_manager.initialize_task()
     else:
-        await tree_task_manager.update_progress(status="running", new_log=f"Lancement de l'étape: {req_body.step}")
+        await tree_task_manager.update_progress(
+            status="running",
+            new_log=f"Lancement de l'étape: {req_body.step.value}"
+        )
 
-    background_tasks.add_task(run_taxonomy_step, auth_header, user_caller,
-                              req_body.step, _svc_config.client, req_body.target_pillar)
-    return {"message": f"Étape {req_body.step} lancée", "status": "running"}
+    background_tasks.add_task(
+        run_taxonomy_step, auth_header, user_caller,
+        req_body.step.value, _svc_config.client, req_body.target_pillar
+    )
+    return {"message": f"Étape {req_body.step.value} lancée", "status": "running"}
 
 
 @router.post("/recalculate_tree")

@@ -10,10 +10,15 @@ L'extension pgvector est activée manuellement après démarrage du conteneur.
 Prérequis : Docker doit être disponible (vérifié par deploy.sh et run_tests.sh).
 """
 import os
+import platform
 
 import pytest
 from sqlalchemy import create_engine, text
 from testcontainers.postgres import PostgresContainer
+
+# Sur Apple Silicon (arm64), forcer linux/arm64 pour éviter l'émulation Rosetta
+# qui consomme trop de mémoire et cause un OOM (exit code 137) du conteneur pgvector.
+_DOCKER_PLATFORM = "linux/arm64" if platform.machine() == "arm64" else "linux/amd64"
 
 
 @pytest.fixture(scope="session")
@@ -25,7 +30,7 @@ def pgvector_container():
     car cv_api.src.cvs.models importe Vector(3072) de pgvector.sqlalchemy.
     Sans cette image, le CREATE TABLE échoue avec "type vector does not exist".
     """
-    with PostgresContainer("pgvector/pgvector:pg16") as pg:
+    with PostgresContainer("pgvector/pgvector:pg16").with_kwargs(platform=_DOCKER_PLATFORM) as pg:
         # Activer l'extension pgvector sur la DB de test
         sync_url = pg.get_connection_url()
         engine = create_engine(sync_url)

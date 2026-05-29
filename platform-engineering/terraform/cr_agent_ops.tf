@@ -57,6 +57,31 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         }
       }
       env {
+        name = "GOOGLE_CHAT_WEBHOOK_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.sre_chat_webhook.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "CLOUD_RUN_REGION"
+        value = var.region
+      }
+      env {
+        name  = "CLOUD_RUN_SERVICE_URI"
+        value = "https://agent-ops-api-${terraform.workspace}-${var.project_id}.${var.region}.run.app"
+      }
+      env {
+        name  = "CLOUD_RUN_SA_EMAIL"
+        value = google_service_account.agent_ops_sa.email
+      }
+      env {
+        name  = "ANALYTICS_MCP_URL"
+        value = google_cloud_run_v2_service.analytics_mcp.uri
+      }
+      env {
         name = "GOOGLE_API_KEY"
         value_source {
           secret_key_ref {
@@ -196,6 +221,10 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         }
       }
       env {
+        name  = "GOOGLE_CHAT_WEBHOOK_SECRET_NAME"
+        value = google_secret_manager_secret.sre_chat_webhook.secret_id
+      }
+      env {
         name  = "GEMINI_API_BASE_URL"
         value = ""
       }
@@ -223,7 +252,8 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
   depends_on = [
     null_resource.run_db_migrations_job,
     google_secret_manager_secret_iam_member.agent_ops_jwt_access,
-    google_secret_manager_secret_iam_member.agent_ops_gemini_access
+    google_secret_manager_secret_iam_member.agent_ops_gemini_access,
+    google_secret_manager_secret_iam_member.agent_ops_chat_webhook_access,
   ]
 }
 
@@ -312,9 +342,25 @@ resource "google_secret_manager_secret_iam_member" "agent_ops_gemini_access" {
   member    = "serviceAccount:${google_service_account.agent_ops_sa.email}"
 }
 
+# Donne à agent_ops_sa le droit de lire l'URL du webhook Google Chat SRE
+resource "google_secret_manager_secret_iam_member" "agent_ops_chat_webhook_access" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.sre_chat_webhook.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.agent_ops_sa.email}"
+}
+
 resource "google_project_iam_member" "agent_ops_logging_viewer" {
   project = var.project_id
   role    = "roles/logging.viewer"
+  member  = "serviceAccount:${google_service_account.agent_ops_sa.email}"
+}
+
+# Permet à agent_ops_sa de créer/modifier les jobs Cloud Scheduler
+# pour le follow-up automatique 30min après un incident CRITICAL SRE.
+resource "google_project_iam_member" "agent_ops_scheduler_admin" {
+  project = var.project_id
+  role    = "roles/cloudscheduler.admin"
   member  = "serviceAccount:${google_service_account.agent_ops_sa.email}"
 }
 

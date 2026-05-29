@@ -78,11 +78,17 @@ def compute_taxonomy_quality(all_comps: list) -> dict:
     issues = []
     score = 100
 
-    if max_pillar["pct"] > 35:
+    if len(pillar_counts) == 2:
+        threshold = 50
+    else:
+        threshold = 35
+
+    if max_pillar["pct"] > threshold:
         issues.append(
-            f"Le pilier '{max_pillar['name']}' concentre {max_pillar['pct']}% des compétences actives (> 35%)."
+            f"Le pilier '{max_pillar['name']}' concentre {max_pillar['pct']}% des compétences actives"
+            f" (> {threshold}%)."
         )
-        score -= int(max_pillar["pct"] - 35)
+        score -= int(max_pillar["pct"] - threshold)
 
     archive_pct = 0
     if archive_count > 0:

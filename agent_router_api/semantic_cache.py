@@ -303,6 +303,26 @@ class SemanticCache:
         except Exception as e:
             logger.error(f"[SemanticCache] Erreur lors du stockage HNSW: {e}", exc_info=True)
 
+    async def clear(self) -> bool:
+        """Supprime toutes les clés du cache sémantique (commençant par _CACHE_KEY_PREFIX)."""
+        if not await self._ensure_connected():
+            return False
+        try:
+            cursor = 0
+            keys_to_delete = []
+            while True:
+                cursor, data = await self._redis.scan(cursor=cursor, match=f"{_CACHE_KEY_PREFIX}*", count=100)
+                keys_to_delete.extend(data)
+                if cursor == 0:
+                    break
+            if keys_to_delete:
+                await self._redis.delete(*keys_to_delete)
+                logger.info(f"[SemanticCache] Effacé {len(keys_to_delete)} clés de cache sémantique.")
+            return True
+        except Exception as e:
+            logger.error(f"[SemanticCache] Erreur lors de l'effacement du cache: {e}")
+            return False
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------

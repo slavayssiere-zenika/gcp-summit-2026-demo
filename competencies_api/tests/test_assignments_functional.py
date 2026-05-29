@@ -11,6 +11,8 @@ Couverture visée (de 39% → ~75%) :
   - POST /pubsub/user-events        (L318-351)
   - _get_assign_sem                  (L45-51)
 """
+from fakeredis import aioredis
+import fakeredis
 import asyncio
 import base64
 import json
@@ -32,8 +34,6 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./competencies_assign_test.db"
 os.environ["USERS_API_URL"] = "http://users_api:8000"
 os.environ["SECRET_KEY"] = "testsecret"
 
-import fakeredis
-from fakeredis import aioredis
 
 _fake_redis_server = fakeredis.FakeServer()
 _fake_redis_client = aioredis.FakeRedis(
@@ -153,8 +153,8 @@ class TestAssignBulk:
     @_mock_get_user(1)
     def test_assign_bulk_valid_competencies(self, mock_get_user, client):
         """Assigne plusieurs compétences valides → assigned == nombre de comp."""
-        comp1 = _create_competency(client, "BulkPython")
-        comp2 = _create_competency(client, "BulkGo")
+        comp1 = _create_competency(client, "Xenon")
+        comp2 = _create_competency(client, "Boron")
 
         resp = client.post(
             "/user/1/assign/bulk",
@@ -288,8 +288,8 @@ class TestListUserCompetencies:
     @_mock_get_user(1)
     def test_list_user_competencies_with_data(self, mock_get_user, client):
         """Retourne les compétences assignées avec pagination."""
-        comp1 = _create_competency(client, "ListComp1")
-        comp2 = _create_competency(client, "ListComp2")
+        comp1 = _create_competency(client, "Tungsten")
+        comp2 = _create_competency(client, "Cadmium")
         client.post(f"/user/1/assign/{comp1['id']}")
         client.post(f"/user/1/assign/{comp2['id']}")
 
@@ -302,8 +302,9 @@ class TestListUserCompetencies:
     @_mock_get_user(1)
     def test_list_user_competencies_pagination(self, mock_get_user, client):
         """skip/limit fonctionne correctement."""
-        for i in range(3):
-            comp = _create_competency(client, f"PaginComp{i}")
+        names = ["Helium", "Argon", "Neon"]
+        for name in names:
+            comp = _create_competency(client, name)
             client.post(f"/user/1/assign/{comp['id']}")
 
         resp = client.get("/user/1?skip=1&limit=2")

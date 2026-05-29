@@ -49,7 +49,7 @@ async def test_get_existing_competencies_fail_fast():
         client_instance.get.return_value = mock_resp
 
         with patch("src.services.taxonomy_service.logger.error") as mock_logger, \
-             patch("src.services.taxonomy_service.database.get_db", return_value=AsyncMock()):
+                patch("src.services.taxonomy_service.database.get_db", return_value=AsyncMock()):
             result = await get_existing_competencies("Bearer token")
             # Result should be empty because of fail-fast on first page
             assert result == []
@@ -62,7 +62,7 @@ async def test_run_taxonomy_step_apply():
     mock_genai_client = MagicMock()
 
     with patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
-         patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status:
+            patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status:
 
         mock_get_status.return_value = {
             "res_tree": {"name": "Tech", "merge_from": ["OldTech"]},
@@ -84,6 +84,7 @@ async def test_run_taxonomy_step_apply():
                 new_log="Terminé. 1 doublon(s) fusionné(s).",
                 tree={"name": "Tech", "merge_from": ["OldTech"]},
                 usage={"merges_applied": 1},
+                batch_step="apply",
                 status="completed"
             )
 
@@ -134,11 +135,11 @@ async def test_run_taxonomy_step_map():
     mock_genai_client = MagicMock()
 
     with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
-         patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
-         patch("src.services.taxonomy_service.get_existing_competencies") as mock_get_existing, \
-         patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
-         patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
-         patch("src.services.taxonomy_service.log_finops"):
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.get_existing_competencies") as mock_get_existing, \
+            patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
+            patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
+            patch("src.services.taxonomy_service.log_finops"):
 
         mock_get_status.return_value = {}
         mock_get_existing.return_value = ["Skill1", "Skill2"]
@@ -158,6 +159,7 @@ async def test_run_taxonomy_step_map():
             completed_pillars=[],
             sweep_result=None,
             status="waiting_for_user",
+            batch_step="map",
             new_log="Map terminé. 2 piliers générés. En attente de validation."
         )
 
@@ -167,10 +169,10 @@ async def test_run_taxonomy_step_deduplicate():
     mock_genai_client = MagicMock()
 
     with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
-         patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
-         patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
-         patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
-         patch("src.services.taxonomy_service.log_finops"):
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
+            patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
+            patch("src.services.taxonomy_service.log_finops"):
 
         mock_get_status.return_value = {"map_result": {"Pillar1": ["Skill1"], "Pillar2": ["Skill2"]}}
         mock_fetch.return_value = "Prompt"
@@ -186,6 +188,7 @@ async def test_run_taxonomy_step_deduplicate():
         mock_update.assert_called_with(
             map_result={"DedupPillar": ["Skill1", "Skill2"]},
             status="waiting_for_user",
+            batch_step="deduplicate",
             new_log="Déduplication terminée. En attente de validation."
         )
 
@@ -195,10 +198,10 @@ async def test_run_taxonomy_step_reduce():
     mock_genai_client = MagicMock()
 
     with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
-         patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
-         patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
-         patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
-         patch("src.services.taxonomy_service.log_finops"):
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
+            patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
+            patch("src.services.taxonomy_service.log_finops"):
 
         mock_get_status.return_value = {"map_result": {"Pillar1": ["Skill1"]}}
         mock_fetch.return_value = "Prompt"
@@ -213,6 +216,7 @@ async def test_run_taxonomy_step_reduce():
 
         mock_update.assert_called_with(
             status="waiting_for_user",
+            batch_step="reduce",
             new_log="Étape Reduce terminée. En attente de validation."
         )
 
@@ -222,11 +226,11 @@ async def test_run_taxonomy_step_sweep():
     mock_genai_client = MagicMock()
 
     with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
-         patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
-         patch("src.services.taxonomy_service.get_existing_competencies") as mock_get_existing, \
-         patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
-         patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
-         patch("src.services.taxonomy_service.log_finops"):
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.get_existing_competencies") as mock_get_existing, \
+            patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
+            patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
+            patch("src.services.taxonomy_service.log_finops"):
 
         mock_get_status.return_value = {"res_tree": {"name": "Pillar1", "sub_competencies": [{"name": "Skill1"}]}}
         mock_get_existing.return_value = ["Skill1", "Skill2"]
@@ -243,5 +247,108 @@ async def test_run_taxonomy_step_sweep():
         mock_update.assert_called_with(
             sweep_result=[{"name": "Pillar1", "merge_from": ["Skill2"]}],
             status="waiting_for_user",
+            batch_step="sweep",
             new_log="Sweep terminé. 1 suggestions de rattrapage générées."
         )
+
+
+@pytest.mark.asyncio
+async def test_run_taxonomy_step_map_empty_db():
+    mock_genai_client = MagicMock()
+
+    with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.get_existing_competencies") as mock_get_existing:
+
+        mock_get_status.return_value = {}
+        mock_get_existing.return_value = []
+
+        await run_taxonomy_step("Bearer token", "user_1", "map", mock_genai_client)
+
+        mock_update.assert_called_with(
+            error="Aucune compétence disponible en base de données pour recalculer la taxonomie.",
+            status="error"
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_taxonomy_step_deduplicate_empty_ai_response():
+    mock_genai_client = MagicMock()
+
+    with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.fetch_prompt") as mock_fetch, \
+            patch("src.services.taxonomy_service.generate_content_with_retry") as mock_gen, \
+            patch("src.services.taxonomy_service.log_finops"):
+
+        original_map_result = {"Pillar1": ["Skill1"], "Pillar2": ["Skill2"]}
+        mock_get_status.return_value = {"map_result": original_map_result}
+        mock_fetch.return_value = "Prompt"
+
+        mock_gen_resp = MagicMock()
+        mock_gen_resp.text = '[]'
+        mock_gen_resp.usage_metadata = {}
+        mock_gen.return_value = mock_gen_resp
+
+        with patch.dict("os.environ", {"GEMINI_MODEL": "gemini-test", "GEMINI_PRO_MODEL": "gemini-pro-test"}):
+            await run_taxonomy_step("Bearer token", "user_1", "deduplicate", mock_genai_client)
+
+        mock_update.assert_called_with(
+            map_result=original_map_result,
+            status="waiting_for_user",
+            batch_step="deduplicate",
+            new_log="Déduplication terminée. En attente de validation."
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_taxonomy_step_sweep_fuzzy_matching():
+    mock_genai_client = MagicMock()
+
+    with patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status, \
+            patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.get_existing_competencies") as mock_get_existing:
+
+        mock_get_status.return_value = {
+            "res_tree": {
+                "Development": {"sub_competencies": [{"name": "Python"}]},
+                "Containers": {"sub_competencies": [{"name": "Docker"}]}
+            }
+        }
+        mock_get_existing.return_value = ["python ", "PYTHON", "Docker"]
+
+        await run_taxonomy_step("Bearer token", "user_1", "sweep", mock_genai_client)
+
+        mock_update.assert_called_with(
+            sweep_result=[],
+            status="waiting_for_user",
+            batch_step="sweep",
+            new_log="Sweep terminé : Aucune compétence orpheline."
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_taxonomy_step_apply_api_outage():
+    mock_genai_client = MagicMock()
+
+    with patch("src.services.taxonomy_service.tree_task_manager.update_progress") as mock_update, \
+            patch("src.services.taxonomy_service.tree_task_manager.get_latest_status") as mock_get_status:
+
+        mock_get_status.return_value = {
+            "res_tree": {"name": "Tech", "merge_from": ["OldTech"]},
+            "sweep_result": [{"name": "DevOps", "merge_from": ["Ops"]}]
+        }
+
+        with patch("src.services.taxonomy_service.httpx.AsyncClient") as MockClient:
+            client_instance = AsyncMock()
+            MockClient.return_value.__aenter__.return_value = client_instance
+
+            mock_resp = MagicMock(status_code=500, text="Internal Server Error")
+            client_instance.post.return_value = mock_resp
+
+            await run_taxonomy_step("Bearer token", "user_1", "apply", mock_genai_client)
+
+            mock_update.assert_called_with(
+                error="Erreur lors de la synchronisation de la taxonomie (Status 500) : Internal Server Error",
+                status="error"
+            )

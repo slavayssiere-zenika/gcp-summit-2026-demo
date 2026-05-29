@@ -175,7 +175,9 @@ EXTRA_PROJECT_NAME_RE = r"^[a-z][a-z0-9-]{2,30}$"
 EXTRA_PROJECT_VERSION_RE = r"^v\d+\.\d+\.\d+$"
 
 
-def validate_extra_project_structure(name: str, path: str, lb_path: str, version: str) -> dict:
+def validate_extra_project_structure(
+    name: str, path: str, lb_path: str, version: str, db_migrations_version: str = None
+) -> dict:
     """
     Valide la structure d'un projet externe avant tout déploiement.
 
@@ -184,6 +186,7 @@ def validate_extra_project_structure(name: str, path: str, lb_path: str, version
     - Présence du Dockerfile, des répertoires database/ et terraform/
     - Format lb_path (doit commencer par '/')
     - Format version semver (ex: v0.1.0)
+    - Format db_migrations_version semver si présent (ex: v0.1.0)
 
     Retourne un dict structuré :
         {
@@ -191,6 +194,7 @@ def validate_extra_project_structure(name: str, path: str, lb_path: str, version
             "path": str,
             "lb_path": str,
             "version": str,
+            "db_migrations_version": str,
             "valid": bool,
             "errors": list[str]
         }
@@ -219,6 +223,14 @@ def validate_extra_project_structure(name: str, path: str, lb_path: str, version
             "(ex: v0.1.0)"
         )
 
+    # Validation de la version des migrations
+    if db_migrations_version and not re.match(EXTRA_PROJECT_VERSION_RE, db_migrations_version):
+        errors.append(
+            f"db_migrations_version '{db_migrations_version}' invalide "
+            f"— doit respecter le format semver '{EXTRA_PROJECT_VERSION_RE}' "
+            "(ex: v0.1.0)"
+        )
+
     # Validation du répertoire racine
     if not os.path.isdir(path):
         errors.append(f"répertoire '{path}' introuvable ou inaccessible")
@@ -236,6 +248,7 @@ def validate_extra_project_structure(name: str, path: str, lb_path: str, version
         "path": path,
         "lb_path": lb_path,
         "version": version,
+        "db_migrations_version": db_migrations_version,
         "alloydb_database": "",  # rempli par discover_extra_projects
         "valid": len(errors) == 0,
         "errors": errors,
@@ -280,6 +293,7 @@ def discover_extra_projects(config: dict) -> list:
         path = proj["path"]
         lb_path = proj["lb_path"]
         version = proj["version"]
+        db_migrations_version = proj.get("db_migrations_version")
         # alloydb_database est optionnel : défaut = name avec tirets remplacess par underscores
         alloydb_database = proj.get("alloydb_database") or name.replace("-", "_")
 
@@ -296,7 +310,7 @@ def discover_extra_projects(config: dict) -> list:
                 "Chaque projet externe doit avoir un chemin LB unique."
             )
 
-        result = validate_extra_project_structure(name, path, lb_path, version)
+        result = validate_extra_project_structure(name, path, lb_path, version, db_migrations_version)
 
         if not result["valid"]:
             error_detail = "\n    ".join(result["errors"])
@@ -308,12 +322,15 @@ def discover_extra_projects(config: dict) -> list:
         seen_names.add(name)
         seen_lb_paths.add(lb_path)
         result["alloydb_database"] = alloydb_database
+        result["db_migrations_version"] = db_migrations_version or version
         result["health_check_paths"] = proj.get("health_check_paths") or []
         result["token_iap"] = proj.get("token_iap") or False
         validated.append(result)
         logger.info(
             f"  [+] Projet externe validé : '{name}' ({path}) → "
-            f"lb_path={lb_path} version={version} alloydb_database={alloydb_database}"
+            f"lb_path={lb_path} version={version} "
+            f"db_migrations_version={result['db_migrations_version']} "
+            f"alloydb_database={alloydb_database}"
         )
 
     logger.info(f"[extra_projects] {len(validated)}/{len(raw_projects)} projet(s) externe(s) validé(s).")
@@ -391,6 +408,7 @@ def _update_lb_routes_and_apply(
     lb_path: str,
     tf_dir: str,
     env: str,
+    project_id: str = "slavayssiere-sandbox-462015",
 ) -> None:
     """Met à jour la route LB de l'extra-project via Terraform (apply ciblé).
 
@@ -448,11 +466,12 @@ def _update_lb_routes_and_apply(
         json.dump(tfvars, f, indent=2)
 
     # ── 4. Apply ciblé sur le URL map uniquement ──────────────────────────────
+    tf_vars = get_tf_args(project_id)
     apply_cmd = [
         "terraform", "apply",
         "-target=google_compute_url_map.default",
         "-auto-approve", "-lock-timeout=60s",
-    ]
+    ] + tf_vars
     logger.info(f"  [lb-routes] Running: {' '.join(apply_cmd)}")
     result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=180)
     if result.returncode != 0:
@@ -461,6 +480,75 @@ def _update_lb_routes_and_apply(
         )
     else:
         logger.info(f"  [lb-routes] ✓ URL map mis à jour — route '{lb_path}' active via Terraform.")
+
+
+def _detach_extra_project_routes(env: str, project_id: str) -> None:
+    """Retire toutes les routes extra-projects du Load Balancer principal avant destruction.
+
+    Évite l'erreur 'resourceInUseByAnotherResource' sur les BackendServices GCP.
+    """
+    logger.info("[*] Détachement des routes extra-projects du Load Balancer principal...")
+    # 1. Met à jour le state local à vide
+    _lb_routes_save(env, [])
+
+    # 2. Lit le tfvars existant, et force extra_project_routes à []
+    tfvars_path = os.path.join(TERRAFORM_DIR, f"{env}.auto.tfvars.json")
+    try:
+        if os.path.exists(tfvars_path):
+            with open(tfvars_path) as f:
+                tfvars = json.load(f)
+        else:
+            tfvars = {}
+        tfvars["extra_project_routes"] = []
+        with open(tfvars_path, "w") as f:
+            json.dump(tfvars, f, indent=2)
+    except Exception as exc:
+        logger.warning(f"  [destroy-lb] Impossible de mettre à jour {tfvars_path} : {exc}")
+        return
+
+    # 3. Lance un apply ciblé pour détacher les routes dans GCP
+    tf_vars = get_tf_args(project_id)
+    apply_cmd = [
+        "terraform", "apply",
+        "-target=google_compute_url_map.default",
+        "-refresh=false",
+        "-auto-approve", "-lock-timeout=60s",
+    ] + tf_vars
+    logger.info(f"  [destroy-lb] Running: {' '.join(apply_cmd)}")
+    result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        logger.warning(
+            f"  [destroy-lb] Échec du détachement des routes (apply ciblé) :\n"
+            f"{(result.stdout + result.stderr)[-500:]}"
+        )
+    else:
+        logger.info("[+] ✓ Toutes les routes extra-projects ont été détachées du Load Balancer.")
+
+
+def _get_latest_active_secret_version(project_id: str, secret_id: str) -> str:
+    """
+    Interroge Secret Manager via gcloud pour récupérer le numéro de la dernière version active (ENABLED).
+    Si aucune version n'est active ou en cas d'erreur, retourne "latest" par défaut.
+    """
+    try:
+        cmd = [
+            "gcloud", "secrets", "versions", "list", secret_id,
+            f"--project={project_id}",
+            "--filter=state=ENABLED",
+            "--format=value(name)",
+            "--limit=1"
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if res.returncode == 0 and res.stdout.strip():
+            output = res.stdout.strip()
+            # gcloud peut retourner la version seule ou le path complet: projects/.../versions/X
+            if output.isdigit():
+                return output
+            if "/" in output:
+                return output.split("/")[-1]
+    except Exception as e:
+        logger.warning(f"[secrets] Impossible de récupérer la version active de {secret_id} : {e}")
+    return "latest"
 
 
 def deploy_extra_project_terraform(
@@ -522,10 +610,8 @@ def deploy_extra_project_terraform(
     # ── Service Account email du SA créé par la plateforme pour ce projet ────
     service_account_email = sa_emails.get(name, "")
     if not service_account_email:
-        logger.warning(
-            f"[extra_projects] Aucun SA trouvé dans extra_project_sa_emails pour '{name}'. "
-            "Assurez-vous que le terraform apply de la plateforme a été exécuté au moins une fois."
-        )
+        service_account_email = f"sa-{name}-{env}@{project_id}.iam.gserviceaccount.com"
+        logger.info(f"  [fallback] Utilisation de l'email SA calculé : {service_account_email}")
 
     alloydb_database = project.get("alloydb_database") or name.replace("-", "_")
 
@@ -534,11 +620,18 @@ def deploy_extra_project_terraform(
     iap_oauth_client_id_secret = "google-secret-id"
     iap_oauth_client_secret_secret = "google-secret-key"
 
+    # Récupération de la dernière version active pour IAP OAuth (évite les erreurs sur les versions détruites)
+    iap_oauth_client_version = _get_latest_active_secret_version(project_id, iap_oauth_client_id_secret)
+    logger.info(f"  [secrets] Version active pour IAP OAuth : {iap_oauth_client_version}")
+
+    db_migrations_version = project.get("db_migrations_version") or version
+
     tf_vars = [
         f"-var=project_id={project_id}",
         f"-var=region={region}",
         f"-var=service_name={name}",
         f"-var=image_version={version}",
+        f"-var=image_db_migrations_version={db_migrations_version}",
         f"-var=lb_path={project['lb_path']}",
         f"-var=vpc_network_id={vpc_network_id}",
         f"-var=vpc_subnet_id={vpc_subnet_id}",
@@ -548,11 +641,14 @@ def deploy_extra_project_terraform(
         f"-var=service_account_email={service_account_email}",
         f"-var=iap_oauth_client_id={iap_oauth_client_id_secret}",
         f"-var=iap_oauth_client_secret={iap_oauth_client_secret_secret}",
+        f"-var=iap_oauth_client_version={iap_oauth_client_version}",
     ]
 
     logger.info(
         f"  Variables injectées : project_id={project_id} | region={region} | "
-        f"service_name={name} | image_version={version} | lb_path={project['lb_path']} | "
+        f"service_name={name} | image_version={version} | "
+        f"image_db_migrations_version={db_migrations_version} | "
+        f"lb_path={project['lb_path']} | "
         f"vpc_network_id={'<set>' if vpc_network_id else '<vide>'} | "
         f"vpc_subnet_id={'<set>' if vpc_subnet_id else '<vide>'} | "
         f"alloydb_ip={'<set>' if alloydb_ip else '<vide>'} | "
@@ -561,6 +657,7 @@ def deploy_extra_project_terraform(
         f"alloydb_instance_uri={'<set>' if alloydb_instance_uri else '<vide>'} | "
         f"iap_client_id={iap_oauth_client_id_secret} | "
         f"iap_client_secret={iap_oauth_client_secret_secret} | "
+        f"iap_client_version={iap_oauth_client_version} | "
         f"NOTE: image injecte par le sous-projet (defaut variables.tf)"
     )
 
@@ -615,45 +712,37 @@ def deploy_extra_project_terraform(
     # Le job Liquibase (null_resource.run_db_migrations_job) s'exécute PENDANT
     # le terraform apply. Il doit pouvoir se connecter en IAM → base + GRANT
     # doivent exister avant. On déclenche donc db-init-job-{env} maintenant.
+    # db_init.py est idempotent : CREATE DATABASE + GRANT sont sans effet si déjà présents.
+    # On n'utilise PAS de state local (pas de .db_init_state.json) — approche stateless.
     db_init_job = f"db-init-job-{env}"
     alloydb_iam_user = service_account_email.replace(".gserviceaccount.com", "") if service_account_email else ""
 
     if alloydb_iam_user and alloydb_ip and alloydb_database:
-        fingerprint = _db_init_fingerprint(env, name, alloydb_database, alloydb_iam_user)
-        if not _db_init_needed(env, name, alloydb_database, alloydb_iam_user):
-            logger.info(
-                f"  [db-init] ⏭  Ignoré — empreinte inchangée pour '{name}' "
-                f"(db={alloydb_database}, sa={alloydb_iam_user}). "
-                "Forcez avec --extra-projects si nécessaire."
+        logger.info(
+            f"  [db-init] Exécution de {db_init_job} AVANT l'apply "
+            f"(base='{alloydb_database}' / user='{alloydb_iam_user}') — idempotent, toujours rejoué"
+        )
+        db_init_cmd = [
+            "gcloud", "run", "jobs", "execute", db_init_job,
+            f"--region={region}",
+            f"--project={project_id}",
+            "--wait",
+            f"--update-env-vars=EXTRA_DB_NAME={alloydb_database},EXTRA_IAM_USER={alloydb_iam_user}",
+        ]
+        logger.info(f"  [*] Running: {' '.join(db_init_cmd)}  (elapsed: {elapsed()})")
+        result = subprocess.run(db_init_cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise DeploymentError(
+                f"  [db-init] Le job {db_init_job} a échoué pour '{name}' :\n"
+                f"{(result.stdout + result.stderr)[-500:]}"
             )
-        else:
-            logger.info(
-                f"  [db-init] Exécution de {db_init_job} AVANT l'apply "
-                f"(base='{alloydb_database}' / user='{alloydb_iam_user}')"
-            )
-            db_init_cmd = [
-                "gcloud", "run", "jobs", "execute", db_init_job,
-                f"--region={region}",
-                f"--project={project_id}",
-                "--wait",
-                f"--update-env-vars=EXTRA_DB_NAME={alloydb_database},EXTRA_IAM_USER={alloydb_iam_user}",
-            ]
-            logger.info(f"  [*] Running: {' '.join(db_init_cmd)}  (elapsed: {elapsed()})")
-            result = subprocess.run(db_init_cmd, capture_output=True, text=True, timeout=300)
-            if result.returncode != 0:
-                logger.warning(
-                    f"  [db-init] Le job {db_init_job} a retourné une erreur (non bloquant) :\n"
-                    f"{(result.stdout + result.stderr)[-500:]}"
-                )
-            else:
-                logger.info(f"  [db-init] ✓ Base '{alloydb_database}' prête, droits IAM accordés.")
-                _db_init_save_state(env, name, fingerprint)
+        logger.info(f"  [db-init] ✓ Base '{alloydb_database}' prête, droits IAM accordés.")
 
     else:
-        logger.warning(
-            f"  [db-init] Paramètres manquants (sa_email={alloydb_iam_user!r}, "
-            f"alloydb_ip={alloydb_ip!r}, db={alloydb_database!r}) — "
-            f"le terraform apply risque d'échouer sur les migrations."
+        raise DeploymentError(
+            f"[db-init] Paramètres manquants pour '{name}' "
+            f"(sa_email={alloydb_iam_user!r}, alloydb_ip={alloydb_ip!r}, db={alloydb_database!r}). "
+            "Assurez-vous que le terraform apply de la plateforme a créé le SA avant de relancer."
         )
 
     _run_extra(["terraform", "apply", "-auto-approve", "-lock-timeout=120s"] + tf_vars)
@@ -661,7 +750,158 @@ def deploy_extra_project_terraform(
     logger.info(f"  [+] Terraform extra projet '{name}' appliqué avec succès.")
 
     # ── Mise à jour route LB via Terraform (apply ciblé) ─────────────────────
-    _update_lb_routes_and_apply(name, project["lb_path"], tf_dir, env)
+    _update_lb_routes_and_apply(name, project["lb_path"], tf_dir, env, project_id)
+
+
+def _destroy_extra_project_terraform(
+    project: dict,
+    env: str,
+    project_id: str,
+    region: str = "europe-west1",
+) -> None:
+    """
+    Lance la destruction Terraform du projet externe depuis son propre répertoire terraform/.
+
+    Variables injectées automatiquement dans Terraform (identiques au deploy) :
+    - project_id, region, service_name, image_version, etc.
+    """
+    name = project["name"]
+    version = project["version"]
+    tf_dir = os.path.join(project["path"], "terraform")
+
+    logger.info(f"[extra_projects] Destruction Terraform du projet externe : '{name}'")
+    logger.info(f"  Répertoire : {tf_dir}")
+    logger.info(f"  Version    : {version}")
+
+    if not os.path.exists(tf_dir):
+        logger.warning(
+            f"[extra_projects] Répertoire Terraform inexistant pour '{name}' ({tf_dir}) — Destruction sautée."
+        )
+        return
+
+    # ── Récupération des outputs de la plateforme (VPC, etc.) ─────────────────
+    platform_outputs = _get_platform_tf_outputs()
+    vpc_network_id = platform_outputs.get("vpc_network_id", "")
+    vpc_subnet_id = platform_outputs.get("vpc_subnet_id", "")
+    alloydb_instance_uri = platform_outputs.get("alloydb_instance_uri", "")
+    alloydb_ip = platform_outputs.get("alloydb_ip", "")
+    tf_state_bucket = platform_outputs.get("tf_state_bucket", "")
+    sa_emails = platform_outputs.get("extra_project_sa_emails") or {}
+
+    service_account_email = sa_emails.get(name, "")
+    if not service_account_email:
+        service_account_email = f"sa-{name}-{env}@{project_id}.iam.gserviceaccount.com"
+        logger.info(f"  [fallback] Utilisation de l'email SA calculé pour destroy : {service_account_email}")
+    alloydb_database = project.get("alloydb_database") or name.replace("-", "_")
+
+    # Convention plateforme GCP : noms des secrets IAP OAuth dans Secret Manager.
+    iap_oauth_client_id_secret = "google-secret-id"
+    iap_oauth_client_secret_secret = "google-secret-key"
+
+    # Récupération de la dernière version active pour IAP OAuth
+    iap_oauth_client_version = _get_latest_active_secret_version(project_id, iap_oauth_client_id_secret)
+
+    db_migrations_version = project.get("db_migrations_version") or version
+
+    tf_vars = [
+        f"-var=project_id={project_id}",
+        f"-var=region={region}",
+        f"-var=service_name={name}",
+        f"-var=image_version={version}",
+        f"-var=image_db_migrations_version={db_migrations_version}",
+        f"-var=lb_path={project['lb_path']}",
+        f"-var=vpc_network_id={vpc_network_id}",
+        f"-var=vpc_subnet_id={vpc_subnet_id}",
+        f"-var=alloydb_instance_uri={alloydb_instance_uri}",
+        f"-var=alloydb_ip={alloydb_ip}",
+        f"-var=alloydb_database={alloydb_database}",
+        f"-var=service_account_email={service_account_email}",
+        f"-var=iap_oauth_client_id={iap_oauth_client_id_secret}",
+        f"-var=iap_oauth_client_secret={iap_oauth_client_secret_secret}",
+        f"-var=iap_oauth_client_version={iap_oauth_client_version}",
+    ]
+
+    # ── Génère un backend.tf dans le terraform/ du projet externe ──────────
+    if tf_state_bucket:
+        backend_tf_path = os.path.join(tf_dir, "backend.tf")
+        backend_tf_content = (
+            '# AUTO-GENERATED by manage_env.py — ne pas modifier manuellement.\n'
+            '# Ce fichier est réécrit à chaque déploiement.\n'
+            'terraform {\n'
+            '  backend "gcs" {\n'
+            f'    bucket = "{tf_state_bucket}"\n'
+            f'    prefix = "terraform/state/{env}/{name}"\n'
+            '  }\n'
+            '}\n'
+        )
+        with open(backend_tf_path, "w") as _f:
+            _f.write(backend_tf_content)
+        logger.info(f"  [backend] backend.tf généré : bucket={tf_state_bucket} prefix=terraform/state/{env}/{name}")
+
+    def _run_extra(cmd, **kwargs):
+        logger.info(f"[*] Running (extra project destroy): {' '.join(cmd)}  (elapsed: {elapsed()})")
+        process = subprocess.Popen(
+            cmd, cwd=tf_dir,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+        )
+        full_output = []
+        for line in iter(process.stdout.readline, ""):
+            print(line, end="", flush=True)
+            full_output.append(line)
+        process.stdout.close()
+        return_code = process.wait()
+        if return_code != 0:
+            raise DeploymentError(
+                f"[extra_projects] Terraform '{' '.join(cmd[:2])}' échoué pour le projet '{name}'.\n"
+                f"{''.join(full_output[-30:])}"
+            )
+
+    _run_extra(["terraform", "init", "-reconfigure", "-upgrade"])
+    _run_extra(["terraform", "destroy", "-auto-approve", "-lock-timeout=120s"] + tf_vars)
+    logger.info(f"  [+] Terraform extra projet '{name}' détruit avec succès.")
+
+
+def _cleanup_serverless_addresses(project_id: str, region: str, env: str) -> None:
+    """
+    Supprime les adresses IP 'serverless-ipv4-*' créées automatiquement par Cloud Run
+    VPC Direct Egress, car elles bloquent la suppression du sous-réseau (subnet) lors du destroy.
+    """
+    logger.info(f"[*] Recherche d'adresses serverless-ipv4 à nettoyer dans la région '{region}'...")
+    try:
+        cmd_list = [
+            "gcloud", "compute", "addresses", "list",
+            f"--project={project_id}",
+            f"--filter=name ~ ^serverless-ipv4 AND region:({region})",
+            "--format=value(name)"
+        ]
+        logger.info(f"[*] Running: {' '.join(cmd_list)}")
+        res = subprocess.run(cmd_list, capture_output=True, text=True, timeout=30)
+        if res.returncode != 0:
+            logger.warning(f"[cleanup-ips] Impossible de lister les adresses : {res.stderr.strip()}")
+            return
+
+        addresses = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        if not addresses:
+            logger.info("[cleanup-ips] Aucune adresse serverless-ipv4 détectée.")
+            return
+
+        logger.info(f"[cleanup-ips] {len(addresses)} adresse(s) à supprimer : {', '.join(addresses)}")
+        for addr in addresses:
+            cmd_del = [
+                "gcloud", "compute", "addresses", "delete", addr,
+                f"--project={project_id}",
+                f"--region={region}",
+                "--quiet"
+            ]
+            logger.info(f"[*] Running: {' '.join(cmd_del)}")
+            del_res = subprocess.run(cmd_del, capture_output=True, text=True, timeout=30)
+            if del_res.returncode == 0:
+                logger.info(f"[cleanup-ips] ✓ Adresse '{addr}' supprimée avec succès.")
+            else:
+                logger.warning(f"[cleanup-ips] ✗ Échec de suppression de '{addr}' : {del_res.stderr.strip()}")
+    except Exception as exc:
+        logger.warning(f"[cleanup-ips] Erreur lors du nettoyage des adresses serverless-ipv4 : {exc}")
 
 
 def build_image_urls(registry: str, versions: dict) -> dict:
@@ -707,6 +947,8 @@ for _h in logging.root.handlers:
 # ── Log fichier persistant (lisible par Antigravity) ──────────────────────────
 # Chemin relatif à la racine du mono-repo (parent du dossier platform-engineering/)
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT == "/" or not os.access(_REPO_ROOT, os.W_OK):
+    _REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 _LOG_DIR = os.path.join(_REPO_ROOT, "deploy_logs")
 os.makedirs(_LOG_DIR, exist_ok=True)
 _RUN_TS = time.strftime("%Y%m%d_%H%M%S")
@@ -813,12 +1055,18 @@ def resource_exists_in_gcp(resource_type, name, project_id):
         res = subprocess.run(["gcloud", "iam", "service-accounts", "describe", name,
                              "--project", project_id, "--format=json"], capture_output=True)
         return res.returncode == 0
+    elif resource_type == "backend_service":
+        res = subprocess.run(["gcloud", "compute", "backend-services", "describe", name,
+                             "--global", "--project", project_id, "--format=json"], capture_output=True)
+        return res.returncode == 0
     return False
 
 
 def get_tf_args(project_id: str = "slavayssiere-sandbox-462015") -> list:
     """Retourne les arguments -var supplémentaires pour terraform apply/plan/import."""
-    return []
+    active_version = _get_latest_active_secret_version(project_id, "google-secret-id")
+    logger.info(f"  [secrets] Version de secret active détectée pour la plateforme principale : {active_version}")
+    return [f"-var=google_secret_version={active_version}"]
 
 
 def toggle_prevent_destroy(disable=True):
@@ -1209,13 +1457,14 @@ def _terraform_apply_with_retry(apply_cmd, env, project_id, region, extra_domain
         sys.exit(res.returncode)
 
 
-def _post_deploy_frontend_sync(env, project_id, ctx_to_use):
+def _post_deploy_frontend_sync(env, project_id, frontend_version=None, ctx_to_use=None):
     """
     Synchronise les assets frontend depuis le bucket source GCS vers le bucket LB.
 
     Étapes :
     1. Récupère le nom du bucket cible depuis les outputs Terraform.
     2. Identifie la dernière archive dans le bucket source (tri par horodatage ISO8601).
+       Si frontend_version est spécifiée, filtre les archives pour correspondre à cette version.
     3. Télécharge, extrait et localise le dossier contenant index.html.
     4. Rsync vers le bucket LB + invalidation CDN si des changements sont détectés.
     """
@@ -1253,7 +1502,7 @@ def _post_deploy_frontend_sync(env, project_id, ctx_to_use):
         sys.exit(1)
 
     # Tri par horodatage GCS (--long retourne la date de création)
-    # Format: "<date>  <taille>  gs://bucket/fichier"
+    # Format: "<taille>  <date>  gs://bucket/fichier"
     raw_ls_long = subprocess.run(
         ["gcloud", "storage", "ls", "--long", f"gs://{SOURCE_ARCHIVES_BUCKET}/"],
         capture_output=True, text=True
@@ -1261,13 +1510,13 @@ def _post_deploy_frontend_sync(env, project_id, ctx_to_use):
     if raw_ls_long.returncode == 0 and raw_ls_long.stdout.strip():
         ls_lines = [raw_line.strip() for raw_line in raw_ls_long.stdout.splitlines()
                     if raw_line.strip() and "gs://" in raw_line]
-        # Chaque ligne : "<date>  <size>  gs://..."
+        # Chaque ligne : "<taille>  <date>  gs://..."
         # On exclut les lignes de total (TOTAL:)
         timed_entries = []
         for ls_line in ls_lines:
             parts = ls_line.split()
             if len(parts) >= 3 and parts[-1].startswith("gs://"):
-                timed_entries.append((parts[0], parts[-1]))  # (date_str, url)
+                timed_entries.append((parts[-2], parts[-1]))  # (date_str, url)
         timed_entries.sort(key=lambda x: x[0])  # tri lexicographique sur ISO8601
         urls = [url for _, url in timed_entries]
     else:
@@ -1278,7 +1527,35 @@ def _post_deploy_frontend_sync(env, project_id, ctx_to_use):
         print(f"[*] No archives found in gs://{SOURCE_ARCHIVES_BUCKET}/. Skipping frontend sync.")
         return
 
-    latest_archive_url = urls[-1]
+    if frontend_version:
+        # Standardise la version (ex: v0.1.12 ou 0.1.12)
+        v_suffix = frontend_version if frontend_version.startswith("v") else f"v{frontend_version}"
+        matching_urls = []
+        for u in urls:
+            filename = u.split("/")[-1]
+            if filename.endswith(f"-{v_suffix}.tar.gz") or filename.endswith(f"-{v_suffix}.zip"):
+                matching_urls.append(u)
+
+        if not matching_urls:
+            # Fallback souple si pas de correspondance stricte à la fin
+            for u in urls:
+                if v_suffix in u or frontend_version in u:
+                    matching_urls.append(u)
+
+        if not matching_urls:
+            err_msg = (
+                f"No frontend archive found matching version '{frontend_version}' "
+                f"in gs://{SOURCE_ARCHIVES_BUCKET}/"
+            )
+            print(f"[!] {err_msg}")
+            generate_antigravity_error_report(
+                "Post-Deploy : Sync Frontend", err_msg, ["frontend", "sync", "version_not_found"])
+            sys.exit(1)
+
+        latest_archive_url = matching_urls[-1]
+    else:
+        latest_archive_url = urls[-1]
+
     print(f"[*] Latest archive identified: {latest_archive_url}")
 
     # 3. Télécharger et extraire
@@ -1621,6 +1898,7 @@ def _seed_prompts(api_dns_name, access_token, ctx_to_use):
         "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
         "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
         "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
+        "agent_ops_api.sre_triage.system_instruction": "agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt",
         "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
@@ -1630,6 +1908,7 @@ def _seed_prompts(api_dns_name, access_token, ctx_to_use):
         "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
         "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
         "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt",
+        "prompts_api.sre_triage.playbook": "prompts_api/prompts_api.sre_triage.playbook.txt",
     }
 
     packaged_dir = os.path.join(os.path.dirname(__file__), "bundled_prompts")
@@ -1730,8 +2009,9 @@ def _get_iap_identity_token(project_id: str, pname: str = "", env: str = "") -> 
     """
     # Lit l'audience IAP depuis Secret Manager
     try:
+        active_version = _get_latest_active_secret_version(project_id, "google-secret-id")
         res = subprocess.run(
-            ["gcloud", "secrets", "versions", "access", "latest",
+            ["gcloud", "secrets", "versions", "access", active_version,
              "--secret=google-secret-id", f"--project={project_id}"],
             capture_output=True, text=True, timeout=15,
         )
@@ -1772,7 +2052,9 @@ def _get_iap_identity_token(project_id: str, pname: str = "", env: str = "") -> 
                     "includeEmail": True
                 }).encode("utf-8")
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            # Contournement des erreurs SSL sur Mac (unable to get local issuer certificate)
+            ssl_ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, timeout=20, context=ssl_ctx) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 token = resp_data.get("token", "")
                 if token:
@@ -1852,15 +2134,21 @@ def _sanity_checks_extra_projects(
         if token:
             req.add_header("Authorization", f"Bearer {token}")
         last_err = ""
-        for _attempt in range(3):
+        for attempt in range(10):
             try:
                 resp = urllib.request.urlopen(req, timeout=30, context=ctx_to_use)
                 auth_label = " [IAP]" if token else ""
                 return f"  [+] [{pname}]{auth_label} {path:<40} -> OK (HTTP {resp.status})"
             except urllib.error.HTTPError as e:
                 last_err = f"FAIL (HTTP {e.code}) sur {path}"
-                if e.code >= 500:
-                    time.sleep(10)
+                # En cas de 404, 401 (IAP propagation) ou 5xx, on attend et on réessaie
+                # car le Load Balancer peut mettre 2-3 minutes à propager la nouvelle route.
+                if e.code in (401, 404) or e.code >= 500:
+                    logger.info(
+                        f"  [lb-propagation] Attente propagation route/IAP '{pname}' "
+                        f"({e.code}) - tentative {attempt + 1}/10..."
+                    )
+                    time.sleep(20)
                     continue
                 generate_antigravity_error_report(
                     f"Sanity Check extra-project '{pname}'",
@@ -1874,7 +2162,7 @@ def _sanity_checks_extra_projects(
             f"Sanity Check extra-project '{pname}'",
             last_err, ["extra-project", pname, "exception"],
         )
-        return f"  [-] [{pname}] {path:<40} -> {last_err} (après 3 tentatives)"
+        return f"  [-] [{pname}] {path:<40} -> {last_err} (après 10 tentatives)"
 
     tasks = []
     for proj in projects_with_checks:
@@ -2338,7 +2626,11 @@ def deploy(env, base_domain, project_id, config, force=False):
         ] + get_tf_args(project_id)
 
         _terraform_apply_with_retry(apply_cmd, env, project_id, region, extra_domains)
-        _post_deploy_frontend_sync(env, project_id, ctx_to_use=None)
+        _post_deploy_frontend_sync(
+            env, project_id,
+            frontend_version=config.get("frontend_version"),
+            ctx_to_use=None
+        )
 
         # ── Étape 5 : Terraform des projets externes (AVANT sanity checks) ──
         for ext_proj in extra_projects:
@@ -2386,46 +2678,9 @@ def deploy(env, base_domain, project_id, config, force=False):
 
 
 # ── Fichier de suivi du modèle d'embedding déployé par env ───────────────────
-_DB_INIT_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".db_init_state.json")
-
-
-def _db_init_fingerprint(env: str, name: str, alloydb_database: str, alloydb_iam_user: str) -> str:
-    """Calcule une empreinte SHA1 des paramètres db-init d'un extra-project.
-
-    Déclencheurs de re-initialisation :
-      - Première fois (aucun state)
-      - alloydb_database a changé (ex : renommage)
-      - alloydb_iam_user a changé (ex : SA recréé avec nouveau suffixe)
-    """
-    import hashlib
-    raw = f"{env}|{name}|{alloydb_database}|{alloydb_iam_user}"
-    return hashlib.sha1(raw.encode()).hexdigest()[:16]
-
-
-def _db_init_load_state() -> dict:
-    """Lit le state db-init persisté (depuis .db_init_state.json)."""
-    if os.path.exists(_DB_INIT_STATE_FILE):
-        try:
-            with open(_DB_INIT_STATE_FILE) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"[db-init] Impossible de lire .db_init_state.json : {e}")
-    return {}
-
-
-def _db_init_save_state(env: str, name: str, fingerprint: str) -> None:
-    """Persiste l'empreinte db-init d'un extra-project pour un env donné."""
-    state = _db_init_load_state()
-    state[f"{env}/{name}"] = fingerprint
-    with open(_DB_INIT_STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
-
-
-def _db_init_needed(env: str, name: str, alloydb_database: str, alloydb_iam_user: str) -> bool:
-    """Retourne True si le db-init doit être rejoué pour cet extra-project."""
-    current = _db_init_fingerprint(env, name, alloydb_database, alloydb_iam_user)
-    stored = _db_init_load_state().get(f"{env}/{name}", "")
-    return current != stored
+# Anciennement : _DB_INIT_STATE_FILE + _db_init_fingerprint/load/save/needed
+# Supprimé : db_init.py est idempotent — on n'a pas besoin de state local.
+# Le job est systématiquement rejoué à chaque deploy_extra_project_terraform.
 
 
 _RAG_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".rag_model_state.json")
@@ -2836,6 +3091,22 @@ def destroy(env, project_id, config, force=False):
     init_tf()
     set_workspace(env)
 
+    # ── Étape A : Destruction des extra-projects en premier ─────────────────
+    extra_projects = discover_extra_projects(config)
+    region = config.get("region", "europe-west1")
+    if extra_projects:
+        _detach_extra_project_routes(env, project_id)
+        print(f"[*] {len(extra_projects)} projet(s) externe(s) à détruire en premier :")
+        for p in extra_projects:
+            print(f"    - {p['name']}  ({p['path']})  →  lb_path={p['lb_path']}  version={p['version']}")
+        print()
+        for ext_proj in extra_projects:
+            _destroy_extra_project_terraform(ext_proj, env, project_id, region)
+        print(f"\n[+] Destruction des extra_projects terminée ({len(extra_projects)} projet(s)).")
+
+    # ── Étape B : Nettoyage pré-destroy des adresses serverless-ipv4 ──────────
+    _cleanup_serverless_addresses(project_id, region, env)
+
     if force:
         logger.warning("[!] FORCE MODE: Protected resources WILL BE DESTROYED.")
         toggle_prevent_destroy(disable=True)
@@ -2890,6 +3161,10 @@ def destroy(env, project_id, config, force=False):
         if SANITY_ERROR_COUNT > 0:
             raise DeploymentError(
                 f"{SANITY_ERROR_COUNT} Sanity Checks failed. Consultez le rapport antigravity_sanity_error.md")
+
+        # ── Étape C : Nettoyage local de .lb_routes_state.json ─────────────────
+        _lb_routes_save(env, [])
+        logger.info("[*] State local .lb_routes_state.json nettoyé.")
 
     finally:
         if force:
@@ -3000,12 +3275,25 @@ if __name__ == "__main__":
         tfvars_path = os.path.join(TERRAFORM_DIR, f"{args.env}.auto.tfvars.json")
         # Injecte les routes LB des extra-projects connues depuis le state local
         # afin qu'elles survivent à chaque apply plateforme.
+        project_id = final_config.get("project_id", "slavayssiere-sandbox-462015")
         known_lb_routes = _lb_routes_load(args.env)
-        if known_lb_routes:
-            final_config["extra_project_routes"] = known_lb_routes
+        valid_lb_routes = []
+        for r in known_lb_routes:
+            bs_id = r.get("backend_service_id", "")
+            bs_name = bs_id.split("/")[-1] if "/" in bs_id else bs_id
+            if bs_name and resource_exists_in_gcp("backend_service", bs_name, project_id):
+                valid_lb_routes.append(r)
+            else:
+                logger.info(
+                    f"[lb-routes] Route '{r['name']}' ignorée car le backend '{bs_name}' "
+                    f"n'existe pas encore dans GCP."
+                )
+
+        final_config["extra_project_routes"] = valid_lb_routes
+        if valid_lb_routes:
             logger.info(
-                f"[lb-routes] {len(known_lb_routes)} route(s) connue(s) injectée(s) dans le tfvars "
-                f"({[r['name'] for r in known_lb_routes]})."
+                f"[lb-routes] {len(valid_lb_routes)} route(s) valide(s) injectée(s) dans le tfvars "
+                f"({[r['name'] for r in valid_lb_routes]})."
             )
         with open(tfvars_path, "w") as f:
             json.dump(final_config, f, indent=2)
@@ -3030,7 +3318,7 @@ if __name__ == "__main__":
                 deploy(args.env, base_domain, project_id, deploy_config, force=args.force)
 
         elif args.action == "destroy":
-            destroy(args.env, project_id, final_config, force=args.force)
+            destroy(args.env, project_id, deploy_config, force=args.force)
         elif args.action == "plan":
             plan(args.env, project_id)
         elif args.action == "rag-calibrate":

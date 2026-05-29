@@ -25,6 +25,9 @@ from src.services.data_quality_publisher import publish_data_quality_snapshot
 from src.services.finops import log_finops
 from src.services.taxonomy_service import fetch_prompt as _fetch_prompt
 from src.services.taxonomy_service import get_existing_competencies as _get_existing_competencies
+from src.services.taxonomy_service import (
+    get_existing_competencies_with_archive as _get_existing_competencies_with_archive,
+)
 from src.gemini_retry import generate_content_with_retry
 import google.auth.transport.requests as google_requests
 from google.oauth2 import id_token as sa_id_token
@@ -663,10 +666,18 @@ class TaxonomyBatchService:
                 f"Bearer {comp_oidc_token}" if comp_oidc_token
                 else f"Bearer {sweep_service_token}"
             )
-            existing_names = await _get_existing_competencies(comp_auth_header)
+            existing_names, archived_names = await _get_existing_competencies_with_archive(
+                comp_auth_header
+            )
 
             used_names = get_all_used_names(res_tree)
             missing = list(set(existing_names) - used_names)
+
+            logger.info(
+                "[sweep-prep] %d compétences manquantes dont %d archivées (consultants protégés).",
+                len(missing),
+                len([n for n in missing if n in archived_names]),
+            )
 
             if not missing:
                 await tree_task_manager.update_progress(sweep_result=[], missing_competencies=[], new_log="Aucune compétence manquante détectée. Application de l'arbre en DB...")  # noqa: E501
@@ -819,10 +830,21 @@ class TaxonomyBatchService:
 
                     for i in range(0, len(missing), chunk_size):
                         missing_chunk = missing[i:i + chunk_size]
+
+                        # Annoter les orphelins archivés : ils ont des consultants assignés
+                        # (cleanup-orphans a déjà supprimé les vides) → le LLM NE DOIT PAS
+                        # les dropper. Le tag [ARCHIVÉ] déclenche la règle absolue du prompt.
+                        def _fmt_missing(name: str) -> str:
+                            if name in archived_names:
+                                return f"{name} [ARCHIVÉ — consultants assignés, PLACEMENT OBLIGATOIRE]"
+                            return name
+
+                        missing_str = "\n".join(_fmt_missing(n) for n in missing_chunk)
+
                         # {{RES_TREE}} et {{TREE_OUTLINE}} sont tous deux remplacés pour
                         # compatibilité avec l'ancienne et la nouvelle version du prompt.
                         sweep_instruction = instruction_sweep.replace(
-                            "{{MISSING_COMPETENCIES}}", ", ".join(missing_chunk)).replace(
+                            "{{MISSING_COMPETENCIES}}", missing_str).replace(
                             "{{RES_TREE}}", tree_outline_str).replace(
                             "{{TREE_OUTLINE}}", tree_outline_str).replace(
                             "{{VALID_NODES}}", valid_nodes_str)

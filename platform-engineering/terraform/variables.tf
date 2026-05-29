@@ -343,3 +343,21 @@ variable "extra_project_routes" {
   }))
   default = []
 }
+
+variable "google_secret_version" {
+  description = "Version active du secret pour google-secret-id et google-secret-key. Résolue dynamiquement par manage_env.py."
+  type        = string
+  default     = "latest"
+}
+
+# =========================================================
+# SRE Alerting — Canaux de notification email
+# Les emails déclarés ici reçoivent les alertes GCP Cloud Monitoring
+# (ex: échecs persistants du warm-up, cold starts répétés).
+# Configurer via envs/*.yaml (clé : sre_alert_emails).
+# =========================================================
+variable "sre_alert_emails" {
+  description = "Liste des adresses email à notifier lors des alertes SRE GCP Cloud Monitoring (warm-up dégradé, cold starts)."
+  type        = list(string)
+  default     = []
+}

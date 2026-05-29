@@ -2,6 +2,7 @@
 from tools.finops_tools import handle_log_ai_consumption, handle_get_finops_report, handle_detect_usage_anomalies, handle_get_aiops_dashboard_data
 from tools.market_tools import handle_get_top_market_skills, handle_get_market_demand_volume
 from tools.rag_quality_tools import handle_log_rag_quality_snapshot, handle_get_rag_quality_history
+from tools.sre_triage_tools import handle_log_sre_triage, handle_get_sre_trends
 import asyncio
 import contextvars
 import json
@@ -85,6 +86,7 @@ FINOPS_DATASET_ID = os.getenv("FINOPS_DATASET_ID", "finops")
 FINOPS_TABLE_ID = os.getenv("FINOPS_TABLE_ID", "ai_usage")
 FINOPS_TABLE_REF = f"{PROJECT_ID}.{FINOPS_DATASET_ID}.{FINOPS_TABLE_ID}"
 RAG_QUALITY_TABLE_REF = f"{PROJECT_ID}.{FINOPS_DATASET_ID}.rag_quality_snapshots"
+SRE_TRIAGE_TABLE_REF = f"{PROJECT_ID}.{FINOPS_DATASET_ID}.sre_triage_history"
 
 server = Server("analytics-mcp")
 
@@ -210,6 +212,58 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["env"]
             }
+        ),
+        Tool(
+            name="log_sre_triage",
+            description=(
+                "Enregistre un rapport de triage SRE dans BigQuery pour l'historique et l'analyse des tendances. "
+                "Appelé automatiquement après chaque cycle d'analyse SRE pour tracer la sévérité, "
+                "les services impactés, les tokens LLM consommés et le coût estimé."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "triggered_at": {"type": "string", "description": "Horodatage UTC ISO 8601 du triage. Auto-généré si absent."},
+                    "env": {"type": "string", "description": "Workspace cible : dev ou prd."},
+                    "severity": {"type": "string", "enum": ["OK", "WARNING", "CRITICAL"], "description": "Sévérité globale du triage."},
+                    "hours_window": {"type": "integer", "description": "Fenêtre d'analyse en heures."},
+                    "services_critical": {"type": "array", "items": {"type": "string"}, "description": "Liste des services en état critique."},
+                    "services_warning": {"type": "array", "items": {"type": "string"}, "description": "Liste des services en état dégradé."},
+                    "services_ok": {"type": "array", "items": {"type": "string"}, "description": "Liste des services en bonne santé."},
+                    "total_5xx": {"type": "integer", "description": "Total des erreurs HTTP 5xx détectées.", "default": 0},
+                    "dq_errors_count": {"type": "integer", "description": "Nombre total de ValidationError détectées.", "default": 0},
+                    "dq_errors_detail": {"type": "string", "description": "JSON {service: {type: count}} des erreurs de data quality.", "default": ""},
+                    "tokens_in": {"type": "integer", "description": "Tokens LLM en entrée pour ce triage.", "default": 0},
+                    "tokens_out": {"type": "integer", "description": "Tokens LLM en sortie pour ce triage.", "default": 0},
+                    "cost_usd": {"type": "number", "description": "Coût estimé du triage en USD.", "default": 0.0},
+                    "report_excerpt": {"type": "string", "description": "Résumé exécutif du rapport (max 1000 chars).", "default": ""},
+                    "playbook_used": {"type": "boolean", "description": "Playbook disponible et utilisé.", "default": False},
+                    "followup_scheduled": {"type": "boolean", "description": "Follow-up 30min planifié.", "default": False}
+                },
+                "required": ["env", "severity", "hours_window"]
+            }
+        ),
+        Tool(
+            name="get_sre_trends",
+            description=(
+                "Interroge l'historique BigQuery des N derniers triages SRE pour détecter les tendances. "
+                "Retourne : sévérité des derniers triages, tendance dq_errors (hausse/baisse/stable/hausse_critique), "
+                "tendance erreurs 5xx, et une interprétation textuelle prête à inclure dans le rapport SRE. "
+                "Appeler en Phase 0 avant l'analyse pour contextualiser : 'competencies-api avait 0 DQ error hier, "
+                "maintenant 30 — régression ×∞'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "env": {"type": "string", "description": "Environnement cible : dev ou prd.", "default": "dev"},
+                    "lookback_triages": {
+                        "type": "integer",
+                        "description": "Nombre de triages passés à analyser pour la tendance. Défaut: 5.",
+                        "default": 5
+                    }
+                },
+                "required": ["env"]
+            }
         )
     ]
 
@@ -233,6 +287,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await handle_log_rag_quality_snapshot(arguments, client, PROJECT_ID, FINOPS_DATASET_ID)
         elif name == "get_rag_quality_history":
             return await handle_get_rag_quality_history(arguments, client, PROJECT_ID, FINOPS_DATASET_ID)
+        elif name == "log_sre_triage":
+            return await handle_log_sre_triage(arguments, client, SRE_TRIAGE_TABLE_REF)
+        elif name == "get_sre_trends":
+            return await handle_get_sre_trends(arguments, client, SRE_TRIAGE_TABLE_REF)
         else:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
     except Exception as e:

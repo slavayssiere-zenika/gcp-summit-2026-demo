@@ -125,6 +125,14 @@ resource "google_cloud_run_v2_service" "missions_api" {
         }
       }
       env {
+        name  = "GEMINI_MISSIONS_MODEL"
+        value = var.gemini_missions_model
+      }
+      env {
+        name  = "GEMINI_MODEL"
+        value = var.gemini_model
+      }
+      env {
         name  = "PROMPTS_API_URL"
         value = "http://api.internal.zenika/api/prompts/"
       }

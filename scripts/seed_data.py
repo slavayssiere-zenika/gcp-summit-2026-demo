@@ -5,6 +5,7 @@ import string
 from datetime import datetime, timezone
 import os
 import psycopg2
+import subprocess
 
 USERS_API = "http://localhost:8000"
 ITEMS_API = "http://localhost:8001"
@@ -133,6 +134,63 @@ def sql_val(val):
         return f"'{escaped}'"
 
 
+def run_sql_query(db_name, query, is_mutation=True):
+    """Exécute une requête SQL directe en se connectant à PostgreSQL.
+
+    Tente d'abord une connexion TCP directe via psycopg2,
+    et en cas d'échec (ex: isolation réseau dans Docker),
+    bascule sur une exécution via docker exec postgres psql.
+    """
+    # 1. Tentative directe via psycopg2
+    try:
+        conn = psycopg2.connect(get_db_url(db_name))
+        cur = conn.cursor()
+        cur.execute(query)
+        if is_mutation:
+            conn.commit()
+            cur.close()
+            conn.close()
+            return True
+        else:
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            return rows
+    except Exception:
+        # Silencieusement essayer le fallback Docker
+        pass
+
+    # 2. Fallback via docker exec psql
+    try:
+        if is_mutation:
+            subprocess.run(
+                ["docker", "exec", "-i", "postgres", "psql", "-U", "postgres", "-d", db_name],
+                input=query.encode("utf-8"),
+                capture_output=True,
+                check=True
+            )
+            return True
+        else:
+            res = subprocess.run(
+                ["docker", "exec", "postgres", "psql", "-U", "postgres", "-d", db_name, "-t", "-A", "-c", query],
+                capture_output=True,
+                check=True
+            )
+            output = res.stdout.decode("utf-8", errors="ignore").strip()
+            rows = []
+            for line in output.split("\n"):
+                line = line.strip()
+                if line:
+                    rows.append((line,))
+            return rows
+    except Exception as docker_err:
+        stderr = ""
+        if hasattr(docker_err, "stderr") and docker_err.stderr:
+            stderr = docker_err.stderr.decode("utf-8", errors="ignore")
+        print(f"  ❌ Fallback docker exec failed: {docker_err}. Stderr: {stderr}")
+        raise docker_err
+
+
 def erase_data() -> None:
     """Purge toutes les données de test avant un nouveau seed."""
     ERASE_PLAN = [
@@ -151,15 +209,9 @@ def erase_data() -> None:
     print("\n🗑️  Erasing existing test data...")
     for db_name, tables in ERASE_PLAN:
         try:
-            conn = psycopg2.connect(get_db_url(db_name))
-            cur = conn.cursor()
             tables_sql = ", ".join(tables)
-            cur.execute(
-                f"TRUNCATE TABLE {tables_sql} RESTART IDENTITY CASCADE;"
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
+            query = f"TRUNCATE TABLE {tables_sql} RESTART IDENTITY CASCADE;"
+            run_sql_query(db_name, query, is_mutation=True)
             print(f"  - [{db_name}] {tables_sql} → tronque.")
         except Exception as e:
             print(f"  ❌ Erreur erase [{db_name}]: {e}")
@@ -380,6 +432,7 @@ def main(perf: bool = False) -> None:
         "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
         "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
         "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
+        "agent_ops_api.sre_triage.system_instruction": "agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
         "cv_api.generate_taxonomy_tree_deduplicate": "cv_api/cv_api.generate_taxonomy_tree_deduplicate.txt",
@@ -387,7 +440,8 @@ def main(perf: bool = False) -> None:
         "cv_api.generate_taxonomy_tree_sweep": "cv_api/cv_api.generate_taxonomy_tree_sweep.txt",
         "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
         "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
-        "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt"
+        "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt",
+        "prompts_api.sre_triage.playbook": "prompts_api/prompts_api.sre_triage.playbook.txt",
     }
 
     for key, path in prompt_files.items():
@@ -484,14 +538,9 @@ def main(perf: bool = False) -> None:
     print("\n⚡ Executing generated SQL seed files directly on PostgreSQL...")
     for db_name, filepath in sql_files.items():
         try:
-            conn = psycopg2.connect(get_db_url(db_name))
-            cur = conn.cursor()
             with open(filepath, "r", encoding="utf-8") as f:
                 sql_content = f.read()
-            cur.execute(sql_content)
-            conn.commit()
-            cur.close()
-            conn.close()
+            run_sql_query(db_name, sql_content, is_mutation=True)
             print(f"  - [{db_name}] Successfully seeded directly from SQL file!")
         except Exception as e:
             print(f"  ❌ Error executing seed for [{db_name}] from {filepath}: {e}")
@@ -502,24 +551,18 @@ def main(perf: bool = False) -> None:
     # Collecte rapide et propre des item_ids via SQL
     item_ids = []
     try:
-        conn = psycopg2.connect(get_db_url("items"))
-        cur = conn.cursor()
-        cur.execute("SELECT id FROM items ORDER BY id LIMIT 50000;")
-        item_ids = [row[0] for row in cur.fetchall()]
-        cur.close()
-        conn.close()
+        rows = run_sql_query("items", "SELECT id FROM items ORDER BY id LIMIT 50000;", is_mutation=False)
+        if rows is not None:
+            item_ids = [int(row[0]) for row in rows]
     except Exception as e:
         print(f"  ❌ Erreur collecte SQL item_ids: {e}")
 
     # Collecte rapide et propre des mission_ids via SQL
     mission_ids = []
     try:
-        conn = psycopg2.connect(get_db_url("missions"))
-        cur = conn.cursor()
-        cur.execute("SELECT id FROM missions ORDER BY id LIMIT 50000;")
-        mission_ids = [row[0] for row in cur.fetchall()]
-        cur.close()
-        conn.close()
+        rows = run_sql_query("missions", "SELECT id FROM missions ORDER BY id LIMIT 50000;", is_mutation=False)
+        if rows is not None:
+            mission_ids = [int(row[0]) for row in rows]
     except Exception as e:
         print(f"  ❌ Erreur collecte SQL mission_ids: {e}")
 

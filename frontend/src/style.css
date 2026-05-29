@@ -160,3 +160,26 @@ a {
   white-space: nowrap !important;
   border: 0 !important;
 }
+
+/* ── Accessibilité : Skip Link (Bypass Link) ── */
+/* Lien de contournement masqué par défaut, visible uniquement au focus clavier. */
+.skip-link {
+  position: absolute !important;
+  top: -100px;
+  left: 1.5rem;
+  background: var(--zenika-red);
+  color: #ffffff !important;
+  padding: 0.75rem 1.5rem;
+  z-index: 9999;
+  font-weight: 700;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: 0 4px 20px rgba(227, 25, 55, 0.4);
+  transition: top 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 3px solid #000000;
+  outline-offset: -3px;
+}

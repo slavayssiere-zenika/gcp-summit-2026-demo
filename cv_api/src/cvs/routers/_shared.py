@@ -9,6 +9,7 @@ import os
 # These were defined inline in the original monolithic router.py.
 # Centralised here so that both taxonomy_router and search_router can import them.
 from typing import List, Optional
+from enum import Enum
 
 from pydantic import BaseModel
 
@@ -16,17 +17,17 @@ from pydantic import BaseModel
 logger = logging.getLogger("src.cvs")
 
 # ── URL constants ─────────────────────────────────────────────────────────────
-USERS_API_URL        = os.getenv("USERS_API_URL",        "http://users_api:8000")
+USERS_API_URL = os.getenv("USERS_API_URL",        "http://users_api:8000")
 COMPETENCIES_API_URL = os.getenv("COMPETENCIES_API_URL", "http://competencies_api:8003")
-PROMPTS_API_URL      = os.getenv("PROMPTS_API_URL",      "http://prompts_api:8000")
-DRIVE_API_URL        = os.getenv("DRIVE_API_URL",        "http://drive_api:8006")
-ITEMS_API_URL        = os.getenv("ITEMS_API_URL",        "http://items_api:8001")
-MISSIONS_API_URL     = os.getenv("MISSIONS_API_URL",     "http://missions_api:8000")
-ANALYTICS_MCP_URL    = os.getenv("ANALYTICS_MCP_URL",   "http://analytics_mcp:8008")
-GCP_PROJECT_ID       = os.getenv("GCP_PROJECT_ID",      "")
-VERTEX_LOCATION      = os.getenv("VERTEX_LOCATION",      "europe-west1")
-BATCH_GCS_BUCKET     = os.getenv("BATCH_GCS_BUCKET",    "")
-CLOUDRUN_WORKSPACE   = os.getenv("CLOUDRUN_WORKSPACE",  "")
+PROMPTS_API_URL = os.getenv("PROMPTS_API_URL",      "http://prompts_api:8000")
+DRIVE_API_URL = os.getenv("DRIVE_API_URL",        "http://drive_api:8006")
+ITEMS_API_URL = os.getenv("ITEMS_API_URL",        "http://items_api:8001")
+MISSIONS_API_URL = os.getenv("MISSIONS_API_URL",     "http://missions_api:8000")
+ANALYTICS_MCP_URL = os.getenv("ANALYTICS_MCP_URL",   "http://analytics_mcp:8008")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID",      "")
+VERTEX_LOCATION = os.getenv("VERTEX_LOCATION",      "europe-west1")
+BATCH_GCS_BUCKET = os.getenv("BATCH_GCS_BUCKET",    "")
+CLOUDRUN_WORKSPACE = os.getenv("CLOUDRUN_WORKSPACE",  "")
 BULK_SCALE_SERVICES: list[str] = ["competencies-api", "items-api"]
 
 # Admin credentials for long-running background tasks (AGENTS.md §4)
@@ -105,11 +106,23 @@ CV_RESPONSE_SCHEMA: dict = {
 _CV_RESPONSE_SCHEMA = CV_RESPONSE_SCHEMA
 
 
+class TaxonomyStep(str, Enum):
+    """Valeurs légales pour l'étape du pipeline de recalcul taxonomique.
+
+    Pipeline officiel : map → deduplicate → reduce → sweep → apply.
+    Pydantic rejette automatiquement toute autre valeur (y compris chaîne vide)
+    avec un HTTP 422 avant que le router ne soit exécuté.
+    """
+    map = "map"
+    deduplicate = "deduplicate"
+    reduce = "reduce"
+    sweep = "sweep"
+    apply = "apply"
 
 
 class RecalculateStepRequest(BaseModel):
-    """Request body for POST /recalculate_tree/step."""
-    step: str
+    """Request body pour POST /recalculate_tree/step."""
+    step: TaxonomyStep
     target_pillar: Optional[str] = None
 
 

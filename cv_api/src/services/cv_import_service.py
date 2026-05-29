@@ -15,7 +15,7 @@ from src.services.cv_storage_service import CVStorageService
 from src.services.finops import log_finops
 from src.services.utils import _build_distilled_content
 from metrics import CV_PROCESSING_TOTAL
-from shared.database import SessionLocal
+import shared.database as shared_db
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,7 @@ async def process_cv_core(
     t0 = time.monotonic()
     try:
         if db is None:
-            async with SessionLocal() as local_db:
+            async with shared_db.SessionLocal() as local_db:
                 result = await CVStorageService.resolve_identity_and_user(
                     local_db, structured_cv, folder_name, token_payload, url, headers
                 )
@@ -253,7 +253,7 @@ async def process_cv_core(
     t0 = time.monotonic()
     try:
         if db is None:
-            async with SessionLocal() as local_db:
+            async with shared_db.SessionLocal() as local_db:
                 await CVStorageService.upsert_cv_profile(
                     local_db, user_id, url, source_tag, structured_cv, raw_text, vector_data,
                     importer_id, extraction_reliability_score

@@ -21,7 +21,8 @@ locals {
     "roles/pubsub.admin",
     "roles/run.admin",
     "roles/bigquery.admin",
-    "roles/compute.networkAdmin"
+    "roles/compute.networkAdmin",
+    "roles/logging.configWriter"
   ]
 }
 

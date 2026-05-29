@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from shared.database import Base
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
 
 # Association table for Many-to-Many relationship between User and Competency
@@ -22,6 +22,7 @@ class Competency(Base):
     name = Column(String, unique=True, nullable=False, index=True)
     description = Column(String, nullable=True)
     aliases = Column(String, nullable=True)
+    is_to_acquire = Column(Boolean, default=False, nullable=False)
     parent_id = Column(Integer, ForeignKey("competencies.id"), nullable=True)
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
@@ -117,8 +118,12 @@ class CompetencySuggestion(Base):
         Integer, nullable=False, default=1
     )  # fréquence = signal marché
     created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        server_default="NOW()",
     )
+
     updated_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),

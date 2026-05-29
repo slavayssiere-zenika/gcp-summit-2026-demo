@@ -227,7 +227,11 @@ async def _call_sub_agent(
 
         try:
             async with httpx.AsyncClient(timeout=timeout, headers=headers, auth=A2aRequestInterceptor()) as client:
-                res = await client.post(f"{url.rstrip('/')}/a2a/query", json={"query": query, "user_id": user_id}, timeout=10.0)
+                res = await client.post(
+                    f"{url.rstrip('/')}/a2a/query",
+                    json={"query": query, "user_id": user_id},
+                    timeout=timeout
+                )
 
             if res.status_code in _NON_RETRYABLE_4XX:
                 # Fail-fast : erreur client, inutile de retenter

@@ -105,14 +105,15 @@ def get_session_service() -> RedisSessionService:
 # ---------------------------------------------------------------------------
 # Agent factory
 # ---------------------------------------------------------------------------
-async def create_agent(session_id: str | None = None) -> Agent:
+async def create_agent(session_id: str | None = None, prompt_key: str | None = None) -> Agent:
     global OPS_TOOLS
     _default = (
         "Tu es l'Agent Ops (Platform Engineering, FinOps & Sécurité) de la plateforme Zenika. "
         "Tu détiens l'expertise des logs et de l'infra."
     )
+    effective_prompt_key = prompt_key or "agent_ops_api.system_instruction"
     instruction_text = await fetch_agent_prompt(
-        prompt_key="agent_ops_api.system_instruction",
+        prompt_key=effective_prompt_key,
         default_text=_default,
         auth_header=auth_header_var.get(),
         agent_prefix="[Ops]",
@@ -154,11 +155,11 @@ async def create_agent(session_id: str | None = None) -> Agent:
     if cloudtrace_toolset is not None:
         OPS_TOOLS.append(cloudtrace_toolset)
 
-    app_logger.info("[Ops] Creating Agent with %d tools...", len(OPS_TOOLS))
+    app_logger.info("[Ops] Creating Agent with %d tools (prompt_key=%s)...", len(OPS_TOOLS), effective_prompt_key)
 
     # ── Context Caching Gemini ────────────────────────────────────────────────
     cache_name = await get_or_create_gemini_context_cache(
-        prompt_key="agent_ops_api.system_instruction",
+        prompt_key=effective_prompt_key,
         prompt_text=instruction_text,
         model=model,
         agent_prefix="[Ops]",
@@ -218,6 +219,7 @@ async def run_agent_query(
     session_id: str | None = None,
     auth_token: str | None = None,
     user_id: str = "user_1",
+    prompt_key: str | None = None,
 ) -> dict:
     # Fix JWT propagation [STAFF-007] — re-setter auth_header_var dans CE contexte asyncio
     if auth_token:
@@ -227,7 +229,7 @@ async def run_agent_query(
     session_service = get_session_service()
 
     app_logger.info("[Ops] Initializing Agent and Runner (session: %s)...", ephemeral_session_id[:8])
-    agent = await create_agent(ephemeral_session_id)
+    agent = await create_agent(ephemeral_session_id, prompt_key=prompt_key)
     runner = Runner(app_name="zenika_ops_assistant", agent=agent, session_service=session_service)
     await session_service.create_session(
         app_name="zenika_ops_assistant", user_id=user_id, session_id=ephemeral_session_id

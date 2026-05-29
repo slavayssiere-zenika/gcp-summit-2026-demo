@@ -1,4 +1,3 @@
-03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 0661524a71e8722946d2f0820e28fd37dde601a0  ./users_api/src/users/pubsub.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
@@ -27,7 +26,7 @@
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 61f39a84525adaa6547dbc46d74fe590d6680e0c  ./users_api/tests/test_crud_extended.py
-635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
+69c83abcfafb946076c74da166b28a1da96290f3  ./shared/database.py
 6aad6aa1620870803bfe70245fb7d355b7112658  ./users_api/src/users/models.py
 78a59620d02c0a50ddd70ef064e2cce9f50dad59  ./users_api/mcp_app.py
 7d390ff330651fb35ae0e3c21e58969723c6c8ca  ./users_api/tests/test_auth_service_account.py
@@ -68,6 +67,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/src/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/src/users/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./users_api/tests/integration/__init__.py
+df0108d780bd5648c1672b391c524728ca57cad7  ./shared/pyproject.toml
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e3f78075d5519c255d702f8da72da78a38cc94f4  ./users_api/tests/test_outbound_propagation.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py

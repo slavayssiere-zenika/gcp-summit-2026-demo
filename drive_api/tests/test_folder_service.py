@@ -150,4 +150,8 @@ async def test_invalidate_drive_cache(mock_delete_cache, mock_clear_namespace):
 
     res = await FolderService.invalidate_drive_cache()
     assert res == 2
-    mock_delete_cache.assert_called_with("drive:sync:rebuild_running")
+    from unittest.mock import call
+    mock_delete_cache.assert_has_calls([
+        call("drive:sync:rebuild_running"),
+        call("drive:roots")
+    ], any_order=True)

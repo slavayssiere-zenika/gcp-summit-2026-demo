@@ -52,7 +52,7 @@ bash scripts/run_tests.sh
 // turbo
 ```bash
 # Lister les fichiers Python modifiés et les passer à flake8
-MODIFIED_PY=$(git diff --name-only HEAD 2>/dev/null | grep '\.py$')
+MODIFIED_PY=$(git diff --name-only --diff-filter=d HEAD 2>/dev/null | grep '\.py$')
 if [ -n "$MODIFIED_PY" ]; then
   echo "=== Flake8 PEP8 check sur les fichiers modifiés ==="
   echo "$MODIFIED_PY" | xargs python3 -m flake8 --max-line-length=120 --extend-ignore=W503,E501

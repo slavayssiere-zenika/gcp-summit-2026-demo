@@ -202,3 +202,117 @@ resource "google_project_iam_member" "log_sink_bq_writer" {
   role    = "roles/bigquery.dataEditor"
   member  = google_logging_project_sink.http_requests_bq.writer_identity
 }
+
+resource "google_bigquery_table" "sre_triage_history" {
+  dataset_id          = google_bigquery_dataset.finops.dataset_id
+  table_id            = "sre_triage_history"
+  deletion_protection = terraform.workspace == "prd" ? true : false
+
+  time_partitioning {
+    type  = "DAY"
+    field = "triggered_at"
+  }
+
+  clustering = ["env", "severity"]
+
+  schema = <<EOF
+[
+  {
+    "name": "triggered_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Horodatage UTC du triage"
+  },
+  {
+    "name": "env",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Workspace (dev/prd)"
+  },
+  {
+    "name": "severity",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "OK / WARNING / CRITICAL"
+  },
+  {
+    "name": "hours_window",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Fenêtre analysée en heures"
+  },
+  {
+    "name": "services_critical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON array des services en état critique"
+  },
+  {
+    "name": "services_warning",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON array des services en état dégradé"
+  },
+  {
+    "name": "services_ok",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON array des services en bonne santé"
+  },
+  {
+    "name": "total_5xx",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Total des erreurs HTTP 5xx"
+  },
+  {
+    "name": "dq_errors_count",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Nombre total de ValidationError détectées"
+  },
+  {
+    "name": "dq_errors_detail",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON {service: {type: count}} des erreurs de data quality"
+  },
+  {
+    "name": "tokens_in",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Tokens LLM en entrée"
+  },
+  {
+    "name": "tokens_out",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Tokens LLM en sortie"
+  },
+  {
+    "name": "cost_usd",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Coût estimé du triage en USD"
+  },
+  {
+    "name": "report_excerpt",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Résumé exécutif du rapport (max 1000 chars)"
+  },
+  {
+    "name": "playbook_used",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Playbook disponible et utilisé"
+  },
+  {
+    "name": "followup_scheduled",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Follow-up 30min planifié"
+  }
+]
+EOF
+}

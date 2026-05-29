@@ -12,6 +12,11 @@ const router = createRouter({
       meta: { public: true }
     },
     {
+      path: '/warming',
+      name: 'warming',
+      component: () => import('../views/Warming.vue'),
+    },
+    {
       path: '/',
       name: 'home',
       component: Home
@@ -103,6 +108,12 @@ const router = createRouter({
       meta: { adminOnly: true, rhAllowed: true }
     },
     {
+      path: '/admin/skills-to-acquire',
+      name: 'admin-skills-to-acquire',
+      component: () => import('../views/HRSkillsToAcquire.vue'),
+      meta: { adminOnly: true, rhAllowed: true }
+    },
+    {
       path: '/admin/extraction-quality',
       name: 'admin-extraction-quality',
       component: () => import('../views/ExtractionQualityList.vue'),
@@ -159,6 +170,9 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
     next()
   } else if (!authService.state.isAuthenticated) {
     next({ name: 'login' })
+  } else if (to.name !== 'warming' && sessionStorage.getItem('zenika_warmed') !== 'true') {
+    // Redirige vers warming si authentifié mais non pré-chauffé
+    next({ name: 'warming' })
   } else if (to.meta.adminOnly) {
     const role = authService.state.user?.role
     if (role === 'admin') {

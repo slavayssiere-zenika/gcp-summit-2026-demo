@@ -183,3 +183,41 @@ resource "google_cloud_scheduler_job" "data_quality_snapshot" {
     }
   }
 }
+
+# ==============================================================
+# SRE Triage Automatique — Agent Ops Diagnostic (toutes les 2h)
+# Déclenche l'Agent Ops pour analyser les erreurs 5xx, latences
+# et anomalies FinOps sur la fenêtre des 2 dernières heures.
+# Le rapport structuré (✅/⚠️/🔴) est produit par le LLM et
+# visible dans les logs Cloud Run de agent_ops_api.
+# ==============================================================
+resource "google_cloud_scheduler_job" "sre_triage_agent_ops" {
+  name             = "sre-triage-agent-ops-${terraform.workspace}"
+  description      = "Triage SRE automatique toutes les 2h : l'Agent Ops analyse erreurs 5xx, latences et anomalies FinOps sur la plateforme et produit un rapport ✅/⚠️/🔴."
+  schedule         = "0 */2 * * *"
+  time_zone        = "Europe/Paris"
+  attempt_deadline = "600s"
+  region           = var.region
+  project          = var.project_id
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.agent_ops_api.uri}/tasks/sre-triage"
+
+    body = base64encode(jsonencode({
+      hours         = 2
+      threshold_5xx = 5
+    }))
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    # OIDC : le SA agent_ops appelle son propre service Cloud Run
+    # Conforme AGENTS.md §4 — pas de JWT applicatif pour les tâches automatisées
+    oidc_token {
+      service_account_email = google_service_account.agent_ops_sa.email
+      audience              = google_cloud_run_v2_service.agent_ops_api.uri
+    }
+  }
+}

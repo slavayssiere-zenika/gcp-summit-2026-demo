@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.drive_service import DriveService
 from src.google_auth import get_drive_service
 from src.models import DriveSyncState, DriveSyncStatus
-from shared.database import SessionLocal
+import shared.database as shared_db
 import traceback
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,7 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: AsyncSession = Dep
 
     async def run_sync():
         # Get a new DB session since the one in dependency might close
-        async with SessionLocal() as session:
+        async with shared_db.SessionLocal() as session:
             try:
                 service = DriveService(session)
 

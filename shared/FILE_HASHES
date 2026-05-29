@@ -1,4 +1,3 @@
-03dbc7dce8a39bc0b9fb60cda45195d7b663f470  ./shared/pyproject.toml
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
@@ -16,7 +15,7 @@
 53ec7850836038d178ae07b5587d855b819e63e7  ./shared/fastapi_utils.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
-635248ae7c4fed69c6701649ba022432e5bc859e  ./shared/database.py
+69c83abcfafb946076c74da166b28a1da96290f3  ./shared/database.py
 7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
 831d252cf652d6503a439140a99024a4f3056dfd  ./shared/testing/__init__.py
@@ -33,6 +32,7 @@ ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
+df0108d780bd5648c1672b391c524728ca57cad7  ./shared/pyproject.toml
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py

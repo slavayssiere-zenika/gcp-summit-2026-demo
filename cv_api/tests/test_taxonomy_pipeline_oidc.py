@@ -118,25 +118,26 @@ async def test_handle_reduce_step_sweep_not_skipped_when_orphans_exist():
 
     with patch("src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
                new_callable=AsyncMock, return_value=status), \
-         patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
-               new_callable=AsyncMock) as mock_update, \
-         patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-               ".generate_autonomous_service_token",
-               new_callable=AsyncMock, return_value=""), \
-         patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
-         patch("src.services.taxonomy_batch_service._fetch_prompt",
-               new_callable=AsyncMock, return_value="sweep prompt {{MISSING_COMPETENCIES}}"), \
-         patch("src.services.taxonomy_batch_service._get_existing_competencies",
-               new_callable=AsyncMock, return_value=["AWS", "Kubernetes", "Python", "Docker"]), \
-         patch("src.services.taxonomy_batch_service.gcs_storage.Client"), \
-         patch("src.services.taxonomy_batch_service._svc_config.vertex_batch_client") as mock_vbatch, \
-         patch("src.services.taxonomy_batch_service.BATCH_GCS_BUCKET", "test-bucket"), \
-         patch.dict(os.environ, {
-             "USE_IAM_AUTH": "false",
-             "PROMPTS_API_URL": "http://api.internal/api/prompts",
-             "COMPETENCIES_API_URL": "http://api.internal/api/competencies",
-             "GEMINI_PRO_MODEL": "gemini-test",
-         }):
+            patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
+                  new_callable=AsyncMock) as mock_update, \
+            patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                  ".generate_autonomous_service_token",
+                  new_callable=AsyncMock, return_value=""), \
+            patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
+            patch("src.services.taxonomy_batch_service._fetch_prompt",
+                  new_callable=AsyncMock, return_value="sweep prompt {{MISSING_COMPETENCIES}}"), \
+            patch("src.services.taxonomy_batch_service._get_existing_competencies_with_archive",
+                  new_callable=AsyncMock,
+                  return_value=(["AWS", "Kubernetes", "Python", "Docker"], {"Kubernetes", "Docker"})), \
+            patch("src.services.taxonomy_batch_service.gcs_storage.Client"), \
+            patch("src.services.taxonomy_batch_service._svc_config.vertex_batch_client") as mock_vbatch, \
+            patch("src.services.taxonomy_batch_service.BATCH_GCS_BUCKET", "test-bucket"), \
+            patch.dict(os.environ, {
+                "USE_IAM_AUTH": "false",
+                "PROMPTS_API_URL": "http://api.internal/api/prompts",
+                "COMPETENCIES_API_URL": "http://api.internal/api/competencies",
+                "GEMINI_PRO_MODEL": "gemini-test",
+            }):
 
         sys.modules["json_repair"].loads.return_value = res_tree
         mock_vbatch.batches.create.return_value = mock_job
@@ -199,21 +200,21 @@ async def test_handle_sweep_step_filters_phantom_pillars():
 
     with patch("src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
                new_callable=AsyncMock, return_value=status), \
-         patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
-               new_callable=AsyncMock), \
-         patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
-         patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-               "._get_oidc_token_for_competencies",
-               new_callable=AsyncMock, return_value="comp-oidc-token"), \
-         patch("src.services.taxonomy_batch_service.gcs_storage.Client") as mock_gcs, \
-         patch("src.services.taxonomy_batch_service.httpx.AsyncClient") as mock_http, \
-         patch("src.services.taxonomy_batch_service.publish_data_quality_snapshot",
-               new_callable=AsyncMock), \
-         patch.dict(os.environ, {
-             "USE_IAM_AUTH": "false",
-             "COMPETENCIES_API_URL": "http://api.internal/api/competencies",
-             "GEMINI_PRO_MODEL": "gemini-test",
-         }):
+            patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
+                  new_callable=AsyncMock), \
+            patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
+            patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                  "._get_oidc_token_for_competencies",
+                  new_callable=AsyncMock, return_value="comp-oidc-token"), \
+            patch("src.services.taxonomy_batch_service.gcs_storage.Client") as mock_gcs, \
+            patch("src.services.taxonomy_batch_service.httpx.AsyncClient") as mock_http, \
+            patch("src.services.taxonomy_batch_service.publish_data_quality_snapshot",
+                  new_callable=AsyncMock), \
+            patch.dict(os.environ, {
+                "USE_IAM_AUTH": "false",
+                "COMPETENCIES_API_URL": "http://api.internal/api/competencies",
+                "GEMINI_PRO_MODEL": "gemini-test",
+            }):
 
         sys.modules["json_repair"].loads.return_value = {
             "assignments": sweep_assignments,
@@ -280,28 +281,28 @@ async def test_handle_reduce_step_no_orphans_goes_to_bulk_directly():
 
     with patch("src.services.taxonomy_batch_service.tree_task_manager.get_latest_status",
                new_callable=AsyncMock, return_value=status), \
-         patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
-               new_callable=AsyncMock) as mock_update, \
-         patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-               ".generate_autonomous_service_token",
-               new_callable=AsyncMock, return_value=""), \
-         patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
-         patch("src.services.taxonomy_batch_service._fetch_prompt",
-               new_callable=AsyncMock, return_value="sweep prompt"), \
-         patch("src.services.taxonomy_batch_service._get_existing_competencies",
-               new_callable=AsyncMock, return_value=["AWS", "GCP"]), \
-         patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
-               "._get_oidc_token_for_competencies",
-               new_callable=AsyncMock, return_value="comp-oidc"), \
-         patch("src.services.taxonomy_batch_service.httpx.AsyncClient") as mock_http, \
-         patch("src.services.taxonomy_batch_service.publish_data_quality_snapshot",
-               new_callable=AsyncMock), \
-         patch.dict(os.environ, {
-             "USE_IAM_AUTH": "false",
-             "PROMPTS_API_URL": "http://api.internal/api/prompts",
-             "COMPETENCIES_API_URL": "http://api.internal/api/competencies",
-             "GEMINI_PRO_MODEL": "gemini-test",
-         }):
+            patch("src.services.taxonomy_batch_service.tree_task_manager.update_progress",
+                  new_callable=AsyncMock) as mock_update, \
+            patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                  ".generate_autonomous_service_token",
+                  new_callable=AsyncMock, return_value=""), \
+            patch("src.services.taxonomy_batch_service.log_finops", new_callable=AsyncMock), \
+            patch("src.services.taxonomy_batch_service._fetch_prompt",
+                  new_callable=AsyncMock, return_value="sweep prompt"), \
+            patch("src.services.taxonomy_batch_service._get_existing_competencies_with_archive",
+                  new_callable=AsyncMock, return_value=(["AWS", "GCP"], set())), \
+            patch("src.services.taxonomy_batch_service.TaxonomyBatchService"
+                  "._get_oidc_token_for_competencies",
+                  new_callable=AsyncMock, return_value="comp-oidc"), \
+            patch("src.services.taxonomy_batch_service.httpx.AsyncClient") as mock_http, \
+            patch("src.services.taxonomy_batch_service.publish_data_quality_snapshot",
+                  new_callable=AsyncMock), \
+            patch.dict(os.environ, {
+                "USE_IAM_AUTH": "false",
+                "PROMPTS_API_URL": "http://api.internal/api/prompts",
+                "COMPETENCIES_API_URL": "http://api.internal/api/competencies",
+                "GEMINI_PRO_MODEL": "gemini-test",
+            }):
 
         sys.modules["json_repair"].loads.return_value = res_tree
         mock_ctx = AsyncMock()

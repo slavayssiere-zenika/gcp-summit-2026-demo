@@ -39,7 +39,11 @@ async def list_missions(
         missions_data.append({
             "id": m.id,
             "title": m.title,
-            "description": m.description,
+            "description": (
+                (m.description[:200] + "...")
+                if m.description and len(m.description) > 200
+                else m.description
+            ),
             "status": m.status or MissionStatus.STAFFED,
             "extracted_competencies": m.extracted_competencies or [],
             "prefiltered_candidates": m.prefiltered_candidates or [],
@@ -182,7 +186,11 @@ async def delete_all_missions(db: AsyncSession = Depends(database.get_db), token
 
 
 @router.delete("/missions/{mission_id}")
-async def delete_mission(mission_id: int, db: AsyncSession = Depends(database.get_db), token_payload: dict = Depends(verify_jwt)):
+async def delete_mission(
+    mission_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    token_payload: dict = Depends(verify_jwt),
+):
     """Supprime une mission spécifique et son historique (réservé aux admins et commerciaux)."""
     user_role = token_payload.get("role", "user")
     if user_role not in ("admin", "commercial"):
@@ -206,3 +214,66 @@ async def delete_mission(mission_id: int, db: AsyncSession = Depends(database.ge
         except (ValueError, TypeError):
             pass
     return {"status": "deleted", "id": mission_id}
+
+
+@router.post("/missions/recover-stuck")
+async def recover_stuck_missions(
+    db: AsyncSession = Depends(database.get_db),
+    token_payload: dict = Depends(verify_jwt),
+    stuck_minutes: int = Query(
+        10, ge=1, le=1440,
+        description="Missions bloquées depuis plus de N minutes (défaut 10 min)",
+    ),
+):
+    """Watchdog : remet en DRAFT les missions zombies bloquées en ANALYSIS_IN_PROGRESS.
+
+    Une mission est considérée zombie si elle est en ANALYSIS_IN_PROGRESS depuis plus de
+    `stuck_minutes` minutes (signal d'une analyse Gemini ayant échoué silencieusement
+    ou d'un pod Cloud Run tué pendant le background task).
+
+    Réservé aux admins. Audit trail complet.
+    """
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import and_
+
+    user_role = token_payload.get("role", "user")
+    user_email = token_payload.get("sub", "unknown@zenika.com")
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Accès refusé : rôle admin requis.")
+
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=stuck_minutes)
+
+    result = await db.execute(
+        select(Mission).where(
+            and_(
+                Mission.status == MissionStatus.ANALYSIS_IN_PROGRESS,
+                Mission.created_at <= cutoff,
+            )
+        )
+    )
+    stuck_missions = result.scalars().all()
+
+    recovered = []
+    for mission in stuck_missions:
+        mission.status = MissionStatus.DRAFT
+        history_entry = MissionStatusHistory(
+            mission_id=mission.id,
+            old_status=MissionStatus.ANALYSIS_IN_PROGRESS,
+            new_status=MissionStatus.DRAFT,
+            reason=(
+                f"Auto-recovery watchdog : zombie détecté après {stuck_minutes} min "
+                "— analyse Gemini n'a pas pu compléter (pod tué ou erreur silencieuse)."
+            ),
+            changed_by=user_email,
+        )
+        db.add(history_entry)
+        recovered.append({"id": mission.id, "title": mission.title})
+
+    if recovered:
+        await db.commit()
+
+    return {
+        "recovered": len(recovered),
+        "stuck_minutes_threshold": stuck_minutes,
+        "missions": recovered,
+    }

@@ -1,0 +1,2030 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Drive Synchronization API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/{path}": {
+      "get": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Proxy Mcp",
+        "operationId": "proxy_mcp_mcp__path__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spec": {
+      "get": {
+        "summary": "Get Spec",
+        "operationId": "get_spec_spec_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "summary": "Get Version",
+        "operationId": "get_version_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folders": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "Add Folder",
+        "operationId": "add_folder_folders_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "List Folders",
+        "operationId": "list_folders_folders_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedFoldersResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folders/{folder_id}": {
+      "patch": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "Update Folder",
+        "operationId": "update_folder_folders__folder_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "folder_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Folder Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "Delete Folder",
+        "operationId": "delete_folder_folders__folder_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "folder_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Folder Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folders/reset-sync": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "Reset Folder Sync",
+        "operationId": "reset_folder_sync_folders_reset_sync_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folders/rebuild-tree": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "Rebuild Folder Tree",
+        "description": "Force un scan complet de l'arbre Drive pour r\u00e9parer les structures parent_folder_name manquantes,\nSANS repasser les statuts en PENDING pour les fichiers d\u00e9j\u00e0 import\u00e9s et non modifi\u00e9s.",
+        "operationId": "rebuild_folder_tree_folders_rebuild_tree_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/folders/invalidate-cache": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Folders"
+        ],
+        "summary": "Invalidate Drive Cache",
+        "operationId": "invalidate_drive_cache_folders_invalidate_cache_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/status": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Get Status",
+        "operationId": "get_status_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/files": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "List Files",
+        "operationId": "list_files_files_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "folder_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedFilesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/blacklisted": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "List Blacklisted Files",
+        "description": "Liste pagin\u00e9e des fichiers Drive blacklist\u00e9s pour qualit\u00e9 d'extraction insuffisante.\nUn fichier est blacklist\u00e9 apr\u00e8s N tentatives cons\u00e9cutives avec score < seuil.\nIl sera automatiquement d\u00e9blaclist\u00e9 si le consultant met \u00e0 jour son CV sur Drive.",
+        "operationId": "list_blacklisted_files_files_blacklisted_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/{google_file_id}/blacklist-attempt": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Record Blacklist Attempt",
+        "description": "Appel\u00e9 par cv_api apr\u00e8s une extraction avec score < EXTRACTION_RELIABILITY_THRESHOLD.\nIncr\u00e9mente extraction_attempt_count. Si count >= EXTRACTION_MAX_ATTEMPTS \u2192 blacklist automatique.\nLe fichier passe en EXTRACTION_BLACKLISTED et ne sera plus re-ing\u00e9r\u00e9 depuis Drive\njusqu'\u00e0 ce que le consultant mette \u00e0 jour son CV (revision_id change \u2192 auto-unblacklist).",
+        "operationId": "record_blacklist_attempt_files__google_file_id__blacklist_attempt_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "google_file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Google File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/{google_file_id}/blacklist": {
+      "delete": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Unblacklist File",
+        "description": "R\u00e9initialise manuellement le blacklist d'un fichier (admin uniquement).\nRemet status \u2192 PENDING : le fichier sera re-ing\u00e9r\u00e9 au prochain /sync.\nCas d'usage : apr\u00e8s qu'un consultant a fourni une version lisible de son CV.",
+        "operationId": "unblacklist_file_files__google_file_id__blacklist_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "google_file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Google File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/{google_file_id}": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Get File State",
+        "description": "Retourne l'\u00e9tat de synchronisation Drive pour un fichier donn\u00e9 par son ID Google.\nUtilis\u00e9 par cv_api (reanalyze) pour r\u00e9cup\u00e9rer le parent_folder_name (nomenclature Zenika).",
+        "operationId": "get_file_state_files__google_file_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "google_file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Google File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/consultant/search": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Search Consultant Files",
+        "description": "Endpoint de diagnostic : recherche tous les fichiers d'un consultant par nom de dossier (ILIKE).\nRetourne le parent_folder_name, status, user_id et folder_id pour chaque fichier trouv\u00e9.\nUtile pour investiguer les consultants manquants dans le graphe.\nExemple : GET /drive/consultant/search?name=Lavayssi\u00e8re",
+        "operationId": "search_consultant_files_consultant_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/retry-errors": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Retry Errors",
+        "description": "Remet en PENDING tous les fichiers en erreur ou bloqu\u00e9s (QUEUED/PROCESSING zombies).\nAppel\u00e9 manuellement depuis le Frontend (\"R\u00e9essayer Tout\") \u2014 requiert JWT.\nParam\u00e8tre `force=true` : bypass du seuil zombie (10 min) \u2014 reset imm\u00e9diat de TOUS les QUEUED/PROCESSING.\nD\u00e9l\u00e8gue \u00e0 la logique m\u00e9tier partag\u00e9e _reset_errors_to_pending.",
+        "operationId": "retry_errors_retry_errors_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/errors": {
+      "delete": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Clear All Errors",
+        "description": "Supprime toutes les erreurs actuelles en basculant leur statut a IGNORED.\nUtile pour purger les erreurs persistantes du pipeline.",
+        "operationId": "clear_all_errors_errors_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/tokens/google": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Get Google Token",
+        "description": "Retourne le token d'acc\u00e8s Google Drive (ADC) pour les op\u00e9rations de r\u00e9analyse.\nCet endpoint est prot\u00e9g\u00e9 par verify_jwt sur le router principal.",
+        "operationId": "get_google_token_tokens_google_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/files/{file_id}": {
+      "patch": {
+        "tags": [
+          "Drive Admin",
+          "Drive Files"
+        ],
+        "summary": "Update File",
+        "description": "Updates a file's state (user_id and/or status).\nUsed by other services to fix identity assignments.",
+        "operationId": "update_file_files__file_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dlq/status": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive DLQ"
+        ],
+        "summary": "Get Dlq Status",
+        "description": "Retourne le nombre et la liste des fichiers dans la DLQ Pub/Sub.\nPull sans ACK \u2014 les messages restent dans la DLQ.\nCroise les google_file_id avec DriveSyncState pour afficher les noms.\nLes payloads illisibles sont retournes dans unknown_files avec leur message_id\npour permettre la suppression individuelle.",
+        "operationId": "get_dlq_status_dlq_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/dlq/message": {
+      "delete": {
+        "tags": [
+          "Drive Admin",
+          "Drive DLQ"
+        ],
+        "summary": "Delete Dlq Message",
+        "description": "Supprime un message sp\u00e9cifique de la DLQ.\n\nStrat\u00e9gie 1 (rapide) : si ack_id est fourni, ACK direct sans re-pull.\nStrat\u00e9gie 2 (fallback) : re-pull et match par google_file_id ou pubsub_message_id.",
+        "operationId": "delete_dlq_message_dlq_message_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "google_file_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Google File Id"
+            }
+          },
+          {
+            "name": "pubsub_message_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Pubsub Message Id"
+            }
+          },
+          {
+            "name": "ack_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Ack Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dlq/replay": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive DLQ"
+        ],
+        "summary": "Replay Dlq",
+        "description": "Rejoue les messages de la DLQ :\n1. Pull tous les messages de la DLQ subscription\n2. Extrait les google_file_id des payloads\n3. Les remet en PENDING dans la DB (+ reset last_processed_at)\n4. ACK les messages (les supprime de la DLQ)\n5. Le frontend doit ensuite appeler POST /sync pour republier\n\nIdempotent : si un google_file_id n'existe pas en DB, il est ignor\u00e9.",
+        "operationId": "replay_dlq_dlq_replay_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/ingestion/stats": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Ingestion"
+        ],
+        "summary": "Get Ingestion Stats",
+        "description": "Retourne les KPIs de data quality pour le pipeline d'ingestion Drive \u2192 CV.\nUtilis\u00e9 par AdminDriveIngestion pour afficher le grade global et les m\u00e9triques.",
+        "operationId": "get_ingestion_stats_ingestion_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/ingestion/folder-kpis": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Ingestion"
+        ],
+        "summary": "Get Folder Kpis",
+        "description": "Retourne les KPIs d'ingestion par folder/agence.\nUtilis\u00e9 par AdminDriveIngestion pour le tableau par agence.",
+        "operationId": "get_folder_kpis_ingestion_folder_kpis_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/ingestion/history": {
+      "get": {
+        "tags": [
+          "Drive Admin",
+          "Drive Ingestion"
+        ],
+        "summary": "Get Ingestion History",
+        "description": "Retourne les derni\u00e8res ingestions r\u00e9ussies avec horodatages.",
+        "operationId": "get_ingestion_history_ingestion_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingestion/batch-retry": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Ingestion"
+        ],
+        "summary": "Ingestion Batch Retry",
+        "description": "Retry simple : remet en PENDING les fichiers en ERROR et zombies bloqu\u00e9s,\npuis d\u00e9clenche un /sync imm\u00e9diat pour les republier dans Pub/Sub.",
+        "operationId": "ingestion_batch_retry_ingestion_batch_retry_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingestion/quality-gate-batch": {
+      "post": {
+        "tags": [
+          "Drive Admin",
+          "Drive Ingestion"
+        ],
+        "summary": "Quality Gate Batch",
+        "description": "Quality Gate Batch : identifie les CVs avec donn\u00e9es incompl\u00e8tes et les remet\nen PENDING pour re-traitement cibl\u00e9 via Pub/Sub.",
+        "operationId": "quality_gate_batch_ingestion_quality_gate_batch_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/scheduled/retry-errors": {
+      "post": {
+        "tags": [
+          "Drive_Public",
+          "Drive Sync - IAM Protected"
+        ],
+        "summary": "Scheduled Retry Errors",
+        "description": "Drain automatique de la DLQ \u2014 appel\u00e9 par Cloud Scheduler toutes les heures.\nAccepte aussi force=true pour forcer le d\u00e9blocage imm\u00e9diat depuis un outil externe.",
+        "operationId": "scheduled_retry_errors_scheduled_retry_errors_post",
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync": {
+      "post": {
+        "tags": [
+          "Drive_Public",
+          "Drive Sync - IAM Protected"
+        ],
+        "summary": "Trigger Sync",
+        "description": "Called by GCP Cloud Scheduler every X minutes.\nPerforms discovery and then processes a batch.\nProtected by Cloud Run IAM (OIDC token from Scheduler SA), NOT by JWT.",
+        "operationId": "trigger_sync_sync_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DriveSyncStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "QUEUED",
+          "PROCESSING",
+          "IMPORTED_CV",
+          "IGNORED_NOT_CV",
+          "OUT_OF_SCOPE",
+          "DELETED_OK",
+          "ERROR",
+          "EXTRACTION_BLACKLISTED"
+        ],
+        "title": "DriveSyncStatus"
+      },
+      "FileStateResponse": {
+        "properties": {
+          "google_file_id": {
+            "type": "string",
+            "title": "Google File Id"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DriveSyncStatus"
+          },
+          "revision_id": {
+            "type": "string",
+            "title": "Revision Id"
+          },
+          "modified_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified Time"
+          },
+          "parent_folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Folder Name"
+          },
+          "last_processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Processed At"
+          },
+          "imported_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported At"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "processing_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Duration Ms"
+          },
+          "file_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Type",
+            "default": "google_doc"
+          },
+          "retry_count": {
+            "type": "integer",
+            "title": "Retry Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "google_file_id",
+          "file_name",
+          "folder_id",
+          "status",
+          "revision_id",
+          "modified_time",
+          "parent_folder_name",
+          "last_processed_at",
+          "imported_at",
+          "error_message",
+          "user_id",
+          "processing_duration_ms"
+        ],
+        "title": "FileStateResponse"
+      },
+      "FileUpdate": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveSyncStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "processing_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Duration Ms"
+          }
+        },
+        "type": "object",
+        "title": "FileUpdate"
+      },
+      "FolderCreate": {
+        "properties": {
+          "google_folder_id": {
+            "type": "string",
+            "title": "Google Folder Id"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Name"
+          },
+          "excluded_folders": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Folders",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "google_folder_id",
+          "tag"
+        ],
+        "title": "FolderCreate"
+      },
+      "FolderResponse": {
+        "properties": {
+          "google_folder_id": {
+            "type": "string",
+            "title": "Google Folder Id"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Name"
+          },
+          "excluded_folders": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Folders",
+            "default": []
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FolderStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "google_folder_id",
+          "tag",
+          "id",
+          "created_at"
+        ],
+        "title": "FolderResponse"
+      },
+      "FolderStats": {
+        "properties": {
+          "total_files": {
+            "type": "integer",
+            "title": "Total Files",
+            "default": 0
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "default": 0
+          },
+          "queued": {
+            "type": "integer",
+            "title": "Queued",
+            "default": 0
+          },
+          "processing": {
+            "type": "integer",
+            "title": "Processing",
+            "default": 0
+          },
+          "imported": {
+            "type": "integer",
+            "title": "Imported",
+            "default": 0
+          },
+          "ignored": {
+            "type": "integer",
+            "title": "Ignored",
+            "default": 0
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "FolderStats"
+      },
+      "FolderUpdate": {
+        "properties": {
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "excluded_folders": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Folders"
+          }
+        },
+        "type": "object",
+        "title": "FolderUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PaginatedFilesResponse": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileStateResponse"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginatedFilesResponse"
+      },
+      "PaginatedFoldersResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FolderResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "PaginatedFoldersResponse"
+      },
+      "StatusResponse": {
+        "properties": {
+          "total_files_scanned": {
+            "type": "integer",
+            "title": "Total Files Scanned"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "queued": {
+            "type": "integer",
+            "title": "Queued",
+            "default": 0
+          },
+          "processing": {
+            "type": "integer",
+            "title": "Processing",
+            "default": 0
+          },
+          "imported": {
+            "type": "integer",
+            "title": "Imported"
+          },
+          "ignored": {
+            "type": "integer",
+            "title": "Ignored"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "last_processed_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Processed Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_files_scanned",
+          "pending",
+          "imported",
+          "ignored",
+          "errors",
+          "last_processed_time"
+        ],
+        "title": "StatusResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

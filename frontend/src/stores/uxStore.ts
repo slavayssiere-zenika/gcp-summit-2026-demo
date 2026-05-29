@@ -9,7 +9,8 @@ interface Toast {
 export const useUxStore = defineStore('ux', {
   state: () => ({
     toasts: [] as Toast[],
-    toastIdCounter: 0
+    toastIdCounter: 0,
+    degradedServices: [] as string[]
   }),
   actions: {
     showToast(message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') {
@@ -23,6 +24,14 @@ export const useUxStore = defineStore('ux', {
     },
     removeToast(id: number) {
       this.toasts = this.toasts.filter(t => t.id !== id)
+    },
+    addDegradedService(serviceName: string) {
+      if (!this.degradedServices.includes(serviceName)) {
+        this.degradedServices.push(serviceName)
+      }
+    },
+    clearDegradedServices() {
+      this.degradedServices = []
     }
   }
 })
