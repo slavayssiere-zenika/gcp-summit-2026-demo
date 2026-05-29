@@ -16,13 +16,13 @@
         45,
         44,
         12,
-        50,
-        34,
         43,
+        50,
         4,
-        66,
-        25,
-        38
+        38,
+        51,
+        34,
+        62
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -40,11 +40,11 @@
         41,
         27,
         57,
-        26,
         65,
         10,
-        58,
+        26,
         49,
+        58,
         11
       ],
       "min_recall_at_k": 0.5,
@@ -59,16 +59,16 @@
       "id": "FULLSTACK_REACT_001",
       "query": "Développeur fullstack React TypeScript Node.js microservices",
       "expected_user_ids": [
-        23,
-        30,
+        53,
         32,
         3,
-        53,
-        59,
+        40,
+        30,
+        46,
         42,
-        54,
         63,
-        46
+        23,
+        13
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -83,15 +83,15 @@
       "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
       "expected_user_ids": [
         45,
-        66,
         8,
         34,
+        66,
         18,
         25,
-        43,
         29,
         37,
-        17
+        43,
+        39
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -108,13 +108,13 @@
         44,
         12,
         4,
-        50,
-        51,
         38,
-        45,
-        8,
-        66,
-        46
+        55,
+        22,
+        7,
+        11,
+        15,
+        39
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -129,15 +129,15 @@
       "query": "Coach Agile Scrum Master transformation organisationnelle SAFe",
       "expected_user_ids": [
         47,
-        5,
         67,
-        15,
-        24,
+        5,
         4,
         55,
+        52,
         19,
+        37,
         22,
-        6
+        24
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -152,13 +152,13 @@
       "query": "MLOps ingénieur Machine Learning Vertex AI déploiement de modèles",
       "expected_user_ids": [
         27,
-        65,
         29,
-        58,
-        44,
-        26,
         41,
-        48,
+        44,
+        65,
+        58,
+        57,
+        10,
         37,
         49
       ],
@@ -174,16 +174,16 @@
       "id": "NODE_BACKEND_001",
       "query": "Node.js API REST backend microservices TypeScript",
       "expected_user_ids": [
-        23,
-        59,
         32,
         3,
-        46,
+        53,
         52,
-        42,
         55,
-        54,
-        53
+        46,
+        59,
+        42,
+        40,
+        30
       ],
       "min_recall_at_k": 0.5,
       "tags": [
