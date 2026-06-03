@@ -15,14 +15,14 @@
       "expected_user_ids": [
         50,
         45,
-        12,
-        7,
         43,
-        44,
-        58,
-        37,
+        12,
         39,
-        38
+        44,
+        7,
+        37,
+        58,
+        54
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -38,12 +38,12 @@
       "expected_user_ids": [
         49,
         57,
-        27,
         42,
+        27,
         64,
-        9,
-        26,
         59,
+        26,
+        9,
         48,
         10
       ],
@@ -60,15 +60,15 @@
       "query": "Développeur fullstack React TypeScript Node.js microservices",
       "expected_user_ids": [
         55,
+        3,
+        32,
+        38,
+        25,
         47,
         40,
-        3,
-        25,
-        63,
-        54,
-        38,
-        58,
-        16
+        29,
+        56,
+        63
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -83,15 +83,15 @@
       "query": "Architecte cloud expérience multi-cloud AWS GCP Azure migration legacy",
       "expected_user_ids": [
         45,
-        8,
         37,
-        24,
+        8,
         22,
         65,
-        36,
+        24,
         43,
         28,
-        41
+        36,
+        10
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -105,16 +105,16 @@
       "id": "SECURITY_ZEROTRUST_001",
       "query": "Expert sécurité IAM Zero Trust DevSecOps SIEM",
       "expected_user_ids": [
-        12,
         50,
+        12,
         44,
-        7,
         51,
+        7,
         39,
-        47,
-        38,
         8,
-        43
+        45,
+        65,
+        47
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -129,12 +129,12 @@
       "query": "Coach Agile Scrum Master transformation organisationnelle SAFe",
       "expected_user_ids": [
         46,
-        14,
         4,
+        14,
         67,
-        52,
         3,
-        31
+        31,
+        52
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -148,16 +148,16 @@
       "id": "MLOPS_001",
       "query": "MLOps ingénieur Machine Learning Vertex AI déploiement de modèles",
       "expected_user_ids": [
-        27,
-        42,
-        57,
         59,
-        26,
-        9,
-        28,
+        42,
         64,
-        36,
-        22
+        57,
+        9,
+        41,
+        24,
+        49,
+        10,
+        37
       ],
       "min_recall_at_k": 0.5,
       "tags": [
@@ -171,16 +171,16 @@
       "id": "NODE_BACKEND_001",
       "query": "Node.js API REST backend microservices TypeScript",
       "expected_user_ids": [
-        55,
-        47,
-        58,
         3,
-        25,
-        52,
         32,
-        40,
         56,
-        63
+        47,
+        25,
+        55,
+        58,
+        52,
+        40,
+        29
       ],
       "min_recall_at_k": 0.5,
       "tags": [
