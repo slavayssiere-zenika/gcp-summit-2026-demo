@@ -1,3 +1,4 @@
+# Forced rebuild by deploy.sh (2026-06-05) - Triggers db_migrations container rebuild
 databaseChangeLog:
   - changeSet:
       id: "1"

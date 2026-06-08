@@ -175,43 +175,43 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     async with httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=120.0) as client:
         try:
             if name == "list_prompts":
-                response = await client.get(f"{API_BASE_URL}/prompts/", timeout=10.0)
+                response = await client.get(f"{API_BASE_URL}/", timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_prompt":
                 key = arguments["key"]
-                response = await client.get(f"{API_BASE_URL}/prompts/{key}", timeout=10.0)
+                response = await client.get(f"{API_BASE_URL}/{key}", timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "get_my_prompt":
-                response = await client.get(f"{API_BASE_URL}/prompts/user/me", timeout=10.0)
+                response = await client.get(f"{API_BASE_URL}/user/me", timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "create_prompt":
                 payload = {"key": arguments["key"], "value": arguments["value"]}
-                response = await client.post(f"{API_BASE_URL}/prompts/", json=payload, timeout=10.0)
+                response = await client.post(f"{API_BASE_URL}/", json=payload, timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "update_prompt":
                 key = arguments["key"]
                 payload = {"value": arguments["value"]}
-                response = await client.put(f"{API_BASE_URL}/prompts/{key}", json=payload, timeout=10.0)
+                response = await client.put(f"{API_BASE_URL}/{key}", json=payload, timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "update_my_prompt":
                 payload = {"value": arguments["value"]}
-                response = await client.put(f"{API_BASE_URL}/prompts/user/me", json=payload, timeout=10.0)
+                response = await client.put(f"{API_BASE_URL}/user/me", json=payload, timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 
             elif name == "analyze_prompt":
                 key = arguments["key"]
-                response = await client.post(f"{API_BASE_URL}/prompts/{key}/analyze", timeout=10.0)
+                response = await client.post(f"{API_BASE_URL}/{key}/analyze", timeout=10.0)
                 response.raise_for_status()
                 return [TextContent(type="text", text=json.dumps(response.json()))]
 

@@ -206,6 +206,7 @@ resource "google_compute_region_url_map" "internal_url_map" {
         }
       }
     }
+
   }
 }
 

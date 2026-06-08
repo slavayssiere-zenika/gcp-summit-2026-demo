@@ -412,7 +412,7 @@ class CVStorageService:
 
                 ids_to_assign = [
                     cid for cid in resolved_ids
-                    if isinstance(cid, int) and cid not in existing_comps
+                    if isinstance(cid, int) and not isinstance(cid, bool) and cid not in existing_comps
                 ]
                 failed_count = sum(
                     1 for cid in resolved_ids

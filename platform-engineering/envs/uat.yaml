@@ -51,6 +51,9 @@ finops_anomaly_threshold: 500000
 sre_alert_emails:
   - "sebastien.lavayssiere@zenika.com"
 
+# URL du webhook Google Chat pour les alertes SRE
+sre_chat_webhook_url: "https://chat.googleapis.com/v1/spaces/AAQAhkmpQBo/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=eAbVeY5aEfyirn9YPkECY87JeXWOaYftsPLYX8bG-DQ"
+
 # ── IA / Modèles (per-agent, AGENTS.md §1.4) ──────────────────────────────
 # Migration 2026-05-12 : gemini-3.1-flash-lite est passé GA (sans -preview).
 # gemini-3.1-pro reste en preview (pas de GA 3.1-pro disponible).

@@ -97,14 +97,22 @@ async def check_component_health_internal(component_name: str) -> dict:
         if target_path:
             url = f"http://api.internal.zenika{target_path}health"
             try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    res = await client.get(url, timeout=10.0)
-                    if res.status_code == 200:
-                        return {"status": "healthy", "component": component_name, "url": url, "code": 200}
-                    else:
-                        return {"status": "unhealthy", "component": component_name, "url": url, "code": res.status_code, "detail": res.text[:200]}  # noqa: E501
-            except Exception as he:
-                return {"status": "unreachable", "component": component_name, "url": url, "error": str(he)}
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    for attempt in range(3):
+                        try:
+                            res = await client.get(url, timeout=20.0)
+                            if res.status_code == 200:
+                                return {"status": "healthy", "component": component_name, "url": url, "code": 200}
+                            if res.status_code in (503, 429) and attempt < 2:
+                                await asyncio.sleep(2.0 * (attempt + 1))
+                                continue
+                            return {"status": "unhealthy", "component": component_name, "url": url, "code": res.status_code, "detail": res.text[:200]}  # noqa: E501
+                        except Exception as he:
+                            if attempt == 2:
+                                return {"status": "unreachable", "component": component_name, "url": url, "error": str(he)}
+                            await asyncio.sleep(2.0 * (attempt + 1))
+            except Exception as e:
+                return {"status": "error", "error": str(e)}
 
         # 4. Fallback GCP discovery
         services = await list_gcp_services_internal()

@@ -833,6 +833,7 @@ services:
       - MISSIONS_API_URL=http://missions_api:8009
       - DRIVE_API_URL=http://drive_api:8006
       - PROMPTS_API_URL=http://prompts_api:8000
+      - AGENT_OPS_API_URL=http://agent_ops_api:8080
     profiles:
       - perf
     networks:
@@ -859,6 +860,7 @@ services:
       - MISSIONS_API_URL=http://missions_api:8009
       - DRIVE_API_URL=http://drive_api:8006
       - PROMPTS_API_URL=http://prompts_api:8000
+      - AGENT_OPS_API_URL=http://agent_ops_api:8080
     profiles:
       - perf-stress
     networks:
@@ -876,6 +878,7 @@ services:
       - MISSIONS_API_URL=http://missions_api:8009
       - DRIVE_API_URL=http://drive_api:8006
       - PROMPTS_API_URL=http://prompts_api:8000
+      - AGENT_OPS_API_URL=http://agent_ops_api:8080
     # Workers en mode distribue : connexion vers le master par hostname fixe.
     command: -f /locust/locustfile.py --worker --master-host=locust-master
     profiles:

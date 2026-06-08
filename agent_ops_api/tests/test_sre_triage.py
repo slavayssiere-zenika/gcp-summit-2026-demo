@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 os.environ["SECRET_KEY"] = "testsecret_must_be_32_characters_long_for_sha256"
 os.environ["PUBSUB_INVOKER_SA_EMAIL"] = ""
 
-from main import app
+from main import app  # noqa: E402
 
 client = TestClient(app)
 
@@ -37,3 +37,127 @@ def test_sre_triage_success(mock_run_sre_triage):
     payload = response.json()
     assert payload["response"] == "Diagnose result"
     assert payload["hours"] == 1
+
+
+def test_classify_report_ok():
+    from sre_triage import classify_report
+    report = (
+        "# Rapport Triage SRE\n\n"
+        "## 📋 Statut des Services\n"
+        "| Service | Statut | Détails |\n"
+        "|---|---|---|\n"
+        "| users_api | ✅ OK | Aucune erreur |\n"
+        "| items_api | ✅ OK | Aucune erreur |\n\n"
+        "## Incidents Critiques\n"
+        "Aucun incident critique détecté.\n\n"
+        "## Alertes Data Quality\n"
+        "Aucune dégradation de la qualité des données.\n\n"
+        "## Alertes FinOps\n"
+        "Consommation IA dans les normes.\n\n"
+        "## Tendances historiques (Ignoré par le trieur)\n"
+        "- 2026-06-07 : 🔴 users_api en panne (résolu)\n"
+    )
+    assert classify_report(report) == "OK"
+
+
+def test_classify_report_critical_service():
+    from sre_triage import classify_report
+    report = (
+        "# Rapport Triage SRE\n\n"
+        "## 📋 Statut des Services\n"
+        "| Service | Statut | Détails |\n"
+        "|---|---|---|\n"
+        "| users_api | 🔴 CRITICAL | 5xx threshold exceeded |\n"
+        "| items_api | ✅ OK | Aucune erreur |\n"
+    )
+    assert classify_report(report) == "CRITICAL"
+
+
+def test_classify_report_critical_section():
+    from sre_triage import classify_report
+    report = (
+        "# Rapport Triage SRE\n\n"
+        "## 📋 Statut des Services\n"
+        "| Service | Statut | Détails |\n"
+        "|---|---|---|\n"
+        "| users_api | ✅ OK | Aucune erreur |\n\n"
+        "## Incidents Critiques\n"
+        "- 🔴 Erreur critique détectée sur alloydb.\n"
+    )
+    assert classify_report(report) == "CRITICAL"
+
+
+def test_classify_report_warning_service():
+    from sre_triage import classify_report
+    report = (
+        "# Rapport Triage SRE\n\n"
+        "## 📋 Statut des Services\n"
+        "| Service | Statut | Détails |\n"
+        "|---|---|---|\n"
+        "| users_api | ⚠️ WARNING | High latency |\n"
+    )
+    assert classify_report(report) == "WARNING"
+
+
+def test_classify_report_warning_data_quality():
+    from sre_triage import classify_report
+    report = (
+        "# Rapport Triage SRE\n\n"
+        "## 📋 Statut des Services\n"
+        "| Service | Statut | Détails |\n"
+        "|---|---|---|\n"
+        "| users_api | ✅ OK | Aucune erreur |\n\n"
+        "## Alertes Data Quality\n"
+        "- ⚠️ 15 CVs ont un score de fiabilité faible.\n"
+    )
+    assert classify_report(report) == "WARNING"
+
+
+def test_classify_report_warning_finops():
+    from sre_triage import classify_report
+    report = (
+        "# Rapport Triage SRE\n\n"
+        "## 📋 Statut des Services\n"
+        "| Service | Statut | Détails |\n"
+        "|---|---|---|\n"
+        "| users_api | ✅ OK | Aucune erreur |\n\n"
+        "## Alertes FinOps\n"
+        "- ⚠️ Augmentation de 50% de la consommation Gemini.\n"
+    )
+    assert classify_report(report) == "WARNING"
+
+
+@patch("sre_triage.run_daily_report")
+def test_daily_report_endpoint(mock_run_daily_report):
+    mock_run_daily_report.return_value = "Daily Report Content"
+
+    # Send a request to daily-report
+    response = client.post(
+        "/tasks/daily-report",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["report"] == "Daily Report Content"
+
+
+def test_daily_report_endpoint_missing_auth():
+    """Le endpoint /tasks/daily-report doit retourner 401 sans token Bearer."""
+    response = client.post("/tasks/daily-report")
+    assert response.status_code == 401
+
+
+@patch("sre_triage.run_daily_report")
+def test_daily_report_endpoint_agent_failure(mock_run_daily_report):
+    """Le endpoint /tasks/daily-report doit retourner 500 si run_daily_report lève une exception."""
+    mock_run_daily_report.side_effect = Exception("LLM timeout")
+
+    response = client.post(
+        "/tasks/daily-report",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert response.status_code == 500
+    payload = response.json()
+    assert "detail" in payload
+    assert "LLM timeout" in payload["detail"]

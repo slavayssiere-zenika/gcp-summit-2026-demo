@@ -57,13 +57,8 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         }
       }
       env {
-        name = "GOOGLE_CHAT_WEBHOOK_URL"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.sre_chat_webhook.secret_id
-            version = "latest"
-          }
-        }
+        name  = "GOOGLE_CHAT_WEBHOOK_URL"
+        value = var.sre_chat_webhook_url
       }
       env {
         name  = "CLOUD_RUN_REGION"
@@ -221,10 +216,6 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         }
       }
       env {
-        name  = "GOOGLE_CHAT_WEBHOOK_SECRET_NAME"
-        value = google_secret_manager_secret.sre_chat_webhook.secret_id
-      }
-      env {
         name  = "GEMINI_API_BASE_URL"
         value = ""
       }
@@ -253,7 +244,6 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
     null_resource.run_db_migrations_job,
     google_secret_manager_secret_iam_member.agent_ops_jwt_access,
     google_secret_manager_secret_iam_member.agent_ops_gemini_access,
-    google_secret_manager_secret_iam_member.agent_ops_chat_webhook_access,
   ]
 }
 
@@ -338,14 +328,6 @@ resource "google_compute_region_backend_service" "agent_ops_internal_backend" {
 resource "google_secret_manager_secret_iam_member" "agent_ops_gemini_access" {
   project   = data.google_secret_manager_secret.gemini_api_key.project
   secret_id = data.google_secret_manager_secret.gemini_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.agent_ops_sa.email}"
-}
-
-# Donne à agent_ops_sa le droit de lire l'URL du webhook Google Chat SRE
-resource "google_secret_manager_secret_iam_member" "agent_ops_chat_webhook_access" {
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.sre_chat_webhook.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.agent_ops_sa.email}"
 }

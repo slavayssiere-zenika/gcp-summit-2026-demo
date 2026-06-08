@@ -38,7 +38,11 @@ async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
     base_url = api_url.rstrip("/")
     base_domain = base_url.replace('/api/prompts', '').replace('/prompts', '')
     # Handle dev API gateway vs frontend proxy
-    auth_url = f"{base_domain}/auth/login" if "api.dev" in base_domain or "dev.zenika" in base_domain else f"{base_domain}/api/auth/login"
+    auth_url = (
+        f"{base_domain}/auth/login"
+        if "api.dev" in base_domain or "dev.zenika" in base_domain or "prd.zenika" in base_domain
+        else f"{base_domain}/api/auth/login"
+    )
 
     logger.info(f"{YELLOW}[*] Authenticating as {admin_email}...{RESET}")
 
@@ -89,12 +93,18 @@ async def sync_prompts(api_url: str, admin_email: str, admin_password: str):
                                 timeout=5.0
                             )
                             if inv_res.status_code < 400:
-                                logger.info(f"{GREEN}    -> Cache Redis invalidé pour '{key}' sur {service_path}.{RESET}")
+                                logger.info(
+                                    f"{GREEN}    -> Cache Redis invalidé pour '{key}' sur {service_path}.{RESET}"
+                                )
                             else:
                                 logger.warning(
-                                    f"{YELLOW}    [!] Cache invalidation returned HTTP {inv_res.status_code} for '{key}'.{RESET}")
+                                    f"{YELLOW}    [!] Cache invalidation returned HTTP "
+                                    f"{inv_res.status_code} for '{key}'.{RESET}"
+                                )
                         except Exception as cache_err:
-                            logger.warning(f"{YELLOW}    [!] Cache invalidation failed for '{key}': {cache_err}{RESET}")
+                            logger.warning(
+                                f"{YELLOW}    [!] Cache invalidation failed for '{key}': {cache_err}{RESET}"
+                            )
 
             except Exception as e:
                 logger.error(f"{RED}    [!] Error syncing {key}: {e}{RESET}")

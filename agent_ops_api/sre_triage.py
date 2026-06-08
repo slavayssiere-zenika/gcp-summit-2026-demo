@@ -19,6 +19,7 @@ Structure de la requête Cloud Scheduler (body JSON) :
 
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -99,17 +100,68 @@ class SreTriageReport(BaseModel):
 # ---------------------------------------------------------------------------
 
 def classify_report(response_text: str) -> str:
-    """Détermine la sévérité du rapport à partir des marqueurs visuels.
+    """Détermine la sévérité du rapport à partir des statuts des services et des sections d'alertes.
 
     Returns:
-        "CRITICAL" si le rapport contient au moins un marqueur 🔴.
-        "WARNING"  si le rapport contient des ⚠️ sans 🔴.
-        "OK"       si uniquement des ✅ ou aucun marqueur connu.
+        "CRITICAL" si le rapport contient au moins un statut 🔴 ou incident critique.
+        "WARNING"  si le rapport contient des statuts ⚠️ ou alertes réelles sans 🔴.
+        "OK"       sinon.
     """
-    if _CRITICAL_MARKER in response_text:
+    services_critical = False
+    services_warning = False
+
+    lines = response_text.splitlines()
+    for line in lines:
+        parts = [p.strip() for p in line.split("|") if p.strip()]
+        if len(parts) >= 2:
+            # Élimine les en-têtes du tableau
+            if parts[0].lower() in ("service", "---", ""):
+                continue
+            status = parts[1]
+            if _CRITICAL_MARKER in status:
+                services_critical = True
+            elif _WARNING_MARKER in status:
+                services_warning = True
+
+    if services_critical:
         return "CRITICAL"
-    if _WARNING_MARKER in response_text:
+
+    # Recherche de contenu réel sous "Incidents Critiques"
+    _re_critical = re.compile(
+        r"## (?:🔴\s*)?Incidents Critiques\s*\n(.*?)(?=\n##|\Z)",
+        re.DOTALL | re.IGNORECASE,
+    )
+    critical_section = _re_critical.search(response_text)
+    if critical_section:
+        content = critical_section.group(1).strip()
+        if content and "Aucun incident critique" not in content and _CRITICAL_MARKER in content:
+            return "CRITICAL"
+
+    # Recherche de contenu sous "Alertes Data Quality"
+    _re_dq = re.compile(
+        r"## (?:⚠️\s*)?Alertes Data Quality\s*\n(.*?)(?=\n##|\Z)",
+        re.DOTALL | re.IGNORECASE,
+    )
+    dq_section = _re_dq.search(response_text)
+    if dq_section:
+        content = dq_section.group(1).strip()
+        if content and "Aucune dégradation" not in content and _WARNING_MARKER in content:
+            services_warning = True
+
+    # Recherche de contenu sous "Alertes FinOps"
+    _re_finops = re.compile(
+        r"## (?:⚠️\s*)?Alertes FinOps\s*\n(.*?)(?=\n##|\Z)",
+        re.DOTALL | re.IGNORECASE,
+    )
+    finops_section = _re_finops.search(response_text)
+    if finops_section:
+        content = finops_section.group(1).strip()
+        if content and "Consommation IA dans les normes" not in content and _WARNING_MARKER in content:
+            services_warning = True
+
+    if services_warning:
         return "WARNING"
+
     return "OK"
 
 
@@ -630,3 +682,95 @@ async def _push_triage_to_analytics(report: SreTriageReport, auth_token: str) ->
                 )
     except Exception as exc:
         logger.warning("[SRE Analytics] Erreur push BigQuery analytics_mcp : %s", exc)
+
+
+async def run_daily_report(
+    auth_token: str,
+    user_id: str = "scheduler@system",
+) -> str:
+    """Génère le rapport quotidien de la veille en déléguant à l'Agent Ops."""
+    from agent import run_agent_query  # noqa: PLC0415
+
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    yesterday_str = yesterday.strftime("%Y-%m-%d")
+
+    logger.info("[SRE Daily Report] Déclenchement pour la date=%s", yesterday_str)
+
+    cv_query = (
+        f"SELECT COUNT(*) as count FROM cv_profiles"
+        f" WHERE is_archived = FALSE AND DATE(created_at) = '{yesterday_str}'"
+    )
+    users_query = (
+        f"SELECT COUNT(DISTINCT user_id) as count FROM user_audit_logs"
+        f" WHERE field_changed='is_active' AND new_value='False'"
+        f" AND DATE(timestamp) = '{yesterday_str}'"
+    )
+    query = (
+        f"## 📊 Rapport Quotidien d'Usage de la Veille\n\n"
+        f"Génère le rapport d'usage pour la journée du {yesterday_str}"
+        f" (de {yesterday_str} 00:00:00 à {yesterday_str} 23:59:59 UTC).\n\n"
+        "Tu DOIS utiliser tes outils pour collecter :\n"
+        f"1. **Fréquentation** : Appelle `get_usage_statistics(date=\"{yesterday_str}\")`.\n"
+        f"2. **CVs ingérés** : Appelle `execute_read_only_query` sur la base `cv` : `{cv_query}`.\n"
+        f"3. **Collaborateurs passés inactifs** : Appelle `execute_read_only_query`"
+        f" sur la base `users` : `{users_query}`.\n"
+        "4. **FinOps & IA** : Appelle `get_finops_report(period=\"daily\")`"
+        " pour analyser la consommation de la veille.\n\n"
+        "Rédige le rapport Markdown conformément aux instructions système"
+        " de `agent_ops_api.daily_report.system_instruction`."
+    )
+
+    result = await run_agent_query(
+        query, session_id=None, auth_token=auth_token, user_id=user_id,
+        prompt_key="agent_ops_api.daily_report.system_instruction",
+    )
+
+    report_text = result.get("response", "")
+
+    # Envoi de la notification Google Chat
+    await _send_daily_report_chat_notification(report_text, yesterday_str)
+
+    return report_text
+
+
+async def _send_daily_report_chat_notification(report_text: str, yesterday_str: str) -> None:
+    """Envoie le rapport quotidien d'usage sur Google Chat (toujours envoyé)."""
+    webhook_url = _get_webhook_url()
+    if not webhook_url:
+        logger.debug("[SRE Chat] Webhook Google Chat absent ou inaccessible — notification rapport quotidien ignorée.")
+        return
+
+    env = os.environ.get("K_SERVICE", "local").split("-")[-1]
+
+    header = (
+        f"📊 *RAPPORT D'USAGE QUOTIDIEN* — `{env}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📅 Date d'activité : {yesterday_str}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    )
+
+    footer = (
+        "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💬 Rapport généré par l'Agent SRE Usage."
+    )
+
+    # Tronquer le rapport si trop long
+    if len(report_text) > _CHAT_REPORT_MAX_CHARS:
+        report_text = report_text[:_CHAT_REPORT_MAX_CHARS] + "\n\n_⚠️ Rapport tronqué car trop long pour Google Chat._"
+
+    message_text = header + report_text + footer
+    payload = {"text": message_text}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(webhook_url, json=payload)
+            if response.status_code == 200:
+                logger.info("[SRE Chat] Rapport quotidien envoyé sur Google Chat avec succès.")
+            else:
+                logger.warning(
+                    "[SRE Chat] Webhook rapport quotidien a retourné HTTP %d : %s",
+                    response.status_code,
+                    response.text[:200],
+                )
+    except Exception as exc:
+        logger.warning("[SRE Chat] Erreur envoi webhook rapport quotidien : %s", exc)

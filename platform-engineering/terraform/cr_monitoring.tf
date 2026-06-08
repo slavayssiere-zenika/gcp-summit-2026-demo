@@ -95,6 +95,18 @@ resource "google_cloud_run_v2_service" "monitoring_mcp" {
           }
         }
       }
+      env {
+        name  = "DATABASE_URL"
+        value = "postgresql://${replace(google_service_account.monitoring_sa.email, ".gserviceaccount.com", "")}@${google_alloydb_instance.primary.ip_address}:5432/zenika"
+      }
+      env {
+        name  = "USE_IAM_AUTH"
+        value = "true"
+      }
+      env {
+        name  = "ALLOYDB_INSTANCE_URI"
+        value = "projects/${var.project_id}/locations/${var.region}/clusters/${google_alloydb_cluster.main.cluster_id}/instances/${google_alloydb_instance.primary.instance_id}"
+      }
     }
   }
 
@@ -199,6 +211,29 @@ resource "google_project_iam_member" "monitoring_trace_user" {
   project = var.project_id
   role    = "roles/cloudtrace.user"
   member  = "serviceAccount:${google_service_account.monitoring_sa.email}"
+}
+
+resource "google_project_iam_member" "monitoring_alloydb_client" {
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:${google_service_account.monitoring_sa.email}"
+}
+
+resource "google_project_iam_member" "monitoring_alloydb_databaseUser" {
+  project = var.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.monitoring_sa.email}"
+}
+
+resource "google_alloydb_user" "monitoring_db_user" {
+  cluster    = google_alloydb_cluster.main.name
+  user_id    = replace(google_service_account.monitoring_sa.email, ".gserviceaccount.com", "")
+  user_type  = "ALLOYDB_IAM_USER"
+  depends_on = [google_alloydb_instance.primary]
+  lifecycle {
+    ignore_changes = [
+    database_roles]
+  }
 }
 
 

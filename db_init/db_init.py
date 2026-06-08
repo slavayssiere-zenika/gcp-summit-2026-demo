@@ -67,6 +67,34 @@ async def grant_permissions(conn: asyncpg.Connection, user: str, db_name: str, l
         print(f"  ✓ Permissions accordées sur '{db_name}' → {label} '{user}'", flush=True)
 
 
+async def grant_read_only_permissions(
+    conn: asyncpg.Connection, user: str, db_name: str, label: str = "monitoring"
+) -> None:
+    """Octroie les permissions de lecture seule sur le schéma public à un utilisateur IAM.
+
+    Idempotent : GRANT sur un droit déjà accordé est silencieux en PostgreSQL.
+    """
+    grants = [
+        f'GRANT USAGE ON SCHEMA public TO "{user}";',
+        f'GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{user}";',
+        f'GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO "{user}";',
+        f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "{user}";',
+        f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO "{user}";',
+    ]
+    errors = []
+    for stmt in grants:
+        try:
+            await conn.execute(stmt)
+        except Exception as e:
+            errors.append(f"    WARN ({stmt[:40]}...): {e}")
+
+    if errors:
+        for err in errors:
+            print(err, flush=True)
+    else:
+        print(f"  ✓ Permissions de lecture seule accordées sur '{db_name}' → {label} '{user}'", flush=True)
+
+
 async def main() -> None:
     root_pw = get_env("ROOT_DB_URL")
     db_ip = get_env("DB_IP")
@@ -76,6 +104,7 @@ async def main() -> None:
     admin_user = get_env("ADMIN_USER", required=False)
 
     root_pw_encoded = urllib.parse.quote(root_pw, safe="")
+    monitoring_user = f"sa-monitoring-{env_name}-{sa_suffix}@{project_id}.iam"
     master_dsn = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/postgres?sslmode=require"
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -125,6 +154,7 @@ async def main() -> None:
 
         try:
             await grant_permissions(svc_conn, iam_user, svc, label="service")
+            await grant_read_only_permissions(svc_conn, monitoring_user, svc, label="monitoring")
             if admin_user:
                 await grant_permissions(svc_conn, admin_user, svc, label="admin")
         finally:
@@ -163,6 +193,7 @@ async def main() -> None:
             extra_conn = await asyncpg.connect(extra_dsn)
             try:
                 await grant_permissions(extra_conn, extra_iam_user, extra_db, label="extra-project")
+                await grant_read_only_permissions(extra_conn, monitoring_user, extra_db, label="monitoring")
                 if admin_user:
                     await grant_permissions(extra_conn, admin_user, extra_db, label="admin")
             finally:

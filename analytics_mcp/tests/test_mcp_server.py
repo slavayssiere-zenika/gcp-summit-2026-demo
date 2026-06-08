@@ -18,6 +18,7 @@ from mcp_server import call_tool, list_tools
 # Tests log_ai_consumption
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch('mcp_server.client')
 async def test_log_ai_consumption_success(mock_client):
@@ -98,7 +99,9 @@ async def test_get_finops_report_daily(mock_client):
         ("total_output", 200),
         ("estimated_cost_usd", 0.000135),
     ]))
-    mock_row.keys = MagicMock(return_value=["period", "user_email", "action", "total_input", "total_output", "estimated_cost_usd"])
+    mock_row.keys = MagicMock(return_value=[
+        "period", "user_email", "action", "total_input", "total_output", "estimated_cost_usd"
+    ])
     # Simulation dict(row)
     mock_bq_row = {
         "period": "2026-04-15",
@@ -161,11 +164,10 @@ async def test_get_finops_report_weekly(mock_client):
     assert isinstance(data, list)
 
 
-
-
 # ---------------------------------------------------------------------------
 # Tests gestion d'erreur générale
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 @patch('mcp_server.client')
@@ -223,6 +225,7 @@ async def test_list_tools_returns_all_expected_tools():
         "get_market_demand_volume",
         "log_ai_consumption",
         "get_finops_report",
+        "get_usage_statistics",
     ]
     for tool in expected_tools:
         assert tool in tool_names, f"Tool '{tool}' manquant dans list_tools()"

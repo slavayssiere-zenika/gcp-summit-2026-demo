@@ -361,3 +361,8 @@ variable "sre_alert_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "sre_chat_webhook_url" {
+  description = "URL du webhook Google Chat pour les alertes SRE."
+  type        = string
+}

@@ -473,7 +473,7 @@ def _update_lb_routes_and_apply(
         "-auto-approve", "-lock-timeout=60s",
     ] + tf_vars
     logger.info(f"  [lb-routes] Running: {' '.join(apply_cmd)}")
-    result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=180)
+    result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         logger.warning(
             f"  [lb-routes] Apply ciblé échoué :\n{(result.stdout + result.stderr)[-500:]}"
@@ -515,7 +515,7 @@ def _detach_extra_project_routes(env: str, project_id: str) -> None:
         "-auto-approve", "-lock-timeout=60s",
     ] + tf_vars
     logger.info(f"  [destroy-lb] Running: {' '.join(apply_cmd)}")
-    result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=180)
+    result = subprocess.run(apply_cmd, cwd=TERRAFORM_DIR, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         logger.warning(
             f"  [destroy-lb] Échec du détachement des routes (apply ciblé) :\n"
@@ -1056,9 +1056,35 @@ def resource_exists_in_gcp(resource_type, name, project_id):
                              "--project", project_id, "--format=json"], capture_output=True)
         return res.returncode == 0
     elif resource_type == "backend_service":
-        res = subprocess.run(["gcloud", "compute", "backend-services", "describe", name,
-                             "--global", "--project", project_id, "--format=json"], capture_output=True)
-        return res.returncode == 0
+        region = None
+        if "/" in name:
+            parts = name.split("/")
+            if "regions" in parts:
+                try:
+                    r_idx = parts.index("regions")
+                    region = parts[r_idx + 1]
+                except (ValueError, IndexError):
+                    pass
+            name = parts[-1]
+
+        if region:
+            res = subprocess.run([
+                "gcloud", "compute", "backend-services", "describe", name,
+                "--region", region, "--project", project_id, "--format=json"
+            ], capture_output=True)
+            return res.returncode == 0
+        else:
+            res = subprocess.run([
+                "gcloud", "compute", "backend-services", "describe", name,
+                "--global", "--project", project_id, "--format=json"
+            ], capture_output=True)
+            if res.returncode == 0:
+                return True
+            res = subprocess.run([
+                "gcloud", "compute", "backend-services", "describe", name,
+                "--region", "europe-west1", "--project", project_id, "--format=json"
+            ], capture_output=True)
+            return res.returncode == 0
     return False
 
 
@@ -1204,6 +1230,20 @@ def build_importable_resources_map(env, project_id, region, extra_domains=None):
         "google_dns_managed_zone.internal_zone": f"{dns_base}/internal-zone-{env}",
         # ── SSL Certificate ──────────────────────────────────────────────────
         "google_compute_managed_ssl_certificate.default": f"projects/{project_id}/global/sslCertificates/ssl-{env}",
+        # ── Pub/Sub Topics ───────────────────────────────────────────────────
+        "google_pubsub_topic.cv_import_events_dead_letter": f"projects/{project_id}/topics/zenika-cv-import-events-dead-letter-{env}",  # noqa: E501
+        "google_pubsub_topic.cv_import_events": f"projects/{project_id}/topics/zenika-cv-import-events-{env}",
+        "google_pubsub_topic.user_events": f"projects/{project_id}/topics/zenika-user-events-{env}",
+        "google_pubsub_topic.data_quality_events": f"projects/{project_id}/topics/zenika-data-quality-events-{env}",
+        # ── Pub/Sub Schemas ──────────────────────────────────────────────────
+        "google_pubsub_schema.data_quality_schema": f"projects/{project_id}/schemas/data-quality-schema-v2-{env}",
+        # ── Pub/Sub Subscriptions ────────────────────────────────────────────
+        "google_pubsub_subscription.cv_import_events_sub": f"projects/{project_id}/subscriptions/cv-import-events-sub-{env}",  # noqa: E501
+        "google_pubsub_subscription.cv_import_events_dlq_sub": f"projects/{project_id}/subscriptions/cv-import-events-dlq-sub-{env}",  # noqa: E501
+        "google_pubsub_subscription.cv_api_sub": f"projects/{project_id}/subscriptions/cv-api-user-events-sub-{env}",
+        "google_pubsub_subscription.items_api_sub": f"projects/{project_id}/subscriptions/items-api-user-events-sub-{env}",  # noqa: E501
+        "google_pubsub_subscription.competencies_api_sub": f"projects/{project_id}/subscriptions/competencies-api-user-events-sub-{env}",  # noqa: E501
+        "google_pubsub_subscription.data_quality_bq_sub": f"projects/{project_id}/subscriptions/data-quality-bq-sub-{env}",  # noqa: E501
     }
 
     # ── Zones DNS additionnelles (extra_domains) ──────────────────────
@@ -1632,8 +1672,21 @@ def _post_deploy_frontend_sync(env, project_id, frontend_version=None, ctx_to_us
         output_lower = (rsync_res.stdout + rsync_res.stderr).lower()
 
         # Simple heuristic: if 'copying' or 'removing' is in the output, something was actually synced
-        if "copying " in output_lower or "removing " in output_lower:
+        if "copying" in output_lower or "removing" in output_lower:
             print("[*] Frontend changes synced successfully!")
+            print("[*] Setting Cache-Control headers on GCS bucket...")
+            subprocess.run([
+                "gcloud", "storage", "objects", "update",
+                f"gs://{target_bucket}/index.html",
+                "--cache-control=no-store, no-cache, must-revalidate, max-age=0"
+            ], capture_output=True)
+
+            subprocess.run([
+                "gcloud", "storage", "objects", "update",
+                f"gs://{target_bucket}/assets/**",
+                "--cache-control=public, max-age=31536000, immutable"
+            ], capture_output=True)
+
             print("[*] Invalidating Cloud CDN Cache to serve the new Frontend immediately...")
             res_cdn = subprocess.run([
                 "gcloud", "compute", "url-maps", "invalidate-cdn-cache",
@@ -1899,6 +1952,9 @@ def _seed_prompts(api_dns_name, access_token, ctx_to_use):
         "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
         "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
         "agent_ops_api.sre_triage.system_instruction": "agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt",
+        "agent_ops_api.daily_report.system_instruction": (
+            "agent_ops_api/agent_ops_api.daily_report.system_instruction.txt"
+        ),
         "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
@@ -2743,7 +2799,8 @@ def rag_calibrate(
     Retourne True si calibrage réussi ou ignoré, False si erreur bloquante.
     """
     script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    golden_path = os.path.join(script_dir, "cv_api", "eval", "golden_queries.json")
+    filename = "golden_queries.json" if env in ("dev", "local") else f"golden_queries_{env}.json"
+    golden_path = os.path.join(script_dir, "cv_api", "eval", filename)
     log_dir = os.path.join(script_dir, "logs")
     os.makedirs(log_dir, exist_ok=True)
 
@@ -2756,7 +2813,7 @@ def rag_calibrate(
     print("=======================================================")
 
     if not os.path.exists(golden_path):
-        logger.warning(f"[RAG] golden_queries.json introuvable : {golden_path} — calibrage ignoré.")
+        logger.warning(f"[RAG] {filename} introuvable : {golden_path} — calibrage ignoré.")
         return True  # Non-bloquant
 
     with open(golden_path, encoding="utf-8") as f:
@@ -2809,7 +2866,7 @@ def rag_calibrate(
         return False
 
     # ── Étape 2 : Injection automatique dans golden_queries.json ──────────────
-    print("\n[*] RAG Calibration — Étape 2/3 : Injection dans golden_queries.json...")
+    print(f"\n[*] RAG Calibration — Étape 2/3 : Injection dans {filename}...")
     updated = 0
     for case in cases:
         cid = case["id"]
@@ -2888,7 +2945,26 @@ def rag_calibrate(
             "Relancez : python3 platform-engineering/manage_env.py rag-calibrate --env prd"
         )
     else:
-        print("  [+] Calibrage complet — golden_queries.json est à jour et versionné.")
+        print(f"  [+] Calibrage complet — {filename} est à jour et versionné.")
+        print(f"\n[*] RAG Calibration — Étape 4/3 : Upload de {filename} sur le GCS du Frontend...")
+        try:
+            gcloud_bin = os.environ.get("GCLOUD_BIN", "gcloud")
+            prefix_pattern = f"gs://frontend-{env}-{project_id}-*"
+            res_ls = subprocess.run(
+                [gcloud_bin, "storage", "ls", "--project", project_id, "-b", prefix_pattern],
+                capture_output=True, text=True, check=True
+            )
+            bucket_url = res_ls.stdout.strip().splitlines()[0]
+            subprocess.run(
+                [
+                    gcloud_bin, "storage", "cp", "--project", project_id,
+                    golden_path, f"{bucket_url.rstrip('/')}/{filename}"
+                ],
+                check=True, capture_output=True
+            )
+            print(f"  [+] Uploadé avec succès sur {bucket_url.rstrip('/')}/{filename}")
+        except Exception as e_upload:
+            logger.warning(f"[RAG] Impossible d'uploader sur GCS : {e_upload}")
 
     return all_ok
 
@@ -2910,11 +2986,12 @@ def rag_run_eval(
     """
 
     script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    golden_path = os.path.join(script_dir, "cv_api", "eval", "golden_queries.json")
+    filename = "golden_queries.json" if env in ("dev", "local") else f"golden_queries_{env}.json"
+    golden_path = os.path.join(script_dir, "cv_api", "eval", filename)
     test_env_pytest = os.path.join(script_dir, "test_env", "bin", "pytest")
 
     if not os.path.exists(golden_path):
-        logger.warning("[RAG Eval] golden_queries.json introuvable — eval ignoree.")
+        logger.warning(f"[RAG Eval] {filename} introuvable — eval ignoree.")
         return True
 
     if not os.path.exists(test_env_pytest):
@@ -2932,6 +3009,7 @@ def rag_run_eval(
         **os.environ,
         "RAG_EVAL_BASE_URL": cv_base,
         "RAG_EVAL_TOKEN": access_token,
+        "RAG_EVAL_ENV": env,
         "RAG_EVAL_DRY_RUN": "false",
         "RAG_EVAL_RECALL_THRESHOLD": str(recall_threshold),
         "RAG_EVAL_TOP_K": "5",
@@ -3281,7 +3359,7 @@ if __name__ == "__main__":
         for r in known_lb_routes:
             bs_id = r.get("backend_service_id", "")
             bs_name = bs_id.split("/")[-1] if "/" in bs_id else bs_id
-            if bs_name and resource_exists_in_gcp("backend_service", bs_name, project_id):
+            if bs_id and resource_exists_in_gcp("backend_service", bs_id, project_id):
                 valid_lb_routes.append(r)
             else:
                 logger.info(

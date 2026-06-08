@@ -87,6 +87,7 @@ async def assign_competencies_bulk(
     async with acquire_shielded(sem):
         body = await request.json()
         competency_ids = body.get("competency_ids", [])
+        competency_ids = [cid for cid in competency_ids if isinstance(cid, int) and not isinstance(cid, bool)]
         if not competency_ids:
             return {"assigned": 0, "skipped": 0, "message": "Aucune compétence fournie."}
 

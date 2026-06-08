@@ -12,7 +12,7 @@ async def handle_search_competencies(client, arguments: dict, headers: dict, api
 
 async def handle_get_competency(client, arguments: dict, headers: dict, api_base_url: str):
 
-    response = await client.get(f"{api_base_url}/{arguments['competency_id']}/", timeout=10.0)
+    response = await client.get(f"{api_base_url}/{arguments['competency_id']}", timeout=10.0)
     response.raise_for_status()
     return [TextContent(type="text", text=json.dumps(response.json()))]
 

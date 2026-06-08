@@ -8,6 +8,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "aiofiles"
+version = "25.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/c3/534eac40372d8ee36ef40df62ec129bee4fdb5ad9706e58a29be53b2c970/aiofiles-25.1.0.tar.gz", hash = "sha256:a8d728f0a29de45dc521f18f07297428d56992a742f0cd2701ba86e44d23d5b2", size = 46354, upload-time = "2025-10-09T20:51:04.358Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl", hash = "sha256:abe311e527c862958650f9438e859c1fa7568a141b22abcd015e120e86a85695", size = 14668, upload-time = "2025-10-09T20:51:03.174Z" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -410,6 +419,46 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c6/ad/ff781329bbbdc0974a098d996e89c9e1f7024262f9e3eec442fbb9ad1ac6/google_auth-2.53.0.tar.gz", hash = "sha256:e7e6aa16f6bee7b2b264830fd04f08087a1d5a836df516251a5d15327b246c9c", size = 335844, upload-time = "2026-05-15T20:53:07.928Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4a/c9/db44165ba7c581268c6d46017ef63339110378305062830104fc7fa144cb/google_auth-2.53.0-py3-none-any.whl", hash = "sha256:6e7449917c599b35126a99ec268ec6880301f2fea41dce198fe8fd83ff642b68", size = 246071, upload-time = "2026-05-15T20:53:05.609Z" },
+]
+
+[[package]]
+name = "google-cloud-alloydb"
+version = "0.10.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f6/b2/6e25926dcddae31a596be9cf54f2c02f10732d24def2bbfe1a2e99d08631/google_cloud_alloydb-0.10.0.tar.gz", hash = "sha256:7d67d6a27827006f28dd05ac45b43523e9933b4744babb9c9d461775efd78c4a", size = 697547, upload-time = "2026-06-03T14:52:30.464Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/bb/e9aae24b3209e98f8d52dc50149f4bca33f54c866c30214d7cca678e86b3/google_cloud_alloydb-0.10.0-py3-none-any.whl", hash = "sha256:1fdb026abbfb882d7ee4951433de171d75e63bc3dbbedf651a0538351acfd580", size = 536784, upload-time = "2026-06-03T14:51:42.904Z" },
+]
+
+[[package]]
+name = "google-cloud-alloydb-connector"
+version = "1.13.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiofiles" },
+    { name = "cryptography" },
+    { name = "google-api-core" },
+    { name = "google-auth" },
+    { name = "google-cloud-alloydb" },
+    { name = "protobuf" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/17/f67e6eece8f1742aacefbd169354622fed4624888d298e107ce889b0d491/google_cloud_alloydb_connector-1.13.0.tar.gz", hash = "sha256:f4d43dc37c59590b6162afc4df612bdc92b808abc4c2f3823f9f7e1243ccddb9", size = 34157, upload-time = "2026-05-12T17:52:06.396Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/5f/0332d8729efc0c082a7e7d2baeddf80801837809931b9ea448026c9ee80c/google_cloud_alloydb_connector-1.13.0-py3-none-any.whl", hash = "sha256:bc4ec1bf1cd75790924e1f825dbe58a978c8b29a3fb39a6803ad8ec362673176", size = 46921, upload-time = "2026-05-12T17:52:05.092Z" },
+]
+
+[package.optional-dependencies]
+asyncpg = [
+    { name = "asyncpg" },
 ]
 
 [[package]]
@@ -857,6 +906,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "asyncpg" },
     { name = "fastapi" },
+    { name = "google-cloud-alloydb-connector", extra = ["asyncpg"] },
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-logging" },
     { name = "google-cloud-pubsub" },
@@ -884,6 +934,7 @@ dependencies = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.136.0" },
+    { name = "google-cloud-alloydb-connector", extras = ["asyncpg"], specifier = ">=1.13.0" },
     { name = "google-cloud-bigquery", specifier = ">=3.11.0" },
     { name = "google-cloud-logging", specifier = ">=3.8.0" },
     { name = "google-cloud-pubsub", specifier = ">=2.38.0" },

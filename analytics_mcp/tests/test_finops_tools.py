@@ -4,7 +4,11 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, AsyncMock
 
-from tools.finops_tools import handle_detect_usage_anomalies, handle_get_aiops_dashboard_data
+from tools.finops_tools import (
+    handle_detect_usage_anomalies,
+    handle_get_aiops_dashboard_data,
+    handle_get_usage_statistics,
+)
 
 
 @pytest.mark.asyncio
@@ -21,7 +25,11 @@ async def test_handle_detect_usage_anomalies():
             self.window_end = end
 
     mock_query_job.result.return_value = [
-        MockRow("test@example.com", 60000, 10, datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc))
+        MockRow(
+            "test@example.com", 60000, 10,
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=timezone.utc),
+        )
     ]
     mock_client.query.return_value = mock_query_job
 
@@ -135,3 +143,101 @@ async def test_handle_log_ai_consumption_null_email():
     assert "Error:" in result[0].text
     assert "user_email" in result[0].text
     client.insert_rows_json.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests handle_get_usage_statistics
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_handle_get_usage_statistics_happy_path():
+    """handle_get_usage_statistics retourne les métriques BigQuery pour une date donnée."""
+    mock_client = MagicMock()
+
+    class MockRow:
+        unique_visitors = 42
+        total_requests = 1500
+        router_requests = 800
+        agent_queries = 150
+
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = [MockRow()]
+    mock_client.query.return_value = mock_query_job
+
+    args = {"date": "2026-06-07"}
+    result = await handle_get_usage_statistics(args, mock_client, "my-project", "finops_prd")
+
+    assert len(result) == 1
+    data = json.loads(result[0].text)
+    assert data["date"] == "2026-06-07"
+    assert data["unique_visitors"] == 42
+    assert data["total_requests"] == 1500
+    assert data["router_requests"] == 800
+    assert data["agent_queries"] == 150
+    assert data["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_handle_get_usage_statistics_no_data():
+    """handle_get_usage_statistics retourne status no_data si la requête retourne 0 lignes."""
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = []  # Aucune ligne
+    mock_client.query.return_value = mock_query_job
+
+    args = {"date": "2026-06-07"}
+    result = await handle_get_usage_statistics(args, mock_client, "my-project", "finops_prd")
+
+    assert len(result) == 1
+    data = json.loads(result[0].text)
+    assert data["status"] == "no_data"
+    assert data["unique_visitors"] == 0
+    assert data["total_requests"] == 0
+
+
+@pytest.mark.asyncio
+async def test_handle_get_usage_statistics_fallback_on_exception():
+    """handle_get_usage_statistics retourne status fallback_no_table si BigQuery lève une exception."""
+    mock_client = MagicMock()
+    mock_client.query.side_effect = Exception("Table not found in location US")
+
+    args = {"date": "2026-06-07"}
+    result = await handle_get_usage_statistics(args, mock_client, "my-project", "finops_prd")
+
+    assert len(result) == 1
+    data = json.loads(result[0].text)
+    assert data["status"] == "fallback_no_table"
+    assert data["unique_visitors"] == "[N/D]"
+    assert data["total_requests"] == "[N/D]"
+    assert "Table not found" in data.get("error_detail", "")
+
+
+@pytest.mark.asyncio
+async def test_handle_get_usage_statistics_default_date_yesterday():
+    """handle_get_usage_statistics utilise la date de la veille si l'argument date est absent."""
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = []
+    mock_client.query.return_value = mock_query_job
+
+    from datetime import datetime, timedelta, timezone
+    expected_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    args = {}  # Pas de date fournie
+    result = await handle_get_usage_statistics(args, mock_client, "my-project", "finops_prd")
+
+    assert len(result) == 1
+    data = json.loads(result[0].text)
+    assert data["date"] == expected_date, f"La date par défaut devrait être {expected_date}"
+
+
+@pytest.mark.asyncio
+async def test_handle_get_usage_statistics_client_none():
+    """handle_get_usage_statistics retourne un fallback propre si le client BigQuery est None."""
+    args = {"date": "2026-06-07"}
+    result = await handle_get_usage_statistics(args, None, "my-project", "finops_prd")
+
+    assert len(result) == 1
+    data = json.loads(result[0].text)
+    assert data["status"] == "fallback_no_table"
+    assert data["unique_visitors"] == "[N/D]"

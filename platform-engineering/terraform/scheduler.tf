@@ -221,3 +221,36 @@ resource "google_cloud_scheduler_job" "sre_triage_agent_ops" {
     }
   }
 }
+
+# ==============================================================
+# Rapport quotidien SRE d'usage de la veille
+# Du lundi au vendredi à 10h00 (heure de Paris)
+# ==============================================================
+resource "google_cloud_scheduler_job" "sre_daily_report" {
+  name             = "sre-daily-report-${terraform.workspace}"
+  description      = "Rapport quotidien SRE d'usage de la veille (visiteurs, requêtes, KPIs)."
+  schedule         = "0 10 * * 1-5"
+  time_zone        = "Europe/Paris"
+  attempt_deadline = "600s"
+  region           = var.region
+  project          = var.project_id
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.agent_ops_api.uri}/tasks/daily-report"
+
+    body = base64encode(jsonencode({}))
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    # OIDC : le SA agent_ops appelle son propre service Cloud Run
+    # Conforme AGENTS.md §4 — pas de JWT applicatif pour les tâches automatisées
+    oidc_token {
+      service_account_email = google_service_account.agent_ops_sa.email
+      audience              = google_cloud_run_v2_service.agent_ops_api.uri
+    }
+  }
+}
+

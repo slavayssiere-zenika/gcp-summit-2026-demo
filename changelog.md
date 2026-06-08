@@ -1,3 +1,264 @@
+## Mise à jour automatique - 2026-06-08 13:58:53
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2743  | 608  |  78% |
+| agent_hr_api     | 1564  | 102  |  93% |
+| agent_missions_api | 1927  | 90   |  95% |
+| agent_ops_api    | 2105  | 191  |  91% |
+| agent_router_api | 3588  | 516  |  86% |
+| analytics_mcp    | 1100  | 206  |  81% |
+| competencies_api | 5728  | 901  |  84% |
+| cv_api           | 10433 | 1540 |  85% |
+| drive_api        | 3504  | 413  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2231  | 281  |  87% |
+| monitoring_mcp   | 1359  | 187  |  86% |
+| platform-engineering | 2299  | 1553 |  32% |
+| prompts_api      | 1350  | 252  |  81% |
+| scratch          | N/A   | N/A  | N/A  |
+| scripts          | N/A   | N/A  | N/A  |
+| shared           | 2937  | 301  |  90% |
+| tests            | 578   | 38   |  93% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- [rag-calibrate] prd: golden dataset mis à jour (manual)
+- [rag-calibrate] prd: golden dataset mis à jour (manual)
+- [rag-calibrate] dev: golden dataset mis à jour (manual)
+- [rag-calibrate] dev: golden dataset mis à jour (manual)
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/README.md` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/sre_triage.py` (M)
+- `agent_ops_api/tests/test_sre_triage.py` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/README.md` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/mcp_server.py` (M)
+- `analytics_mcp/tests/test_finops_tools.py` (M)
+- `analytics_mcp/tests/test_mcp_server.py` (M)
+- `analytics_mcp/tools/finops_tools.py` (M)
+- `changelog.md` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/src/competencies/assignments_router.py` (M)
+- `competencies_api/tools/tree_tools.py` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/eval/rag_quality_eval.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/services/cv_storage_service.py` (M)
+- `cv_api/src/services/data_quality_service.py` (M)
+- `db_init/FILE_HASHES` (M)
+- `db_init/HASH` (M)
+- `db_init/VERSION` (M)
+- `db_init/db_init.py` (M)
+- `db_migrations/FILE_HASHES` (M)
+- `db_migrations/HASH` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/users/changelog.yaml` (M)
+- `docker-compose.yml` (M)
+- `docs/pipelines.md` (M)
+- `drive_api/spec.md` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/prompts_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `locust/locustfile.py` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/pyproject.toml` (M)
+- `monitoring_mcp/tools/data_tools.py` (M)
+- `monitoring_mcp/tools/pipeline_tools.py` (M)
+- `monitoring_mcp/uv.lock` (M)
+- `platform-engineering/EXTRA_PROJECT_TEMPLATE.md` (M)
+- `platform-engineering/bundled_prompts/agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt` (M)
+- `platform-engineering/envs/dev.yaml` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/envs/uat.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/alerting.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_monitoring.tf` (M)
+- `platform-engineering/terraform/lb-internal.tf` (M)
+- `platform-engineering/terraform/lb.tf` (M)
+- `platform-engineering/terraform/scheduler.tf` (M)
+- `platform-engineering/terraform/secrets.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `platform-engineering/tests/test_manage_env.py` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/mcp_server.py` (M)
+- `prompts_api/spec.md` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/generate_gcp_summit_data.py` (M)
+- `scripts/seed_data.py` (M)
+- `scripts/sync_prompts.py` (M)
+- `sre_report.md` (M)
+- `agent_ops_api/agent_ops_api.daily_report.system_instruction.txt` (??)
+- `agent_ops_api/tests/test_sre_internals.py` (??)
+- `docs/analyses_pipelines_ia.md` (??)
+- `platform-engineering/bundled_prompts/agent_ops_api/agent_ops_api.daily_report.system_instruction.txt` (??)
+- `run_git_push.sh` (??)
+
+---
+
+## Mise à jour automatique - 2026-06-08 13:42:51
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2743  | 608  |  78% |
+| agent_hr_api     | 1564  | 102  |  93% |
+| agent_missions_api | 1927  | 90   |  95% |
+| agent_ops_api    | 2105  | 191  |  91% |
+| agent_router_api | 3588  | 516  |  86% |
+| analytics_mcp    | 1100  | 206  |  81% |
+| competencies_api | 5728  | 901  |  84% |
+| cv_api           | 10433 | 1540 |  85% |
+| drive_api        | 3504  | 413  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2231  | 281  |  87% |
+| monitoring_mcp   | 1359  | 187  |  86% |
+| platform-engineering | 2299  | 1553 |  32% |
+| prompts_api      | 1350  | 252  |  81% |
+| scratch          | N/A   | N/A  | N/A  |
+| scripts          | N/A   | N/A  | N/A  |
+| shared           | 2937  | 301  |  90% |
+| tests            | 578   | 38   |  93% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- [rag-calibrate] prd: golden dataset mis à jour (manual)
+- [rag-calibrate] prd: golden dataset mis à jour (manual)
+- [rag-calibrate] dev: golden dataset mis à jour (manual)
+- [rag-calibrate] dev: golden dataset mis à jour (manual)
+
+#### Fichiers (non commités)
+- `gent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/sre_triage.py` (M)
+- `agent_ops_api/tests/test_sre_triage.py` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/mcp_server.py` (M)
+- `analytics_mcp/tests/test_finops_tools.py` (M)
+- `analytics_mcp/tests/test_mcp_server.py` (M)
+- `analytics_mcp/tools/finops_tools.py` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/src/competencies/assignments_router.py` (M)
+- `competencies_api/tools/tree_tools.py` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/eval/rag_quality_eval.py` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/services/cv_storage_service.py` (M)
+- `cv_api/src/services/data_quality_service.py` (M)
+- `db_init/FILE_HASHES` (M)
+- `db_init/HASH` (M)
+- `db_init/VERSION` (M)
+- `db_init/db_init.py` (M)
+- `db_migrations/FILE_HASHES` (M)
+- `db_migrations/HASH` (M)
+- `db_migrations/VERSION` (M)
+- `db_migrations/changelogs/users/changelog.yaml` (M)
+- `docker-compose.yml` (M)
+- `drive_api/spec.md` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/prompts_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `locust/locustfile.py` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/pyproject.toml` (M)
+- `monitoring_mcp/tools/data_tools.py` (M)
+- `monitoring_mcp/tools/pipeline_tools.py` (M)
+- `monitoring_mcp/uv.lock` (M)
+- `platform-engineering/EXTRA_PROJECT_TEMPLATE.md` (M)
+- `platform-engineering/bundled_prompts/agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt` (M)
+- `platform-engineering/envs/dev.yaml` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/envs/uat.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/alerting.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_monitoring.tf` (M)
+- `platform-engineering/terraform/lb-internal.tf` (M)
+- `platform-engineering/terraform/lb.tf` (M)
+- `platform-engineering/terraform/scheduler.tf` (M)
+- `platform-engineering/terraform/secrets.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `platform-engineering/tests/test_manage_env.py` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/mcp_server.py` (M)
+- `prompts_api/spec.md` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/generate_gcp_summit_data.py` (M)
+- `scripts/seed_data.py` (M)
+- `scripts/sync_prompts.py` (M)
+- `sre_report.md` (M)
+- `agent_ops_api/agent_ops_api.daily_report.system_instruction.txt` (??)
+- `agent_ops_api/tests/test_sre_internals.py` (??)
+- `docs/analyses_pipelines_ia.md` (??)
+- `platform-engineering/bundled_prompts/agent_ops_api/agent_ops_api.daily_report.system_instruction.txt` (??)
+
+---
+
 ## Mise à jour automatique - 2026-05-29 18:41:36
 
 ### Couverture de Code

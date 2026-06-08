@@ -1,5 +1,4 @@
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
-06116b42615a17b1fd3f9a3c4447eaa8ec69c7f7  ./prompts_api/mcp_server.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0af3abc983848cfb585da536c6b7cbcbfd7ec10e  ./prompts_api/tests/test_zero_trust.py
@@ -54,6 +53,7 @@ c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./prompts_api/.dockerignore
+d45b279060113ec95429f7621749a5f212273feb  ./prompts_api/mcp_server.py
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./prompts_api/src/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./prompts_api/src/prompts/__init__.py

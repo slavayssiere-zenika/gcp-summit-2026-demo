@@ -25,6 +25,8 @@ from sqlalchemy.future import select
 from src.cvs.models import CVProfile
 from tenacity import AsyncRetrying, before_sleep_log, stop_after_attempt, wait_exponential, retry_if_exception
 
+from src.services.config import CLOUDRUN_WORKSPACE
+
 logger = logging.getLogger(__name__)
 
 # ── Constantes ─────────────────────────────────────────────────────────────────
@@ -399,10 +401,12 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
         # Structure Cloud Run : /app/src/services/data_quality_service.py → parents[2] = /app
         # Structure dev local : /…/cv_api/src/services/data_quality_service.py → parents[2] = cv_api/
         _svc_file = Path(__file__).resolve()
-        _candidate = _svc_file.parents[2] / "eval" / "golden_queries.json"
+        env = (CLOUDRUN_WORKSPACE or "dev").lower()
+        filename = "golden_queries.json" if env in ("dev", "local", "") else f"golden_queries_{env}.json"
+        _candidate = _svc_file.parents[2] / "eval" / filename
         if not _candidate.exists():
             # Fallback explicite Cloud Run si workdir non standard
-            _candidate = Path("/app/eval/golden_queries.json")
+            _candidate = Path(f"/app/eval/{filename}")
 
         if _candidate.exists():
             golden_data = json.loads(_candidate.read_text(encoding="utf-8"))
@@ -412,11 +416,12 @@ async def compute_data_quality_report(db: AsyncSession, auth_header: str) -> dic
             rag_recall_at_5 = round(rag_nb_cases_ok / rag_nb_cases, 4) if rag_nb_cases else None
         else:
             logger.warning(
-                "[data-quality] golden_queries.json introuvable (%s). RAG metrics non disponibles.",
+                "[data-quality] %s introuvable (%s). RAG metrics non disponibles.",
+                filename,
                 _candidate,
             )
     except Exception as exc:
-        logger.warning("[data-quality] Lecture golden_queries.json échouée (non-bloquant): %s", exc)
+        logger.warning("[data-quality] Lecture %s échouée (non-bloquant): %s", filename, exc)
 
     # ── 7. Métrique RAG Chunking (R7) — non-bloquant ──────────────────────────
     # Mesure l'état d'indexation de la table cv_mission_embeddings.

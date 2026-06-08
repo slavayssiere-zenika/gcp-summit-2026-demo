@@ -410,6 +410,9 @@ def wait_for_tree_recalculation(admin_password):
                 if status == "idle":
                     logger.info("  -> Competency Tree Recalculation idle. Exiting poll.")
                     break
+                if status == "applying":
+                    # L'étape apply est en cours — on attend sans avancer
+                    logger.info("  -> Apply step in progress — waiting...")
 
                 if status == "waiting_for_user" and batch_step in next_steps:
                     next_step = next_steps[batch_step]
@@ -438,6 +441,40 @@ def wait_for_tree_recalculation(admin_password):
                 logger.error(f"  -> Failed to check status: {res.text}")
 
             time.sleep(10)
+
+    # ── Garde-fou post-recalcul ─────────────────────────────────────────────
+    # L'arbre doit avoir des feuilles (≥20 compétences) avant que le bulk
+    # reanalyse puisse mapper quoi que ce soit. On attend jusqu'à 5 min.
+    logger.info("  -> Vérification de la complétude de l'arbre (garde-fou)...")
+    token = authenticate(admin_password)
+    for attempt in range(20):  # 20 × 15s = 5 min max
+        try:
+            with httpx.Client(
+                base_url=DEV_API_URL,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            ) as chk:
+                r = chk.get("/api/competencies/?limit=1")
+                if r.status_code == 200:
+                    total = r.json().get("total", 0)
+                    if total >= 20:
+                        logger.info(
+                            f"  -> Arbre complet : {total} compétences. "
+                            "Bulk reanalyse peut démarrer."
+                        )
+                        break
+                    logger.info(
+                        f"  -> Arbre encore incomplet ({total} compétences < 20). "
+                        f"Attente 15s... ({attempt + 1}/20)"
+                    )
+        except Exception as exc:
+            logger.warning(f"  -> Vérification arbre échouée : {exc}")
+        time.sleep(15)
+    else:
+        logger.warning(
+            "  -> ATTENTION : l'arbre semble incomplet après 5 min. "
+            "Le bulk reanalyse risque de ne rien assigner."
+        )
 
 
 def trigger_bulk_reanalyse(admin_password):
@@ -624,7 +661,10 @@ def trigger_bulk_scoring(admin_password):
         # ── Étape 1 : Pas de job en cours → lancer un nouveau job ───────────
         res = client.post(
             "/api/competencies/evaluations/bulk-scoring-all",
-            params={"delta_only": "true", "force": "false", "min_scored_threshold": 10},
+            # force=True : inclut TOUS les users avec compétences, pas seulement ceux
+            # sous le seuil. Indispensable sur base vierge ou arbre partiel.
+            # delta_only=True : ne re-score que les paires sans ai_score (économique).
+            params={"delta_only": "true", "force": "true"},
         )
         if res.status_code == 401:
             logger.warning("  -> JWT expired. Re-authenticating...")
@@ -632,11 +672,7 @@ def trigger_bulk_scoring(admin_password):
             client.headers["Authorization"] = f"Bearer {token}"
             res = client.post(
                 "/api/competencies/evaluations/bulk-scoring-all",
-                params={
-                    "delta_only": "true",
-                    "force": "false",
-                    "min_scored_threshold": 10,
-                },
+                params={"delta_only": "true", "force": "true"},
             )
 
         if res.status_code in [200, 202]:

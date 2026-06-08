@@ -112,6 +112,76 @@ async def handle_detect_usage_anomalies(arguments: dict, client, FINOPS_TABLE_RE
     }))]
 
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 async def handle_get_aiops_dashboard_data(get_aiops_dashboard_data_internal) -> list[TextContent]:
     data = await get_aiops_dashboard_data_internal()
     return [TextContent(type="text", text=json.dumps(data))]
+
+
+async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOPS_DATASET_ID) -> list[TextContent]:
+    date_str = arguments.get("date")  # Format: YYYY-MM-DD
+    if not date_str:
+        from datetime import datetime, timedelta, timezone
+        date_str = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Cloud Logging crée une table par jour : run_googleapis_com_requests_YYYYMMDD
+    # On requête via le wildcard table + _TABLE_SUFFIX pour cibler exactement 1 jour.
+    table_suffix = date_str.replace("-", "")  # "2026-06-07" -> "20260607"
+    wildcard_ref = f"`{PROJECT_ID}.{FINOPS_DATASET_ID}.run_googleapis_com_requests_*`"
+
+    query = f"""
+        SELECT
+            COUNT(DISTINCT httpRequest.remoteIp) as unique_visitors,
+            COUNT(*) as total_requests,
+            COUNTIF(resource.labels.service_name LIKE 'agent-router-api%') as router_requests,
+            COUNTIF(httpRequest.requestUrl LIKE '%/query%') as agent_queries
+        FROM {wildcard_ref}
+        WHERE _TABLE_SUFFIX = @table_suffix
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("table_suffix", "STRING", table_suffix)
+        ]
+    )
+
+    try:
+        if not client:
+            raise Exception("BigQuery client is not initialized.")
+        query_job = await asyncio.to_thread(client.query, query, job_config)
+        results = await asyncio.to_thread(query_job.result)
+        rows = list(results)
+        if rows:
+            row = rows[0]
+            stats = {
+                "date": date_str,
+                "unique_visitors": row.unique_visitors if row.unique_visitors is not None else 0,
+                "total_requests": row.total_requests if row.total_requests is not None else 0,
+                "router_requests": row.router_requests if row.router_requests is not None else 0,
+                "agent_queries": row.agent_queries if row.agent_queries is not None else 0,
+                "status": "success"
+            }
+        else:
+            stats = {
+                "date": date_str,
+                "unique_visitors": 0,
+                "total_requests": 0,
+                "router_requests": 0,
+                "agent_queries": 0,
+                "status": "no_data"
+            }
+    except Exception as e:
+        logger.warning("Error fetching BQ usage stats for date %s (table might not exist in local/dev): %s", date_str, e)
+        stats = {
+            "date": date_str,
+            "unique_visitors": "[N/D]",
+            "total_requests": "[N/D]",
+            "router_requests": "[N/D]",
+            "agent_queries": "[N/D]",
+            "status": "fallback_no_table",
+            "error_detail": str(e)
+        }
+
+    return [TextContent(type="text", text=json.dumps(stats))]

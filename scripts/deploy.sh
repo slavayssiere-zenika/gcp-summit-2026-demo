@@ -948,7 +948,7 @@ build_and_push_standard() {
   local TAG
 
   if [[ "$MODE" == "build" || "$MODE" == "both" ]]; then
-    if [ "$SKIP_UNCHANGED" = true ] && [ "$SERVICE" != "db_init" ] && ! has_changes "$SERVICE"; then
+    if [ "$SKIP_UNCHANGED" = true ] && ! has_changes "$SERVICE"; then
       echo -e "${YELLOW}--- Skipped $SERVICE (no changes detected since last deployment) ---${RESET}"
       DEPLOYS_SKIPPED+=("$SERVICE")
       return 0
@@ -1277,7 +1277,7 @@ build_and_upload_frontend() {
       gcloud storage objects update "gs://${DEV_BUCKET}/assets/**" --cache-control="public, max-age=31536000, immutable" 2>/dev/null || true
 
       echo "-> Invalidation du cache CDN (Google Cloud CDN)..."
-      gcloud compute url-maps invalidate-cdn-cache "lb-dev" --path "/*" --async --project "$PROJECT_ID" || echo "/!\ Attention: impossible d'invalider le cache CDN"
+      gcloud compute url-maps invalidate-cdn-cache "lb-${TF_WORKSPACE}" --path "/*" --async --project "$PROJECT_ID" || echo "/!\ Attention: impossible d'invalider le cache CDN"
       DEPLOYS_SUCCESS+=("frontend")
       save_service_hash "frontend"
     else
@@ -1443,7 +1443,7 @@ fi
 NEW_TARGETS=()
 for svc in "${TARGET_SERVICES[@]}"; do
   if [ "$svc" == "all" ]; then
-    NEW_TARGETS+=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend")
+    NEW_TARGETS+=("${APP_MICROSERVICES[@]}" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "db_init")
   else
     NEW_TARGETS+=("$svc")
   fi

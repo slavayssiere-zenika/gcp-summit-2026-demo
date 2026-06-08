@@ -56,7 +56,6 @@
 8738bf4bf3bd8937c3677f11f438636cb777ea52  ./shared/exception_handler.py
 88580c7566a0861e142b99d7cd68696641a2eb83  ./agent_commons/tests/test_prompt_loader_cache.py
 8d50f90a73d7211a53816c105fd6f5387da12717  ./agent_commons/tests/test_circuit_breaker_redis.py
-8d694a60db2df35a66cc13785275ddb8aae8b1ac  ./agent_missions_api/tests/test_mcp.py
 8d9bea4bb6b536285ca96aa438e32cec8814b60c  ./agent_missions_api/tests/test_session.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 94c3b88329e1cabede6ce6c196d4120eb855842b  ./agent_commons/tests/test_mcp_proxy.py
@@ -94,6 +93,7 @@ d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./agent_missions_api/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
+dad0c77005b8f8cfee290cad53e72cffd7a802da  ./agent_missions_api/tests/test_mcp.py
 df0108d780bd5648c1672b391c524728ca57cad7  ./shared/pyproject.toml
 e0e8c2669ba6484494e937ae5acaf4761fa3249d  ./agent_missions_api/tests/test_hitl_endpoints.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py

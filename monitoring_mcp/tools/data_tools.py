@@ -9,6 +9,7 @@ Tools exposés :
 
 import logging
 import os
+import re
 from datetime import datetime
 import redis
 from sqlalchemy import text
@@ -75,7 +76,34 @@ async def execute_read_only_query_internal(query: str, db_name: str = "zenika") 
     try:
 
         db_url = os.getenv("DATABASE_URL", f"postgresql+asyncpg://postgres:postgres@alloydb:5432/{db_name}")
-        engine = create_async_engine(db_url)
+        use_iam = os.getenv("USE_IAM_AUTH", "false").lower() == "true"
+        instance_uri = os.getenv("ALLOYDB_INSTANCE_URI")
+
+        if use_iam and instance_uri:
+            from google.cloud.alloydb.connector import AsyncConnector, IPTypes
+            db_user = "postgres"
+            if db_url.startswith("postgresql"):
+                m = re.match(r"postgresql(?:\+asyncpg)?://([^:]+)(?::[^@]*)?@[^/]+", db_url)
+                if m:
+                    db_user = m.group(1)
+
+            connector = AsyncConnector()
+
+            async def getconn():
+                return await connector.connect(
+                    instance_uri,
+                    "asyncpg",
+                    user=db_user,
+                    db=db_name,
+                    enable_iam_auth=True,
+                    ip_type=IPTypes.PRIVATE
+                )
+            engine = create_async_engine("postgresql+asyncpg://", async_creator=getconn)
+        else:
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            engine = create_async_engine(db_url)
+
         async with engine.connect() as conn:
             result = await conn.execute(text(query))
             rows = result.mappings().all()

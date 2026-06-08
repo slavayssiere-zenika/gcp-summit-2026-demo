@@ -64,17 +64,8 @@ resource "google_monitoring_notification_channel" "sre_email" {
 # ==============================================================================
 # 2b. Canal de notification Google Chat (webhook)
 # ==============================================================================
-# Lit l'URL du webhook depuis Secret Manager (sre-chat-webhook-<env>).
-# Ce secret est géré hors Terraform — à alimenter via :
-#   gcloud secrets versions add sre-chat-webhook-<env> --data-file=-
 # Cloud Monitoring supporte le type "webhook_tokenauth" pour Google Chat.
 # Le canal est partagé par toutes les alert policies (SRE triage + SLO burn rate).
-
-data "google_secret_manager_secret_version" "sre_chat_webhook_url" {
-  secret  = google_secret_manager_secret.sre_chat_webhook.secret_id
-  project = var.project_id
-  version = "latest"
-}
 
 resource "google_monitoring_notification_channel" "sre_chat" {
   project      = var.project_id
@@ -82,7 +73,7 @@ resource "google_monitoring_notification_channel" "sre_chat" {
   type         = "webhook_tokenauth"
 
   labels = {
-    url = data.google_secret_manager_secret_version.sre_chat_webhook_url.secret_data
+    url = var.sre_chat_webhook_url
   }
 
   force_delete = false

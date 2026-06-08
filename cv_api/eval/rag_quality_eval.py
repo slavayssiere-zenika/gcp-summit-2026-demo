@@ -39,13 +39,26 @@ import httpx
 import pytest
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-_GOLDEN_PATH = Path(__file__).parent / "golden_queries.json"
-
 # URL de base de l'API cv_api (sans trailing slash)
 # Exemples :
 #   Dev Cloud Run : https://api.dev.zenika.slavayssiere.fr/api/cv
 #   Local         : http://localhost:8004
 BASE_URL = os.getenv("RAG_EVAL_BASE_URL", "http://localhost:8004")
+
+# Détermination de l'environnement pour charger le bon golden dataset
+env = os.getenv("RAG_EVAL_ENV", os.getenv("CLOUDRUN_WORKSPACE", os.getenv("ENV", ""))).lower()
+if not env:
+    # Déduction depuis l'URL de l'API
+    url_lower = BASE_URL.lower()
+    if "prd" in url_lower:
+        env = "prd"
+    elif "uat" in url_lower:
+        env = "uat"
+    else:
+        env = "dev"
+
+filename = "golden_queries.json" if env in ("dev", "local", "") else f"golden_queries_{env}.json"
+_GOLDEN_PATH = Path(__file__).parent / filename
 
 # JWT Bearer token pour authentification
 API_TOKEN = os.getenv("RAG_EVAL_TOKEN", "")
@@ -67,10 +80,36 @@ TIMEOUT_S = float(os.getenv("RAG_EVAL_TIMEOUT", "30.0"))
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _load_golden_cases() -> list[dict]:
-    """Charge et valide les cas golden depuis le fichier JSON."""
-    with open(_GOLDEN_PATH, encoding="utf-8") as f:
-        data = json.load(f)
-    return data.get("cases", [])
+    """Charge et valide les cas golden depuis le fichier JSON (GCS avec fallback local)."""
+    # 1. Tenter de charger depuis l'URL GCS publique correspondante
+    try:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(BASE_URL)
+        if parsed.netloc and parsed.scheme:
+            host = parsed.netloc
+            if host.startswith("api."):
+                host = host[4:]
+            gcs_url = f"{parsed.scheme}://{host}/{filename}"
+            # Utiliser un timeout court pour éviter de figer le démarrage des tests
+            response = httpx.get(gcs_url, timeout=5.0)
+            if response.status_code == 200:
+                data = response.json()
+                cases = data.get("cases", [])
+                if cases:
+                    print(f"  [+] Golden dataset chargé depuis GCS : {gcs_url}")
+                    return cases
+    except Exception:
+        # Fallback silencieux en cas d'erreur réseau
+        pass
+
+    # 2. Fallback local
+    try:
+        with open(_GOLDEN_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("cases", [])
+    except Exception as e:
+        print(f"  [!] Impossible de charger le golden dataset local : {e}")
+        return []
 
 
 def _search(query: str, limit: int = TOP_K, agency: Optional[str] = None) -> list[dict]:

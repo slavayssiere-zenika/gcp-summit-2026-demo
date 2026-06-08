@@ -376,6 +376,35 @@ app.include_router(_history_router)
 app.include_router(protected_router)
 
 
+@app.post("/tasks/daily-report", tags=["Tasks"])
+async def daily_report(
+    request: Request,
+    scheduler_payload: dict = Depends(_verify_scheduler),
+):
+    """Génère et envoie le rapport quotidien d'usage de la veille."""
+    invoker = scheduler_payload.get("sub", "scheduler@system")
+    app_logger.info("[SRE Daily Report] Requête reçue — invoker=%s", invoker)
+
+    payload = {
+        "sub": invoker,
+        "role": "admin",
+        "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())
+    }
+    system_token = "Bearer " + jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    auth_header_var.set(system_token)
+
+    try:
+        from sre_triage import run_daily_report
+        report_text = await run_daily_report(
+            auth_token=system_token,
+            user_id=invoker,
+        )
+        return {"success": True, "report": report_text}
+    except Exception as exc:
+        app_logger.error("[SRE Daily Report] Erreur critique : %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur SRE Daily Report : {exc}")
+
+
 @app.post("/tasks/sre-triage", response_model=SreTriageReport, tags=["Tasks"])
 async def sre_triage(
     request: Request,

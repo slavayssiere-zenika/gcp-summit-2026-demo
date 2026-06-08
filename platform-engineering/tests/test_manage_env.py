@@ -811,9 +811,16 @@ class TestPostDeployFrontendSync:
         )
 
         # Mock subprocess.run
+        rsync_mock = MagicMock(returncode=0)
+        rsync_mock.stdout = ""
+        rsync_mock.stderr = "Copying file://... to gs://..."
+
         mock_run.side_effect = [
-            r1, r2, r3, MagicMock(returncode=0),
-            MagicMock(returncode=0), MagicMock(returncode=0)
+            r1, r2, r3, MagicMock(returncode=0),  # terraform output, ls, ls --long, cp
+            rsync_mock,                           # rsync
+            MagicMock(returncode=0),              # objects update index.html
+            MagicMock(returncode=0),              # objects update assets
+            MagicMock(returncode=0)               # invalidate-cdn-cache
         ]
 
         with patch("manage_env.tempfile.TemporaryDirectory") as mock_tmp:

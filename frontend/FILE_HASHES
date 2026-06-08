@@ -63,7 +63,6 @@
 7af01e1ebe38b2a1972dd363ec7715f6a87f02fc  ./frontend/src/components/agent/ConsultantAvailabilityCard.vue
 7baea944bcc475e5e029c1b68224cf1887db4c96  ./frontend/src/types/index.ts
 8409c261d1e24a08cebfe277da39198b470bfaef  ./frontend/src/style.css
-855c35446e7a0a0883c396b576a2dfc201044136  ./frontend/vitest.log
 8907cae430171ed070575a72bb61a0af7cdadf80  ./frontend/src/views/__tests__/Login.spec.ts
 89b936797db1af622d2a700191b3f081d9e6741f  ./frontend/src/components/ui/__tests__/ToastNotification.spec.ts
 89c443e9e52dd5a5592e1737055ae08f11c86a60  ./frontend/src/services/auth.ts
@@ -76,6 +75,7 @@
 a10c1060ebc51ed10f25e2cc832fda6fdf430371  ./frontend/src/components/onboarding/OnboardingTour.vue
 a5d8befcae9fd64acbed445962432e8fa876c51e  ./frontend/src/views/Competencies.vue
 a9f55bce18ee6bc559fed8373cdce23399fd44f8  ./frontend/src/views/__tests__/Competencies.spec.ts
+afee3e72b3aa0b672e010d35c4b4fa881b2553e2  ./frontend/vitest.log
 b015bc3f37724712dcaa5423928dc8d88b6329f8  ./frontend/src/views/HRSkillsToAcquire.vue
 b0a3b293e2aafe2cda33eba2e9759e4d38d82198  ./frontend/src/types/__tests__/index.spec.ts
 b1fa2fe2854f7c5a883a8ce0e903e19ca4724b24  ./frontend/src/utils/treeify.ts

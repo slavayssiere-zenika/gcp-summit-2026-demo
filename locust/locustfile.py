@@ -217,6 +217,7 @@ class ZenikaPerfUser(HttpUser):
         self.drive_api = os.getenv("DRIVE_API_URL", "http://drive_api:8006")
         self.prompts_api = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
         self.agent_router_api = os.getenv("AGENT_ROUTER_API_URL", "http://agent_router_api:8080")
+        self.agent_ops_api = os.getenv("AGENT_OPS_API_URL", "http://agent_ops_api:8080")
         self._login()
 
         # Intercept requests to refresh token and update headers dynamically
@@ -798,6 +799,85 @@ class ZenikaPerfUser(HttpUser):
             headers=self.headers,
             name="[Prompts] GET /prompts/{key}",
         )
+
+    # --- Agent Ops API — SRE & Rapport quotidien ---
+
+    @task(1)
+    def get_sre_triage_health(self):
+        """GET /health — verifie que agent_ops_api repond (healthcheck leger).
+
+        Poids 1 (faible frequence). Permet de mesurer la disponibilite
+        du service SRE independamment des appels LLM lourds.
+        """
+        with self.client.get(
+            f"{self.agent_ops_api}/health",
+            headers=self.headers,
+            name="[AgentOps] GET /health",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 200:
+                resp.success()
+            else:
+                resp.failure(f"[AgentOps] /health inattendu : HTTP {resp.status_code}")
+
+    @task(1)
+    def post_sre_triage(self):
+        """POST /tasks/sre-triage — declenche un triage SRE complet.
+
+        Endpoint charge (appel LLM + Cloud Logging + Cloud Monitoring).
+        En local sans GCP, l'agent peut retourner 503 (MCP non dispo) :
+        ce cas est accepte comme comportement attendu hors-GCP.
+        Poids 1 : appel rare, mais mesure la latence P99 sous 50 users.
+        """
+        with self.client.post(
+            f"{self.agent_ops_api}/tasks/sre-triage",
+            json={"hours": 1, "threshold_5xx": 5},
+            headers=self.headers,
+            name="[AgentOps] POST /tasks/sre-triage",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (200, 202):
+                data = resp.json()
+                if not isinstance(data, dict):
+                    resp.failure("[AgentOps] /tasks/sre-triage retourne un body non-dict")
+                else:
+                    resp.success()
+            elif resp.status_code == 503:
+                # Comportement attendu en local sans monitoring MCP GCP disponible
+                resp.success()
+            else:
+                resp.failure(
+                    f"[AgentOps] /tasks/sre-triage HTTP {resp.status_code}: {resp.text[:120]}"
+                )
+
+    @task(1)
+    def post_daily_report(self):
+        """POST /tasks/daily-report — declenche le rapport d'usage quotidien.
+
+        Endpoint charge (BigQuery + Cloud Logging + LLM).
+        En local sans GCP, l'agent peut retourner 503 (BigQuery non dispo) :
+        ce cas est accepte comme comportement attendu hors-GCP.
+        Poids 1 : appel rare pour ne pas saturer le LLM mock sous 50 users.
+        """
+        with self.client.post(
+            f"{self.agent_ops_api}/tasks/daily-report",
+            headers=self.headers,
+            name="[AgentOps] POST /tasks/daily-report",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (200, 202):
+                data = resp.json()
+                if not isinstance(data, dict):
+                    resp.failure("[AgentOps] /tasks/daily-report retourne un body non-dict")
+                else:
+                    resp.success()
+            elif resp.status_code == 503:
+                # Comportement attendu en local : BigQuery / analytics_mcp non connectes a GCP
+                resp.success()
+            else:
+                resp.failure(
+                    f"[AgentOps] /tasks/daily-report HTTP {resp.status_code}: {resp.text[:120]}"
+                )
 
     # --- Agent Router API ---
 

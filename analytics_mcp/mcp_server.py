@@ -1,5 +1,5 @@
 # flake8: noqa: E501
-from tools.finops_tools import handle_log_ai_consumption, handle_get_finops_report, handle_detect_usage_anomalies, handle_get_aiops_dashboard_data
+from tools.finops_tools import handle_log_ai_consumption, handle_get_finops_report, handle_detect_usage_anomalies, handle_get_aiops_dashboard_data, handle_get_usage_statistics
 from tools.market_tools import handle_get_top_market_skills, handle_get_market_demand_volume
 from tools.rag_quality_tools import handle_log_rag_quality_snapshot, handle_get_rag_quality_history
 from tools.sre_triage_tools import handle_log_sre_triage, handle_get_sre_trends
@@ -264,6 +264,16 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["env"]
             }
+        ),
+        Tool(
+            name="get_usage_statistics",
+            description="Récupère les statistiques de fréquentation et d'usage de la veille (visiteurs uniques, total requêtes, etc.) depuis BigQuery.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Date au format YYYY-MM-DD. Si absente, utilise hier."}
+                }
+            }
         )
     ]
 
@@ -291,6 +301,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await handle_log_sre_triage(arguments, client, SRE_TRIAGE_TABLE_REF)
         elif name == "get_sre_trends":
             return await handle_get_sre_trends(arguments, client, SRE_TRIAGE_TABLE_REF)
+        elif name == "get_usage_statistics":
+            return await handle_get_usage_statistics(arguments, client, PROJECT_ID, FINOPS_DATASET_ID)
         else:
             return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
     except Exception as e:

@@ -228,16 +228,44 @@ resource "google_cloud_run_v2_service" "main" {
   }
 }
 
-# Backend Service pour le Load Balancer
+# Backend Service Global pour le Load Balancer Externe (Requis : type global uniquement)
 resource "google_compute_backend_service" "main" {
-  name    = "backend-${var.service_name}-${terraform.workspace}"
-  project = var.project_id
+  name                  = "backend-${var.service_name}-${terraform.workspace}"
+  protocol              = "HTTP"
+  port_name             = "http"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  project               = var.project_id
 
-  # IAP activé sur le backend
+  backend {
+    group = google_compute_region_network_endpoint_group.serverless_neg.id
+  }
+
+  # IAP activé sur le backend (si nécessaire)
   iap {
     oauth2_client_id     = data.google_secret_manager_secret_version.iap_client_id.secret_data
     oauth2_client_secret = data.google_secret_manager_secret_version.iap_client_secret.secret_data
   }
+}
+
+# Autorise le SA dédié à franchir l'IAP pour les health checks du Load Balancer
+resource "google_iap_web_backend_service_iam_member" "main_iap_sa_accessor" {
+  project             = var.project_id
+  web_backend_service = google_compute_backend_service.main.name
+  role                = "roles/iap.httpsResourceAccessor"
+  member              = "serviceAccount:${var.service_account_email}"
+}
+```
+
+---
+
+## Exemple d'utilisation dans `terraform/outputs.tf`
+
+Il est **obligatoire** d'exposer l'ID de votre backend service global afin que la plateforme puisse injecter automatiquement les routes du Load Balancer Externe.
+
+```hcl
+output "backend_service_id" {
+  value       = google_compute_backend_service.main.id
+  description = "L'ID du Backend Service global pour le mapping dans le Load Balancer"
 }
 ```
 
@@ -352,6 +380,8 @@ Actions à réaliser :
 - `[ ]` `terraform/variables.tf` déclare les **15 variables** du contrat (project_id, region, service_name, image_version, image, lb_path, vpc_network_id, vpc_subnet_id, alloydb_instance_uri, alloydb_ip, alloydb_database, service_account_email, iap_oauth_client_id, iap_oauth_client_secret)
 - `[ ]` Pas de `backend.tf` ni de bloc `backend` dans `main.tf` (auto-généré par manage_env.py)
 - `[ ]` `terraform/main.tf` utilise `var.image`, `var.vpc_network_id`, `var.vpc_subnet_id`
+- `[ ]` `terraform/main.tf` définit un backend service de type **global uniquement** (`google_compute_backend_service`) avec le load balancing scheme `EXTERNAL_MANAGED`
+- `[ ]` `terraform/outputs.tf` définit l'output `backend_service_id` retournant le self_link de ce backend service global
 - `[ ]` Secrets IAP `iap-oauth-client-id-{env}` et `iap-oauth-client-secret-{env}` créés dans Secret Manager
 - `[ ]` Endpoint `GET /health` retournant `{"status": "ok"}` implémenté
 - `[ ]` Entrée ajoutée dans `platform-engineering/envs/dev.yaml` sous `extra_projects`

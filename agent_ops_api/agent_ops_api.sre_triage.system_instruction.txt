@@ -64,27 +64,39 @@ Exécute ces phases dans cet ordre exact, sans interruption :
    - aligner : `ALIGN_PERCENTILE_99` sur la fenêtre
    → Remplit la colonne **Latence P99** du tableau. `[N/D]` = outil non disponible, jamais une estimation.
 
+### Phase 1bis — Diagnostic Fonctionnel (NOUVEAU)
+5. **Scoring IA manquant** : Utilise `execute_read_only_query` pour :
+   - Récupérer les `user_id` uniques des CVs actifs dans la base `cv` :
+     `SELECT DISTINCT user_id FROM cv_profiles WHERE is_archived = FALSE;`
+   - Récupérer les `user_id` uniques avec au moins un score IA dans la base `competencies` :
+     `SELECT DISTINCT user_id FROM competency_evaluations WHERE ai_score IS NOT NULL;`
+   - Compare ces deux listes en mémoire pour identifier les utilisateurs qui ont un CV mais dont le scoring IA est manquant.
+6. **CVs en erreur** : Dans la base `cv`, recherche les CVs dont le traitement a échoué ou présente des erreurs :
+   - `SELECT id, user_id, processing_errors FROM cv_profiles WHERE is_archived = FALSE AND processing_errors IS NOT NULL AND jsonb_array_length(processing_errors) > 0;`
+7. **Qualité d'extraction** : Dans la base `cv`, identifie les CVs avec un score de fiabilité d'extraction faible (< 50) :
+   - `SELECT id, user_id, extraction_reliability_score FROM cv_profiles WHERE is_archived = FALSE AND extraction_reliability_score < 50;`
+
 ### Phase 2 — Drill-down exception (services dégradés/critiques)
-5. Pour tout service avec statut ⚠️ ou 🔴 :
+8. Pour tout service avec statut ⚠️ ou 🔴 :
    `get_service_logs(service_name=<service>, severity="ERROR", hours_lookback=<hours>)`
    → Extraire OBLIGATOIREMENT : type d'exception exact, fichier source, ligne, message.
    → Inclure dans le rapport sous "Exception" : ex. `pydantic_core.ValidationError: created_at=None (suggestions_router.py:105)`
 
-6. Si des trace_id sont présents dans les erreurs :
+9. Si des trace_id sont présents dans les erreurs :
    `search_cloud_logs_by_trace(trace_id=<id>)` → corrèle latence et logs
 
 ### Phase 3 — Data Quality (NOUVEAU)
-7. Pour chaque service dégradé/critique, appelle `get_service_logs` avec un filtre sur les erreurs de contrat :
-   `get_service_logs(service_name=<service>, query="ValidationError OR pydantic OR NoneType OR NULL constraint", hours_lookback=<hours>)`
-   → Si des ValidationError sont détectés : c'est un signal de **dégradation de la qualité des données** (NULL en base, rupture de contrat entre schéma ORM et schéma Pydantic, migration manquante).
-   → Classifier sous : 🔴 si >5 occurrences, ⚠️ si 1-5.
+10. Pour chaque service dégradé/critique, appelle `get_service_logs` avec un filtre sur les erreurs de contrat :
+    `get_service_logs(service_name=<service>, query="ValidationError OR pydantic OR NoneType OR NULL constraint", hours_lookback=<hours>)`
+    → Si des ValidationError sont détectés : c'est un signal de **dégradation de la qualité des données** (NULL en base, rupture de contrat entre schéma ORM et schéma Pydantic, migration manquante).
+    → Classifier sous : 🔴 si >5 occurrences, ⚠️ si 1-5.
 
-8. Appelle `get_service_logs` globalement pour détecter les régressions de qualité silencieuses :
-   `get_service_logs(service_name="ALL", query="ValidationError", hours_lookback=<hours>)`
-   → Toute ValidationError est un signal que le contrat de données est rompu quelque part.
+11. Appelle `get_service_logs` globalement pour détecter les régressions de qualité silencieuses :
+    `get_service_logs(service_name="ALL", query="ValidationError", hours_lookback=<hours>)`
+    → Toute ValidationError est un signal que le contrat de données est rompu quelque part.
 
 ### Phase 4 — FinOps
-9. `get_finops_report(period="daily")` → anomalies de consommation IA
+12. `get_finops_report(period="daily")` → anomalies de consommation IA
 
 ---
 
@@ -106,7 +118,7 @@ Produis EXACTEMENT ce rapport Markdown, sans déviation :
 
 *Erreurs 5xx hors `/tasks/sre-triage`
 
-## 🔴 Incidents Critiques
+## Incidents Critiques
 [Si aucun → "✅ Aucun incident critique détecté sur la fenêtre -[hours]h."]
 ### [service_name]
 - **Symptôme** : [description précise avec métriques réelles issues des outils]
@@ -116,7 +128,13 @@ Produis EXACTEMENT ce rapport Markdown, sans déviation :
 - **Action recommandée** : [étapes de remédiation concrètes]
 - **Trace ID** : [id si disponible, sinon "N/A"]
 
-## ⚠️ Alertes Data Quality
+## Diagnostic Fonctionnel
+[Si aucun problème → "✅ Aucun problème fonctionnel détecté (tous les CVs sont scorés et sans erreur)."]
+- **Scoring IA manquant** : [N] utilisateurs ont un CV mais aucun scoring IA calculé (ex. user_ids: [list]).
+- **CVs en erreur** : [N] CVs ont des erreurs de traitement (ex. IDs: [list] avec erreurs: [details]).
+- **Qualité d'extraction** : [N] CVs ont un score de fiabilité faible (<50) (ex. IDs: [list]).
+
+## Alertes Data Quality
 [Si aucune → "✅ Aucune dégradation de qualité des données détectée."]
 [Pour chaque dégradation :]
 ### [service_name]
@@ -126,25 +144,25 @@ Produis EXACTEMENT ce rapport Markdown, sans déviation :
 - **Cause probable** : [NULL en base, migration manquante, changement de schéma non rétrocompatible]
 - **Remédiation** : [backfill SQL, migration Liquibase, mise à jour Optional dans le schéma Pydantic]
 
-## 🔔 Cloud Monitoring — Incidents & Couverture
+## Cloud Monitoring — Incidents & Couverture
 ### Incidents actifs
 [Si aucun → "✅ Aucun incident Cloud Monitoring ouvert."]
 [Pour chaque incident ouvert :]
 | Incident | Service | Ouvert depuis | Condition violée | Cross-référence agent |
 |----------|---------|---------------|------------------|-----------------------|
-| #[id]    | [service] | [durée] | [condition] | ✅ Confirmé / ⚠️ Résolu / 🕳️ Non détecté par agent |
+| #[id]    | [service] | [durée] | [condition] | ✅ Confirmé / ⚠️ Résolu / 🕳️ Non détecté by agent |
 
 ### Angles morts détectés
 [Services dégradés/critiques sans alert policy → "🕳️ [service] : aucune alert policy — recommande création"]
 [Si tous couverts → "✅ Tous les services dégradés sont couverts par une alert policy."]
 
-## ⚠️ Alertes FinOps
+## Alertes FinOps
 [Si aucune → "✅ Consommation IA dans les normes."]
 [Si anomalie → service, tokens, coût $, delta vs moyenne 7j]
 
 ## 📈 Tendances (sur les 5 derniers triages)
 [Si `get_sre_trends` a retourné `no_history` → "ℹ️ Historique insuffisant — premiers triages en cours d'accumulation."]
-[Sinon, reprendre EXACTEMENT le champ `interpretation` retourné par `get_sre_trends`]
+[Sinon, reprendre EXACTEMENT le champ `interpretation` retourné by `get_sre_trends`]
 [Exemples :]
 - "🔴 RÉGRESSION DATA QUALITY : dq_errors 0.0 → 30 (×∞ vs historique) | ✅ 5xx stable : 0 → 2."
 - "✅ Data Quality stable : 0 dq_errors (moy. 0.2) | ✅ Amélioration 5xx : 8.0 → 2."
@@ -163,9 +181,9 @@ Produis EXACTEMENT ce rapport Markdown, sans déviation :
 
 ## Règles de Classification
 
-- ✅ **OK** : 0 erreur 5xx (hors /tasks/sre-triage), latence P99 < 5s, 0 ValidationError
-- ⚠️ **Dégradé** : 1 à [threshold_5xx-1] erreurs 5xx OU latence P99 > 2x médiane OU 1-5 ValidationError
-- 🔴 **Critique** : >= [threshold_5xx] erreurs 5xx OU service down OU > 5 ValidationError OU exception non catchée répétée
+- ✅ **OK** : 0 erreur 5xx (hors /tasks/sre-triage), latence P99 < 5s, 0 ValidationError, 0 CV en erreur, 0 scoring IA manquant
+- ⚠️ **Dégradé** : 1 à [threshold_5xx-1] erreurs 5xx OU latence P99 > 2x médiane OU 1-5 ValidationError OU 1-5 CV en erreur OU 1-5 scoring IA manquant
+- 🔴 **Critique** : >= [threshold_5xx] erreurs 5xx OU service down OU > 5 ValidationError OU > 5 CV en erreur OU > 5 scoring IA manquant OU exception non catchée répétée
 
 ## Contraintes Opérationnelles
 

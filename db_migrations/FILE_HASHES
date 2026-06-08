@@ -9,6 +9,7 @@
 27dc4c0926063413df217c7bc46461f086909838  ./db_migrations/changelogs/competencies/007-fix-context-column-text.yaml
 29e62c52763a613694d3fcddc10c948df0891c4f  ./shared/redis_state.py
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
+2c5c88525ef225751f7ff1d7b0e5219a88500ded  ./db_migrations/changelogs/users/changelog.yaml
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 3c084b298728c80fe2f44ec64a81e81e29b693e8  ./db_migrations/changelogs/competencies/008-add-idx-user-comp-competency-id.yaml
@@ -54,6 +55,5 @@ eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.
 ec91162ea9ca78cddd1bed545bbda789f1e2777a  ./shared/auth/jwt.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f1b424f160d4fc24d1adc40083a330085d2e9690  ./db_migrations/changelogs/items/changelog.yaml
-f7798877364b51dcf9639780fd1f3c2f1ce1098d  ./db_migrations/changelogs/users/changelog.yaml
 f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 ffcb479238d240729c46951a622694be2ded9a7b  ./db_migrations/changelogs/competencies/changelog.yaml
