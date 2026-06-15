@@ -104,6 +104,11 @@ app = FastAPI(
     root_path=os.getenv("ROOT_PATH", "")
 )
 instrument_app(app, service_name="agent-ops-api", register_exception_handler=False)
+# Enregistrement explicite du global exception handler (register_exception_handler=False
+# est passé à instrument_app pour éviter un double-enregistrement, mais le handler
+# DOIT être ajouté manuellement pour éviter que les exceptions Python non-HTTPException
+# remontent comme des 500 opaques sans log applicatif — notamment lors des cold starts).
+app.add_exception_handler(Exception, make_global_exception_handler("agent_ops_api"))
 RedisInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 

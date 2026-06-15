@@ -142,7 +142,7 @@ resource "google_cloud_run_v2_service" "drive_api" {
         value_source {
           secret_key_ref {
             secret  = data.google_secret_manager_secret.jwt_secret.secret_id
-            version = "latest"
+            version = var.jwt_secret_version
           }
         }
       }

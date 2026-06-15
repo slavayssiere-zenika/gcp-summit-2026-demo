@@ -350,6 +350,12 @@ variable "google_secret_version" {
   default     = "latest"
 }
 
+variable "jwt_secret_version" {
+  description = "Version active du secret pour jwt-secret. Résolue dynamiquement par manage_env.py."
+  type        = string
+  default     = "latest"
+}
+
 # =========================================================
 # SRE Alerting — Canaux de notification email
 # Les emails déclarés ici reçoivent les alertes GCP Cloud Monitoring

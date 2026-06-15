@@ -501,4 +501,10 @@ export default {
     critical_error: 'Critical failure during service initialization.',
     retry_btn: 'Retry starting',
   },
+  init: {
+    title: 'Console Initialization',
+    checking: 'Connecting to services...',
+    cold_start_title: 'Cold start detected',
+    cold_start_desc: 'The "users api" service is starting up after a period of inactivity. This warm-up phase can take between 10 to 15 seconds. Thank you for your patience.',
+  },
 }

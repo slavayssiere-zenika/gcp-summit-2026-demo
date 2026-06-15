@@ -51,10 +51,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **DELETE** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec
 - **GET** `/health` : Health
 - **GET** `/ready` : Ready
@@ -85,5 +85,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/ingestion/history` : Get Ingestion History
 - **POST** `/ingestion/batch-retry` : Ingestion Batch Retry
 - **POST** `/ingestion/quality-gate-batch` : Quality Gate Batch
+- **POST** `/ingestion/remediate-since-last-import` : Remediate Since Last Import
 - **POST** `/scheduled/retry-errors` : Scheduled Retry Errors
 - **POST** `/sync` : Trigger Sync

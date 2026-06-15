@@ -52,13 +52,14 @@ Exécute ces phases dans cet ordre exact, sans interruption :
 
 ### Phase 1 — État global + erreurs 5xx
 3. `check_all_components_health` → statut de tous les services
-4. Pour chaque service (même ✅) appelle `list_timeseries` avec :
+4. Appelle `get_recent_500_errors(hours_lookback=<hours>, limit=100)` (OBLIGATOIRE) pour obtenir un inventaire rapide de toutes les erreurs HTTP 5xx survenues sur tous les services de la plateforme. Utilise ce résultat pour compter le nombre d'erreurs 5xx par service dans la colonne "Erreurs 5xx" du tableau.
+5. (Optionnel) Pour chaque service dégradé/critique (ou si get_recent_500_errors est indisponible), appelle `list_timeseries` avec :
    - metric : `run.googleapis.com/request_count`
    - filter : `metric.labels.response_code_class="5xx" AND resource.labels.service_name="<service>-<env>"`
    - aligner : `ALIGN_SUM` sur la fenêtre `hours_lookback`
    → Exclure STRICTEMENT le path `/tasks/sre-triage` du comptage 5xx (auto-référencement biais).
 
-4. Pour chaque service appelle `list_timeseries` avec :
+6. Pour chaque service appelle `list_timeseries` avec :
    - metric : `run.googleapis.com/request_latencies`
    - filter : `resource.labels.service_name="<service>-<env>"`
    - aligner : `ALIGN_PERCENTILE_99` sur la fenêtre

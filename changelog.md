@@ -1,3 +1,155 @@
+## Mise à jour automatique - 2026-06-15 11:03:13
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2743  | 608  |  78% |
+| agent_hr_api     | 1564  | 102  |  93% |
+| agent_missions_api | 1927  | 90   |  95% |
+| agent_ops_api    | 2155  | 191  |  91% |
+| agent_router_api | 3588  | 516  |  86% |
+| analytics_mcp    | 1109  | 206  |  81% |
+| competencies_api | 5738  | 902  |  84% |
+| cv_api           | 10438 | 1540 |  85% |
+| drive_api        | 3531  | 435  |  88% |
+| items_api        | 2177  | 132  |  94% |
+| missions_api     | 2231  | 281  |  87% |
+| monitoring_mcp   | 1359  | 187  |  86% |
+| platform-engineering | 2308  | 1550 |  33% |
+| prompts_api      | 1350  | 252  |  81% |
+| scratch          | N/A   | N/A  | N/A  |
+| scripts          | N/A   | N/A  | N/A  |
+| shared           | 2992  | 263  |  91% |
+| tests            | 578   | 38   |  93% |
+| users_api        | 2012  | 336  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/analyse-security.md` (M)
+- `agent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/README.md` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent_ops_api.daily_report.system_instruction.txt` (M)
+- `agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/sre_triage.py` (M)
+- `agent_ops_api/tests/test_sre_internals.py` (M)
+- `agent_ops_api/tests/test_sre_triage.py` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/README.md` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/tests/test_finops_tools.py` (M)
+- `analytics_mcp/tools/finops_tools.py` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/tests/test_deduplication_resolution.py` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/README.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/services/pubsub_service.py` (M)
+- `cv_api/tests/test_pubsub_handler.py` (M)
+- `cv_api/tests/test_taxonomy_router.py` (M)
+- `db_init/FILE_HASHES` (M)
+- `db_init/HASH` (M)
+- `db_init/VERSION` (M)
+- `db_migrations/FILE_HASHES` (M)
+- `db_migrations/HASH` (M)
+- `db_migrations/VERSION` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/README.md` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/discovery_service.py` (M)
+- `drive_api/src/routers/dlq_router.py` (M)
+- `drive_api/src/routers/ingestion_router.py` (M)
+- `drive_api/src/services/ingestion_kpi_service.py` (M)
+- `drive_api/src/services/tree_resolution.py` (M)
+- `drive_api/tests/test_dlq_router.py` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/App.vue` (M)
+- `frontend/src/i18n/locales/en.ts` (M)
+- `frontend/src/i18n/locales/fr.ts` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/prompts_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `platform-engineering/bundled_prompts/agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/cr_agent_hr.tf` (M)
+- `platform-engineering/terraform/cr_agent_missions.tf` (M)
+- `platform-engineering/terraform/cr_agent_ops.tf` (M)
+- `platform-engineering/terraform/cr_agent_router.tf` (M)
+- `platform-engineering/terraform/cr_analytics.tf` (M)
+- `platform-engineering/terraform/cr_competencies.tf` (M)
+- `platform-engineering/terraform/cr_cv.tf` (M)
+- `platform-engineering/terraform/cr_drive.tf` (M)
+- `platform-engineering/terraform/cr_items.tf` (M)
+- `platform-engineering/terraform/cr_missions.tf` (M)
+- `platform-engineering/terraform/cr_monitoring.tf` (M)
+- `platform-engineering/terraform/cr_prompts.tf` (M)
+- `platform-engineering/terraform/cr_users.tf` (M)
+- `platform-engineering/terraform/variables.tf` (M)
+- `platform-engineering/tests/test_manage_env.py` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/spec.md` (M)
+- `run_git_push.sh` (M)
+- `scripts/deploy.sh` (M)
+- `scripts/local_up.py` (M)
+- `shared/FILE_HASHES` (M)
+- `shared/HASH` (M)
+- `shared/VERSION` (M)
+- `shared/auth/jwt.py` (M)
+- `shared/pyproject.toml` (M)
+- `shared/tests/test_auth.py` (M)
+- `sre_report.md` (M)
+- `sre_report_runner.py` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+
+---
+
 ## Mise à jour automatique - 2026-06-08 13:58:53
 
 ### Couverture de Code

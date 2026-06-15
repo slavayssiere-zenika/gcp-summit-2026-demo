@@ -15,13 +15,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 os.environ.setdefault("SECRET_KEY", "testsecret_must_be_32_characters_long_for_sha256")
-os.environ.setdefault("PUBSUB_INVOKER_SA_EMAIL", "")
+
 
 from sre_triage import (  # noqa: E402
     SreTriageReport,
     _CHAT_REPORT_MAX_CHARS,
     _get_webhook_url,
     _parse_report_metrics,
+    _sanitize_md_for_chat,
     _send_chat_notification,
     _send_daily_report_chat_notification,
 )
@@ -527,3 +528,69 @@ class TestSendDailyReportChatNotification:
 
         with patch("sre_triage.httpx.AsyncClient", return_value=mock_cm):
             await _send_daily_report_chat_notification("Rapport.", "2026-06-07")
+
+
+# ---------------------------------------------------------------------------
+# Tests _sanitize_md_for_chat
+# ---------------------------------------------------------------------------
+
+class TestSanitizeMdForChat:
+    """Valide la conversion du Markdown standard vers le format Google Chat."""
+
+    def test_h1_converted_to_chat_bold(self):
+        """# Titre doit devenir *Titre* (gras Google Chat)."""
+        result = _sanitize_md_for_chat("# Mon titre")
+        assert result == "*Mon titre*"
+
+    def test_h2_converted_to_chat_bold(self):
+        """## Titre doit devenir *Titre*."""
+        result = _sanitize_md_for_chat("## Sous-titre")
+        assert result == "*Sous-titre*"
+
+    def test_h3_converted_to_chat_bold(self):
+        """### Titre doit devenir *Titre*."""
+        result = _sanitize_md_for_chat("### Sous-sous-titre")
+        assert result == "*Sous-sous-titre*"
+
+    def test_double_star_bold_converted(self):
+        """**texte** doit devenir *texte* (format Chat)."""
+        result = _sanitize_md_for_chat("Visiteurs : **42** utilisateurs")
+        assert result == "Visiteurs : *42* utilisateurs"
+
+    def test_code_fences_stripped(self):
+        """Les blocs ``` doivent être retirés du texte."""
+        text = "```\ndu code\n```"
+        result = _sanitize_md_for_chat(text)
+        assert "```" not in result
+        assert "du code" in result
+
+    def test_code_fence_with_language_stripped(self):
+        """Les blocs ```python doivent également être retirés."""
+        text = "```python\nx = 1\n```"
+        result = _sanitize_md_for_chat(text)
+        assert "```" not in result
+
+    def test_multiple_blank_lines_collapsed(self):
+        """3+ lignes vides consécutives doivent être réduites à 2 max."""
+        text = "Ligne 1\n\n\n\nLigne 2"
+        result = _sanitize_md_for_chat(text)
+        assert "\n\n\n" not in result
+        assert "Ligne 1" in result
+        assert "Ligne 2" in result
+
+    def test_full_md_report_converted(self):
+        """Un rapport Markdown complet doit être correctement converti."""
+        md = (
+            "# 📊 Rapport d'Usage\n"
+            "## 👥 Fréquentation\n"
+            "**Visiteurs uniques** : 42\n"
+            "## 💰 FinOps\n"
+            "**Coût** : $0.14\n"
+        )
+        result = _sanitize_md_for_chat(md)
+        assert "# " not in result
+        assert "## " not in result
+        assert "**" not in result
+        assert "*📊 Rapport d'Usage*" in result
+        assert "*👥 Fréquentation*" in result
+        assert "*Visiteurs uniques*" in result

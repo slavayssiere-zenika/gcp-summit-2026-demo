@@ -14,6 +14,12 @@ DOCKER_REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY}"
 PYTHON_REPO="zenika-python"
 PYTHON_REPO_URL="${REGION}-python.pkg.dev/${PROJECT_ID}/${PYTHON_REPO}"
 
+# Python Command detection (prioritize virtualenv if present)
+PYTHON_CMD="./test_env/bin/python3"
+if [ ! -f "$PYTHON_CMD" ]; then
+  PYTHON_CMD="python3"
+fi
+
 # Colors for Zenika Branding
 RED='\033[0;31m'
 GREY='\033[1;30m'
@@ -542,9 +548,18 @@ compute_service_hash() {
   if [[ "$SERVICE" == "agent_"* ]]; then
     DIRS_TO_CHECK+=("./agent_commons")
   fi
-  # shared/ est toujours inclus dans le hash des services backend
-  # → tout changement dans shared/ invalide le hash de TOUS les consumers backend
-  if [ -d "./shared" ] && [ "$SERVICE" != "frontend" ]; then
+  # shared/ est inclus dans le hash des services backend Python uniquement.
+  # Les services non-Python (db_migrations, db_init) ne dépendent pas de shared/
+  # et ne doivent pas être invalidés par des changements dans shared/.
+  local SHARED_EXEMPT_SERVICES=("frontend" "db_migrations" "db_init")
+  local is_exempt=false
+  for exempt in "${SHARED_EXEMPT_SERVICES[@]}"; do
+    if [ "$SERVICE" == "$exempt" ]; then
+      is_exempt=true
+      break
+    fi
+  done
+  if [ -d "./shared" ] && [ "$is_exempt" = false ]; then
     DIRS_TO_CHECK+=("./shared")
   fi
 
@@ -1392,7 +1407,7 @@ ${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
   local API_URL="https://api.dev.${BASE_DOMAIN}/api/prompts"
 
   # Exécution du script Python
-  if python3 scripts/sync_prompts.py --url "$API_URL" --password "$ADMIN_PWD"; then
+  if "$PYTHON_CMD" scripts/sync_prompts.py --url "$API_URL" --password "$ADMIN_PWD"; then
     return 0
   else
     return 1
@@ -1608,7 +1623,7 @@ else
   echo -e "${GREY}[*] Validation de la rétrocompatibilité des spécifications OpenAPI...${RESET}"
   
   # Exécution du script de validation
-  if ! python3 scripts/validate_openapi.py; then
+  if ! "$PYTHON_CMD" scripts/validate_openapi.py; then
     echo -e "${RED}❌ Échec de la validation de contrat OpenAPI (breaking changes détectés) !${RESET}"
     DEPLOYS_FAILED+=("openapi_contract_gate (Rupture de contrat OpenAPI)")
     exit 1
@@ -1702,7 +1717,7 @@ else
 
       GEMINI_API_BASE_URL=http://mock_gemini:8099 \
       COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \
-      LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" python3 scripts/local_up.py --no-pull --perf --erase
+      LOCUST_USERS=50 LOCUST_SPAWN_RATE=10 LOCUST_DURATION="2m" "$PYTHON_CMD" scripts/local_up.py --no-pull --perf --erase
       LOCUST_EXIT=$?
 
       if [ "$LOCUST_EXIT" -ne 0 ]; then

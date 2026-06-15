@@ -733,8 +733,33 @@ async def run_daily_report(
     return report_text
 
 
+def _sanitize_md_for_chat(text: str) -> str:
+    """Convertit le Markdown LLM en format Google Chat.
+
+    Google Chat ne supporte pas :
+    - Les titres Markdown (# ## ###) → on les transforme en texte gras *titre*
+    - Le gras Markdown (**texte**) → *texte*
+    - Les blocs de code (```) → on les retire (le LLM les utilise comme délimiteur)
+    - L'italique Markdown (*texte* seul) est déjà compatible Chat
+    """
+    import re
+    # Retire les blocs de code markdown (``` ... ```)
+    text = re.sub(r"```[^\n]*\n?", "", text)
+    # Convertit ### / ## / # Titre → *Titre*
+    text = re.sub(r"^#{1,3}\s+(.+)$", r"*\1*", text, flags=re.MULTILINE)
+    # Convertit **gras** → *gras*
+    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
+    # Supprime les lignes vides multiples (> 2 consécutives)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 async def _send_daily_report_chat_notification(report_text: str, yesterday_str: str) -> None:
-    """Envoie le rapport quotidien d'usage sur Google Chat (toujours envoyé)."""
+    """Envoie le rapport quotidien d'usage sur Google Chat (toujours envoyé).
+
+    Le rapport produit par le LLM est sanitizé pour retirer le Markdown
+    non compatible Google Chat (# titres, **gras**).
+    """
     webhook_url = _get_webhook_url()
     if not webhook_url:
         logger.debug("[SRE Chat] Webhook Google Chat absent ou inaccessible — notification rapport quotidien ignorée.")
@@ -745,20 +770,23 @@ async def _send_daily_report_chat_notification(report_text: str, yesterday_str: 
     header = (
         f"📊 *RAPPORT D'USAGE QUOTIDIEN* — `{env}`\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📅 Date d'activité : {yesterday_str}\n"
+        f"📅 Date d'activité : *{yesterday_str}*\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     footer = (
         "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💬 Rapport généré par l'Agent SRE Usage."
+        "💬 _Rapport généré par l'Agent SRE Usage — trafic interne exclu_"
     )
 
-    # Tronquer le rapport si trop long
-    if len(report_text) > _CHAT_REPORT_MAX_CHARS:
-        report_text = report_text[:_CHAT_REPORT_MAX_CHARS] + "\n\n_⚠️ Rapport tronqué car trop long pour Google Chat._"
+    # Sanitize le Markdown LLM vers le format Google Chat
+    sanitized = _sanitize_md_for_chat(report_text)
 
-    message_text = header + report_text + footer
+    # Tronquer si trop long pour Google Chat (limite ~4096 chars/message)
+    if len(sanitized) > _CHAT_REPORT_MAX_CHARS:
+        sanitized = sanitized[:_CHAT_REPORT_MAX_CHARS] + "\n\n_⚠️ Rapport tronqué (limite Google Chat atteinte)._"
+
+    message_text = header + sanitized + footer
     payload = {"text": message_text}
 
     try:

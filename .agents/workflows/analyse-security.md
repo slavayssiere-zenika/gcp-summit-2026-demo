@@ -77,3 +77,18 @@ Les serveurs MCP (`mcp_server.py`) constituent un vecteur d'attaque indirect : u
 - **Tools Destructifs Sans Guard Backend** : Identifier les tools MCP exposant des actions destructives (`delete_competency`, `delete_all_missions`, `clear_user_competencies`) et s'assurer que l'API cible impose une vérification de rôle `admin` sur ces endpoints. Commande : `grep -n "delete\|clear\|drop\|suspend" */mcp_server.py`.
 - **Pas de Fabrication de Token** : Vérifier que les MCP servers ne génèrent pas de JWT de service en interne (pas d'appel à `/auth/internal/service-token` sans audit trail). Seul `agent_router_api` est autorisé à obtenir un service token avant de lancer une background task.
 - **Isolation Stdio** : Les sidecars MCP stdio (`mcp_server.py`) ne doivent pas avoir accès aux variables d'environnement contenant des secrets (SECRET_KEY, GOOGLE_API_KEY). Ces variables doivent être purgées via `os.environ.pop()` dans `main.py` avant le démarrage du sidecar.
+
+## 7. Audit des Bypass d'Authentification (Sécurité Stricte / Zéro Bypass)
+Tout mécanisme de contournement d'authentification (comme `DEV_SCHEDULER_BYPASS`) est strictement interdit dans le code applicatif afin d'éviter toute faille de sécurité en production.
+
+- **Interdiction Absolue des Bypass** : S'assurer qu'aucun mécanisme de bypass d'authentification n'existe dans `shared/auth/jwt.py` ou dans les microservices. L'authentification OIDC ou JWT doit être validée de bout en bout pour chaque requête.
+- **Absence de Variables de Bypass** : Vérifier que la variable `DEV_SCHEDULER_BYPASS` n'est présente nulle part dans le code source ou les configurations réseau de production (Terraform, YAML d'environnements, docker-compose).
+  Commande de vérification :
+  ```bash
+  grep -rn "DEV_SCHEDULER_BYPASS" shared/ auth/ src/ platform-engineering/
+  ```
+  Cette commande ne doit retourner aucun résultat dans le code applicatif de production.
+- **Longueur de la SECRET_KEY (Min 32 octets)** : Pour l'algorithme HS256, la clé de signature du JWT doit faire à minima 32 caractères (256 bits). Une clé trop courte déclenche des avertissements (`InsecureKeyLengthWarning`) ou des erreurs bloquantes selon les versions des bibliothèques de sécurité. Vérifier la conformité de la valeur stockée dans Secret Manager.
+- **Tests unitaires de régression** : Chaque microservice implémentant une logique OIDC ou JWT doit posséder des tests unitaires validant qu'une requête sans token ou avec un token falsifié soit rejetée (HTTP 401), même si des variables d'environnement de configuration sont manquantes. En phase de test, la validation OIDC doit être simulée via des mocks (`unittest.mock.patch` de `verify_oauth2_token` ou des surcharges de dépendance FastAPI) et non par un bypass dans le code de production.
+
+

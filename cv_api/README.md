@@ -146,4 +146,4 @@ Les deux services ont `roles/storage.objectAdmin` sur ce bucket via leurs servic
 - `POST /assign/bulk` dans `competencies_api` DOIT être appelé après chaque analyse batch réussie
 
 ## Dernière modification
-2026-04-30 — Refactoring God Router → architecture modulaire 5 sous-routers (`profile`, `search`, `analytics`, `taxonomy`, `bulk`). `router.py` réduit à 42L (orchestrateur pur).
+2026-06-11 — v0.1.60 — Pub/Sub handler updates

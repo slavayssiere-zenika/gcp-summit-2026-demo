@@ -28,7 +28,8 @@ from pathlib import Path
 
 # seed_data.py est dans le même dossier scripts/
 sys.path.insert(0, str(Path(__file__).parent))
-import seed_data  # noqa: E402
+# Import lazy — seed_data importe psycopg2 qui n'est pas toujours disponible
+# (ex: mode perf gate sans seed). L'import est déplacé dans run_seed().
 
 # ── Configuration (miroir de deploy.sh) ────────────────────────────────────────
 PROJECT_ID = "slavayssiere-sandbox-462015"
@@ -470,6 +471,7 @@ def run_seed(perf: bool = False, skip_if_present: bool = False) -> None:
         return
     label = "perf (400 users, 2000 items)" if perf else "standard (12 users, 50 items)"
     print(f"\n📦 Ingestion des données [{label}]...")
+    import seed_data  # noqa: E402 — import lazy : psycopg2 requis seulement au seed
     seed_data.main(perf=perf)
     print("  ✅ Seed terminé.")
 

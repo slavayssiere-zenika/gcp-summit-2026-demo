@@ -1,7 +1,6 @@
 """dlq_router.py — Dead Letter Queue management (Pub/Sub).
 Shared imports for drive_api sub-routers."""
 import asyncio
-import base64 as _b64
 import json as _json
 import logging
 from datetime import datetime, timezone
@@ -94,7 +93,7 @@ async def get_dlq_status(db: AsyncSession = Depends(get_db)):
             msg_id = msg.message.message_id
             ack_id = msg.ack_id
             try:
-                raw = _b64.b64decode(msg.message.data).decode("utf-8")
+                raw = msg.message.data.decode("utf-8")
                 payload = _json.loads(raw)
                 fid = payload.get("google_file_id", "")
                 if fid:
@@ -223,7 +222,7 @@ async def delete_dlq_message(
 
             for msg in messages:
                 try:
-                    raw = _b64.b64decode(msg.message.data).decode("utf-8")
+                    raw = msg.message.data.decode("utf-8")
                     payload = _json.loads(raw)
                     fid = payload.get("google_file_id", "")
                 except Exception:
@@ -316,7 +315,7 @@ async def replay_dlq(db: AsyncSession = Depends(get_db), _: dict = Depends(_requ
                 for msg in messages:
                     all_ack_ids.append(msg.ack_id)
                     try:
-                        raw = _b64.b64decode(msg.message.data).decode("utf-8")
+                        raw = msg.message.data.decode("utf-8")
                         payload = _json.loads(raw)
                         file_id = payload.get("google_file_id", "")
                         if file_id:

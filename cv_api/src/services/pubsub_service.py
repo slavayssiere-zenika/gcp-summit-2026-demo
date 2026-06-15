@@ -14,14 +14,12 @@ from sqlalchemy.future import select
 
 import shared.database as database
 import src.services.config as _svc_config
-import os as _os
 from src.cvs.models import CVProfile
 from src.services.cv_import_service import process_cv_core
 from src.services.cv_storage_service import CVStorageService
-from shared.auth.jwt import VerifyOIDC
+from shared.auth.jwt import SECRET_KEY as _AUTH_SECRET_KEY, VerifyOIDC
 from shared.schemas.auth import TokenResponse
 
-_AUTH_SECRET_KEY = _os.getenv('SECRET_KEY', '')
 
 logger = logging.getLogger(__name__)
 

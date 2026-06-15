@@ -176,6 +176,18 @@ async def test_handle_get_usage_statistics_happy_path():
     assert data["agent_queries"] == 150
     assert data["status"] == "success"
 
+    # Vérifie que la query utilise bien le _TABLE_SUFFIX avec le format YYYYMMDD
+    call_args = mock_client.query.call_args
+    query_str = call_args[0][0]
+    assert "_TABLE_SUFFIX" in query_str, "La query doit utiliser _TABLE_SUFFIX (tables shardées par jour)"
+    assert "run_googleapis_com_requests_*" in query_str, "La query doit cibler le wildcard de tables shardées"
+    # Vérifie le paramètre : table_suffix = "20260607"
+    job_config = call_args[1].get("job_config") or call_args[0][1]
+    params = {p.name: p.value for p in job_config.query_parameters}
+    assert params.get("table_suffix") == "20260607", (
+        f"Le suffixe doit être '20260607', got: {params.get('table_suffix')}"
+    )
+
 
 @pytest.mark.asyncio
 async def test_handle_get_usage_statistics_no_data():

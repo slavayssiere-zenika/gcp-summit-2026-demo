@@ -9,7 +9,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 462 | ⚠️ |
+| `main.py` | 467 | ⚠️ |
 | `conftest.py` | 21 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `agent.py` | 301 | ✅ |
@@ -94,4 +94,4 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 - Toutes les réponses A2A doivent inclure le flag `degraded: True` si une API aval est indisponible
 
 ## Dernière modification
-- 2026-06-08 — v0.2.42 — stable (Intégration Daily Report & SRE triage)
+- 2026-06-11 — v0.2.48 — SRE triage update & daily report

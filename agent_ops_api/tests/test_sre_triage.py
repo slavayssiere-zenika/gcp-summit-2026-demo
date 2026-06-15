@@ -1,10 +1,18 @@
 import os
+import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 # Mock the environment to avoid real calls during imports
 os.environ["SECRET_KEY"] = "testsecret_must_be_32_characters_long_for_sha256"
-os.environ["PUBSUB_INVOKER_SA_EMAIL"] = ""
+
+
+@pytest.fixture(autouse=True)
+def mock_oidc_verification():
+    with patch("shared.auth.jwt.google_id_token.verify_oauth2_token") as mock_verify:
+        mock_verify.return_value = {"email": "allowed@test.com"}
+        yield mock_verify
+
 
 from main import app  # noqa: E402
 

@@ -27,7 +27,7 @@ bash scripts/run_tests.sh
 MODIFIED_PY=$(git diff --name-only --diff-filter=d HEAD 2>/dev/null | grep '\.py$') || true
 if [ -n "$MODIFIED_PY" ]; then
   echo "=== Flake8 PEP8 check sur les fichiers modifiés ==="
-  echo "$MODIFIED_PY" | xargs python3 -m flake8 --max-line-length=120 --extend-ignore=W503,E501
+  echo "$MODIFIED_PY" | xargs test_env/bin/python3 -m flake8 --max-line-length=120 --extend-ignore=W503,E501
   echo "✅ Aucune violation PEP8 — code conforme."
 else
   echo "[+] Aucun fichier Python modifié — étape ignorée."
@@ -90,4 +90,4 @@ fi
 echo "[+] SÉCURITÉ AR : Aucun token GCP ni wheel buildé détecté — commit autorisé."
 
 # Etape 11: git commit
-git commit -m "Update agent ops and analytics config"
+git commit -m "Update APIs, frontend locales and observability"

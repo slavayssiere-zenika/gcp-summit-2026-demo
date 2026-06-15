@@ -100,7 +100,40 @@ watch(
   { immediate: true }
 )
 
+const showLoading = ref(false)
+const isColdStart = ref(false)
+const isInitialLoad = ref(true)
+let loadingTimer: ReturnType<typeof setTimeout> | null = null
+let coldStartTimer: ReturnType<typeof setTimeout> | null = null
+
+onMounted(() => {
+  if (authService.state.isLoading) {
+    loadingTimer = setTimeout(() => {
+      showLoading.value = true
+    }, 800)
+    
+    coldStartTimer = setTimeout(() => {
+      isColdStart.value = true
+    }, 3000)
+  }
+})
+
+watch(
+  () => authService.state.isLoading,
+  (loading) => {
+    if (!loading) {
+      if (loadingTimer) clearTimeout(loadingTimer)
+      if (coldStartTimer) clearTimeout(coldStartTimer)
+      showLoading.value = false
+      isColdStart.value = false
+      isInitialLoad.value = false
+    }
+  }
+)
+
 onUnmounted(() => {
+  if (loadingTimer) clearTimeout(loadingTimer)
+  if (coldStartTimer) clearTimeout(coldStartTimer)
   if (_dqPollingTimer) {
     clearInterval(_dqPollingTimer)
     _dqPollingTimer = null
@@ -317,7 +350,27 @@ onUnmounted(() => {
     </div>
 
     <main id="main-content" class="content">
-      <RouterView />
+      <div v-if="authService.state.isLoading && showLoading && isInitialLoad" class="init-loading-container glass" role="status" :aria-label="t('init.title')">
+        <div class="init-loading-card">
+          <div class="init-spinner-wrapper">
+            <div class="init-spinner"></div>
+            <Bot size="32" class="init-bot-icon" aria-hidden="true" />
+          </div>
+          <h2>{{ t('init.title') }}</h2>
+          <p class="init-status">{{ t('init.checking') }}</p>
+          
+          <transition name="fade">
+            <div v-if="isColdStart" class="cold-start-warning">
+              <AlertTriangle size="20" class="warning-icon" aria-hidden="true" />
+              <div>
+                <strong>{{ t('init.cold_start_title') }}</strong>
+                <p>{{ t('init.cold_start_desc') }}</p>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </div>
+      <RouterView v-else />
     </main>
   </div>
 </template>
@@ -884,5 +937,120 @@ body {
 @keyframes slideDown {
   from { transform: translateY(-10px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* Initial loading and cold start styles */
+.init-loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 200px);
+  padding: 2.5rem;
+  border-radius: 24px;
+  animation: fadeIn 0.4s ease-out;
+  margin: 2rem auto;
+  max-width: 600px;
+}
+
+.init-loading-card {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.init-spinner-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.init-spinner {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 4px solid rgba(227, 25, 55, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--zenika-red);
+  animation: spin 1s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+}
+
+.init-bot-icon {
+  color: var(--zenika-red);
+  animation: pulseIcon 2s ease-in-out infinite;
+}
+
+.init-loading-card h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.init-status {
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.cold-start-warning {
+  margin-top: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  padding: 1.25rem;
+  border-radius: 16px;
+  color: #b45309;
+  text-align: left;
+  animation: slideUp 0.3s ease-out;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.05);
+}
+
+.cold-start-warning .warning-icon {
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+  animation: sreShake 4s infinite;
+}
+
+.cold-start-warning strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.cold-start-warning p {
+  font-size: 0.85rem;
+  color: #b45309;
+  margin: 0;
+  line-height: 1.4;
+}
+
+@keyframes pulseIcon {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

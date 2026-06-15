@@ -39,7 +39,18 @@ def override_verify_jwt():
 
 
 def get_client():
+    from shared.auth.jwt import VerifyJwtOrOidc
     app.dependency_overrides[verify_jwt] = override_verify_jwt
+    # Override VerifyJwtOrOidc instances (utilisés dans tree_router.py pour /bulk_tree)
+    for route in app.routes:
+        if hasattr(route, "dependencies"):
+            for dep in route.dependencies:
+                if isinstance(dep.dependency, VerifyJwtOrOidc):
+                    app.dependency_overrides[dep.dependency] = override_verify_jwt
+        if hasattr(route, "dependant"):
+            for dep in route.dependant.dependencies:
+                if isinstance(dep.call, VerifyJwtOrOidc):
+                    app.dependency_overrides[dep.call] = override_verify_jwt
     from fastapi.testclient import TestClient
     return TestClient(app)
 

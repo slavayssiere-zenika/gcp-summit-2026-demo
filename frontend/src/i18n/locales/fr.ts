@@ -501,4 +501,10 @@ export default {
     critical_error: "Échec d'initialisation des services critiques.",
     retry_btn: 'Réessayer le démarrage',
   },
+  init: {
+    title: 'Initialisation de la console',
+    checking: 'Connexion aux services en cours...',
+    cold_start_title: 'Démarrage à froid détecté',
+    cold_start_desc: 'Le service "users api" sort d\'une période d\'inactivité prolongée. Le pré-chauffage peut prendre entre 10 et 15 secondes. Merci de votre patience.',
+  },
 }

@@ -211,7 +211,7 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         value_source {
           secret_key_ref {
             secret  = data.google_secret_manager_secret.jwt_secret.secret_id
-            version = "latest"
+            version = var.jwt_secret_version
           }
         }
       }
@@ -226,6 +226,14 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
       env {
         name  = "ENABLE_GEMINI_CONTEXT_CACHE"
         value = "false"
+      }
+      # SA du Cloud Scheduler — requis pour que VerifyOIDC valide
+      # correctement les tokens OIDC des jobs daily-report et sre-triage.
+      # Sans cette variable, le bypass local s'active en prd, ce qui peut
+      # provoquer des erreurs d'authentification selon la version du code.
+      env {
+        name  = "PUBSUB_INVOKER_SA_EMAIL"
+        value = "sa-agent-ops-${terraform.workspace}-${random_id.sa_suffix.hex}@${var.project_id}.iam.gserviceaccount.com"
       }
     }
   }

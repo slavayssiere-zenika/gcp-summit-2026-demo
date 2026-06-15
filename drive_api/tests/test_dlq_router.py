@@ -8,10 +8,10 @@ pour éviter toute connexion GCP.
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./drive_dlq_test.db")
+os.environ.setdefault(
+    "DATABASE_URL", "sqlite+aiosqlite:///./drive_dlq_test.db")
 os.environ.setdefault("SECRET_KEY", "testsecret")
 os.environ.setdefault("GCP_PROJECT_ID", "test-project")
 os.environ.setdefault("DLQ_SUBSCRIPTION_ID", "drive-dlq-sub")
@@ -73,8 +73,10 @@ def test_dlq_status_pubsub_unavailable(mocker):
     """PubSub inaccessible → retourne message_count=-1, pas d'exception."""
     mock_subscriber = MagicMock()
     mock_subscriber.pull.side_effect = Exception("Connection refused")
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=mock_subscriber)
-    mocker.patch("src.routers.dlq_router.asyncio.to_thread", new=AsyncMock(side_effect=Exception("no GCP")))
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=mock_subscriber)
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread",
+                 new=AsyncMock(side_effect=Exception("no GCP")))
 
     with get_client() as client:
         resp = client.get("/dlq/status", headers=AUTH)
@@ -98,8 +100,10 @@ def test_dlq_status_empty_queue(mocker):
         # Deuxième appel = modify_ack_deadline → ne doit pas arriver pour liste vide
         return None
 
-    mocker.patch("src.routers.dlq_router.asyncio.to_thread", side_effect=fake_to_thread)
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread",
+                 side_effect=fake_to_thread)
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
 
     with get_client() as client:
         resp = client.get("/dlq/status", headers=AUTH)
@@ -111,14 +115,12 @@ def test_dlq_status_empty_queue(mocker):
 
 def test_dlq_status_with_valid_message(mocker):
     """PubSub avec un message JSON valide → file_id extrait."""
-    import base64
     import json
 
     payload = {"google_file_id": "file123", "folder_id": "folder1"}
-    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
 
     msg = MagicMock()
-    msg.message.data = base64.b64decode(encoded)
+    msg.message.data = json.dumps(payload).encode()
     msg.message.message_id = "msg001"
     msg.ack_id = "ack001"
 
@@ -129,7 +131,8 @@ def test_dlq_status_with_valid_message(mocker):
         "src.routers.dlq_router.asyncio.to_thread",
         new=AsyncMock(return_value=mock_pull_resp)
     )
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
 
     async def override_db_with_rows():
         yield _make_sync_db(all_results=[])
@@ -157,7 +160,8 @@ def test_delete_dlq_message_with_ack_id(mocker):
     """ack_id fourni → ACK direct sans re-pull."""
     mock_subscriber = MagicMock()
     mock_subscriber.acknowledge.return_value = None
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=mock_subscriber)
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=mock_subscriber)
     mocker.patch(
         "src.routers.dlq_router.asyncio.to_thread",
         new=AsyncMock(return_value=None)
@@ -209,7 +213,8 @@ def test_delete_dlq_message_by_file_id(mocker):
         "src.routers.dlq_router.asyncio.to_thread",
         new=AsyncMock(return_value=mock_pull_resp)
     )
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
 
     async def override_db_with_state():
         yield _make_sync_db(first_results=[sync_state])
@@ -217,7 +222,8 @@ def test_delete_dlq_message_by_file_id(mocker):
     app.dependency_overrides[get_db] = override_db_with_state
 
     with get_client() as client:
-        resp = client.delete("/dlq/message?google_file_id=file123", headers=AUTH)
+        resp = client.delete(
+            "/dlq/message?google_file_id=file123", headers=AUTH)
 
     app.dependency_overrides[get_db] = override_get_db
     assert resp.status_code in (200, 404, 500)
@@ -236,8 +242,10 @@ def test_replay_dlq_empty_queue(mocker):
         # Premier appel = pull → DeadlineExceeded (DLQ vide)
         raise DeadlineExceeded("timeout")
 
-    mocker.patch("src.routers.dlq_router.asyncio.to_thread", side_effect=fake_to_thread)
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread",
+                 side_effect=fake_to_thread)
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
 
     with get_client() as client:
         resp = client.post("/dlq/replay", headers=AUTH)
@@ -261,7 +269,8 @@ def test_replay_dlq_pubsub_error(mocker):
         "src.routers.dlq_router.asyncio.to_thread",
         new=AsyncMock(side_effect=Exception("GCP unavailable"))
     )
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
 
     with get_client() as client:
         resp = client.post("/dlq/replay", headers=AUTH)
@@ -269,64 +278,69 @@ def test_replay_dlq_pubsub_error(mocker):
 
 # ── New Tests for Better Coverage ──
 
+
 def test_dlq_status_with_invalid_payload(mocker):
     mock_msg = MagicMock()
     mock_msg.message.data = b"not base64 or not json"
     mock_msg.message.message_id = "msg_invalid"
     mock_msg.ack_id = "ack_invalid"
-    
+
     mock_pull_resp = MagicMock()
     mock_pull_resp.received_messages = [mock_msg]
-    
-    mocker.patch("src.routers.dlq_router.asyncio.to_thread", new=AsyncMock(return_value=mock_pull_resp))
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
-    
+
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread",
+                 new=AsyncMock(return_value=mock_pull_resp))
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
+
     with get_client() as client:
         resp = client.get("/dlq/status", headers=AUTH)
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["unknown_files"]) == 1
 
+
 def test_delete_dlq_message_by_pubsub_id(mocker):
-    import base64
     import json
     payload = {"other_key": "val"}
-    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-    
+
     msg = MagicMock()
-    msg.message.data = base64.b64decode(encoded)
+    msg.message.data = json.dumps(payload).encode()
     msg.message.message_id = "msg123"
     msg.ack_id = "ack_target"
-    
+
     mock_pull_resp = MagicMock()
     mock_pull_resp.received_messages = [msg]
-    
-    mocker.patch("src.routers.dlq_router.asyncio.to_thread", new=AsyncMock(return_value=mock_pull_resp))
+
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread",
+                 new=AsyncMock(return_value=mock_pull_resp))
     mock_sub = MagicMock()
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=mock_sub)
-    
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=mock_sub)
+
     with get_client() as client:
-        resp = client.delete("/dlq/message?pubsub_message_id=msg123", headers=AUTH)
-    
+        resp = client.delete(
+            "/dlq/message?pubsub_message_id=msg123", headers=AUTH)
+
     assert resp.status_code == 200
     assert resp.json()["method"] == "repull"
 
+
 def test_replay_dlq_with_valid_files(mocker):
-    import base64
     import json
     payload = {"google_file_id": "file_replay"}
-    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-    
+
     msg = MagicMock()
-    msg.message.data = base64.b64decode(encoded)
+    msg.message.data = json.dumps(payload).encode()
     msg.message.message_id = "msg_replay"
     msg.ack_id = "ack_replay"
-    
+
     mock_pull_resp = MagicMock()
     mock_pull_resp.received_messages = [msg]
-    
+
     # Return 1 page then empty
     call_count = [0]
+
     async def fake_to_thread(fn, *args, **kwargs):
         call_count[0] += 1
         if call_count[0] == 1:
@@ -334,13 +348,15 @@ def test_replay_dlq_with_valid_files(mocker):
         elif getattr(fn, "__name__", "") == "pull" or "pull" in str(fn):
             return MagicMock(received_messages=[])
         return None
-    
-    mocker.patch("src.routers.dlq_router.asyncio.to_thread", side_effect=fake_to_thread)
-    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient", return_value=MagicMock())
-    
+
+    mocker.patch("src.routers.dlq_router.asyncio.to_thread",
+                 side_effect=fake_to_thread)
+    mocker.patch("src.routers.dlq_router.pubsub_v1.SubscriberClient",
+                 return_value=MagicMock())
+
     with get_client() as client:
         resp = client.post("/dlq/replay", headers=AUTH)
-        
+
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "success"

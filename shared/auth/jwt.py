@@ -131,18 +131,14 @@ class VerifyOIDC:
             raise HTTPException(status_code=401, detail="Missing OIDC Token")
 
         oidc_token = auth_header_val.replace("Bearer ", "")
-
-        # En local dev (SA non configuré), bypass contrôlé
         invoker_sa_email = os.getenv("PUBSUB_INVOKER_SA_EMAIL", "")
-        if not invoker_sa_email or "your-project" in invoker_sa_email:
-            return {"sub": "scheduler", "role": "admin"}
 
         try:
             audience = None
             if self.audience_env_var:
                 audience = os.getenv(self.audience_env_var)
             if not audience:
-                # Fallback heuristique Cloud Run
+                # Fallback heuristique Cloud Run : l'audience est l'URL du service
                 audience = f"https://{request.headers.get('host', '')}"
 
             decoded = google_id_token.verify_oauth2_token(
@@ -150,27 +146,25 @@ class VerifyOIDC:
             )
             token_email = decoded.get("email", "")
 
-            allowed = self.allowed_sa_emails or []
+            allowed = list(self.allowed_sa_emails or [])
             if not allowed:
                 # Fallback sur les env vars communes
-                cv_sa = os.getenv("CV_SA_EMAIL")
-                sch_sa = os.getenv("SCHEDULER_SA_EMAIL")
-                if cv_sa:
-                    allowed.append(cv_sa)
-                if sch_sa:
-                    allowed.append(sch_sa)
+                for env_var in ("CV_SA_EMAIL", "SCHEDULER_SA_EMAIL"):
+                    sa = os.getenv(env_var)
+                    if sa:
+                        allowed.append(sa)
                 if invoker_sa_email:
                     allowed.append(invoker_sa_email)
 
             if allowed and token_email not in allowed:
-                logger.warning(f"[OIDC] Unauthorized SA email: {token_email}. Allowed: {allowed}")
+                logger.warning("[OIDC] Unauthorized SA email: %s. Allowed: %s", token_email, allowed)
                 raise HTTPException(status_code=401, detail="Unauthorized scheduler invoker")
 
             return {"sub": token_email, "role": "scheduler"}
         except HTTPException:
             raise
         except Exception as exc:
-            logger.warning(f"[OIDC] Échec validation OIDC: {exc}")
+            logger.warning("[OIDC] Échec validation OIDC: %s", exc)
             raise HTTPException(status_code=401, detail=f"Invalid OIDC token: {exc}")
 
 

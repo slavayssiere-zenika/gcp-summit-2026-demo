@@ -323,3 +323,91 @@ class IngestionKpiService:
             "total_queued": total_queued,
             "reason_breakdown": reason_breakdown
         }
+
+    async def remediate_since_last_import(self) -> dict:
+        """
+        Trouve la date du dernier import réussi de CV, puis réinitialise en PENDING
+        tous les fichiers en échec (ERROR) ou bloqués (QUEUED, PROCESSING) qui ont été traités
+        depuis cette date. Invalide également leur cache Redis drive:file:known pour forcer
+        leur re-discovery si nécessaire.
+        """
+        # 1. Obtenir la date du dernier import réussi
+        last_imported_at = (await self.db.execute(
+            select(func.max(DriveSyncState.imported_at)).where(
+                DriveSyncState.status == DriveSyncStatus.IMPORTED_CV
+            )
+        )).scalar()
+
+        if not last_imported_at:
+            # Fallback si aucun import réussi dans toute l'histoire (ou db vide/partielle)
+            # On cherche par exemple depuis les 7 derniers jours par défaut.
+            last_imported_at = datetime.now(timezone.utc) - timedelta(days=7)
+            logger.info(
+                f"[Remediation] Aucun import réussi trouvé en base. "
+                f"Utilisation du fallback (7 jours) : {last_imported_at}"
+            )
+
+        # 2. Identifier les fichiers à réinitialiser
+        stmt_select = (
+            select(DriveSyncState.google_file_id)
+            .where(
+                and_(
+                    DriveSyncState.status.in_([
+                        DriveSyncStatus.ERROR,
+                        DriveSyncStatus.QUEUED,
+                        DriveSyncStatus.PROCESSING
+                    ]),
+                    DriveSyncState.last_processed_at >= last_imported_at
+                )
+            )
+        )
+        res = await self.db.execute(stmt_select)
+        file_ids = [r[0] for r in res.fetchall()]
+
+        if not file_ids:
+            return {
+                "status": "success",
+                "message": (
+                    f"Aucun fichier en échec ou en cours de traitement depuis le "
+                    f"dernier import réussi ({last_imported_at.isoformat()})."
+                ),
+                "total_reset": 0,
+                "last_imported_at": last_imported_at.isoformat()
+            }
+
+        # 3. Mettre à jour vers PENDING
+        stmt_update = (
+            update(DriveSyncState)
+            .where(DriveSyncState.google_file_id.in_(file_ids))
+            .values(
+                status=DriveSyncStatus.PENDING,
+                error_message=(
+                    f"Remédié suite à échec général (depuis dernier import réussi "
+                    f"du {last_imported_at.isoformat()})"
+                ),
+                last_processed_at=datetime.now(timezone.utc),
+                retry_count=0
+            )
+        )
+        await self.db.execute(stmt_update)
+        await self.db.commit()
+
+        # 4. Invalider le cache Redis pour ces fichiers
+        try:
+            await _asyncio.gather(*[
+                delete_cache(f"drive:file:known:{fid}")
+                for fid in file_ids
+            ])
+            logger.info(f"[Remediation] Cache Redis invalidé pour {len(file_ids)} fichiers.")
+        except Exception as e_redis:
+            logger.warning(f"[Remediation] Erreur d'invalidation Redis partielle : {e_redis}")
+
+        return {
+            "status": "success",
+            "message": (
+                f"{len(file_ids)} fichiers remis en PENDING depuis le dernier import "
+                f"réussi ({last_imported_at.isoformat()})."
+            ),
+            "total_reset": len(file_ids),
+            "last_imported_at": last_imported_at.isoformat()
+        }

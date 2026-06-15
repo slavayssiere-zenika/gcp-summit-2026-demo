@@ -201,7 +201,6 @@ class TreeResolver:
                     break
 
                 path_traversed.append(current_id)
-                path_traversed_names.append(folder_name_raw)
                 current_id = parents[0]
 
             except Exception as e:

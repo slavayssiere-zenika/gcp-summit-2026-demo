@@ -1,7 +1,6 @@
 003e8304eaf100edc04407692477d23c75aa8ab2  ./frontend/src/views/Home.vue
 0148db15ebedfe4313a76722eb8872a08c9b05f0  ./frontend/src/router/index.ts
 0851c892e20b4ced54e6514f6dbee337f8757bb2  ./frontend/src/components/agent/__tests__/CompetencyList.spec.ts
-0869640d0cdb293c0f7daa8d7aa3eecd38af42b7  ./frontend/src/App.vue
 09620735fb681ec5f18cf5b4ce90530e317afa46  ./frontend/src/composables/useFocusTrap.ts
 1072499182c80915537728a8f328b2c440e1b224  ./frontend/src/components/ui/BaseButton.vue
 13553d5072af76c6a7d72b73f1a6e4fc4513a1fa  ./frontend/src/i18n/index.ts
@@ -19,7 +18,6 @@
 26390e6ceaf8c49e597a7fe7cc73967f3bb1f0ae  ./frontend/src/views/AdminAvailability.vue
 295bd30a830ba9192a24251ea221efe3fc26d97e  ./frontend/src/components/agent/SystemHealthCard.vue
 299c1ad15b1320e8d0a2437361f68f23560b67b8  ./frontend/src/stores/__tests__/uxStore.spec.ts
-2be2ee3d7aaec94eb0681cc5ca78c3253f8de8ee  ./frontend/src/i18n/locales/en.ts
 30988755cdb0001f633572baf25b085d6372cd17  ./frontend/src/components/agent/__tests__/SystemHealthCard.spec.ts
 32f4b2f769502d4b39b43a48c34ea5868bda6730  ./frontend/src/components/agent/__tests__/ConsultantAvailabilityCard.spec.ts
 34d33da995ac5880ebfd16772af8050e05175ab1  ./frontend/.dockerignore
@@ -57,6 +55,7 @@
 694e69d81334090b36ff9650b1701e406d21a0b7  ./frontend/src/components/ui/ToastNotification.vue
 6d0c4217b0c129cd24b5b33632deac9d7a3b7f94  ./frontend/src/components/agent/__tests__/EvaluationTable.spec.ts
 70fff26b37d17aa5a5600ae6efd6d9591b9b26b3  ./frontend/src/components/agent/__tests__/CompetencyBadge.spec.ts
+72615eab5a85b1a7c1a1148b8c640d68bb2959ac  ./frontend/src/i18n/locales/en.ts
 73144a140f884717d81e4f064e7c988d8d641245  ./frontend/src/views/FinopsAdmin.vue
 733cf6b361826a4394c792b76ced6312612adeea  ./frontend/src/views/AdminUsers.vue
 73e11227036ae49c8a451a001cb65e7cfd648693  ./frontend/src/utils/__tests__/treeify.spec.ts
@@ -66,16 +65,18 @@
 8907cae430171ed070575a72bb61a0af7cdadf80  ./frontend/src/views/__tests__/Login.spec.ts
 89b936797db1af622d2a700191b3f081d9e6741f  ./frontend/src/components/ui/__tests__/ToastNotification.spec.ts
 89c443e9e52dd5a5592e1737055ae08f11c86a60  ./frontend/src/services/auth.ts
+8d6c274a9ed69852b93c24d5ccd31da0325ae956  ./frontend/src/App.vue
 8ed5565aa2e785d4d53d68ce9cef60588855769e  ./frontend/src/components/agent/CloudRunLogsViewer.vue
+95a33436525085acffbe7f6e00a596e2768578dd  ./frontend/vitest.log
 95b1350eea6d52f6a2e30d9252d9be87c01e6c0d  ./frontend/src/utils/apiContract.ts
 974def9e339374c8690819b61ab155726da89884  ./frontend/src/components/CVReanalysisPanel.vue
 9bbfa8b175990814ba2e975728a7f4e4d770f643  ./frontend/src/services/__tests__/agentApi.spec.ts
 9d9bb3a7996e70bf4b31876397788805ddc257be  ./frontend/src/components/agent/MissionCard.vue
 9e98b61d8d68bd6770f0856202cf738e9798a2da  ./frontend/src/components/__tests__/CompetencyNode.spec.ts
+a0598350b66c8f6e8062fa6f111a290e5ebeaec7  ./frontend/src/i18n/locales/fr.ts
 a10c1060ebc51ed10f25e2cc832fda6fdf430371  ./frontend/src/components/onboarding/OnboardingTour.vue
 a5d8befcae9fd64acbed445962432e8fa876c51e  ./frontend/src/views/Competencies.vue
 a9f55bce18ee6bc559fed8373cdce23399fd44f8  ./frontend/src/views/__tests__/Competencies.spec.ts
-afee3e72b3aa0b672e010d35c4b4fa881b2553e2  ./frontend/vitest.log
 b015bc3f37724712dcaa5423928dc8d88b6329f8  ./frontend/src/views/HRSkillsToAcquire.vue
 b0a3b293e2aafe2cda33eba2e9759e4d38d82198  ./frontend/src/types/__tests__/index.spec.ts
 b1fa2fe2854f7c5a883a8ce0e903e19ca4724b24  ./frontend/src/utils/treeify.ts
@@ -111,6 +112,5 @@ f3da7ebfeb1041381cf67564702ac21ebe6ea2bf  ./frontend/src/components/TaxonomySugg
 f56a67213dde8f35526fd0fe87bb38220d7eb356  ./frontend/src/components/agent/__tests__/MissionCard.spec.ts
 f7f5a1a42077c7fbac5376135edb5fe8afbbb2ad  ./frontend/src/views/Warming.vue
 f94d77cae348118c0fb71ecaacfef742167b82cf  ./frontend/src/components/ui/__tests__/BaseButton.spec.ts
-f99b9e4784b8457bd02d21c21b385d4ee591b667  ./frontend/src/i18n/locales/fr.ts
 fcd5a0e00c90065922da323cfcfe7144cea9caae  ./frontend/src/views/MissionDetail.vue
 ff9453763cfd49403cd43f34d3cf4b8ebc9e59a4  ./frontend/src/components/ui/__tests__/PageHeader.spec.ts

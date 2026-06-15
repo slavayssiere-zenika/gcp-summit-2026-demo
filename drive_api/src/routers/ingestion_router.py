@@ -122,3 +122,35 @@ async def quality_gate_batch(
             else "Aucun CV incomplet détecté — data quality satisfaisante."
         ),
     }
+
+
+@router.post("/ingestion/remediate-since-last-import")
+async def remediate_since_last_import(
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(_require_admin)
+):
+    """
+    Identifie tous les fichiers en erreur/bloqués depuis la dernière ingestion réussie de CV,
+    les remet en PENDING et déclenche une synchronisation immédiate.
+    """
+    service = IngestionKpiService(db)
+    result = await service.remediate_since_last_import()
+    total_reset = result["total_reset"]
+
+    async def run_sync_after_remediation():
+        async with shared_db.SessionLocal() as session:
+            try:
+                d_service = DriveService(session)
+                processed = await d_service.ingest_batch()
+                logger.info(f"[Remediation] {processed} fichier(s) republié(s) dans Pub/Sub.")
+            except Exception as e:
+                logger.error(f"[Remediation] Erreur sync post-remediation : {e}")
+
+    if total_reset > 0:
+        background_tasks.add_task(run_sync_after_remediation)
+
+    return {
+        **result,
+        "sync_triggered": total_reset > 0
+    }

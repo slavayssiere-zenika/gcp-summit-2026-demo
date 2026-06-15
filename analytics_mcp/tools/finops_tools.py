@@ -132,6 +132,23 @@ async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOP
     table_suffix = date_str.replace("-", "")  # "2026-06-07" -> "20260607"
     wildcard_ref = f"`{PROJECT_ID}.{FINOPS_DATASET_ID}.run_googleapis_com_requests_*`"
 
+    # Exclusion des user-agents internes / bots :
+    # - python-httpx : appels inter-services (agents -> APIs data)
+    # - Google-Cloud-Scheduler : OIDC cron jobs
+    # - APIs-Google : health checks du Load Balancer GCP
+    # - GoogleStackdriverMonitoring : sondes Cloud Monitoring
+    # - kube-probe / GCP-Monitoring : probes infra
+    bot_filter = """
+        AND httpRequest.userAgent NOT LIKE 'python-httpx%'
+        AND httpRequest.userAgent NOT LIKE 'Google-Cloud-Scheduler%'
+        AND httpRequest.userAgent NOT LIKE 'APIs-Google%'
+        AND httpRequest.userAgent NOT LIKE 'GoogleStackdriverMonitoring%'
+        AND httpRequest.userAgent NOT LIKE 'kube-probe%'
+        AND httpRequest.userAgent NOT LIKE 'GCP-Monitoring%'
+        AND httpRequest.userAgent IS NOT NULL
+        AND httpRequest.userAgent != ''
+    """
+
     query = f"""
         SELECT
             COUNT(DISTINCT httpRequest.remoteIp) as unique_visitors,
@@ -140,6 +157,7 @@ async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOP
             COUNTIF(httpRequest.requestUrl LIKE '%/query%') as agent_queries
         FROM {wildcard_ref}
         WHERE _TABLE_SUFFIX = @table_suffix
+        {bot_filter}
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[

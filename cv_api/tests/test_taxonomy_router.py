@@ -21,6 +21,7 @@ with patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExport
         from shared.database import get_db
         from main import app
         from shared.auth.jwt import verify_jwt
+        from src.cvs.routers.taxonomy_router import verify_jwt_or_oidc
 
 
 AUTH = {"Authorization": "Bearer testtoken"}
@@ -40,10 +41,13 @@ async def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_jwt] = override_jwt_admin
+# Override l'instance module-level VerifyJwtOrOidc (utilisée par /batch/start et /batch/check)
+app.dependency_overrides[verify_jwt_or_oidc] = override_jwt_admin
 
 
 def get_client():
     app.dependency_overrides[verify_jwt] = override_jwt_admin
+    app.dependency_overrides[verify_jwt_or_oidc] = override_jwt_admin
     return TestClient(app)
 
 

@@ -349,6 +349,7 @@ class DiscoveryService:
                             await self.db.execute(upsert_stmt)
                             await self.db.commit()
                             new_discoveries += 1
+                            await self._mark_file_known(file_id)
                         else:
                             existing_for_oos = (
                                 await self.db.execute(

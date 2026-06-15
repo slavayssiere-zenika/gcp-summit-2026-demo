@@ -1091,8 +1091,13 @@ def resource_exists_in_gcp(resource_type, name, project_id):
 def get_tf_args(project_id: str = "slavayssiere-sandbox-462015") -> list:
     """Retourne les arguments -var supplémentaires pour terraform apply/plan/import."""
     active_version = _get_latest_active_secret_version(project_id, "google-secret-id")
+    jwt_active_version = _get_latest_active_secret_version(project_id, "jwt-secret")
     logger.info(f"  [secrets] Version de secret active détectée pour la plateforme principale : {active_version}")
-    return [f"-var=google_secret_version={active_version}"]
+    logger.info(f"  [secrets] Version de jwt-secret active détectée : {jwt_active_version}")
+    return [
+        f"-var=google_secret_version={active_version}",
+        f"-var=jwt_secret_version={jwt_active_version}",
+    ]
 
 
 def toggle_prevent_destroy(disable=True):

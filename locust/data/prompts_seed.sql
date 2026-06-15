@@ -710,13 +710,14 @@ Exécute ces phases dans cet ordre exact, sans interruption :
 
 ### Phase 1 — État global + erreurs 5xx
 3. `check_all_components_health` → statut de tous les services
-4. Pour chaque service (même ✅) appelle `list_timeseries` avec :
+4. Appelle `get_recent_500_errors(hours_lookback=<hours>, limit=100)` (OBLIGATOIRE) pour obtenir un inventaire rapide de toutes les erreurs HTTP 5xx survenues sur tous les services de la plateforme. Utilise ce résultat pour compter le nombre d''erreurs 5xx par service dans la colonne "Erreurs 5xx" du tableau.
+5. (Optionnel) Pour chaque service dégradé/critique (ou si get_recent_500_errors est indisponible), appelle `list_timeseries` avec :
    - metric : `run.googleapis.com/request_count`
    - filter : `metric.labels.response_code_class="5xx" AND resource.labels.service_name="<service>-<env>"`
    - aligner : `ALIGN_SUM` sur la fenêtre `hours_lookback`
    → Exclure STRICTEMENT le path `/tasks/sre-triage` du comptage 5xx (auto-référencement biais).
 
-4. Pour chaque service appelle `list_timeseries` avec :
+6. Pour chaque service appelle `list_timeseries` avec :
    - metric : `run.googleapis.com/request_latencies`
    - filter : `resource.labels.service_name="<service>-<env>"`
    - aligner : `ALIGN_PERCENTILE_99` sur la fenêtre
@@ -873,6 +874,7 @@ Tu es exécuté de manière asynchrone par un scheduler. Ne demande jamais de co
 
 1. **Usage & Fréquentation** :
    Appelle `get_usage_statistics(date="<date_de_la_veille>")` (la date te sera fournie dans la requête).
+   ⚠️ Note : les métriques de fréquentation excluent déjà le trafic interne (appels inter-services, health checks, Cloud Scheduler). Un dimanche avec 0 visiteur est NORMAL et valide.
 
 2. **CVs Ingérés** :
    Appelle `execute_read_only_query(query="SELECT COUNT(*) as count FROM cv_profiles WHERE is_archived = FALSE AND DATE(created_at) = ''<date_de_la_veille>''", db_name="cv")`.
@@ -884,35 +886,40 @@ Tu es exécuté de manière asynchrone par un scheduler. Ne demande jamais de co
    Appelle `get_finops_report(period="daily")`. Filtre pour la date spécifiée si possible, ou présente les statistiques de la journée de la veille.
 
 5. **Synthèse & Rédaction** :
-   Construis un rapport structuré clair et professionnel.
+   Construis un rapport structuré clair et professionnel au format Google Chat (voir ci-dessous).
 
 ---
 
-## 📋 Format du Rapport (OBLIGATOIRE)
+## 📋 Format du Rapport — GOOGLE CHAT UNIQUEMENT
 
-Produis un rapport Markdown contenant EXACTEMENT la structure suivante :
+⚠️ IMPORTANT : Ce rapport est affiché dans Google Chat. Le Markdown standard (# titres, **gras**) n''est PAS rendu.
+Tu DOIS utiliser UNIQUEMENT le format suivant :
+- Gras : *texte* (une seule étoile de chaque côté)
+- Italique : _texte_
+- Code inline : `texte`
+- Pas de ## ou # pour les titres — utilise des emoji + texte en gras à la place
+- Séparateurs : ━━━━━━━━━━━━━━━━━━━━
+
+Produis un rapport contenant EXACTEMENT la structure suivante :
 
 ```
-# 📊 Rapport d''Usage Quotidien — [date_de_la_veille]
-Rapport généré le [date_actuelle] UTC.
-
-## 👥 Fréquentation
-- **Visiteurs uniques** : [unique_visitors]
-- **Requêtes totales** : [total_requests]
-- **Requêtes API Router** : [router_requests]
-- **Requêtes Agent (/query)** : [agent_queries]
-
-## 📥 Activité Données
-- **Nouveaux CVs ingérés** : [nb_cv_ingested]
-- **Collaborateurs passés inactifs** : [nb_users_inactive]
-
-## 💰 FinOps & IA
-- **Consommation de Tokens** : [total_input] tokens in / [total_output] tokens out
-- **Coût total estimé** : $[estimated_cost_usd]
-- **Modèle le plus sollicité** : [top_model]
-
-## 📈 KPIs Proposés & Recommandations
-[Suggère 2-3 KPIs ou remarques d''optimisation en fonction des données collectées. Par exemple, calculer le ratio de requêtes IA par visiteur unique, ou faire des remarques sur le coût moyen par CV.]
+*👥 Fréquentation* (visiteurs réels uniquement — trafic interne exclu)
+• Visiteurs uniques : [unique_visitors]
+• Requêtes totales : [total_requests]
+• Requêtes API Router : [router_requests]
+• Requêtes Agent (/query) : [agent_queries]
+━━━━━━━━━━━━━━━━━━━━
+*📥 Activité Données*
+• Nouveaux CVs ingérés : [nb_cv_ingested]
+• Collaborateurs passés inactifs : [nb_users_inactive]
+━━━━━━━━━━━━━━━━━━━━
+*💰 FinOps & IA*
+• Tokens consommés : [total_input] in / [total_output] out
+• Coût estimé : $[estimated_cost_usd]
+• Action la plus sollicitée : [top_action]
+━━━━━━━━━━━━━━━━━━━━
+*📈 Observations*
+[2-3 remarques courtes basées sur les données. Ex : coût moyen par CV, ratio visiteur/query agent, tendance FinOps.]
 ```
 ', NOW());
 INSERT INTO prompts (key, value, updated_at) VALUES ('cv_api.extract_cv_info', 'You are an expert resume parser. Your task is to extract specific information from the provided resume text and output it strictly as a JSON object.

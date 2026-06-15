@@ -23,10 +23,18 @@ from src.services.pubsub_service import PubsubService
 # donc on utilise la même valeur. setdefault() est insuffisant car auth.py purge l'env
 # après lecture — la clé doit être cohérente entre tous les fichiers de test.
 os.environ["SECRET_KEY"] = "testsecret"
-os.environ.setdefault("PUBSUB_INVOKER_SA_EMAIL", "sa-pubsub-invoker-dev@your-project.iam.gserviceaccount.com")
 os.environ.setdefault("GOOGLE_API_KEY", "dummy-api-key")
 
-_TEST_JWT_SECRET = "testsecret"  # Doit correspondre à la SECRET_KEY chargée par src.auth
+
+@pytest.fixture(autouse=True)
+def mock_oidc_verification():
+    with patch("shared.auth.jwt.google_id_token.verify_oauth2_token") as mock_verify:
+        mock_verify.return_value = {"email": "allowed@test.com"}
+        yield mock_verify
+
+
+# Doit correspondre à la SECRET_KEY chargée par src.auth
+_TEST_JWT_SECRET = "testsecret"
 
 
 def _make_pubsub_payload(
@@ -36,12 +44,14 @@ def _make_pubsub_payload(
     folder_name: str = "Marie Dupont",
     google_access_token: str = "test-google-token",
     jwt: str = "",
-    oidc_token: str = "",  # Vide en local (USE_IAM_AUTH != true), rempli en prod
+    # Vide en local (USE_IAM_AUTH != true), rempli en prod
+    oidc_token: str = "",
 ) -> dict:
     """Construit un payload Pub/Sub encodé en base64 comme GCP le ferait."""
     import jwt as jose_jwt
     if not jwt and not oidc_token:
-        jwt = jose_jwt.encode({"sub": "test-worker"}, _TEST_JWT_SECRET, algorithm="HS256")
+        jwt = jose_jwt.encode({"sub": "test-worker"},
+                              _TEST_JWT_SECRET, algorithm="HS256")
 
     message_data = {
         "google_file_id": google_file_id,
@@ -92,7 +102,7 @@ async def test_pubsub_handler_invalid_base64_payload():
             json={"message": {"data": "###INVALID_BASE64###"}},
             headers={"Authorization": "Bearer dummy-oidc-token"},
         )
-    # En dev (PUBSUB_INVOKER_SA_EMAIL = placeholder), la validation OIDC est bypassée
+    # La validation OIDC est simulée via mock_oidc_verification
     # → le handler tente de décoder le base64 et échoue avec 400
     assert resp.status_code == 400, f"Attendu 400, reçu {resp.status_code}"
 
@@ -102,7 +112,8 @@ async def test_pubsub_handler_missing_url_in_payload():
     """Le handler doit retourner 400 si url ou google_file_id sont absents."""
     from main import app
 
-    empty_data = base64.b64encode(json.dumps({"source_tag": "Paris"}).encode()).decode()
+    empty_data = base64.b64encode(json.dumps(
+        {"source_tag": "Paris"}).encode()).decode()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
@@ -121,8 +132,10 @@ async def test_pubsub_handler_nominal_success():
     mock_result.user_id = 42
 
     with (
-        patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(return_value=mock_result)),
-        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
+        patch("src.services.pubsub_service.process_cv_core",
+              new=AsyncMock(return_value=mock_result)),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions",
+              new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -130,7 +143,8 @@ async def test_pubsub_handler_nominal_success():
         # Mock le PATCH vers drive_api
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_http.return_value.__aenter__.return_value.patch = AsyncMock(return_value=mock_response)
+        mock_http.return_value.__aenter__.return_value.patch = AsyncMock(
+            return_value=mock_response)
 
         from main import app as fresh_app
         async with AsyncClient(transport=ASGITransport(app=fresh_app), base_url="http://test") as client:
@@ -156,7 +170,8 @@ async def test_pubsub_handler_pipeline_failure_triggers_500():
     with (
         patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(
             side_effect=HTTPException(status_code=500, detail="Gemini timeout"))),
-        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions",
+              new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -185,7 +200,8 @@ async def test_pubsub_handler_non_cv_returns_200_ack():
     with (
         patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(
             side_effect=HTTPException(status_code=400, detail="Not a CV - LLM Parsing failed"))),
-        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions",
+              new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -218,17 +234,21 @@ async def test_pubsub_handler_oidc_exchange_success():
     mock_result.user_id = 99
 
     # Simule un payload avec oidc_token et sans jwt (cas production)
-    fresh_jwt = jose_jwt.encode({"sub": "drive-api-sa"}, _TEST_JWT_SECRET, algorithm="HS256")
+    fresh_jwt = jose_jwt.encode(
+        {"sub": "drive-api-sa"}, _TEST_JWT_SECRET, algorithm="HS256")
     mock_oidc_response = AsyncMock()
     mock_oidc_response.status_code = 200
-    mock_oidc_response.json = MagicMock(return_value={"access_token": fresh_jwt})
+    mock_oidc_response.json = MagicMock(
+        return_value={"access_token": fresh_jwt})
 
     mock_patch_response = AsyncMock()
     mock_patch_response.status_code = 200
 
     with (
-        patch("src.services.pubsub_service.process_cv_core", new=AsyncMock(return_value=mock_result)),
-        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions", new=AsyncMock(return_value=[])),
+        patch("src.services.pubsub_service.process_cv_core",
+              new=AsyncMock(return_value=mock_result)),
+        patch("src.services.cv_storage_service.CVStorageService.bg_process_competencies_and_missions",
+              new=AsyncMock(return_value=[])),
         patch("httpx.AsyncClient") as mock_http,
         patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(
             __aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False)))
@@ -236,13 +256,15 @@ async def test_pubsub_handler_oidc_exchange_success():
         mock_http_instance = AsyncMock()
         mock_http_instance.post = AsyncMock(return_value=mock_oidc_response)
         mock_http_instance.patch = AsyncMock(return_value=mock_patch_response)
-        mock_http.return_value.__aenter__ = AsyncMock(return_value=mock_http_instance)
+        mock_http.return_value.__aenter__ = AsyncMock(
+            return_value=mock_http_instance)
         mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/pubsub/import-cv",
-                json=_make_pubsub_payload(oidc_token="google-oidc-id-token", jwt=""),
+                json=_make_pubsub_payload(
+                    oidc_token="google-oidc-id-token", jwt=""),
                 headers={"Authorization": "Bearer dummy-oidc-envelope-token"},
             )
 
@@ -290,13 +312,15 @@ async def test_pubsub_handler_delete_action_archives_and_deactivates():
         mock_http_instance.get = AsyncMock(return_value=mock_user_response)
         mock_http_instance.put = AsyncMock(return_value=mock_put_response)
         mock_http_instance.patch = AsyncMock(return_value=mock_patch_response)
-        mock_http.return_value.__aenter__ = AsyncMock(return_value=mock_http_instance)
+        mock_http.return_value.__aenter__ = AsyncMock(
+            return_value=mock_http_instance)
         mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
 
         payload = _make_pubsub_payload()
         decoded = json.loads(base64.b64decode(payload["message"]["data"]))
         decoded["action"] = "delete"
-        payload["message"]["data"] = base64.b64encode(json.dumps(decoded).encode()).decode()
+        payload["message"]["data"] = base64.b64encode(
+            json.dumps(decoded).encode()).decode()
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
@@ -358,8 +382,10 @@ async def test_run_cv_delete_bg_admin_user():
     mock_db.commit = AsyncMock()
 
     mock_http_instance = MagicMock()
-    mock_http_instance.get = AsyncMock(return_value=MagicMock(status_code=200, json=lambda: {"role": "admin"}))
-    mock_http_instance.patch = AsyncMock(return_value=MagicMock(is_error=True, status_code=500))
+    mock_http_instance.get = AsyncMock(return_value=MagicMock(
+        status_code=200, json=lambda: {"role": "admin"}))
+    mock_http_instance.patch = AsyncMock(
+        return_value=MagicMock(is_error=True, status_code=500))
 
     with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):
         with patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_http_instance), __aexit__=AsyncMock())):
@@ -378,8 +404,10 @@ async def test_run_cv_delete_bg_deactivation_failure():
     mock_db.commit = AsyncMock()
 
     mock_http_instance = MagicMock()
-    mock_http_instance.get = AsyncMock(return_value=MagicMock(status_code=200, json=lambda: {"role": "user"}))
-    mock_http_instance.put = AsyncMock(return_value=MagicMock(is_success=False, text="Error"))
+    mock_http_instance.get = AsyncMock(return_value=MagicMock(
+        status_code=200, json=lambda: {"role": "user"}))
+    mock_http_instance.put = AsyncMock(
+        return_value=MagicMock(is_success=False, text="Error"))
     mock_http_instance.patch = AsyncMock(side_effect=Exception("Patch error"))
 
     with patch("src.services.pubsub_service.database.SessionLocal", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_db), __aexit__=AsyncMock())):

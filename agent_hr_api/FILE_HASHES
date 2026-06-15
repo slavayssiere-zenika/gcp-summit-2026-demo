@@ -24,6 +24,7 @@
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
 2ce9917d1c4907c5456d1ef5b4edb703f0d08d7a  ./agent_hr_api/session.py
 2cf6c1ada7941df6612b49151a315ce9fe67b8de  ./agent_commons/agent_commons/metadata.py
+2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 3150bbb348706913a15cb98d2842bddc16e5a8b3  ./agent_hr_api/requirements.txt
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 334148686822e2c057a1bb0454a5a6633e679cc2  ./agent_commons/agent_commons/schemas.py
@@ -35,8 +36,10 @@
 42014d2a4e884dd3f1eb9d64fa67a85b158572e8  ./agent_commons/agent_commons/circuit_breaker.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 435b0a439860ed056585bc663a1b072959cf421e  ./agent_hr_api/tests/test_metadata.py
+497c695b8089d49f9a79a77abb3de03e4fe070c7  ./shared/pyproject.toml
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 53ec7850836038d178ae07b5587d855b819e63e7  ./shared/fastapi_utils.py
+542a20730206b4332d17fc2e6647cb695c36517b  ./shared/tests/test_auth.py
 5ce73cab141c3d3a71e8f4ce6f612bb4c3f342b8  ./shared/observability.py
 5de53d3f073c15c9352924144c3faff7eb60aa37  ./agent_commons/agent_commons/a2a_utils.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
@@ -89,16 +92,13 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./agent_hr_api/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 dc4b44a504335da955f1b1459f7a441ed9a93187  ./agent_hr_api/metrics.py
-df0108d780bd5648c1672b391c524728ca57cad7  ./shared/pyproject.toml
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e3ba209e0a52ca343af11b3b1b6b51e6588d1f5d  ./agent_hr_api/agent.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 e94ec766935137fa55bb6262412fde909427a061  ./agent_commons/tests/test_guardrails.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
-ec91162ea9ca78cddd1bed545bbda789f1e2777a  ./shared/auth/jwt.py
 f07c219bfe776cf380c0401a19129c79ee251ad1  ./agent_commons/tests/__init__.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
-f8b508e23d2efe605f29ddbaa57c6b67bb117fd1  ./shared/tests/test_auth.py
 fa30e320e8004878cfa40b92c96201cf9230fedb  ./agent_commons/agent_commons/session.py
 ff5ada46de4005cc979f9fb37b88c3c1d430b63b  ./agent_hr_api/conftest.py
 ff9b5fbbbec38443b0d6ebfdf32ffe5ad01e8cfd  ./agent_commons/pyproject.toml

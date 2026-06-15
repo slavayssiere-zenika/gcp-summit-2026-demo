@@ -164,7 +164,8 @@ class TestBuildImageUrls:
     def test_all_keys_start_with_image_prefix(self, local_versions):
         images = me.build_image_urls(REGISTRY, local_versions)
         for key in images:
-            assert key.startswith("image_"), f"Clé '{key}' devrait commencer par 'image_'."
+            assert key.startswith(
+                "image_"), f"Clé '{key}' devrait commencer par 'image_'."
 
     def test_url_format_contains_registry(self, local_versions):
         images = me.build_image_urls(REGISTRY, local_versions)
@@ -195,7 +196,8 @@ class TestBuildImageUrls:
         """Pas de double slash dans l'URL."""
         images = me.build_image_urls(REGISTRY, local_versions)
         for url in images.values():
-            assert "://" not in url.split("://", 1)[-1], f"Double slash dans '{url}'."
+            assert "://" not in url.split("://",
+                                          1)[-1], f"Double slash dans '{url}'."
 
     def test_analytics_mcp_mapping(self, local_versions):
         """analytics_mcp (docker) → image_analytics (TF) : mapping non trivial."""
@@ -296,7 +298,8 @@ class TestVersionPriority:
     def _run(self, yaml_path, local_v):
         """Simule la logique du __main__ sans appeler manage_env.py comme script."""
         config = me.load_config(yaml_path)
-        yaml_versions = {k: v for k, v in config.items() if k.endswith("_version") and v}
+        yaml_versions = {k: v for k,
+                         v in config.items() if k.endswith("_version") and v}
         merged = {**local_v, **yaml_versions}
         registry = config.get("image_registry")
         images = me.build_image_urls(registry, merged) if registry else {}
@@ -325,7 +328,8 @@ class TestVersionPriority:
 
     def test_image_registry_absent_leaves_no_image_keys(self, tmp_path, local_versions):
         """Sans image_registry, aucune clé image_* n'est générée (legacy mode signalé)."""
-        content = {"project_id": "test", "base_domain": "test.com", "parent_zone_name": "z"}
+        content = {"project_id": "test",
+                   "base_domain": "test.com", "parent_zone_name": "z"}
         yaml_file = tmp_path / "legacy.yaml"
         yaml_file.write_text(yaml.dump(content))
         config = me.load_config(str(yaml_file))
@@ -355,7 +359,8 @@ class TestVersionPriority:
     def test_no_original_image_star_keys_from_yaml(self, dev_yaml, local_versions):
         """Aucune clé image_* ne doit venir directement du YAML (uniquement de build_image_urls)."""
         config = me.load_config(str(dev_yaml))
-        yaml_image_keys = [k for k in config if k.startswith("image_") and k != "image_registry"]
+        yaml_image_keys = [k for k in config if k.startswith(
+            "image_") and k != "image_registry"]
         assert len(yaml_image_keys) == 0, (
             f"Le YAML ne devrait pas contenir de clés image_* directes : {yaml_image_keys}"
         )
@@ -384,7 +389,8 @@ class TestRealYamlFiles:
     def test_no_direct_image_keys(self, env_file):
         """Aucun fichier env ne doit contenir de clés image_* directes."""
         config = me.load_config(str(ENVS_DIR / env_file))
-        direct_image_keys = [k for k in config if k.startswith("image_") and k != "image_registry"]
+        direct_image_keys = [k for k in config if k.startswith(
+            "image_") and k != "image_registry"]
         assert len(direct_image_keys) == 0, (
             f"{env_file} contient encore des clés image_* directes : {direct_image_keys}. "
             f"Utilisez image_registry à la place."
@@ -446,7 +452,8 @@ class TestTerraformApplyWithRetry:
     def test_success_on_first_attempt(self, mock_sleep, mock_import, mock_run):
         """Si le premier apply reussit, pas de retry ni de sleep."""
         mock_run.return_value = self._make_result(0)
-        me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+        me._terraform_apply_with_retry(
+            ["terraform", "apply"], "dev", "proj", "eu", [])
         assert mock_run.call_count == 1
         mock_sleep.assert_not_called()
 
@@ -455,8 +462,10 @@ class TestTerraformApplyWithRetry:
     @patch("manage_env.time.sleep")
     def test_success_after_409_import(self, mock_sleep, mock_import, mock_run):
         """Apres un apply rate + import 409, le 2eme apply reussit."""
-        mock_run.side_effect = [self._make_result(1, "409"), self._make_result(0)]
-        me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+        mock_run.side_effect = [self._make_result(
+            1, "409"), self._make_result(0)]
+        me._terraform_apply_with_retry(
+            ["terraform", "apply"], "dev", "proj", "eu", [])
         assert mock_run.call_count == 2
 
     @patch("manage_env.run_cmd")
@@ -466,7 +475,8 @@ class TestTerraformApplyWithRetry:
         """Apres 3 applies rates sans import possible, sys.exit est appele."""
         mock_run.return_value = self._make_result(1)
         with pytest.raises(SystemExit):
-            me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+            me._terraform_apply_with_retry(
+                ["terraform", "apply"], "dev", "proj", "eu", [])
 
     @patch("manage_env.run_cmd")
     @patch("manage_env.import_resources_on_409", return_value=0)
@@ -474,7 +484,8 @@ class TestTerraformApplyWithRetry:
     def test_sleep_called_when_no_409_import(self, mock_sleep, mock_import, mock_run):
         """Si l'import 409 ne trouve rien, un sleep de 15s est applique."""
         mock_run.side_effect = [self._make_result(1), self._make_result(0)]
-        me._terraform_apply_with_retry(["terraform", "apply"], "dev", "proj", "eu", [])
+        me._terraform_apply_with_retry(
+            ["terraform", "apply"], "dev", "proj", "eu", [])
         mock_sleep.assert_called_with(15)
 
 
@@ -496,7 +507,8 @@ class TestSanityCheckApiLogin:
         mock_resp.status = 200
         mock_resp.read.return_value = b'{"access_token": "tok123"}'
         mock_urlopen.return_value = mock_resp
-        token = me._sanity_check_api_login("api.dev.example.com", "pwd", self._make_ctx())
+        token = me._sanity_check_api_login(
+            "api.dev.example.com", "pwd", self._make_ctx())
         assert token == "tok123"
 
     @patch("manage_env.generate_antigravity_error_report")
@@ -507,7 +519,8 @@ class TestSanityCheckApiLogin:
         mock_urlopen.side_effect = urllib.error.URLError("connection refused")
         with patch("manage_env.time.sleep"):
             with pytest.raises(SystemExit) as exc_info:
-                me._sanity_check_api_login("api.dev.example.com", "pwd", self._make_ctx())
+                me._sanity_check_api_login(
+                    "api.dev.example.com", "pwd", self._make_ctx())
         assert exc_info.value.code == 1
         mock_report.assert_called_once()
 
@@ -522,7 +535,8 @@ class TestSanityCheckApiLogin:
         http_err = urllib.error.HTTPError(
             url="", code=503, msg="Service Unavailable", hdrs={}, fp=None)
         mock_urlopen.side_effect = [http_err, mock_resp_ok]
-        token = me._sanity_check_api_login("api.dev.example.com", "pwd", self._make_ctx())
+        token = me._sanity_check_api_login(
+            "api.dev.example.com", "pwd", self._make_ctx())
         assert token == "tok"
         assert mock_urlopen.call_count == 2
 
@@ -536,7 +550,8 @@ class TestRagLoadState:
 
     def test_returns_empty_dict_if_file_missing(self, tmp_path, monkeypatch):
         """Si .rag_model_state.json n'existe pas, retourne {}."""
-        monkeypatch.setattr(me, "_RAG_STATE_FILE", str(tmp_path / "nonexistent.json"))
+        monkeypatch.setattr(me, "_RAG_STATE_FILE", str(
+            tmp_path / "nonexistent.json"))
         result = me._rag_load_state()
         assert result == {}
 
@@ -582,56 +597,64 @@ class TestValidateExtraProjectStructure:
     def test_valid_project_structure(self, tmp_path):
         """Un projet complet et bien nomme doit etre valide sans erreur."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], p["version"])
+        result = me.validate_extra_project_structure(
+            p["name"], p["path"], p["lb_path"], p["version"])
         assert result["valid"] is True
         assert result["errors"] == []
 
     def test_invalid_name_uppercase(self, tmp_path):
         """Un name avec majuscule doit etre rejete."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure("MyService", p["path"], p["lb_path"], p["version"])
+        result = me.validate_extra_project_structure(
+            "MyService", p["path"], p["lb_path"], p["version"])
         assert result["valid"] is False
         assert any("name" in e and "invalide" in e for e in result["errors"])
 
     def test_invalid_name_underscore(self, tmp_path):
         """Un name avec underscore doit etre rejete (kebab-case uniquement)."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure("my_service", p["path"], p["lb_path"], p["version"])
+        result = me.validate_extra_project_structure(
+            "my_service", p["path"], p["lb_path"], p["version"])
         assert result["valid"] is False
         assert any("name" in e for e in result["errors"])
 
     def test_invalid_name_too_short(self, tmp_path):
         """Un name de 2 caracteres doit etre rejete (minimum 3)."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure("ab", p["path"], p["lb_path"], p["version"])
+        result = me.validate_extra_project_structure(
+            "ab", p["path"], p["lb_path"], p["version"])
         assert result["valid"] is False
         assert any("name" in e for e in result["errors"])
 
     def test_invalid_lb_path_no_slash(self, tmp_path):
         """Un lb_path sans '/' initial doit etre rejete."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure(p["name"], p["path"], "ia-dev-memory", p["version"])
+        result = me.validate_extra_project_structure(
+            p["name"], p["path"], "ia-dev-memory", p["version"])
         assert result["valid"] is False
         assert any("lb_path" in e for e in result["errors"])
 
     def test_invalid_lb_path_with_space(self, tmp_path):
         """Un lb_path avec espace doit etre rejete."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure(p["name"], p["path"], "/ia dev memory", p["version"])
+        result = me.validate_extra_project_structure(
+            p["name"], p["path"], "/ia dev memory", p["version"])
         assert result["valid"] is False
         assert any("lb_path" in e and "espace" in e for e in result["errors"])
 
     def test_invalid_version_no_v_prefix(self, tmp_path):
         """Une version sans prefixe v doit etre rejetee."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], "1.0.0")
+        result = me.validate_extra_project_structure(
+            p["name"], p["path"], p["lb_path"], "1.0.0")
         assert result["valid"] is False
         assert any("version" in e for e in result["errors"])
 
     def test_invalid_version_partial(self, tmp_path):
         """Une version incomplete (v1.0) doit etre rejetee."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], "v1.0")
+        result = me.validate_extra_project_structure(
+            p["name"], p["path"], p["lb_path"], "v1.0")
         assert result["valid"] is False
         assert any("version" in e for e in result["errors"])
 
@@ -641,7 +664,8 @@ class TestValidateExtraProjectStructure:
             "ia-dev-memory", "/nonexistent/path/abc", "/ia-dev-memory", "v0.1.0"
         )
         assert result["valid"] is False
-        assert any("introuvable" in e or "inaccessible" in e for e in result["errors"])
+        assert any(
+            "introuvable" in e or "inaccessible" in e for e in result["errors"])
 
     def test_missing_dockerfile(self, tmp_path):
         """Un projet sans Dockerfile doit etre invalide."""
@@ -692,7 +716,8 @@ class TestValidateExtraProjectStructure:
     def test_result_contains_all_fields(self, tmp_path):
         """Le dict retourne doit contenir tous les champs attendus."""
         p = _make_valid_project(tmp_path)
-        result = me.validate_extra_project_structure(p["name"], p["path"], p["lb_path"], p["version"])
+        result = me.validate_extra_project_structure(
+            p["name"], p["path"], p["lb_path"], p["version"])
         for field in ("name", "path", "lb_path", "version", "valid", "errors"):
             assert field in result, f"Champ {field!r} absent du resultat."
 
@@ -723,7 +748,8 @@ class TestDiscoverExtraProjects:
         proj_dir = tmp_path / "ia-dev-memory"
         proj_dir.mkdir()
         config = {"extra_projects": [
-            {"name": "ia-dev-memory", "path": str(proj_dir), "lb_path": "/ia-dev-memory", "version": "v0.1.0"}
+            {"name": "ia-dev-memory",
+                "path": str(proj_dir), "lb_path": "/ia-dev-memory", "version": "v0.1.0"}
         ]}
         import pytest as _pytest
         with _pytest.raises(me.DeploymentError, match="invalide"):
@@ -731,13 +757,15 @@ class TestDiscoverExtraProjects:
 
     def test_raises_on_duplicate_names(self, tmp_path):
         """Deux projets avec le meme name declenchent DeploymentError."""
-        p1 = _make_valid_project(tmp_path, name="ia-dev-memory", lb_path="/ia-dev-memory")
+        p1 = _make_valid_project(
+            tmp_path, name="ia-dev-memory", lb_path="/ia-dev-memory")
         proj_dir2 = tmp_path / "ia-dev-memory-2"
         proj_dir2.mkdir()
         (proj_dir2 / "Dockerfile").write_text("FROM python:3.12-slim")
         (proj_dir2 / "database").mkdir()
         (proj_dir2 / "terraform").mkdir()
-        p2 = {"name": "ia-dev-memory", "path": str(proj_dir2), "lb_path": "/other-path", "version": "v0.1.0"}
+        p2 = {"name": "ia-dev-memory",
+              "path": str(proj_dir2), "lb_path": "/other-path", "version": "v0.1.0"}
         config = {"extra_projects": [p1, p2]}
         import pytest as _pytest
         with _pytest.raises(me.DeploymentError, match="Doublon de name"):
@@ -745,8 +773,10 @@ class TestDiscoverExtraProjects:
 
     def test_raises_on_duplicate_lb_paths(self, tmp_path):
         """Deux projets avec le meme lb_path declenchent DeploymentError."""
-        p1 = _make_valid_project(tmp_path, name="service-a", lb_path="/shared-path")
-        p2 = _make_valid_project(tmp_path, name="service-b", lb_path="/shared-path")
+        p1 = _make_valid_project(
+            tmp_path, name="service-a", lb_path="/shared-path")
+        p2 = _make_valid_project(
+            tmp_path, name="service-b", lb_path="/shared-path")
         config = {"extra_projects": [p1, p2]}
         import pytest as _pytest
         with _pytest.raises(me.DeploymentError, match="Doublon de lb_path"):
@@ -757,7 +787,8 @@ class TestDiscoverExtraProjects:
         proj_dir = tmp_path / "ia-dev-memory"
         proj_dir.mkdir()
         config = {"extra_projects": [
-            {"name": "ia-dev-memory", "path": str(proj_dir), "lb_path": "/ia-dev-memory"}
+            {"name": "ia-dev-memory",
+                "path": str(proj_dir), "lb_path": "/ia-dev-memory"}
         ]}
         import pytest as _pytest
         with _pytest.raises(me.DeploymentError, match="manquants"):
@@ -765,8 +796,10 @@ class TestDiscoverExtraProjects:
 
     def test_multiple_valid_projects(self, tmp_path):
         """Deux projets valides et distincts sont tous les deux retournes."""
-        p1 = _make_valid_project(tmp_path, name="service-alpha", lb_path="/alpha")
-        p2 = _make_valid_project(tmp_path, name="service-beta", lb_path="/beta")
+        p1 = _make_valid_project(
+            tmp_path, name="service-alpha", lb_path="/alpha")
+        p2 = _make_valid_project(
+            tmp_path, name="service-beta", lb_path="/beta")
         config = {"extra_projects": [p1, p2]}
         result = me.discover_extra_projects(config)
         assert len(result) == 2
@@ -787,7 +820,8 @@ class TestPostDeployFrontendSync:
         # 1. Mock terraform output pour frontend_bucket_name
         r1 = MagicMock()
         r1.returncode = 0
-        r1.stdout = json.dumps({"frontend_bucket_name": {"value": "my-bucket"}})
+        r1.stdout = json.dumps(
+            {"frontend_bucket_name": {"value": "my-bucket"}})
 
         # 2. Mock gcloud storage ls pour lister les fichiers
         r2 = MagicMock()
@@ -816,7 +850,8 @@ class TestPostDeployFrontendSync:
         rsync_mock.stderr = "Copying file://... to gs://..."
 
         mock_run.side_effect = [
-            r1, r2, r3, MagicMock(returncode=0),  # terraform output, ls, ls --long, cp
+            # terraform output, ls, ls --long, cp
+            r1, r2, r3, MagicMock(returncode=0),
             rsync_mock,                           # rsync
             MagicMock(returncode=0),              # objects update index.html
             MagicMock(returncode=0),              # objects update assets
@@ -828,8 +863,30 @@ class TestPostDeployFrontendSync:
             with patch("manage_env.os.makedirs"):
                 with patch("manage_env.tarfile.open"):
                     with patch("manage_env.os.walk", return_value=[("/tmp/fake-dir", [], ["index.html"])]):
-                        me._post_deploy_frontend_sync("prd", "my-project", frontend_version="v0.1.12")
+                        me._post_deploy_frontend_sync(
+                            "prd", "my-project", frontend_version="v0.1.12")
 
         # Vérifie que la commande de téléchargement a bien utilisé l'URL filtrée de la version v0.1.12
         cp_calls = [c for c in mock_run.mock_calls if "cp" in str(c)]
-        assert any("frontend-20260522112523-v0.1.12.tar.gz" in str(c) for c in cp_calls)
+        assert any("frontend-20260522112523-v0.1.12.tar.gz" in str(c)
+                   for c in cp_calls)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests : get_tf_args()
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestGetTfArgs:
+    """Valide la construction des arguments de variables Terraform supplémentaires."""
+
+    @patch("manage_env._get_latest_active_secret_version")
+    def test_get_tf_args_returns_both_versions(self, mock_get_version):
+        # On mock _get_latest_active_secret_version pour retourner des versions distinctes
+        mock_get_version.side_effect = lambda proj, secret: "5" if secret == "google-secret-id" else "12"
+
+        args = me.get_tf_args("my-project")
+        assert args == [
+            "-var=google_secret_version=5",
+            "-var=jwt_secret_version=12",
+        ]
+        assert mock_get_version.call_count == 2
