@@ -24,7 +24,9 @@ if engine:
     engine.dispose()
 sync_engine = create_engine("sqlite:///./prompts_test.db", connect_args={"check_same_thread": False})
 async_engine = create_async_engine("sqlite+aiosqlite:///./prompts_test.db", connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(class_=AsyncSession, autocommit=False, autoflush=False, expire_on_commit=False, bind=async_engine)
+TestingSessionLocal = sessionmaker(
+    class_=AsyncSession, autocommit=False, autoflush=False, expire_on_commit=False, bind=async_engine
+)
 
 
 async def override_get_db():
@@ -223,14 +225,15 @@ async def test_analyzer_generate_test_cases_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_analyzer_generate_test_cases_fail(monkeypatch):
+    import json
     monkeypatch.setenv("GOOGLE_API_KEY", "fake")
     with patch("src.prompts.analyzer.genai.Client") as mock_client:
         mock_resp = MagicMock()
         mock_resp.text = '{"bad json'
         mock_client.return_value.aio.models.generate_content = AsyncMock(return_value=mock_resp)
 
-        res = await analyzer.generate_test_cases("my prompt")
-        assert res == []
+        with pytest.raises(json.JSONDecodeError):
+            await analyzer.generate_test_cases("my prompt")
 
 
 @pytest.mark.asyncio

@@ -193,9 +193,17 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db), payl
         user.email = f"temp-{uuid.uuid4()}@zenika.com"
 
     db_user = User(
-        username=user.username, email=user.email, first_name=user.first_name, last_name=user.last_name,
-        full_name=user.full_name or f"{user.first_name} {user.last_name}" if user.first_name and user.last_name else user.full_name,
-        hashed_password=get_password_hash(user.password), allowed_category_ids=allowed_ids_str, is_anonymous=user.is_anonymous
+        username=user.username,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        full_name=(
+            user.full_name
+            or (f"{user.first_name} {user.last_name}" if user.first_name and user.last_name else user.full_name)
+        ),
+        hashed_password=get_password_hash(user.password),
+        allowed_category_ids=allowed_ids_str,
+        is_anonymous=user.is_anonymous,
     )
     db.add(db_user)
 
@@ -204,6 +212,10 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db), payl
         await db.refresh(db_user)
     except IntegrityError:
         await db.rollback()
+        try:
+            db.expunge(db_user)
+        except Exception:
+            pass
         # Try upsert on email first, then on username
         existing = (await db.execute(select(User).filter(User.email == user.email))).scalars().first()
         if not existing:
@@ -251,7 +263,12 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db), payl
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int = Path(..., gt=0, le=2_147_483_647), user_update: UserUpdate = Body(...), db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+async def update_user(
+    user_id: int = Path(..., gt=0, le=2_147_483_647),
+    user_update: UserUpdate = Body(...),
+    db: AsyncSession = Depends(get_db),
+    payload: dict = Depends(verify_jwt),
+):
     if payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
 
@@ -295,7 +312,11 @@ async def update_user(user_id: int = Path(..., gt=0, le=2_147_483_647), user_upd
 
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_user(user_id: int = Path(..., gt=0, le=2_147_483_647), db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+async def delete_user(
+    user_id: int = Path(..., gt=0, le=2_147_483_647),
+    db: AsyncSession = Depends(get_db),
+    payload: dict = Depends(verify_jwt),
+):
     if payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Privilèges administrateur requis.")
 

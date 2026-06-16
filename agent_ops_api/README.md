@@ -94,4 +94,4 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 - Toutes les réponses A2A doivent inclure le flag `degraded: True` si une API aval est indisponible
 
 ## Dernière modification
-- 2026-06-11 — v0.2.48 — SRE triage update & daily report
+- 2026-06-16 — v0.2.50 — Mise à jour dépendances partagées et SRE Triage

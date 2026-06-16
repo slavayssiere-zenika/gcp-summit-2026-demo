@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -8,6 +9,8 @@ from google.genai import types
 from src.gemini_retry import generate_content_with_retry
 import yaml
 import asyncio
+
+logger = logging.getLogger(__name__)
 
 
 def get_genai_client():
@@ -45,8 +48,11 @@ async def generate_test_cases(prompt_value: str) -> list:
     try:
         return json.loads(response.text)
     except Exception as e:
-        print(f"Error parsing Gemini response: {e}")
-        return []
+        logger.error(
+            "[analyzer] Failed to parse Gemini response for test case generation: %s",
+            e, exc_info=True,
+        )
+        raise
 
 
 async def run_promptfoo_analysis(prompt_value: str, test_cases: list) -> dict:

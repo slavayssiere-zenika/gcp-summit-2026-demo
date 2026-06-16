@@ -31,9 +31,7 @@ import os
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_fastapi_instrumentator import Instrumentator, metrics as pfi_metrics
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response as StarletteResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from shared.exception_handler import register_global_exception_handler
 from shared.middlewares import ContentLengthSanitizerASGIMiddleware
@@ -52,8 +50,8 @@ _LATENCY_BUCKETS = (
 _EXCLUDED_URLS = "health,ready,metrics,version,api/health"
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware défensif — injecte des headers de sécurité HTTP sur chaque réponse.
+class SecurityHeadersMiddleware:
+    """Middleware défensif ASGI pur — injecte des headers de sécurité HTTP sur chaque réponse.
 
     Protège contre :
     - Clickjacking          : X-Frame-Options: DENY
@@ -61,18 +59,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - XSS (navigateurs old) : X-XSS-Protection: 1; mode=block
     - Referrer leakage      : Referrer-Policy: strict-origin-when-cross-origin
 
+    Implémenté comme middleware ASGI pur (sans BaseHTTPMiddleware) pour éviter
+    le bug `RuntimeError: No response returned.` introduit par Starlette ≥ 0.40.
     Appliqué automatiquement par instrument_app() — ne pas ajouter manuellement.
     """
 
-    async def dispatch(
-        self, request: StarletteRequest, call_next
-    ) -> StarletteResponse:
-        response = await call_next(request)
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        return response
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_security_headers(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers += [
+                    (b"x-frame-options", b"DENY"),
+                    (b"x-content-type-options", b"nosniff"),
+                    (b"x-xss-protection", b"1; mode=block"),
+                    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+                ]
+                message = dict(message)
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_security_headers)
 
 
 def _resolve_otel_service_name() -> str:

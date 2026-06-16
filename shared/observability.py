@@ -16,10 +16,9 @@ import threading
 import time
 from collections import defaultdict
 
-from fastapi import Request
 from opentelemetry import trace
 from pythonjsonlogger import json
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Chemins exclus des logs HTTP (health-check / instrumentation)
 SILENT_PATHS: frozenset = frozenset({
@@ -142,8 +141,12 @@ def setup_logging() -> logging.Logger:
     return root
 
 
-class LoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware HTTP structuré.
+class LoggingMiddleware:
+    """Middleware HTTP structuré (ASGI pur — compatible Starlette ≥ 0.40 + Python 3.13).
+
+    Implémenté comme middleware ASGI pur (sans BaseHTTPMiddleware) pour éviter
+    le bug `RuntimeError: No response returned.` introduit par Starlette ≥ 0.40
+    qui utilise les ExceptionGroup de Python 3.13 dans call_next().
 
     - Exclut les endpoints de supervision (SILENT_PATHS).
     - Log en WARNING pour les 4xx, ERROR pour les 5xx.
@@ -151,34 +154,48 @@ class LoggingMiddleware(BaseHTTPMiddleware):
       sensibles.
     """
 
-    async def dispatch(self, request: Request, call_next):
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         start = time.time()
-        logger = logging.getLogger("middleware.http")
-        path = request.url.path
+        _logger = logging.getLogger("middleware.http")
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+        status_code: int = 500
+
+        async def send_wrapper(message: dict) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
 
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
             if path not in SILENT_PATHS:
                 duration = round(time.time() - start, 4)
-                level = logging.WARNING if response.status_code >= 400 else logging.INFO
-                logger.log(
+                level = logging.WARNING if status_code >= 400 else logging.INFO
+                _logger.log(
                     level,
                     "HTTP Request Processed",
                     extra={
-                        "http.method": request.method,
+                        "http.method": method,
                         "http.path": path,
-                        "http.status_code": response.status_code,
+                        "http.status_code": status_code,
                         "http.duration_s": duration,
                     },
                 )
-            return response
 
         except Exception as exc:
             if path not in SILENT_PATHS:
-                logger.error(
+                _logger.error(
                     "HTTP Request Failed",
                     extra={
-                        "http.method": request.method,
+                        "http.method": method,
                         "http.path": path,
                         "http.status_code": 500,
                         "http.duration_s": round(time.time() - start, 4),

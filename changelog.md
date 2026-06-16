@@ -1,3 +1,148 @@
+## Mise à jour automatique - 2026-06-16 10:45:10
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2743  | 608  |  78% |
+| agent_hr_api     | 1564  | 102  |  93% |
+| agent_missions_api | 1927  | 90   |  95% |
+| agent_ops_api    | 2155  | 191  |  91% |
+| agent_router_api | 3588  | 516  |  86% |
+| analytics_mcp    | 1109  | 206  |  81% |
+| competencies_api | 5738  | 902  |  84% |
+| cv_api           | 10438 | 1540 |  85% |
+| drive_api        | 3531  | 435  |  88% |
+| items_api        | 2180  | 133  |  94% |
+| missions_api     | 2231  | 281  |  87% |
+| monitoring_mcp   | 1359  | 187  |  86% |
+| platform-engineering | 2308  | 1550 |  33% |
+| prompts_api      | 1353  | 250  |  82% |
+| scratch          | N/A   | N/A  | N/A  |
+| scripts          | N/A   | N/A  | N/A  |
+| shared           | 3006  | 263  |  91% |
+| tests            | 578   | 36   |  94% |
+| users_api        | 2036  | 342  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `gent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/pyproject.toml` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_hr_api/uv.lock` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/pyproject.toml` (M)
+- `agent_missions_api/uv.lock` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/README.md` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/pyproject.toml` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/sre_triage.py` (M)
+- `agent_ops_api/uv.lock` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/pyproject.toml` (M)
+- `agent_router_api/uv.lock` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/pyproject.toml` (M)
+- `analytics_mcp/uv.lock` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `competencies_api/pyproject.toml` (M)
+- `competencies_api/uv.lock` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/README.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/pyproject.toml` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/analytics_router.py` (M)
+- `cv_api/uv.lock` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/pyproject.toml` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/uv.lock` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/README.md` (M)
+- `frontend/VERSION` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/README.md` (M)
+- `items_api/VERSION` (M)
+- `items_api/pyproject.toml` (M)
+- `items_api/src/items/crud_router.py` (M)
+- `items_api/uv.lock` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/pyproject.toml` (M)
+- `missions_api/spec.md` (M)
+- `missions_api/uv.lock` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `monitoring_mcp/pyproject.toml` (M)
+- `monitoring_mcp/uv.lock` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/README.md` (M)
+- `prompts_api/VERSION` (M)
+- `prompts_api/pyproject.toml` (M)
+- `prompts_api/spec.md` (M)
+- `prompts_api/src/prompts/analyzer.py` (M)
+- `prompts_api/tests/test_prompts.py` (M)
+- `prompts_api/uv.lock` (M)
+- `run_git_push.sh` (M)
+- `scripts/deploy.sh` (M)
+- `shared/FILE_HASHES` (M)
+- `shared/HASH` (M)
+- `shared/VERSION` (M)
+- `shared/exception_handler.py` (M)
+- `shared/fastapi_utils.py` (M)
+- `shared/observability.py` (M)
+- `shared/pyproject.toml` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/README.md` (M)
+- `users_api/VERSION` (M)
+- `users_api/conftest.py` (M)
+- `users_api/main.py` (M)
+- `users_api/pyproject.toml` (M)
+- `users_api/src/auth.py` (M)
+- `users_api/src/users/crud_router.py` (M)
+- `users_api/tests/test_edge_cases.py` (M)
+- `users_api/uv.lock` (M)
+- `all_logs.json` (??)
+- `recent_logs.json` (??)
+- `scripts/check_silent_exceptions.py` (??)
+- `traceback.txt` (??)
+
+---
+
 ## Mise à jour automatique - 2026-06-15 11:03:13
 
 ### Couverture de Code

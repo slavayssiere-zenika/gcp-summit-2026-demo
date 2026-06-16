@@ -348,6 +348,8 @@ async def _create_items_bulk_inner(
             await clear_namespace("items:search:")
         except IntegrityError as e:
             await db.rollback()
+            for db_item in new_items:
+                db.expunge(db_item)
             _log.getLogger(__name__).warning(
                 f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
 
@@ -374,6 +376,7 @@ async def _create_items_bulk_inner(
                         result_item_ids.append(db_item.id)
                     except IntegrityError:
                         await db.rollback()
+                        db.expunge(db_item)
                         existing = (await db.execute(
                             select(Item).filter(Item.user_id == item.user_id, Item.name == item.name)
                         )).scalars().first()

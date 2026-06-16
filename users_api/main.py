@@ -91,8 +91,9 @@ async def seed_admin():
                     )
                     await db.commit()
                 return
-        except Exception:
+        except Exception as e:
             # users table might not exist yet if Liquibase hasn't finished
+            logger.warning("[startup] seed_admin retry — table unavailable: %s — sleeping 5s", e)
             await asyncio.sleep(5)
 
 

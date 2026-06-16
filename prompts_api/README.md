@@ -66,4 +66,4 @@ Gestion et versioning des system prompts des agents IA. Centralise les instructi
 - Pas de `mcp_server.py` sidecar ? À vérifier lors de la prochaine intervention
 
 ## Dernière modification
-2026-04-29 — v0.0.49 — fix prompt fetch URL dans cv_api
+2026-06-16 — v0.1.34 — Mise à jour des dépendances partagées et prompts analyzer

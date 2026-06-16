@@ -60,4 +60,4 @@ src/
 - Toutes les pages admin (`Admin*.vue`) nécessitent le rôle `admin` dans le JWT
 
 ## Dernière modification
-2026-04-29 — v0.0.181 — Data Quality dashboard + UI improvements
+2026-06-15 — v0.1.27 — Update frontend locales and observability

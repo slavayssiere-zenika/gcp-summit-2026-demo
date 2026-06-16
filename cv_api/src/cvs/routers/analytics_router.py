@@ -280,8 +280,11 @@ async def get_skills_coverage(
         result = await db.execute(raw_query, {"agency": agency, "top_n": top_n})
         rows = result.fetchall()
     except Exception as e:
-        logger.error(f"[get_skills_coverage] SQL error: {e}")
-        return []
+        logger.error("[get_skills_coverage] SQL error: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur base de données lors du calcul de la couverture de compétences : {e}",
+        )
 
     return [
         {"skill": row.skill, "consultant_count": row.consultant_count}

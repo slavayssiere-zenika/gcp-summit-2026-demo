@@ -567,7 +567,7 @@ compute_service_hash() {
   # Exclude VERSION and HASH files, and common ignore paths
   find "${DIRS_TO_CHECK[@]}" -type f \
     ! -name "VERSION" ! -name "HASH" ! -name "FILE_HASHES" \
-    ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" \
+    ! -name ".coverage" ! -name "coverage.json" ! -name "coverage.xml" ! -name "coverage_output.txt" ! -name "pytest.log" ! -name "vitest.log" \
     ! -name "*.db" ! -name "*.pyc" ! -name "*.md" \
     ! -path "*/__pycache__/*" ! -path "*/.pytest_cache/*" \
     ! -path "*/.venv*/*" ! -path "*/venv*/*" ! -path "*/env*/*" ! -path "*/test_env*/*" ! -path "*/node_modules/*" \
@@ -1474,6 +1474,20 @@ done
 
 # ── Gate d'audit de securite des configurations de Mocking (fail-fast) ───────────
 audit_mock_configs
+
+# ── Gate AGENTS.md §10 — Exceptions silencieuses (fail-fast) ─────────────────────
+echo -e "\n${GREY}--- 🔍 AGENTS.md §10 — Audit exceptions silencieuses ---${RESET}"
+if $PYTHON_CMD scripts/check_silent_exceptions.py; then
+  echo -e "${GREEN}✅ Aucune exception silencieuse détectée.${RESET}\n"
+else
+  echo -e "${RED}❌ Exceptions silencieuses détectées — déploiement bloqué.${RESET}"
+  echo -e "${RED}   Corrigez les violations CRITICAL listées ci-dessus.${RESET}"
+  echo -e "${GREY}   Règle : AGENTS.md §10 — toute exception doit raise, retourner {success: false}${RESET}"
+  echo -e "${GREY}           (MCP tools), ou être documentée avec un commentaire # fail-open.${RESET}"
+  echo -e "${GREY}   Bypass temporaire (non recommandé) : ajoutez un commentaire # fail-open${RESET}"
+  echo -e "${GREY}   sur la ligne except concernée et justifiez dans le commit message.${RESET}\n"
+  exit 1
+fi
 
 # ── Gate de test E2E & Evaluation globale (fail-fast) ───────────────────────────
 if [ "$SKIP_TESTS" = false ]; then

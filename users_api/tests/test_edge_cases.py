@@ -44,7 +44,8 @@ class TestAuthEdgeCases:
         assert resp.status_code == 401
 
     def test_blacklist_redis_unavailable_fails_open(self):
-        """Si Redis est indisponible pour la blacklist → fail-open (accès autorisé)."""
+        """Si Redis est indisponible (ConnectionError) pour la blacklist → fail-open (accès autorisé)."""
+        import redis.exceptions
         from fastapi.testclient import TestClient
         from src.auth import create_access_token
 
@@ -52,11 +53,26 @@ class TestAuthEdgeCases:
         client = TestClient(app, raise_server_exceptions=False)
         token = create_access_token({"sub": "user@zenika.com"})
 
-        with patch("src.auth._is_user_blacklisted", new=AsyncMock(side_effect=Exception("Redis down"))):
-            # _is_user_blacklisted est wrappé dans try/except → fail-open → 200
-            # Mais l'exception est dans la logique interne de verify_jwt
+        # Simuler une erreur de connexion Redis (cas normal d'indisponibilité)
+        conn_err = redis.exceptions.ConnectionError("Redis down")
+        with patch("src.auth._is_user_blacklisted", new=AsyncMock(side_effect=conn_err)):
             resp = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
-        # Le fail-open est géré dans _is_user_blacklisted (try/except retourne False)
+        # Fail-open sur ConnectionError → 200
+        assert resp.status_code == 200
+
+    def test_blacklist_redis_unexpected_error_still_fails_open(self):
+        """Exception inattendue sur Redis → loggée en ERROR mais toujours fail-open."""
+        from fastapi.testclient import TestClient
+        from src.auth import create_access_token
+
+        app = self._make_app()
+        client = TestClient(app, raise_server_exceptions=False)
+        token = create_access_token({"sub": "user@zenika.com"})
+
+        # Exception inattendue (bug, sérialisation, etc.) → doit rester fail-open
+        with patch("src.auth._is_user_blacklisted", new=AsyncMock(side_effect=ValueError("Unexpected"))):
+            resp = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+        # Fail-open même sur erreur inattendue (loggée en ERROR)
         assert resp.status_code == 200
 
     def test_blacklisted_user_returns_401(self):

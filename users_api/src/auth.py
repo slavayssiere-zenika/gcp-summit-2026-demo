@@ -1,15 +1,19 @@
 import asyncio
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import redis.exceptions
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 from jwt.exceptions import InvalidTokenError
 import bcrypt
 from shared.cache import key_exists as _cache_key_exists
+
+logger = logging.getLogger(__name__)
 
 # Pool de threads dedie au bcrypt (CPU-bound) — evite de bloquer la boucle asyncio.
 # bcrypt avec work_factor=12 prend ~200-400ms CPU par operation.
@@ -116,8 +120,21 @@ async def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCr
                     )
             except HTTPException:
                 raise
-            except Exception:
-                pass  # Fail-open : Redis indisponible n'interrompt pas l'auth
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
+                # Fail-open : Redis temporairement indisponible — on laisse passer
+                # plutôt que de bloquer tous les utilisateurs sur un pic de charge.
+                logger.warning(
+                    "[auth] Redis unavailable for blacklist check (user=%s) — fail-open",
+                    username,
+                )
+            except Exception as e:
+                # Erreur Redis inattendue (sérialisation, protocole...) : on logue
+                # avec le contexte complet mais on reste fail-open pour ne pas
+                # déclencher un 503 en cascade. À investiguer si récurrent.
+                logger.error(
+                    "[auth] Unexpected Redis error during blacklist check (user=%s): %s",
+                    username, e, exc_info=True,
+                )
             return payload
         except InvalidTokenError:
             # If header token is invalid, we don't fail yet, we'll try the cookie
@@ -156,8 +173,18 @@ async def verify_jwt(request: Request, credentials: Optional[HTTPAuthorizationCr
                 )
         except HTTPException:
             raise
-        except Exception:
-            pass  # Fail-open : Redis indisponible n'interrompt pas l'auth
+        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
+            # Fail-open : Redis temporairement indisponible — on laisse passer
+            logger.warning(
+                "[auth] Redis unavailable for blacklist check (user=%s) — fail-open",
+                username,
+            )
+        except Exception as e:
+            # Erreur Redis inattendue : loguée mais fail-open (voir commentaire ci-dessus).
+            logger.error(
+                "[auth] Unexpected Redis error during blacklist check (user=%s): %s",
+                username, e, exc_info=True,
+            )
         return payload
     except InvalidTokenError:
         raise HTTPException(

@@ -502,7 +502,7 @@ def _parse_report_metrics(report: "SreTriageReport") -> dict:
         if m:
             excerpt = m.group(1).strip()[:1000]
     except Exception:
-        pass
+        pass  # fail-open : extraction Markdown best-effort — format variable selon les versions
 
     return {
         "triggered_at": report.triggered_at,

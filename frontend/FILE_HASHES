@@ -67,7 +67,6 @@
 89c443e9e52dd5a5592e1737055ae08f11c86a60  ./frontend/src/services/auth.ts
 8d6c274a9ed69852b93c24d5ccd31da0325ae956  ./frontend/src/App.vue
 8ed5565aa2e785d4d53d68ce9cef60588855769e  ./frontend/src/components/agent/CloudRunLogsViewer.vue
-95a33436525085acffbe7f6e00a596e2768578dd  ./frontend/vitest.log
 95b1350eea6d52f6a2e30d9252d9be87c01e6c0d  ./frontend/src/utils/apiContract.ts
 974def9e339374c8690819b61ab155726da89884  ./frontend/src/components/CVReanalysisPanel.vue
 9bbfa8b175990814ba2e975728a7f4e4d770f643  ./frontend/src/services/__tests__/agentApi.spec.ts

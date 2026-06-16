@@ -3,8 +3,8 @@ name = "agent-ops-api"
 version = "v0.0.96"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.136.0",
-    "uvicorn>=0.47.0",
+    "fastapi>=0.136.0,<0.138.0",
+    "uvicorn>=0.47.0,<0.48.0",
     "httpx>=0.25.0",
     "opentelemetry-api>=1.41.0,<2.0.0",
     "opentelemetry-sdk>=1.41.0,<2.0.0",

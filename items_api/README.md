@@ -13,7 +13,7 @@ Gestion des items (catalogue de services/produits) et de leurs catégories.
 | `mcp_server.py` | 71 | ✅ |
 | `conftest.py` | 78 | ✅ |
 | `src/items/admin_router.py` | 125 | ✅ |
-| `src/items/crud_router.py` | 467 | ✅ |
+| `src/items/crud_router.py` | 470 | ✅ |
 | `src/items/router.py` | 26 | ✅ |
 | `src/items/routers/categories_router.py` | 60 | ✅ |
 | `src/items/routers/search_router.py` | 188 | ✅ |
@@ -49,4 +49,4 @@ _Aucun tool MCP détecté dans `mcp_server.py`._
 - Cache Redis DB1 — ne pas confondre avec `agent_router_api` qui utilisait historiquement DB1 aussi (corrigé en DB2)
 
 ## Dernière modification
-2026-04-29 — v0.0.45 — bump version post-audit sécurité
+2026-06-16 — v0.1.33 — Update shared dependencies and CRUD router

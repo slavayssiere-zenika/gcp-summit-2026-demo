@@ -45,8 +45,11 @@ async def _get_service_token_fallback() -> str:
                 )
                 if res.status_code == 200:
                     return res.json().get("access_token", "")
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(
+            "[exception_handler] Failed to retrieve service account token"
+            " (GCP metadata unavailable or auth error): %s", e,
+        )
     return ""
 
 

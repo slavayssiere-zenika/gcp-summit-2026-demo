@@ -9,12 +9,12 @@ Gestion des utilisateurs, authentification JWT, et émission de tokens de servic
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 223 | ✅ |
+| `main.py` | 224 | ✅ |
 | `mcp_server.py` | 43 | ✅ |
-| `conftest.py` | 77 | ✅ |
+| `conftest.py` | 78 | ✅ |
 | `metrics.py` | 4 | ✅ |
 | `src/users/auth_router.py` | 307 | ✅ |
-| `src/users/crud_router.py` | 312 | ✅ |
+| `src/users/crud_router.py` | 333 | ✅ |
 | `src/users/router.py` | 10 | ✅ |
 | `src/users/system_router.py` | 139 | ✅ |
 
@@ -71,4 +71,4 @@ _Aucun tool MCP détecté dans `mcp_server.py`._
 - `POST /auth/internal/service-token` est le **seul** mécanisme autorisé pour les tokens de background task — ne jamais utiliser le compte admin
 
 ## Dernière modification
-2026-04-29 — Audit sécurité RBAC + renforcement verify_jwt
+2026-06-16 — v0.2.36 — Update shared dependencies, Auth and CRUD router
