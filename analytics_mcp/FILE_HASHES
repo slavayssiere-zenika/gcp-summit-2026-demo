@@ -2,6 +2,7 @@
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 04c2b730a667d46e83138c735a0549781ace8cd6  ./analytics_mcp/auth.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
+0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
 0e67206eb9bb4bdd2a227d7f16449b8c6430782d  ./shared/tests/zero_trust.py
@@ -14,20 +15,19 @@
 2e5c81f8239af0ac8d8dbd7b27f7e5c4985169a5  ./analytics_mcp/uv.lock
 2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
-35086d0147fdbe4f6a39c8a90639749e79ec5c35  ./shared/observability.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 35b387084a7d024a9a4a6ba30d6f62879e843b17  ./analytics_mcp/mcp_server.py
 3a6c326298eabc6070c6ff2dfae1be0a70f2d6fd  ./analytics_mcp/pytest.ini
 3cddf64634d081af840c26f3279174e9a09187f6  ./analytics_mcp/mcp_app.py
-3dffa162c3d1fb7a9cc49271fd848c7cd6c2fbc4  ./analytics_mcp/tests/test_finops_tools.py
 3eacd50c4a803cd957c9697c269c327215261965  ./analytics_mcp/tests/test_mcp_server.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 4b1640af1a4075863383f9205980edb1cf7375ad  ./analytics_mcp/tests/test_mcp_app.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 542a20730206b4332d17fc2e6647cb695c36517b  ./shared/tests/test_auth.py
-5a1b0844088ac2d107eb32bf7a94f90f606a2211  ./analytics_mcp/tools/finops_tools.py
+5634525ffac2a4e1c38c31e3ff9c6cd7c00a377f  ./analytics_mcp/tools/finops_tools.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 63b3724277ff70750e58d21bc5e9df0dea2fb3fa  ./shared/fastapi_utils.py
+6467b2834a7d90389b8b5b338679c47f8b8354c0  ./analytics_mcp/tests/test_finops_tools.py
 691bf7b830ce05f8460b2e88ea35f05744dc60c7  ./analytics_mcp/conftest.py
 69209a4cc33ecd1aedec911e9f3c14666554c1a8  ./analytics_mcp/Dockerfile
 69c83abcfafb946076c74da166b28a1da96290f3  ./shared/database.py
@@ -46,6 +46,7 @@
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 9ea79e0bea73a253b61faeb4736edad514f2825d  ./analytics_mcp/tests/test_main.py
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
+c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
@@ -53,7 +54,6 @@ ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb4c47bf666a24d06a56299ad6a6889633956e20  ./analytics_mcp/tests/test_market_tools.py
 cd76949fd3f8a2e82a82c2b62233bf5e95f1298d  ./analytics_mcp/init_pricing.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./analytics_mcp/.dockerignore
-cfba8089c339a84374833155e1d72df74b6dd385  ./shared/pyproject.toml
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./analytics_mcp/tools/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py

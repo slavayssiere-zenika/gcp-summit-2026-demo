@@ -151,10 +151,11 @@ async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOP
 
     query = f"""
         SELECT
-            COUNT(DISTINCT httpRequest.remoteIp) as unique_visitors,
-            COUNT(*) as total_requests,
-            COUNTIF(resource.labels.service_name LIKE 'agent-router-api%') as router_requests,
-            COUNTIF(httpRequest.requestUrl LIKE '%/query%') as agent_queries
+            COUNT(DISTINCT IF(httpRequest.status NOT IN (401, 403, 404), httpRequest.remoteIp, NULL)) as unique_visitors,
+            COUNTIF(httpRequest.status NOT IN (401, 403, 404)) as total_requests,
+            COUNTIF(resource.labels.service_name LIKE 'agent-router-api%' AND httpRequest.status NOT IN (401, 403, 404)) as router_requests,
+            COUNTIF(httpRequest.requestUrl LIKE '%/query%' AND httpRequest.status NOT IN (401, 403, 404)) as agent_queries,
+            COUNTIF(httpRequest.status IN (401, 403, 404)) as blocked_scans
         FROM {wildcard_ref}
         WHERE _TABLE_SUFFIX = @table_suffix
         {bot_filter}
@@ -179,6 +180,7 @@ async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOP
                 "total_requests": row.total_requests if row.total_requests is not None else 0,
                 "router_requests": row.router_requests if row.router_requests is not None else 0,
                 "agent_queries": row.agent_queries if row.agent_queries is not None else 0,
+                "blocked_scans": row.blocked_scans if row.blocked_scans is not None else 0,
                 "status": "success"
             }
         else:
@@ -188,6 +190,7 @@ async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOP
                 "total_requests": 0,
                 "router_requests": 0,
                 "agent_queries": 0,
+                "blocked_scans": 0,
                 "status": "no_data"
             }
     except Exception as e:
@@ -198,6 +201,7 @@ async def handle_get_usage_statistics(arguments: dict, client, PROJECT_ID, FINOP
             "total_requests": "[N/D]",
             "router_requests": "[N/D]",
             "agent_queries": "[N/D]",
+            "blocked_scans": "[N/D]",
             "status": "fallback_no_table",
             "error_detail": str(e)
         }

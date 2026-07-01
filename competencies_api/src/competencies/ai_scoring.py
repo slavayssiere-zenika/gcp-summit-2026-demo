@@ -27,6 +27,7 @@ from src.competencies.gemini_cache import get_or_create_scoring_cache
 from src.competencies.helpers import (
     _compute_recency_weight,
     _duration_multiplier,
+    _fetch_prompt_dynamic,
     _get_mission_bonus,
     _parse_duration_months,
 )
@@ -224,26 +225,37 @@ async def _compute_ai_score(
         else "générales du consultant"
     )
 
-    # 4. Prompt v2
-    prompt = (
-        f"Tu es un évaluateur expert de consultants IT et tech (scoring v2 avec pondération)."
-        f" Tu dois noter la maîtrise de la compétence '{competency_name}' "
-        f"pour ce consultant, de 0.0 à 5.0 (par pas de 0.5).\n\n"
-        f"=== RÈGLES DE PONDÉRATION OBLIGATOIRES ===\n"
-        f"1. RÉCENCE : chaque mission affiche un 'poids' entre 0.0 et 1.0.\n"
-        f"   - poids proche de 1.0 = mission récente → compte PLEINEMENT\n"
-        f"   - poids 0.2-0.4 = mission ancienne → compte de façon RÉDUITE\n"
-        f"2. DURÉE : chaque mission affiche un 'multiplicateur' entre 0.5 et 1.5.\n"
-        f"3. TYPE DE MISSION : audit/conseil/accompagnement/formation/expertise = bonus +0.3 à +0.5.\n\n"
-        f"=== NIVEAUX DE RÉFÉRENCE ===\n"
-        f"  0.0: Aucune trace | 1.0: Notions | 2.0: Utilisation ponctuelle\n"
-        f"  3.0: Maîtrise confirmée | 4.0: Expert | 5.0: Référence reconnue\n\n"
+    # 4. Charger le prompt dynamiquement
+    system_prompt = await _fetch_prompt_dynamic(
+        "competencies_api.ai_scoring",
+        "Tu es un évaluateur expert de consultants IT et tech (scoring v2 avec pondération). "
+        "Tu notes la maîtrise d'une compétence de 0.0 à 5.0 (par pas de 0.5).\n\n"
+        "=== RÈGLES DE PONDÉRATION OBLIGATOIRES ===\n"
+        "1. RÉCENCE : chaque mission affiche un 'poids' entre 0.0 et 1.0.\n"
+        "   - poids proche de 1.0 = mission récente → compte PLEINEMENT\n"
+        "   - poids 0.2-0.4 = mission ancienne → compte de façon RÉDUITE\n"
+        "2. DURÉE : chaque mission affiche un 'multiplicateur' entre 0.5 et 1.5.\n"
+        "3. TYPE DE MISSION : audit/conseil/accompagnement/formation/expertise = bonus +0.3 à +0.5.\n\n"
+        "=== NIVEAUX DE RÉFÉRENCE ===\n"
+        "  0.0: Aucune trace | 1.0: Notions | 2.0: Utilisation ponctuelle\n"
+        "  3.0: Maîtrise confirmée | 4.0: Expert | 5.0: Référence reconnue\n\n"
+        "=== FORMAT DE RÉPONSE OBLIGATOIRE ===\n"
+        "Réponds UNIQUEMENT avec du JSON valide contenant exactement deux champs :\n"
+        "- score : float 0.0-5.0, arrondi au pas de 0.5\n"
+        "- justification : string factuel, 50-250 caractères\n"
+        'Exemple : {"score": 3.5, "justification": "2 missions récentes (weight>0.9) dont 1 audit Airbus (+0.5)."}',
+        "competencies_api.ai_scoring.txt",
+    )
+
+    user_prompt = (
+        f"Tu dois noter la maîtrise de la compétence '{competency_name}' "
+        f"pour ce consultant.\n\n"
         f"=== MISSIONS {context_label.upper()} ===\n{missions_text}\n\n"
         f"=== INSTRUCTION ===\n"
         f"Reply ONLY with valid JSON with exactly two fields:\n"
         f"- score : float 0.0-5.0, rounded to nearest 0.5 step\n"
-        f"- justification : factual string, 50-250 characters\n\n"
-        f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit at Airbus (+0.5 bonus)."}}'  # noqa: E501
+        f"- justification : factual string, 50-250 characters\n"
+        f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit (+0.5 bonus)."}}'  # noqa: E501
     )
 
     # 5. Appel Gemini avec JSON forcé + context caching si Vertex AI disponible
@@ -251,21 +263,12 @@ async def _compute_ai_score(
         client = genai.Client(api_key=api_key)
 
         # Tentative de context caching (Vertex AI uniquement)
-        cached_content_name = await get_or_create_scoring_cache(client, GEMINI_MODEL)
+        cached_content_name = await get_or_create_scoring_cache(
+            client, GEMINI_MODEL, system_prompt
+        )
 
         if cached_content_name:
             # Mode caché : le system prompt est injecté via cached_content
-            # Le prompt utilisateur contient uniquement les missions + instruction
-            user_prompt = (
-                f"Tu dois noter la maîtrise de la compétence '{competency_name}' "
-                f"pour ce consultant.\n\n"
-                f"=== MISSIONS {context_label.upper()} ===\n{missions_text}\n\n"
-                f"=== INSTRUCTION ===\n"
-                f"Reply ONLY with valid JSON with exactly two fields:\n"
-                f"- score : float 0.0-5.0, rounded to nearest 0.5 step\n"
-                f"- justification : factual string, 50-250 characters\n"
-                f'Example : {{"score": 3.5, "justification": "2 recent missions (weight>0.9) including 1 audit (+0.5 bonus)."}}'  # noqa: E501
-            )
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=GEMINI_MODEL,
@@ -283,9 +286,11 @@ async def _compute_ai_score(
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=GEMINI_MODEL,
-                    contents=prompt,
+                    contents=user_prompt,
                     config=types.GenerateContentConfig(
-                        response_mime_type="application/json", temperature=0.1
+                        system_instruction=system_prompt,
+                        response_mime_type="application/json",
+                        temperature=0.1,
                     ),
                 ),
                 timeout=60.0,

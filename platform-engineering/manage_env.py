@@ -164,7 +164,9 @@ SERVICE_IMAGE_MAP = {
     "agent_ops": "agent_ops_api",
     "agent_missions": "agent_missions_api",
     "drive": "drive_api",
+    "grafana": "grafana",
 }
+
 
 # Regex de validation du nom d'un projet externe.
 # Format kebab-case : commence par une lettre minuscule, puis lettres minuscules/chiffres/tirets, 3-31 chars total.
@@ -1234,7 +1236,7 @@ def build_importable_resources_map(env, project_id, region, extra_domains=None):
         "google_dns_managed_zone.env_zone": f"{dns_base}/zone-{env}",
         "google_dns_managed_zone.internal_zone": f"{dns_base}/internal-zone-{env}",
         # ── SSL Certificate ──────────────────────────────────────────────────
-        "google_compute_managed_ssl_certificate.default": f"projects/{project_id}/global/sslCertificates/ssl-{env}",
+        "google_compute_managed_ssl_certificate.default": f"projects/{project_id}/global/sslCertificates/ssl-{env}-v2",
         # ── Pub/Sub Topics ───────────────────────────────────────────────────
         "google_pubsub_topic.cv_import_events_dead_letter": f"projects/{project_id}/topics/zenika-cv-import-events-dead-letter-{env}",  # noqa: E501
         "google_pubsub_topic.cv_import_events": f"projects/{project_id}/topics/zenika-cv-import-events-{env}",
@@ -1753,7 +1755,7 @@ def _sanity_check_dns_ssl(env, base_domain, lb_ip, extra_domains, project_id):
     print("\n[*] Check 2/5: Waiting for GCP Managed SSL Certificate provisioning (Can take 15-30 mins)...")
     ssl_ready = False
     cert_creation_time = "Inconnue"
-    cert_name = f"ssl-{env}"
+    cert_name = f"ssl-{env}-v2"
     # Initialisation du contexte SSL par défaut (sera surchargé si certifi disponible)
     try:
         import certifi
@@ -1954,6 +1956,7 @@ def _seed_prompts(api_dns_name, access_token, ctx_to_use):
     print("\n[*] Check 4.5: Seeding system prompts into Prompts API...")
     prompts_to_seed = {
         "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
+        "agent_router_api.classifier": "agent_router_api/agent_router_api.classifier.txt",
         "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
         "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
         "agent_ops_api.sre_triage.system_instruction": "agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt",
@@ -1961,11 +1964,14 @@ def _seed_prompts(api_dns_name, access_token, ctx_to_use):
             "agent_ops_api/agent_ops_api.daily_report.system_instruction.txt"
         ),
         "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
+        "competencies_api.ai_scoring": "competencies_api/competencies_api.ai_scoring.txt",
+        "competencies_api.alias_generator": "competencies_api/competencies_api.alias_generator.txt",
         "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
         "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
         "cv_api.generate_taxonomy_tree_deduplicate": "cv_api/cv_api.generate_taxonomy_tree_deduplicate.txt",
         "cv_api.generate_taxonomy_tree_reduce": "cv_api/cv_api.generate_taxonomy_tree_reduce.txt",
         "cv_api.generate_taxonomy_tree_sweep": "cv_api/cv_api.generate_taxonomy_tree_sweep.txt",
+        "cv_api.search_filter_extraction": "cv_api/cv_api.search_filter_extraction.txt",
         "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
         "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
         "prompts_api.error_correction": "prompts_api/prompts_api.error_correction.txt",
@@ -2665,7 +2671,7 @@ def deploy(env, base_domain, project_id, config, force=False):
                 env, tf_a_addr,
                 f"projects/{project_id}/managedZones/{extra_zone_name}/rrsets/{extra_dns_name}/A")
 
-    ssl_name = f"ssl-{env}"
+    ssl_name = f"ssl-{env}-v2"
     if resource_exists_in_gcp("ssl_cert", ssl_name, project_id):
         import_persistent_resource(env, "google_compute_managed_ssl_certificate.default",
                                    f"projects/{project_id}/global/sslCertificates/{ssl_name}")

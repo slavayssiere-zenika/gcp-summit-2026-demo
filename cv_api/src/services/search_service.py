@@ -23,6 +23,8 @@ from google.cloud import run_v2 as cloudrun_v2
 from pydantic import ValidationError
 from sqlalchemy import text
 from shared.schemas.pagination import PaginationResponse
+from shared.auth.context import auth_header_var
+from shared.cache import get_cache, set_cache
 from metrics import CV_MISSING_EMBEDDINGS, CV_SEARCH_THRESHOLD_FILTERED, CV_SEARCH_RESULT_SCORE
 from opentelemetry.propagate import inject
 from sqlalchemy import func
@@ -39,6 +41,59 @@ from google.genai import types
 from src.cvs.models import CVMissionEmbedding
 
 logger = logging.getLogger(__name__)
+
+
+async def _fetch_prompt_dynamic(prompt_key: str, default_content: str, fallback_filename: str) -> str:
+    """Charge un prompt dynamiquement depuis prompts_api avec cache Redis et fallback local."""
+    cache_key = f"prompt:{prompt_key}"
+
+    try:
+        cached = await get_cache(cache_key)
+        if cached:
+            return cached
+    except Exception as e:
+        logger.warning("[PromptLoader] Erreur lecture cache pour %s: %s", prompt_key, e)
+
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    url = f"{prompts_api_url.rstrip('/')}/{prompt_key}/compiled"
+
+    auth_header = auth_header_var.get(None)
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(url, headers=headers)
+            if res.status_code == 200:
+                data = res.json()
+                val = data.get("value")
+                if val:
+                    ttl = int(os.getenv("PROMPT_CACHE_TTL_S", "60"))
+                    await set_cache(cache_key, val, ttl)
+                    return val
+            else:
+                logger.warning(
+                    "[PromptLoader] prompts_api HTTP %d pour %s",
+                    res.status_code, prompt_key
+                )
+    except Exception as e:
+        logger.warning("[PromptLoader] Échec appel prompts_api pour %s: %s", prompt_key, e)
+
+    try:
+        local_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            fallback_filename
+        )
+        if os.path.exists(local_path):
+            with open(local_path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception as e:
+        logger.warning(
+            "[PromptLoader] Échec lecture fichier local %s: %s",
+            fallback_filename, e
+        )
+
+    return default_content
 
 # R2 — Seuil de pertinence : les candidats au-delà de ce seuil cosine distance
 # sont considérés hors-sujet et exclus du résultat.
@@ -110,11 +165,14 @@ async def execute_search(
         required_skills = skills
     else:
         try:
-            filter_prompt = (
+            prompt_tpl = await _fetch_prompt_dynamic(
+                "cv_api.search_filter_extraction",
                 "Extract a JSON list of strictly required technical competencies from this search query. "
                 "Return ONLY a JSON array of strings (e.g. ['Python', 'AWS']), or an empty array if none are "
-                f"strictly required.\nQuery: '{query}'"
+                "strictly required.",
+                "cv_api.search_filter_extraction.txt"
             )
+            filter_prompt = f"{prompt_tpl}\nQuery: '{query}'"
             filter_res = await generate_content_with_retry(
                 genai_client,
                 model=os.getenv("GEMINI_CV_MODEL", os.getenv("GEMINI_MODEL")),

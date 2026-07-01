@@ -274,3 +274,34 @@ databaseChangeLog:
             sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_email_trgm;"
         - sql:
             sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_created_at_desc;"
+
+  - changeSet:
+      id: "11"
+      author: "antigravity"
+      runInTransaction: false
+      comment: >
+        P3 perf — Index GIN trigramme additionnels sur users (first_name, last_name, username)
+        pour eliminer le Seq Scan du filtre OR dans la route /search.
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_first_name_trgm
+              ON users USING GIN (first_name gin_trgm_ops);
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_last_name_trgm
+              ON users USING GIN (last_name gin_trgm_ops);
+        - sql:
+            dbms: postgresql
+            sql: >-
+              CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_username_trgm
+              ON users USING GIN (username gin_trgm_ops);
+      rollback:
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_first_name_trgm;"
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_last_name_trgm;"
+        - sql:
+            sql: "DROP INDEX CONCURRENTLY IF EXISTS idx_users_username_trgm;"

@@ -273,7 +273,8 @@ def cmd_dlq(args, token: str):
 
 def cmd_query(args, token: str):
     sql = args.sql
-    raw = mcp_call_tool("monitoring", "execute_read_only_query", {"query": sql}, token)
+    db = args.db
+    raw = mcp_call_tool("monitoring", "execute_read_only_query", {"query": sql, "db_name": db}, token)
     _print_json(_extract_result(raw))
 
 
@@ -341,6 +342,7 @@ def main():
     # query
     p_query = sub.add_parser("query", help="Requête SQL SELECT sur AlloyDB")
     p_query.add_argument("sql", help="Requête SQL SELECT")
+    p_query.add_argument("--db", default="postgres", help="Nom de la base de données (ex: competencies, users...)")
     p_query.set_defaults(func=cmd_query)
 
     # health

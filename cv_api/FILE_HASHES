@@ -1,3 +1,4 @@
+0047db681d62c5a12be25438e510628d0d4aa2db  ./cv_api/conftest.py
 0095b02d389ba5d63dab2904afd5fb6f217f7cdd  ./cv_api/uv.lock
 0218aa013f4501c4ba8dc2a048ded62efda93a55  ./cv_api/query_tags.py
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
@@ -6,6 +7,7 @@
 0663d3e9a5c06b22f40a8978ed15f90e16162e8f  ./cv_api/src/services/semaphores.py
 086c2b569e4ae7b5cc6c1b5a8028a5b6d8ce1f2d  ./cv_api/tests/test_data_quality_service.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
+0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0abd729dcbcc00054eb053b3fd850e92ecdc9303  ./cv_api/src/services/data_quality_service.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0bd446233679ec164b5917511a34bf8c84fa0435  ./cv_api/requirements.txt
@@ -31,7 +33,6 @@
 2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 2fb23eb7b5604cf5400fec3fe68ed431773c70cf  ./cv_api/src/cvs/routers/taxonomy_router.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
-35086d0147fdbe4f6a39c8a90639749e79ec5c35  ./shared/observability.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 36c490aeda838e6caf4793d95ab22a01c99225d8  ./cv_api/tests/test_outbound_propagation.py
 370674537fadb2bf1c81def24f56edaa44b817a9  ./cv_api/tests/test_taxonomy_batch_service_extended.py
@@ -39,6 +40,7 @@
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 427f9fe479b0c5fbea742d29153a80e3a35e406f  ./cv_api/tests/test_bulk_service.py
 42e837d86d24ae1aca0af9b3b0b3151ae4808a99  ./cv_api/tests/test_mcp_app.py
+4366294cded3310742c3f982444f021b0f7e85fc  ./cv_api/cv_api.search_filter_extraction.txt
 466d5eca341047657256acf480cf6aa1074e378c  ./cv_api/tests/integration/test_profile_router_extended.py
 4aab7be54ceec3874fe6c06db239536620ef19a4  ./cv_api/scripts/update_prompts_p3.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
@@ -80,6 +82,7 @@
 8a9530874dd2813cc6584165439604e0104da6c3  ./cv_api/scripts/temp_analyze_reduce.py
 8ac976069c708a8daad33b4302262341ed899809  ./cv_api/mcp_server.py
 8b8887b2f4a0efc11b842aabb881d3bfbc43ff24  ./cv_api/tests/test_main.py
+8ba27dd067f1c1d5aaae691c50168cacd7d2b70f  ./cv_api/src/services/search_service.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 949a0164206b6802063dea41efc82a446065d901  ./cv_api/output.log
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
@@ -93,19 +96,18 @@ a24a8af9d1017e1554874da94aba3b8a02adebc9  ./cv_api/src/cvs/routers/analytics_rou
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a41644d411e42100afd33fce57998fb0a8b70b34  ./cv_api/cv_api.generate_taxonomy_tree_reduce.txt
 a47d7b0cb568178eb3a4fff0998230cfad077aec  ./cv_api/src/gemini_retry.py
-a6cb4496753a5b210fc47ec7877d4a23d35bac2d  ./cv_api/src/cvs/routers/profile_router.py
-a758c3d930ad0a85325ad94041e6f5c0357fbff1  ./cv_api/conftest.py
 aafc4bf31029dde38b2a21cd0cd6aec3b1fe468c  ./cv_api/src/services/taxonomy_batch_service.py
 ab2b717174e4365c65d1f79cb02681a3c3eba6a5  ./cv_api/src/services/data_quality_publisher.py
 ae9eb2e1ae88ad6e91ace2a86b322ad20dd6c27d  ./cv_api/src/cvs/models.py
 afa160db60ddfb1a557004017b7a0351d624921a  ./cv_api/pyproject.toml
 b5a9df2b6c870f1dcf42c1140f78c3d3f3d7b14a  ./cv_api/src/cvs/routers/data_quality_router.py
 b63fa6c5a8cba4c7781489c8304ba5bf9473c971  ./cv_api/src/cvs/routers/admin_router.py
+b7303acfbfe457ab8488cf8977a1570d1b096e6f  ./cv_api/src/cvs/routers/profile_router.py
 c30c89ffef55ff43c8e251cd9f97cdb8b3fbd83e  ./cv_api/tests/test_bulk_service_more.py
 c33701cef519850bc0a988b80d619ef58bcb71b9  ./cv_api/tests/test_mcp_tools.py
+c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c4d87fb07ebf38da9e12ef4bd395c3cc9c08c69c  ./cv_api/eval/golden_queries.json
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
-c50d74e703b18056c7214284a0af34cb223b8ade  ./cv_api/src/services/search_service.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 c825c59d824bb4ae4d121ec11677e5c077c95a7a  ./cv_api/src/cvs/router.py
 c9779880b6f7929cd10d679f115411307e775adf  ./cv_api/tests/test_analytics_router.py
@@ -115,7 +117,6 @@ ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb0d6612be16cd8326808c1a3bf9b050d4defc02  ./cv_api/scripts/audit_taxonomy_drops.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./cv_api/.dockerignore
 cf754c709729d1a99b9ed4a3ea5f123577c6126f  ./cv_api/src/cvs/routers/taxonomy_quality.py
-cfba8089c339a84374833155e1d72df74b6dd385  ./shared/pyproject.toml
 d15ac4b634324fda338b9592c4e5651012c29639  ./cv_api/tests/test_embedding_service.py
 d31c0f8308ed390558f137fb91752f6ca572328d  ./cv_api/get_status.py
 d384be3c114848a8cd46d877efe0e5bb33212b4f  ./cv_api/src/services/batch_parsers.py

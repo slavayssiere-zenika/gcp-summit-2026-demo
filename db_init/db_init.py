@@ -38,7 +38,7 @@ def get_env(key: str, required: bool = True) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Liste des microservices avec leur propre base de données AlloyDB
 # ─────────────────────────────────────────────────────────────────────────────
-SERVICES = ["users", "items", "competencies", "cv", "prompts", "drive", "missions"]
+SERVICES = ["users", "items", "competencies", "cv", "prompts", "drive", "missions", "grafana"]
 
 
 async def grant_permissions(conn: asyncpg.Connection, user: str, db_name: str, label: str = "service") -> None:
@@ -136,6 +136,24 @@ async def main() -> None:
     print("\n[DB INIT] ═══ Étape 2 : Attribution des permissions IAM ═══", flush=True)
 
     for svc in SERVICES:
+        # Si c'est la base grafana, nous n'avons pas d'utilisateur IAM, mais un utilisateur intégré
+        if svc == "grafana":
+            svc_dsn = f"postgresql://postgres:{root_pw_encoded}@{db_ip}:5432/{svc}?sslmode=require"
+            print("\n  → Base 'grafana' / Utilisateur intégré 'grafana'", flush=True)
+            svc_conn = None
+            try:
+                svc_conn = await asyncpg.connect(svc_dsn)
+                await grant_permissions(svc_conn, "grafana", "grafana", label="built-in user")
+                await grant_read_only_permissions(svc_conn, monitoring_user, "grafana", label="monitoring")
+                if admin_user:
+                    await grant_permissions(svc_conn, admin_user, "grafana", label="admin")
+            except Exception as e:
+                print(f"  ! Connexion ou permissions impossibles sur la base 'grafana': {e}", flush=True)
+            finally:
+                if svc_conn is not None:
+                    await svc_conn.close()
+            continue
+
         # Convention de nommage des SA (alignée sur cloudrun.tf + random_id.sa_suffix)
         # drive_api : suffixe fixe "-v2" (SA non-régénérable, legacy)
         if svc == "drive":

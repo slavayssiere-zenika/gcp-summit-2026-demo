@@ -36,6 +36,7 @@ from shared.observability import setup_logging
 from agent_commons.exception_handler import make_global_exception_handler
 from shared.auth.jwt import verify_jwt_bearer as verify_jwt, VerifyJwtOrOidc
 from sre_triage import SreTriageRequest, SreTriageReport, run_sre_triage
+from bug_report import bug_router
 
 import os as _os
 
@@ -379,6 +380,7 @@ async def proxy_mcp(server_name: str, path: str, request: Request, auth: HTTPAut
 
 app.include_router(_history_router)
 app.include_router(protected_router)
+app.include_router(bug_router)
 
 
 @app.post("/tasks/daily-report", tags=["Tasks"])

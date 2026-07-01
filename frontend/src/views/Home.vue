@@ -5,11 +5,13 @@ import { useRoute, useRouter } from 'vue-router'
 import markdownit from 'markdown-it'
 import { 
   Mail, User, Hash, Package, Tag, CheckCircle2, XCircle, Network, Trash2, 
-  Eye, Cpu, RefreshCw 
+  Eye, Cpu, RefreshCw, Lightbulb
 } from 'lucide-vue-next'
 import CompetencyNode from '@/components/CompetencyNode.vue'
 import { authService } from '@/services/auth'
+import { agentApi } from '@/services/agentApi'
 import { useChatStore } from '@/stores/chatStore'
+import { useUxStore } from '@/stores/uxStore'
 import AgentExpertTerminal from '@/components/agent/AgentExpertTerminal.vue'
 import FinopsBadge from '@/components/agent/FinopsBadge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -77,9 +79,47 @@ const md = markdownit({
 
 const { t } = useI18n()
 const chatStore = useChatStore()
+const uxStore = useUxStore()
 const userInput = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
+// Gestion du signalement de demande d'amélioration
+const showImprovementModal = ref(false)
+const improvementComment = ref('')
+const isSendingImprovement = ref(false)
+
+const openImprovementModal = () => {
+  improvementComment.value = ''
+  showImprovementModal.value = true
+}
+
+const sendImprovementRequest = async () => {
+  if (!improvementComment.value.trim()) return
+  isSendingImprovement.value = true
+  try {
+    const activeSessionId = chatStore.activeSessionId
+    if (!activeSessionId) {
+      uxStore.showToast("Aucune session active", 'error')
+      return
+    }
+    await agentApi.submitImprovementRequest(
+      activeSessionId,
+      improvementComment.value,
+      chatStore.messages
+    )
+    uxStore.showToast("Demande d'amélioration envoyée avec succès à l'agent SRE !", 'success')
+    showImprovementModal.value = false
+  } catch (error: any) {
+    console.error(error)
+    uxStore.showToast(
+      `Erreur lors de l'envoi : ${error.response?.data?.detail || error.message}`,
+      'error'
+    )
+  } finally {
+    isSendingImprovement.value = false
+  }
+}
 
 const adjustTextareaHeight = () => {
   if (!textareaRef.value) return
@@ -533,12 +573,51 @@ onUnmounted(() => {
           autocomplete="off"
           rows="1"
         ></textarea>
+        <BaseButton @click="openImprovementModal" variant="ghost" title="Demander une amélioration" aria-label="Demander une amélioration" class="improvement-btn">
+          <Lightbulb size="18" />
+        </BaseButton>
         <BaseButton @click="resetHistory" variant="ghost" :title="t('chat.reset_history')" :aria-label="t('chat.reset_history')" class="reset-history-btn">
           <Trash2 size="18" />
         </BaseButton>
         <BaseButton @click="sendQuery()" :loading="chatStore.isTyping" :aria-label="t('chat.send')">{{ t('chat.send') }}</BaseButton>
       </div>
     </div>
+
+    <!-- Modal Demande d'Amélioration -->
+    <Transition name="modal-fade">
+      <div v-if="showImprovementModal" class="modal-overlay" @click.self="showImprovementModal = false" role="dialog" aria-modal="true" aria-labelledby="imp-modal-title">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3 id="imp-modal-title">
+              <Lightbulb size="20" style="color: var(--zenika-red);" />
+              Demander une amélioration
+            </h3>
+            <button class="modal-close" @click="showImprovementModal = false" aria-label="Fermer">✕</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom: 0.75rem; font-size: 0.9rem; color: #475569;">
+              Quelle amélioration souhaitez-vous demander ou quel problème rencontrez-vous ?
+            </p>
+            <label for="improvement-textarea" style="display: block; font-weight: 600; font-size: 0.8rem; color: #334155; margin-bottom: 6px;">Votre description :</label>
+            <textarea
+              id="improvement-textarea"
+              v-model="improvementComment"
+              placeholder="Décrivez ici ce que vous souhaitez voir amélioré, ou le dysfonctionnement..."
+              rows="4"
+              style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0.75rem; font-family: inherit; font-size: 0.9rem; margin-bottom: 0.5rem; outline: none; transition: border-color 0.2s;"
+              @keydown.enter.ctrl.prevent="sendImprovementRequest"
+            ></textarea>
+            <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; line-height: 1.4;">
+              ℹ️ L'historique complet de la discussion en cours sera envoyé de manière sécurisée à l'agent SRE pour analyse.
+            </div>
+          </div>
+          <div class="modal-actions">
+            <BaseButton @click="showImprovementModal = false" variant="ghost">Annuler</BaseButton>
+            <BaseButton @click="sendImprovementRequest" :loading="isSendingImprovement" :disabled="!improvementComment.trim()">Envoyer</BaseButton>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </div>
 </template>
@@ -1478,5 +1557,109 @@ textarea:focus-visible {
   .tree-cost-badge {
     margin-left: 0;
   }
+}
+
+/* Modal styles for improvement request */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  width: 480px;
+  max-width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.75rem;
+}
+
+.modal-header h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: var(--zenika-red);
+}
+
+.modal-body {
+  margin-bottom: 1.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1rem;
+}
+
+/* Modal fade transitions */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.modal-fade-enter-active .modal-card,
+.modal-fade-leave-active .modal-card {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-fade-enter-from .modal-card {
+  transform: scale(0.95) translateY(10px);
+}
+
+.modal-fade-leave-to .modal-card {
+  transform: scale(0.95) translateY(10px);
+}
+
+.improvement-btn {
+  color: var(--zenika-red);
+}
+
+.improvement-btn:hover {
+  color: var(--zenika-red-hover);
+  background: rgba(227, 25, 55, 0.05);
 }
 </style>

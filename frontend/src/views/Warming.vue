@@ -89,7 +89,7 @@ const runWarmingFlow = async () => {
 
   // Étape 1 : Router Gateway
   services.value[0].status = 'warming'
-  const gatewayWarm = await robustPing('/api/health', 'Gateway Router', 3, 1000)
+  const gatewayWarm = await robustPing('/api/health', 'Gateway Router', 8, 2000)
   if (!gatewayWarm) {
     services.value[0].status = 'failed'
     hasFailed.value = true
@@ -101,7 +101,7 @@ const runWarmingFlow = async () => {
 
   // Étape 2 : Agents
   services.value[1].status = 'warming'
-  const agentsWarm = await robustPing('/api/health/agents', 'Sous-Agents (HR, Ops, Missions)', 3, 1500)
+  const agentsWarm = await robustPing('/api/health/agents', 'Sous-Agents (HR, Ops, Missions)', 6, 2000)
   if (!agentsWarm) {
     services.value[1].status = 'failed'
     hasFailed.value = true
@@ -114,9 +114,9 @@ const runWarmingFlow = async () => {
   // Étape 3 : Data APIs (Competencies, Missions, CVs, etc.)
   services.value[2].status = 'warming'
   const [compWarm, missionWarm, cvWarm] = await Promise.all([
-    robustPing('/api/competencies/health', 'Competencies API', 3, 1000),
-    robustPing('/api/missions/health', 'Missions API', 3, 1000),
-    robustPing('/api/cv/health', 'CV API', 3, 1000)
+    robustPing('/api/competencies/health', 'Competencies API', 5, 1500),
+    robustPing('/api/missions/health', 'Missions API', 5, 1500),
+    robustPing('/api/cv/health', 'CV API', 5, 1500)
   ])
 
   if (!compWarm || !missionWarm || !cvWarm) {

@@ -16,13 +16,17 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_MAP = {
     "agent_router_api.system_instruction": "agent_router_api/agent_router_api.system_instruction.txt",
+    "agent_router_api.classifier": "agent_router_api/agent_router_api.classifier.txt",
     "agent_hr_api.system_instruction": "agent_hr_api/agent_hr_api.system_instruction.txt",
     "agent_ops_api.system_instruction": "agent_ops_api/agent_ops_api.system_instruction.txt",
     "agent_ops_api.sre_triage.system_instruction": "agent_ops_api/agent_ops_api.sre_triage.system_instruction.txt",
     "agent_missions_api.system_instruction": "agent_missions_api/agent_missions_api.system_instruction.txt",
+    "competencies_api.ai_scoring": "competencies_api/competencies_api.ai_scoring.txt",
+    "competencies_api.alias_generator": "competencies_api/competencies_api.alias_generator.txt",
     "cv_api.extract_cv_info": "cv_api/cv_api.extract_cv_info.txt",
     "cv_api.generate_taxonomy_tree_map": "cv_api/cv_api.generate_taxonomy_tree_map.txt",
     "cv_api.generate_taxonomy_tree_reduce": "cv_api/cv_api.generate_taxonomy_tree_reduce.txt",
+    "cv_api.search_filter_extraction": "cv_api/cv_api.search_filter_extraction.txt",
     "missions_api.extract_mission_info": "missions_api/extract_mission_info.txt",
     "missions_api.staffing_heuristics": "missions_api/staffing_heuristics.txt",
     "prompts_api.sre_triage.playbook": "prompts_api/prompts_api.sre_triage.playbook.txt",

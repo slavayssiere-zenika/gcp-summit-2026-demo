@@ -1,7 +1,7 @@
 27dc4c0926063413df217c7bc46461f086909838  ./db_migrations/changelogs/competencies/007-fix-context-column-text.yaml
-2c5c88525ef225751f7ff1d7b0e5219a88500ded  ./db_migrations/changelogs/users/changelog.yaml
 3c084b298728c80fe2f44ec64a81e81e29b693e8  ./db_migrations/changelogs/competencies/008-add-idx-user-comp-competency-id.yaml
 4e6de021c22a94dec8dec052f708441aa1dfd52d  ./db_migrations/changelogs/cv/changelog.yaml
+4fa0ee52f84fbcf4876236442a0a59024770d4a3  ./db_migrations/changelogs/users/changelog.yaml
 5467e544a67a4bfd81f23996816b89b2236bf224  ./db_migrations/changelogs/competencies/006-add-scoring-metadata.yaml
 597991943b30a4c91b1eb8d91ca450917ebe595d  ./db_migrations/changelogs/competencies/010-fix-suggestions-created-at-nullable.yaml
 8a0103d84c51dbb9dc13b374b4ad40bbf4514e68  ./db_migrations/changelogs/competencies/005-add-competency-suggestions.yaml

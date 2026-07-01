@@ -1,3 +1,4 @@
+import asyncio
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -43,6 +44,7 @@ app.dependency_overrides[get_db] = override_get_db
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
+    asyncio.run(async_engine.dispose())
     yield
 
 

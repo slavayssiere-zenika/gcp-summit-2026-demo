@@ -67,6 +67,7 @@ app.dependency_overrides[verify_jwt] = override_verify_jwt
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
+    asyncio.run(async_engine.dispose())
     if _cache_module._redis_pool:
         asyncio.run(_cache_module._redis_pool.flushdb())
     yield

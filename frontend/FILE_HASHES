@@ -1,4 +1,3 @@
-003e8304eaf100edc04407692477d23c75aa8ab2  ./frontend/src/views/Home.vue
 0148db15ebedfe4313a76722eb8872a08c9b05f0  ./frontend/src/router/index.ts
 0851c892e20b4ced54e6514f6dbee337f8757bb2  ./frontend/src/components/agent/__tests__/CompetencyList.spec.ts
 09620735fb681ec5f18cf5b4ce90530e317afa46  ./frontend/src/composables/useFocusTrap.ts
@@ -13,10 +12,10 @@
 1c37266477c98ed421f53cea6f7393d0ea3a4b09  ./frontend/src/components/agent/__tests__/ConsultantCard.spec.ts
 1cbee1cf891f02e31aebecc8fe2372fedaa14641  ./frontend/src/views/Help.vue
 1f644f3dce01d62d1bcd14e400b9ac6d60554502  ./frontend/src/components/agent/FinopsBadge.vue
-2175999f7d73cdf1bd3cd5d33ae22f328525d592  ./frontend/src/services/agentApi.ts
 23cba93d267f5f4c53463762375a5304e71d69cb  ./frontend/src/views/ImportCV.vue
 26390e6ceaf8c49e597a7fe7cc73967f3bb1f0ae  ./frontend/src/views/AdminAvailability.vue
 295bd30a830ba9192a24251ea221efe3fc26d97e  ./frontend/src/components/agent/SystemHealthCard.vue
+29852a36096f9c2f45587cf940bfd17287cbc237  ./frontend/src/views/Warming.vue
 299c1ad15b1320e8d0a2437361f68f23560b67b8  ./frontend/src/stores/__tests__/uxStore.spec.ts
 30988755cdb0001f633572baf25b085d6372cd17  ./frontend/src/components/agent/__tests__/SystemHealthCard.spec.ts
 32f4b2f769502d4b39b43a48c34ea5868bda6730  ./frontend/src/components/agent/__tests__/ConsultantAvailabilityCard.spec.ts
@@ -39,6 +38,7 @@
 4bc9126e4cd6aacbc6b4b1f622cee861a42aeb9f  ./frontend/public/favicon.svg
 4c1c87d8fa7b8c3e5b3a62cb8d61d746d31daf27  ./frontend/src/views/Registry.vue
 4e1e70e1e35a6a9fdd43fe5dd9e39feeee483310  ./frontend/src/components/agent/CompetencyList.vue
+4fce05fad465d56e5c631842605728c72e432c35  ./frontend/src/views/Home.vue
 504a4344de1aae61771159f9af10b72afe47be3f  ./frontend/src/components/agent/CompetencyBadge.vue
 54a51035bd926a73d77fcc933de434ae349ede93  ./frontend/src/views/AdminBulkImport.vue
 55d0bc0eab39a625b161729878a776c3b959917e  ./frontend/src/components/agent/AgentExpertTerminal.vue
@@ -91,6 +91,7 @@ c3823f79edde0d9ed3ef746e02da4dc62baff84b  ./frontend/src/utils/__tests__/apiCont
 c42aabafe063e40ef3bb5a3704ca3aed84336616  ./frontend/src/components/ui/PageHeader.vue
 c793f0364448f1c1f097116c9425d520861fa153  ./frontend/src/components/onboarding/OnboardingStep.vue
 cd311c0e8b75aa0b1ccfad6e62d5441a46994a61  ./frontend/src/components/agent/__tests__/FinopsBadge.spec.ts
+cf65293cb34b79ba6eab4aaef17fa05219d0b2d0  ./frontend/src/services/agentApi.ts
 d295a931b9015bd17b126b0bde4175b787795a56  ./frontend/src/views/AiOps.vue
 d67f146079ae13937e4d1a21b9e6e36cfc8c3332  ./frontend/index.html
 d69d889a0769514ff8f910d8a21337002b16b762  ./frontend/src/data/docs.ts
@@ -109,7 +110,6 @@ ea756908233ed25e0209217b50eafc5bf73267ed  ./frontend/src/components/agent/Sessio
 eefe7cd53b199c681e2bb83e19719b688577da3a  ./frontend/src/views/AdminDeduplication.vue
 f3da7ebfeb1041381cf67564702ac21ebe6ea2bf  ./frontend/src/components/TaxonomySuggestions.vue
 f56a67213dde8f35526fd0fe87bb38220d7eb356  ./frontend/src/components/agent/__tests__/MissionCard.spec.ts
-f7f5a1a42077c7fbac5376135edb5fe8afbbb2ad  ./frontend/src/views/Warming.vue
 f94d77cae348118c0fb71ecaacfef742167b82cf  ./frontend/src/components/ui/__tests__/BaseButton.spec.ts
 fcd5a0e00c90065922da323cfcfe7144cea9caae  ./frontend/src/views/MissionDetail.vue
 ff9453763cfd49403cd43f34d3cf4b8ebc9e59a4  ./frontend/src/components/ui/__tests__/PageHeader.spec.ts

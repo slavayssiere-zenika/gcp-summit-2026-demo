@@ -1,0 +1,177 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Compute Resources",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "id": 2,
+      "title": "CPU Utilization per Service",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+          "metricQuery": {
+            "metricType": "run.googleapis.com/container/cpu/utilizations",
+            "resourceType": "cloud_run_revision",
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "crossSeriesReducer": "REDUCE_NONE",
+            "alignmentPeriod": "1m",
+            "groupBys": ["resource.label.service_name"]
+          },
+          "queryType": "metrics",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          },
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "id": 3,
+      "title": "Memory Utilization per Service",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+          "metricQuery": {
+            "metricType": "run.googleapis.com/container/memory/utilizations",
+            "resourceType": "cloud_run_revision",
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "crossSeriesReducer": "REDUCE_NONE",
+            "alignmentPeriod": "1m",
+            "groupBys": ["resource.label.service_name"]
+          },
+          "queryType": "metrics",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          },
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 4,
+      "title": "Instance Count per Service",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+          "metricQuery": {
+            "metricType": "run.googleapis.com/container/instance_count",
+            "resourceType": "cloud_run_revision",
+            "perSeriesAligner": "ALIGN_MEAN",
+            "crossSeriesReducer": "REDUCE_NONE",
+            "alignmentPeriod": "1m",
+            "groupBys": ["resource.label.service_name", "metric.label.state"]
+          },
+          "queryType": "metrics",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 5,
+      "title": "Requests and Latencies",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "id": 6,
+      "title": "Request Count per Service (and status)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+          "metricQuery": {
+            "metricType": "run.googleapis.com/request_count",
+            "resourceType": "cloud_run_revision",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_NONE",
+            "alignmentPeriod": "1m",
+            "groupBys": ["resource.label.service_name", "metric.label.response_code_class"]
+          },
+          "queryType": "metrics",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "id": 7,
+      "title": "Request Latencies (p99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "cloud-monitoring", "uid": "gcp-monitoring" },
+          "metricQuery": {
+            "metricType": "run.googleapis.com/request_latencies",
+            "resourceType": "cloud_run_revision",
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "crossSeriesReducer": "REDUCE_NONE",
+            "alignmentPeriod": "1m",
+            "groupBys": ["resource.label.service_name"]
+          },
+          "queryType": "metrics",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["gcp", "monitoring", "cloudrun"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "GCP Cloud Run System Overview",
+  "uid": "gcp-system-overview",
+  "version": 1,
+  "weekStart": ""
+}

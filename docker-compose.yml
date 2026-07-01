@@ -928,9 +928,34 @@ services:
     networks:
       - monitoring_net
 
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    hostname: neo4j
+    ports:
+      - "7474:7474"  # Browser UI
+      - "7687:7687"  # Bolt protocol
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - graph
+    networks:
+      - monitoring_net
+
 volumes:
   postgres_data:
   tempo_data:
+  neo4j_data:
 
 networks:
   monitoring_net:

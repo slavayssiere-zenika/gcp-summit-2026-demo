@@ -13,6 +13,7 @@ from shared.observability import setup_logging
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.propagate import inject
+from sre_router import router as sre_router
 from router import router as api_router
 from telemetry import setup_telemetry
 from tools_registry import router as mcp_router
@@ -237,6 +238,7 @@ async def log_warmup_degraded(request: Request):
 
 
 app.include_router(_protected_router)
+app.include_router(sre_router)
 app.include_router(api_router)
 app.include_router(mcp_router)
 

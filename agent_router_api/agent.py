@@ -72,10 +72,18 @@ async def create_agent(session_id: str | None = None, preferred_language: str = 
         # Conserver le nom et la docstring d'origine pour que le LLM sache l'invoquer normalement
         ask_missions_agent_with_hr_alignment.__name__ = "ask_missions_agent"
         ask_missions_agent_with_hr_alignment.__doc__ = ask_missions_agent.__doc__
+
+        # Charger dynamiquement le prompt du classificateur depuis Prompts API
+        prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+        classifier_prompt_url = f"{prompts_api_url.rstrip('/')}/agent_router_api.classifier/compiled"
+        headers = {"Authorization": auth_header} if auth_header else {}
+        classifier_instruction = await _fetch_prompt_cached("classifier", classifier_prompt_url, headers)
+
         return build_workflow_agent(
             hr_tool=ask_hr_agent,
             ops_tool=ask_ops_agent,
             missions_tool=ask_missions_agent_with_hr_alignment,
+            classifier_instruction=classifier_instruction,
         )
 
     return Agent(

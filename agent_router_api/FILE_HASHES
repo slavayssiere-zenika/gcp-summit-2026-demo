@@ -2,8 +2,10 @@
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 053f09aadfe32d58eff3ffee80256b1ec693e832  ./agent_router_api/tools_registry.py
 06d8ff5f29af063678d70088a2e89a0b8d2a3b48  ./agent_commons/tests/test_zero_trust.py
+0928ee106ee53089ef1a2674b18cfaaa01b98c03  ./agent_router_api/agent_router_api.classifier.txt
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 09d02dde68dd702c8b3d0c33d3bb15174a7446df  ./agent_router_api/tests/test_semantic_cache.py
+0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0d00c91463de8bc7d27432e51dbc02daf0b1feb1  ./agent_router_api/tests/test_mcp.py
 0d1da1d4d92dc5e2cf00d4fb7a174ec764ef8264  ./agent_router_api/tests/test_state_graph_agent.py
@@ -14,6 +16,7 @@
 1068cd5199e812f8c08ec88e23c1579e76ffc7b5  ./agent_commons/agent_commons/taxonomy_utils.py
 14f7742f54ca0397690a54d9de1f58da11cd8d16  ./agent_router_api/tests/test_main.py
 17bfd522ba13a04cdfef17f51d5dac6cfe5d30b7  ./agent_router_api/tests/test_confidence_scorer.py
+17e549ed23ee80a46241a209a3b33ab363569c1e  ./agent_router_api/workflow_agent.py
 189c3a617f5ce673a87fec0282ae46884a587259  ./agent_router_api/tests/test_health_agents.py
 1d725d567d81190d35a2f6d81d0e954a435d2a7b  ./agent_commons/tests/test_guardrail_ops_metrics.py
 1eb3dc98a9d162f983ef2b16c198e0db3b4a705e  ./agent_commons/tests/test_schemas_agent_response.py
@@ -29,9 +32,7 @@
 2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 334148686822e2c057a1bb0454a5a6633e679cc2  ./agent_commons/agent_commons/schemas.py
-35086d0147fdbe4f6a39c8a90639749e79ec5c35  ./shared/observability.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
-3a339ea6121e4e5eb89551b40ec016b0be4a76c2  ./agent_router_api/agent.py
 3a6c326298eabc6070c6ff2dfae1be0a70f2d6fd  ./agent_router_api/pytest.ini
 3c3d11975ae327a97bc73aec918d5c17ccab8f42  ./agent_router_api/tests/test_agent.py
 3d426c04d0e43ac0a825bf0fb5a04b2c671a90b3  ./agent_commons/agent_commons/mcp_proxy.py
@@ -41,6 +42,7 @@
 42014d2a4e884dd3f1eb9d64fa67a85b158572e8  ./agent_commons/agent_commons/circuit_breaker.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
 48a917953eec0a033e3c64b5dac447a45d660c7a  ./agent_router_api/a2a_tools.py
+4acc4bffcf0fed063c1d2aa99bd5449073eecf1c  ./agent_router_api/main.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 542a20730206b4332d17fc2e6647cb695c36517b  ./shared/tests/test_auth.py
 5de53d3f073c15c9352924144c3faff7eb60aa37  ./agent_commons/agent_commons/a2a_utils.py
@@ -53,6 +55,7 @@
 730889c2367e636f42a33f7dc14f95847cb12e7a  ./agent_router_api/tests/test_a2a_propagation.py
 7a8bad7fb7207f780d3ca8f0cfebd75ebda393ce  ./agent_router_api/agent_api.capabilities_instruction.txt
 7b89acd89b6fa2fe5efb9fe33e7bee828c591a0c  ./agent_router_api/telemetry.py
+7ecd876f0294ce3bba337158f0d165fa524878d0  ./agent_router_api/agent.py
 7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 8008078eb02faaead2b9d949d90a11cd2c60abd4  ./agent_router_api/tests/test_sessions.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
@@ -61,7 +64,6 @@
 83eff2f28e5e28c0095435c920671841f6d9c3ee  ./agent_commons/tests/test_runner_display_type.py
 85b1d83e2660576783e6769e1a08a22687e5ebc1  ./agent_commons/tests/test_mcp_pre_generation_guardrail.py
 86a99795651256ae9f6cd2c7b7a09e28110e376c  ./agent_router_api/prompt_loader.py
-86b90bfedf5d0668575ce7eaf4c845c70822c64f  ./agent_router_api/workflow_agent.py
 88580c7566a0861e142b99d7cd68696641a2eb83  ./agent_commons/tests/test_prompt_loader_cache.py
 8a440b9527240e20e395e94323970e21a881b586  ./agent_router_api/tests/test_guardrail.py
 8d50f90a73d7211a53816c105fd6f5387da12717  ./agent_commons/tests/test_circuit_breaker_redis.py
@@ -71,6 +73,7 @@
 94c3b88329e1cabede6ce6c196d4120eb855842b  ./agent_commons/tests/test_mcp_proxy.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9bda842f4db88e236665e36100c3d5d4fb628c81  ./agent_commons/tests/test_mcp_client_propagation.py
+9c55e0eb0b01bc4df1bd51dace641b81aad58232  ./agent_router_api/sre_router.py
 9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 9c9044377e84ad6ec3ecc14a28a8c7388a00d9a2  ./shared/schemas/auth.py
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
@@ -80,7 +83,6 @@
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a3ca36e9721c55c574ee171242f97343afefd753  ./agent_commons/tests/test_runner_tool_budget.py
 a68580fed9c1701a466d075a5180d3aca3d023d3  ./agent_router_api/mcp_client.py
-a6d9d13c9ba475c78605b5abc39fc2314e4ff9c6  ./agent_router_api/main.py
 acef654bdf0e1197537cfe1a69e22bc9f8faf0d0  ./agent_commons/agent_commons/http_resilience.py
 b6300da477fbe2b0901c68761f33fc07cda8bcb2  ./agent_router_api/requirements.txt
 bbc030dd08a0ca4e4206714f55fcbc158a835d93  ./agent_router_api/conftest.py
@@ -88,6 +90,7 @@ be0b3f9e4395095c89c2a4c8a6782beb2866761b  ./agent_commons/agent_commons/runner.p
 be54873f9b91433df0789e7548db0df5d9da2cfb  ./agent_commons/tests/test_schemas.py
 c0bc432224881c6d0a8c3a38eb42018808110bad  ./agent_router_api/agent_api.assistant_system_instruction.txt
 c24ca4992ae035d68846d5ec0bbd78805f5f8b2f  ./agent_router_api/pyproject.toml
+c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6678f4d4bf49c9483170176c42087f363bbd700  ./agent_commons/agent_commons/finops.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
@@ -97,7 +100,6 @@ ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb18b3f18a06ed361898a1af3c512a1384b2e362  ./agent_commons/tests/test_finops.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./agent_router_api/.dockerignore
-cfba8089c339a84374833155e1d72df74b6dd385  ./shared/pyproject.toml
 d1250060cd910b1dc3f945e8b3770c7a074b2255  ./agent_commons/agent_commons/guardrails_grounding.py
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./agent_router_api/__init__.py

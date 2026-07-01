@@ -1,0 +1,26 @@
+apiVersion: 1
+
+datasources:
+  - name: Google Cloud Monitoring
+    uid: gcp-monitoring
+    type: cloud-monitoring
+    access: proxy
+    editable: false
+    jsonData:
+      authenticationType: gce
+
+  - name: Google Cloud Trace
+    uid: gcp-trace
+    type: cloud-trace
+    access: proxy
+    editable: false
+    jsonData:
+      authenticationType: gce
+
+  - name: Google Cloud Logging
+    uid: gcp-logging
+    type: googlecloud-logging-datasource
+    access: proxy
+    editable: false
+    jsonData:
+      authenticationType: gce

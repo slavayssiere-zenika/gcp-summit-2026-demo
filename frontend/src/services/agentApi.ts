@@ -90,4 +90,29 @@ export const agentApi = {
     const response = await axios.get('/api/hitl/pending', { headers: authHeaders() })
     return response.data
   },
+
+  /**
+   * Envoie une demande d'amélioration (ou un rapport de bug) à l'agent SRE.
+   */
+  async submitImprovementRequest(
+    sessionId: string,
+    userComment: string,
+    history: Message[]
+  ): Promise<{ success: boolean; message: string }> {
+    // Nettoyer l'historique pour n'envoyer que le rôle et le contenu
+    const cleanedHistory = history.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }))
+    const response = await axios.post(
+      '/api/sre/improvement',
+      {
+        session_id: sessionId,
+        user_comment: userComment,
+        session_history: cleanedHistory
+      },
+      { headers: authHeaders() }
+    )
+    return response.data
+  },
 }

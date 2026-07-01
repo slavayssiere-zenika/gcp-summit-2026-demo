@@ -11,6 +11,7 @@ Inclut :
 """
 
 import asyncio
+import json
 import logging
 import math
 import os
@@ -21,7 +22,10 @@ from typing import List, Optional
 import httpx
 from fastapi import BackgroundTasks, HTTPException, Request
 from google import genai
+from google.genai import types
 from opentelemetry.propagate import inject
+from shared.auth.context import auth_header_var
+from shared.cache import get_cache, set_cache
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -55,6 +59,59 @@ MISSION_TYPE_LABELS: dict = {
     "expertise": "Expert / Architecte (valeur ajoutée)",
     "build": "Build / Développement (standard)",
 }
+
+
+async def _fetch_prompt_dynamic(prompt_key: str, default_content: str, fallback_filename: str) -> str:
+    """Charge un prompt dynamiquement depuis prompts_api avec cache Redis et fallback local."""
+    cache_key = f"prompt:{prompt_key}"
+
+    try:
+        cached = await get_cache(cache_key)
+        if cached:
+            return cached
+    except Exception as e:
+        logger.warning("[PromptLoader] Erreur lecture cache pour %s: %s", prompt_key, e)
+
+    prompts_api_url = os.getenv("PROMPTS_API_URL", "http://prompts_api:8000")
+    url = f"{prompts_api_url.rstrip('/')}/{prompt_key}/compiled"
+
+    auth_header = auth_header_var.get(None)
+    headers = {"Authorization": auth_header} if auth_header else {}
+    inject(headers)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(url, headers=headers)
+            if res.status_code == 200:
+                data = res.json()
+                val = data.get("value")
+                if val:
+                    ttl = int(os.getenv("PROMPT_CACHE_TTL_S", "60"))
+                    await set_cache(cache_key, val, ttl)
+                    return val
+            else:
+                logger.warning(
+                    "[PromptLoader] prompts_api HTTP %d pour %s",
+                    res.status_code, prompt_key
+                )
+    except Exception as e:
+        logger.warning("[PromptLoader] Échec appel prompts_api pour %s: %s", prompt_key, e)
+
+    try:
+        local_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            fallback_filename
+        )
+        if os.path.exists(local_path):
+            with open(local_path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception as e:
+        logger.warning(
+            "[PromptLoader] Échec lecture fichier local %s: %s",
+            fallback_filename, e
+        )
+
+    return default_content
 
 
 def _compute_recency_weight(end_date_str: Optional[str]) -> float:
@@ -124,22 +181,41 @@ async def _generate_aliases_for_competency(name: str) -> str | None:
     """Génère 3-5 alias pour une compétence via Gemini Flash."""
     try:
         client = genai.Client()
-        prompt = (
-            f"Tu es un expert technique. Génère 3 à 5 aliases très courts (abréviations, "
-            f"variantes de nommage) pour la technologie suivante : '{name}'.\n"
-            f"Exemple pour 'Kubernetes' : 'K8s, kube, k8s, Kube, kubernetes'.\n"
-            f"Retourne UNIQUEMENT une liste séparée par des virgules, sans aucun texte additionnel."
+        prompt_tpl = await _fetch_prompt_dynamic(
+            "competencies_api.alias_generator",
+            "Tu es un expert technique. Génère 3 à 5 aliases très cours (abréviations, acronymes, "
+            "variantes d'écriture indispensables) pour la compétence fournie. "
+            "Réponds STRICTEMENT sous forme de liste JSON de chaînes de caractères.",
+            "competencies_api.alias_generator.txt"
         )
+        prompt = f"{prompt_tpl}\nCompétence : '{name}'"
         res = await asyncio.wait_for(
             client.aio.models.generate_content(
-                model=GEMINI_MODEL, contents=prompt
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1,
+                ),
             ),
             timeout=30.0,
         )
         if res.text:
-            aliases = res.text.strip().strip("'").strip('"')
-            logger.info(f"Alias générés pour '{name}' : {aliases}")
-            return aliases
+            try:
+                aliases_list = json.loads(res.text.strip())
+                if isinstance(aliases_list, list):
+                    aliases_clean = [str(a).strip() for a in aliases_list if str(a).strip()]
+                    aliases_str = ", ".join(aliases_clean)
+                    logger.info(f"Alias générés pour '{name}' : {aliases_str}")
+                    return aliases_str
+            except Exception as e:
+                logger.warning(
+                    "Échec du parsing JSON des alias pour %s: %s (brut: %s)",
+                    name, e, res.text
+                )
+                aliases = res.text.strip().strip("'").strip('"')
+                logger.info(f"Alias brut renvoyé pour '{name}' : {aliases}")
+                return aliases
     except asyncio.TimeoutError:
         logger.warning(f"[helpers] Timeout (30s) génération alias pour '{name}'")
     except Exception as e:

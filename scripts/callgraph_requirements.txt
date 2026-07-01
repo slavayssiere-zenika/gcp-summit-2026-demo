@@ -1,0 +1,2 @@
+# Dépendances pour build_callgraph.py
+neo4j>=5.0.0

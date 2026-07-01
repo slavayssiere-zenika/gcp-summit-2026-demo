@@ -176,6 +176,17 @@ variable "image_db_init" {
   type        = string
 }
 
+variable "image_grafana" {
+  description = "Image for Grafana container"
+  type        = string
+}
+
+variable "grafana_version" {
+  description = "Raw version string for Grafana (suppress tfvars warning)"
+  type        = string
+  default     = ""
+}
+
 
 # =========================================================
 # Modèles Gemini — Configuration per-agent (AGENTS.md §1.4)

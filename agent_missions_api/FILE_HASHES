@@ -4,6 +4,7 @@
 08463e221b00fb4cb958a260c188cca4309e0cdd  ./agent_missions_api/tests/debug_test_history.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 09b67624dde48d0cc10dc2c19b79f5f0191313a3  ./agent_missions_api/hitl_router.py
+0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
 0e67206eb9bb4bdd2a227d7f16449b8c6430782d  ./shared/tests/zero_trust.py
@@ -25,7 +26,6 @@
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 334148686822e2c057a1bb0454a5a6633e679cc2  ./agent_commons/agent_commons/schemas.py
 33587d2bdf3824cc5f0c2770c56c52123f776af2  ./agent_missions_api/main.py
-35086d0147fdbe4f6a39c8a90639749e79ec5c35  ./shared/observability.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 36c8358eeb2bb863db717760630129b53a5febfe  ./agent_missions_api/tests/test_jwt_propagation.py
 3a6c326298eabc6070c6ff2dfae1be0a70f2d6fd  ./agent_missions_api/pytest.ini
@@ -78,6 +78,7 @@ bdf2bc7dc6c8629263dd890010eac98808265e84  ./agent_missions_api/tests/test_agent_
 be0b3f9e4395095c89c2a4c8a6782beb2866761b  ./agent_commons/agent_commons/runner.py
 be54873f9b91433df0789e7548db0df5d9da2cfb  ./agent_commons/tests/test_schemas.py
 c27e7aa3c0dd1533d0f8d7778bb40ebd06b7dfc2  ./agent_missions_api/tests/conftest.py
+c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c47ed36d34a246d2b98cad908638c0cfa22ab325  ./agent_missions_api/session_router.py
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6678f4d4bf49c9483170176c42087f363bbd700  ./agent_commons/agent_commons/finops.py
@@ -88,7 +89,6 @@ c9ff74297d0363348d7b77d60045232d5470f3f5  ./agent_missions_api/.dockerignore
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cb18b3f18a06ed361898a1af3c512a1384b2e362  ./agent_commons/tests/test_finops.py
-cfba8089c339a84374833155e1d72df74b6dd385  ./shared/pyproject.toml
 d09aa494e60c834985c4f9241f7203e927a24faa  ./agent_missions_api/uv.lock
 d1250060cd910b1dc3f945e8b3770c7a074b2255  ./agent_commons/agent_commons/guardrails_grounding.py
 d460345b27dff62e258107e43fad6ee02434e93f  ./agent_missions_api/session.py

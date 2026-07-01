@@ -82,6 +82,17 @@ def wipe_redis_state():
     yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def mock_prompt_loader_globally():
+    """Mocke _fetch_prompt_dynamic pour tous les tests de cv_api."""
+    with patch(
+        "src.services.search_service._fetch_prompt_dynamic",
+        new_callable=AsyncMock,
+        return_value="Dummy prompt content for testing",
+    ):
+        yield
+
+
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as c:

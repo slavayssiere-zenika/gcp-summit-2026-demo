@@ -1,20 +1,23 @@
 # Certificat SSL Managé
 # Couvre le domaine principal de l'environnement + les domaines additionnels (ex: gen-skillz.znk.io)
 resource "google_compute_managed_ssl_certificate" "default" {
-  name = "ssl-${terraform.workspace}"
+  name = "ssl-${terraform.workspace}-v2"
   managed {
     domains = concat(
       [
         "${terraform.workspace}.${var.base_domain}",
-        "api.${terraform.workspace}.${var.base_domain}"
+        "api.${terraform.workspace}.${var.base_domain}",
+        "grafana.${terraform.workspace}.${var.base_domain}"
       ],
       # Domaines additionnels (ex: gen-skillz.znk.io en prd)
-      [for d in var.extra_domains : trim(d.dns_name, ".")]
+      [for d in var.extra_domains : trim(d.dns_name, ".")],
+      # Domaines Grafana additionnels
+      [for d in var.extra_domains : "grafana.${trim(d.dns_name, ".")}"]
     )
   }
 
   lifecycle {
-    prevent_destroy = true
+    create_before_destroy = true
   }
 }
 
@@ -50,6 +53,26 @@ resource "google_compute_url_map" "default" {
   name            = "lb-${terraform.workspace}"
   description     = "URL Map split between frontend and API"
   default_service = google_compute_backend_bucket.frontend.id
+
+  # Host Rules pour Grafana (domaine principal)
+  host_rule {
+    hosts        = ["grafana.${terraform.workspace}.${var.base_domain}"]
+    path_matcher = "grafana-matcher"
+  }
+
+  # Host Rules pour Grafana sur les domaines additionnels
+  dynamic "host_rule" {
+    for_each = var.extra_domains
+    content {
+      hosts        = ["grafana.${trim(host_rule.value.dns_name, ".")}"]
+      path_matcher = "grafana-matcher"
+    }
+  }
+
+  path_matcher {
+    name            = "grafana-matcher"
+    default_service = google_compute_backend_service.grafana_backend.id
+  }
 
   # Host Rule unifiée pour l'API et le Frontend (domaine principal)
   host_rule {
@@ -467,6 +490,32 @@ resource "google_dns_record_set" "api_a" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+# Enregistrement DNS pour Grafana (grafana.env.domain)
+resource "google_dns_record_set" "grafana_a" {
+  name         = "grafana.${google_dns_managed_zone.env_zone.dns_name}"
+  managed_zone = google_dns_managed_zone.env_zone.name
+  type         = "A"
+  ttl          = 300
+
+  rrdatas = [google_compute_global_address.lb_ip.address]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Enregistrements DNS A secondaires dynamiques pour Grafana sur domaines additionnels
+resource "google_dns_record_set" "grafana_extra_a" {
+  for_each = { for d in var.extra_domains : d.zone_name => d }
+
+  name         = "grafana.${data.google_dns_managed_zone.extra_zones[each.key].dns_name}"
+  managed_zone = data.google_dns_managed_zone.extra_zones[each.key].name
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.lb_ip.address]
+  project      = each.value.parent_zone_project_id
 }
 
 # Note: L'import de cette ressource est géré impérativement par manage_env.py

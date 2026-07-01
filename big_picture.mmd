@@ -1,0 +1,187 @@
+graph TD
+    subgraph GATEWAY["1. Clients & Passerelle (Gateway)"]
+        agent_router_api[agent_router_api]:::gateway_style
+    end
+    subgraph AGENTS["2. Agents d'Orchestration IA"]
+        agent_commons[agent_commons]:::agent
+        agent_hr_api[agent_hr_api]:::agent
+        agent_missions_api[agent_missions_api]:::agent
+        agent_ops_api[agent_ops_api]:::agent
+    end
+    subgraph CORE["3. APIs de Données & Services Core"]
+        competencies_api[competencies_api]:::core
+        cv_api[cv_api]:::core
+        drive_api[drive_api]:::core
+        items_api[items_api]:::core
+        missions_api[missions_api]:::core
+        prompts_api[prompts_api]:::core
+        shared[shared]:::core
+        users_api[users_api]:::core
+    end
+    subgraph MCP["4. MCP Standalone & Observabilité"]
+        analytics_mcp[analytics_mcp]:::mcp
+        monitoring_mcp[monitoring_mcp]:::mcp
+    end
+    subgraph PUBSUB["5. Transport Asynchrone (Pub/Sub)"]
+        cv_import_events["Topic: cv-import-events"]:::pubsub_style
+        data_quality_events["Topic: data-quality-events"]:::pubsub_style
+        data_quality_snapshot["Topic: data-quality-snapshot"]:::pubsub_style
+        user_events["Topic: user-events"]:::pubsub_style
+    end
+    subgraph INFRA["6. Stockage de Données & APIs Externes (GCP)"]
+        AlloyDB[("AlloyDB")]:::db_style
+        BigQuery[("BigQuery")]:::db_style
+        Gemini_API["☁️ Gemini API"]:::google_style
+        Google_Drive_API["☁️ Google Drive API"]:::google_style
+        Google_OAuth["☁️ Google OAuth"]:::google_style
+        Redis[("Redis")]:::db_style
+    end
+    agent_commons -->|"Appelle [AST]"| Gemini_API
+    agent_commons -->|"Stocke [AST]"| Redis
+    agent_commons -->|"Code [AST]"| analytics_mcp
+    agent_commons -->|"Code [AST]"| prompts_api
+    agent_hr_api -->|"Appelle [AST+TF]"| Gemini_API
+    agent_hr_api -.->|"Appelle [TF]"| Google_Drive_API
+    agent_hr_api -->|"Stocke [AST+TF]"| Redis
+    agent_hr_api -.->|"Infra [TF]"| analytics_mcp
+    agent_hr_api -.->|"Infra [TF]"| competencies_api
+    agent_hr_api -.->|"Infra [TF]"| cv_api
+    agent_hr_api -.->|"Infra [TF]"| drive_api
+    agent_hr_api -.->|"Infra [TF]"| items_api
+    agent_hr_api -.->|"Infra [TF]"| missions_api
+    agent_hr_api -.->|"Infra [TF]"| monitoring_mcp
+    agent_hr_api -.->|"Infra [TF]"| prompts_api
+    agent_hr_api -.->|"Infra [TF]"| users_api
+    agent_missions_api -->|"Appelle [AST+TF]"| Gemini_API
+    agent_missions_api -->|"Stocke [AST+TF]"| Redis
+    agent_missions_api -.->|"Infra [TF]"| analytics_mcp
+    agent_missions_api -.->|"Infra [TF]"| competencies_api
+    agent_missions_api -.->|"Infra [TF]"| cv_api
+    agent_missions_api -.->|"Infra [TF]"| missions_api
+    agent_missions_api -.->|"Infra [TF]"| monitoring_mcp
+    agent_missions_api -.->|"Infra [TF]"| prompts_api
+    agent_missions_api -.->|"Infra [TF]"| users_api
+    agent_ops_api -->|"Appelle [AST+TF]"| Gemini_API
+    agent_ops_api -.->|"Appelle [TF]"| Google_Drive_API
+    agent_ops_api ==>|"35 req, 1.4ms (Cache) [AST+TF]"| Redis
+    agent_ops_api ==>|"3 req, 433.3ms [AST+TF]"| analytics_mcp
+    agent_ops_api -.->|"Infra [TF]"| competencies_api
+    agent_ops_api -.->|"Infra [TF]"| cv_api
+    agent_ops_api ==>|"1 req, 1050.3ms [TF]"| drive_api
+    agent_ops_api -.->|"Infra [TF]"| items_api
+    agent_ops_api -.->|"Infra [TF]"| missions_api
+    agent_ops_api ==>|"4 req, 7874.4ms [TF]"| monitoring_mcp
+    agent_ops_api ==>|"3 req, 6458.2ms [TF]"| prompts_api
+    agent_ops_api -.->|"Infra [TF]"| users_api
+    agent_router_api -->|"Appelle [AST+TF]"| Gemini_API
+    agent_router_api -.->|"Appelle [TF]"| Google_Drive_API
+    agent_router_api ==>|"1 req, 6.2ms (Cache) [AST+TF]"| Redis
+    agent_router_api -.->|"Infra [TF]"| agent_hr_api
+    agent_router_api -.->|"Infra [TF]"| agent_missions_api
+    agent_router_api -.->|"Infra [TF]"| agent_ops_api
+    agent_router_api -->|"Code [AST+TF]"| analytics_mcp
+    agent_router_api -.->|"Infra [TF]"| competencies_api
+    agent_router_api -.->|"Infra [TF]"| cv_api
+    agent_router_api -.->|"Infra [TF]"| drive_api
+    agent_router_api -.->|"Infra [TF]"| items_api
+    agent_router_api -.->|"Infra [TF]"| missions_api
+    agent_router_api -.->|"Infra [TF]"| monitoring_mcp
+    agent_router_api -.->|"Infra [TF]"| prompts_api
+    agent_router_api -->|"Code [AST+TF]"| users_api
+    analytics_mcp ==>|"27 req, 274.6ms (Analytics) [AST]"| BigQuery
+    analytics_mcp -->|"Stocke [AST+TF]"| Redis
+    analytics_mcp -.->|"Infra [TF]"| prompts_api
+    analytics_mcp -->|"Code [AST+TF]"| users_api
+    competencies_api ==>|"302 req, 27.5ms (SQL) [AST+TF]"| AlloyDB
+    competencies_api ==>|"3 req, 863.3ms (API) [AST+TF]"| Gemini_API
+    competencies_api ==>|"315 req, 2.1ms (Cache) [AST+TF]"| Redis
+    competencies_api -->|"Code [AST]"| analytics_mcp
+    competencies_api -.->|"Infra [TF]"| competencies_api
+    competencies_api ==>|"3 req, 32.2ms [AST+TF]"| cv_api
+    competencies_api -->|"Code [AST+TF]"| prompts_api
+    competencies_api -->|"Abonné /pubsub/user-events [AST]"| user_events
+    competencies_api ==>|"59 req, 4.2ms [AST+TF]"| users_api
+    cv_import_events ==>|"79 req, 662.5ms (Event)"| cv_api
+    cv_api ==>|"637 req, 15.5ms (SQL) [AST+TF]"| AlloyDB
+    cv_api ==>|"21 req, 1576.3ms (API) [AST+TF]"| Gemini_API
+    cv_api ==>|"8 req, 2536.7ms (API) [AST+TF]"| Google_Drive_API
+    cv_api -->|"Appelle [AST]"| Google_OAuth
+    cv_api ==>|"160 req, 2.5ms (Cache) [AST+TF]"| Redis
+    cv_api ==>|"9 req, 104.3ms [AST+TF]"| analytics_mcp
+    cv_api ==>|"113 req, 102.1ms [AST+TF]"| competencies_api
+    cv_api -->|"Abonné /pubsub/import-cv [AST]"| cv_import_events
+    cv_api -.->|"Infra [TF]"| cv_api
+    cv_api -.->|"Publie [TF]"| data_quality_events
+    cv_api -->|"Abonné /pubsub/data-quality-snapshot [AST]"| data_quality_snapshot
+    cv_api ==>|"17 req, 28.5ms [AST+TF]"| drive_api
+    cv_api ==>|"9 req, 5881.1ms [AST+TF]"| items_api
+    cv_api -->|"Code [AST]"| missions_api
+    cv_api ==>|"5 req, 15412.0ms [AST+TF]"| prompts_api
+    cv_api -->|"Abonné /pubsub/user-events [AST]"| user_events
+    cv_api ==>|"76 req, 888.9ms [AST+TF]"| users_api
+    drive_api -->|"Stocke [AST+TF]"| AlloyDB
+    drive_api -->|"Appelle [AST]"| Google_Drive_API
+    drive_api -->|"Appelle [AST]"| Google_OAuth
+    drive_api -->|"Stocke [AST+TF]"| Redis
+    drive_api -->|"Publie [AST+TF]"| cv_import_events
+    drive_api -.->|"Infra [TF]"| cv_api
+    drive_api -.->|"Infra [TF]"| drive_api
+    drive_api -->|"Code [AST+TF]"| prompts_api
+    drive_api -->|"Code [AST+TF]"| users_api
+    items_api -->|"Stocke [AST+TF]"| AlloyDB
+    items_api -->|"Stocke [AST+TF]"| Redis
+    items_api -.->|"Infra [TF]"| items_api
+    items_api -->|"Code [AST+TF]"| prompts_api
+    items_api -->|"Code [AST+TF]"| users_api
+    missions_api -->|"Stocke [AST+TF]"| AlloyDB
+    missions_api -->|"Appelle [AST+TF]"| Gemini_API
+    missions_api -.->|"Appelle [TF]"| Google_Drive_API
+    missions_api -->|"Stocke [AST+TF]"| Redis
+    missions_api -->|"Code [AST+TF]"| analytics_mcp
+    missions_api -->|"Code [AST+TF]"| competencies_api
+    missions_api -->|"Code [AST+TF]"| cv_api
+    missions_api -.->|"Infra [TF]"| drive_api
+    missions_api -.->|"Infra [TF]"| items_api
+    missions_api -.->|"Infra [TF]"| missions_api
+    missions_api -->|"Code [AST+TF]"| prompts_api
+    missions_api -->|"Code [AST+TF]"| users_api
+    monitoring_mcp -->|"Stocke [AST+TF]"| AlloyDB
+    monitoring_mcp -->|"Stocke [AST]"| BigQuery
+    monitoring_mcp -.->|"Appelle [TF]"| Google_Drive_API
+    monitoring_mcp -->|"Stocke [AST+TF]"| Redis
+    monitoring_mcp ==>|"1 req, 4.3ms"| cv_api
+    monitoring_mcp ==>|"1 req, 30.2ms [AST+TF]"| drive_api
+    monitoring_mcp -.->|"Infra [TF]"| prompts_api
+    prompts_api ==>|"23 req, 154.6ms (SQL) [AST+TF]"| AlloyDB
+    prompts_api -->|"Appelle [AST+TF]"| Gemini_API
+    prompts_api -->|"Appelle [AST]"| Google_OAuth
+    prompts_api ==>|"20 req, 3.1ms (Cache) [AST+TF]"| Redis
+    prompts_api -.->|"Infra [TF]"| prompts_api
+    shared -->|"Stocke [AST]"| AlloyDB
+    shared -->|"Appelle [AST]"| Google_OAuth
+    shared -->|"Stocke [AST]"| Redis
+    shared -->|"Code [AST]"| prompts_api
+    shared -->|"Code [AST]"| users_api
+    users_api ==>|"36 req, 8.5ms (SQL) [AST+TF]"| AlloyDB
+    users_api ==>|"1 req, 52.8ms (API) [AST]"| Google_OAuth
+    users_api ==>|"54 req, 1.3ms (Cache) [AST+TF]"| Redis
+    users_api -.->|"Infra [TF]"| competencies_api
+    users_api -.->|"Infra [TF]"| cv_api
+    users_api -.->|"Infra [TF]"| items_api
+    users_api -->|"Code [AST]"| missions_api
+    users_api -->|"Code [AST+TF]"| prompts_api
+    users_api -->|"Publie [AST+TF]"| user_events
+    users_api -.->|"Infra [TF]"| users_api
+    classDef gateway_style fill:#E60028,stroke:#333,stroke-width:2px,color:#fff;
+    classDef agent fill:#3F3F3F,stroke:#333,stroke-width:2px,color:#fff;
+    classDef core fill:#fff,stroke:#E60028,stroke-width:1.5px,color:#111;
+    classDef mcp fill:#E0E0E0,stroke:#7F7F7F,stroke-width:1px,color:#111;
+    classDef pubsub_style fill:#FFF2F2,stroke:#E60028,stroke-width:1px,stroke-dasharray: 5 5,color:#111;
+    classDef db_style fill:#fff,stroke:#E60028,stroke-width:2px,color:#111;
+    classDef google_style fill:#2C3E50,stroke:#1A252F,stroke-width:1.5px,color:#fff;
+    style GATEWAY fill:#FFF2F2,stroke:#E60028,stroke-width:2px;
+    style AGENTS fill:#F2F2F2,stroke:#3F3F3F,stroke-width:2px;
+    style CORE fill:#FFF,stroke:#E60028,stroke-width:1.5px;
+    style MCP fill:#F9F9F9,stroke:#7F7F7F,stroke-width:1.5px;
+    style PUBSUB fill:#FFF9F9,stroke:#E60028,stroke-width:1.5px,stroke-dasharray:5 5;
+    style INFRA fill:#F5F7FA,stroke:#2C3E50,stroke-width:2px;

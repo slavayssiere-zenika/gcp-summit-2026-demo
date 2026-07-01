@@ -54,3 +54,37 @@ resource "google_project_iam_member" "admin_database_user" {
   role    = "roles/alloydb.databaseUser"
   member  = "user:${var.admin_user}"
 }
+
+# Génération d'un mot de passe fort pour l'utilisateur de base de données Grafana
+resource "random_password" "grafana_db_password" {
+  length  = 16
+  special = true
+}
+
+# Stockage du mot de passe dans Secret Manager
+resource "google_secret_manager_secret" "grafana_db_password" {
+  secret_id = "grafana-db-password"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "grafana_db_password" {
+  secret      = google_secret_manager_secret.grafana_db_password.id
+  secret_data = random_password.grafana_db_password.result
+}
+
+# Création de l'utilisateur intégré dans le cluster AlloyDB
+resource "google_alloydb_user" "grafana_db_user" {
+  cluster   = google_alloydb_cluster.main.name
+  user_id   = "grafana"
+  user_type = "ALLOYDB_BUILT_IN"
+  password  = random_password.grafana_db_password.result
+
+  depends_on = [google_alloydb_instance.primary]
+}
+

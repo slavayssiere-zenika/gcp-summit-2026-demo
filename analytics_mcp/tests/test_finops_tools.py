@@ -159,6 +159,7 @@ async def test_handle_get_usage_statistics_happy_path():
         total_requests = 1500
         router_requests = 800
         agent_queries = 150
+        blocked_scans = 10
 
     mock_query_job = MagicMock()
     mock_query_job.result.return_value = [MockRow()]
@@ -174,6 +175,7 @@ async def test_handle_get_usage_statistics_happy_path():
     assert data["total_requests"] == 1500
     assert data["router_requests"] == 800
     assert data["agent_queries"] == 150
+    assert data["blocked_scans"] == 10
     assert data["status"] == "success"
 
     # Vérifie que la query utilise bien le _TABLE_SUFFIX avec le format YYYYMMDD

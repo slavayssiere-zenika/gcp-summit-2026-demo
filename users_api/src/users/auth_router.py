@@ -56,7 +56,12 @@ async def login(login_data: LoginRequest, request: Request, response: Response, 
     USER_LOGINS_TOTAL.labels(status="success").inc()
 
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
-    token_data = {"sub": user.username, "allowed_category_ids": allowed_ids, "role": user.role}
+    token_data = {
+        "sub": user.username,
+        "user_id": user.id,
+        "allowed_category_ids": allowed_ids,
+        "role": user.role
+    }
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data={"sub": user.username})
 
@@ -87,7 +92,12 @@ async def refresh_token_route(request: Request, response: Response, db: AsyncSes
 
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
 
-    token_data = {"sub": user.username, "allowed_category_ids": allowed_ids, "role": user.role}
+    token_data = {
+        "sub": user.username,
+        "user_id": user.id,
+        "allowed_category_ids": allowed_ids,
+        "role": user.role
+    }
     new_access = create_access_token(data=token_data)
     new_refresh = create_refresh_token(data={"sub": user.username})
 
@@ -230,6 +240,7 @@ async def google_callback(request: Request, code: str, response: Response, db: A
     allowed_ids = [int(x) for x in user.allowed_category_ids.split(",") if x] if user.allowed_category_ids else []
     access_token = create_access_token(data={
         "sub": user.username,
+        "user_id": user.id,
         "allowed_category_ids": allowed_ids,
         "role": user.role
     })

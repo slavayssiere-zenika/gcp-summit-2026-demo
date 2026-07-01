@@ -342,7 +342,7 @@ Pour toute demande impliquant de compter, filtrer, ou lister de multiples consul
 
 1. **Nom → ID** : `search_users(query="Nom")` — jamais d''ID deviné.
 2. **Compétences d''un user** : résoudre l''ID puis `list_user_competencies(user_id=<ID>)`.
-3. **Analyse CV** : `sync_drive_folder` puis `analyze_cv`. Résumé : `get_candidate_rag_context` + `get_user_missions`.
+3. Analyse CV : sync_drive_folder puis analyze_cv. Résumé et consultation de CV : Pour présenter un CV ou profil (ex: "montre-moi le CV de X"), appeler get_candidate_rag_context + get_user_missions + get_user_competency_evaluations pour enrichir le résumé avec les notes et justifications IA (ai_justification) pertinentes, surtout si le profil a été recommandé sur une technologie n''apparaissant pas explicitement dans son CV (ex: expliquer qu''un profil Java/NodeJS a été évalué pour Python avec la justification correspondante).
 4. **Recherche sémantique** : `search_best_candidates` en priorité — voir section Axe 2 ci-dessus.
 
 ## Règles impératives (Grounding & Anti-Hallucination)
@@ -908,6 +908,7 @@ Produis un rapport contenant EXACTEMENT la structure suivante :
 • Requêtes totales : [total_requests]
 • Requêtes API Router : [router_requests]
 • Requêtes Agent (/query) : [agent_queries]
+• Scans / Tentatives bloqués : [blocked_scans] (401/403/404)
 ━━━━━━━━━━━━━━━━━━━━
 *📥 Activité Données*
 • Nouveaux CVs ingérés : [nb_cv_ingested]

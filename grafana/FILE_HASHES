@@ -1,0 +1,13 @@
+589c106b28f780bc381f0d7132fe36985be5af5a  ./grafana/dashboards/gcp_observability.json
+5aff0f0234d9910cf1300f9c2f019499612aa9ba  ./grafana/provisioning/dashboards/dashboards.yaml
+675adb944d1c98573bb6871ec6e8791f82200c2b  ./grafana/dashboards/fastapi.json
+7269ca289168390d61a61ccc4d0dec6a08653f03  ./grafana/dashboards/postgresql.json
+72c07423f3351ec207ad1943a4495b7dabf745b7  ./grafana/dashboards/traces.json
+7620f8139acb2705b101328c4ad74c0f04bbb00e  ./grafana/dashboards/redis.json
+7763ae03c4ae8302d7f50fdd92b0f82a827c81f6  ./grafana/provisioning/datasources/datasources.yaml
+8ca078e24e4cf4e4bb5fd8a937a091123499c2eb  ./grafana/dashboards/sre_data_quality.json
+98d4a885d1d5e5f9e6040c36533cb22acf9f2de9  ./grafana/dashboards/gcp_system.json
+bce7df1a19336cfb58f0a88c8598fcbbb6d47185  ./grafana/dashboards/loki.json
+d0d89b668713a06ec03963f582478c7780f2169b  ./grafana/provisioning/datasources/datasources-gcp.yaml
+da06838a90db93440c472d9a3c65b3e733aafed1  ./grafana/dashboards/functional_dashboard.json
+fd20a65a9afe5e9a26f1d3f1eaacb30b3c3cdbcd  ./grafana/Dockerfile

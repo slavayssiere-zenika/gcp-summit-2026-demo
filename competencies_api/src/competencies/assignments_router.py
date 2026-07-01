@@ -71,7 +71,7 @@ async def assign_competencies_bulk(
     Retourne 503 si un service aval (users_api) est temporairement injoignable.
     """
     is_privileged = jwt_payload.get("role") in ("admin", "rh", "service_account")
-    is_self = str(user_id) == str(jwt_payload.get("sub"))
+    is_self = int(user_id) == jwt_payload.get("user_id")
     if not is_privileged and not is_self:
         raise HTTPException(
             status_code=403,
@@ -168,7 +168,7 @@ async def assign_competency_to_user(
 ):
     """Assigne une compétence unique à un utilisateur (idempotent)."""
     is_privileged = jwt_payload.get("role") in ("admin", "rh", "service_account")
-    is_self = str(user_id) == str(jwt_payload.get("sub"))
+    is_self = int(user_id) == jwt_payload.get("user_id")
     if not is_privileged and not is_self:
         raise HTTPException(
             status_code=403,
@@ -222,7 +222,7 @@ async def remove_competency_from_user(
 ):
     """Supprime l'assignation d'une compétence pour un utilisateur."""
     is_privileged = jwt_payload.get("role") in ("admin", "rh", "service_account")
-    is_self = str(user_id) == str(jwt_payload.get("sub"))
+    is_self = int(user_id) == jwt_payload.get("user_id")
     if not is_privileged and not is_self:
         raise HTTPException(
             status_code=403,
@@ -249,7 +249,7 @@ async def list_user_competencies(
 ):
     """Retourne toutes les compétences assignées à un utilisateur."""
     is_privileged = jwt_payload.get("role") in ("admin", "rh", "service_account")
-    is_self = str(user_id) == str(jwt_payload.get("sub"))
+    is_self = int(user_id) == jwt_payload.get("user_id")
     if not is_privileged and not is_self:
         raise HTTPException(
             status_code=403,

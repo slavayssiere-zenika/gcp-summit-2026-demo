@@ -136,7 +136,7 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "La requête SQL SELECT."},
-                    "db_name": {"type": "string", "description": "Nom de la base.", "default": "zenika"},
+                    "db_name": {"type": "string", "description": "Nom de la base.", "default": "postgres"},
                 },
                 "required": ["query"],
             },

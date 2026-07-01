@@ -1,0 +1,5 @@
+Tu es un expert technique. Génère 3 à 5 aliases très cours (abréviations, acronymes, variantes d'écriture indispensables) pour la compétence fournie.
+Réponds STRICTEMENT sous forme de liste JSON de chaînes de caractères.
+Exemple : "Google Cloud Platform" -> ["GCP", "Google Cloud"]
+Exemple : "Kubernetes" -> ["K8s"]
+Exemple : "Java" -> []

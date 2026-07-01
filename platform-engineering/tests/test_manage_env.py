@@ -110,9 +110,9 @@ def uat_yaml(tmp_path):
 class TestServiceImageMap:
     """Valide la cohérence de SERVICE_IMAGE_MAP avec les autres composants."""
 
-    def test_has_15_entries(self):
-        """La map doit contenir 15 services (synchronisé avec deploy.sh)."""
-        assert len(me.SERVICE_IMAGE_MAP) == 15
+    def test_has_16_entries(self):
+        """La map doit contenir 16 services (synchronisé avec deploy.sh)."""
+        assert len(me.SERVICE_IMAGE_MAP) == 16
 
     def test_all_tf_keys_start_with_no_prefix(self):
         """Les clés Terraform n'ont pas de préfixe 'image_' (c'est build_image_urls qui l'ajoute)."""
@@ -142,6 +142,7 @@ class TestServiceImageMap:
             "agent_router_api", "agent_hr_api", "agent_ops_api", "agent_missions_api",
             "users_api", "items_api", "competencies_api", "cv_api", "prompts_api",
             "drive_api", "missions_api", "analytics_mcp", "monitoring_mcp", "db_migrations", "db_init", "frontend",
+            "grafana",
         }
         for tf_name, docker_name in me.SERVICE_IMAGE_MAP.items():
             assert docker_name in known_components, (
@@ -157,9 +158,9 @@ class TestServiceImageMap:
 class TestBuildImageUrls:
     """Valide la construction des URLs d'images Docker."""
 
-    def test_returns_15_image_keys(self, local_versions):
+    def test_returns_16_image_keys(self, local_versions):
         images = me.build_image_urls(REGISTRY, local_versions)
-        assert len(images) == 15
+        assert len(images) == 16
 
     def test_all_keys_start_with_image_prefix(self, local_versions):
         images = me.build_image_urls(REGISTRY, local_versions)
@@ -225,7 +226,8 @@ class TestDiscoverVersions:
         versions = me.discover_versions()
         expected_keys = [
             "agent_router_api_version", "agent_hr_api_version", "users_api_version",
-            "analytics_mcp_version", "monitoring_mcp_version", "db_migrations_version", "db_init_version", "frontend_version",
+            "analytics_mcp_version", "monitoring_mcp_version", "db_migrations_version",
+            "db_init_version", "frontend_version",
         ]
         for key in expected_keys:
             assert key in versions, f"Clé '{key}' absente du résultat de discover_versions()."
@@ -348,12 +350,12 @@ class TestVersionPriority:
         # À corriger dans manage_env.py si nécessaire.
         pass  # Placeholder — voir note ci-dessus
 
-    def test_all_15_image_keys_generated(self, dev_yaml, local_versions):
-        """Le tfvars final doit contenir exactement 15 clés image_*."""
+    def test_all_16_image_keys_generated(self, dev_yaml, local_versions):
+        """Le tfvars final doit contenir exactement 16 clés image_*."""
         final = self._run(str(dev_yaml), local_versions)
         image_keys = [k for k in final if k.startswith("image_")]
-        assert len(image_keys) == 15, (
-            f"Attendu 15 clés image_*, trouvé {len(image_keys)} : {image_keys}"
+        assert len(image_keys) == 16, (
+            f"Attendu 16 clés image_*, trouvé {len(image_keys)} : {image_keys}"
         )
 
     def test_no_original_image_star_keys_from_yaml(self, dev_yaml, local_versions):

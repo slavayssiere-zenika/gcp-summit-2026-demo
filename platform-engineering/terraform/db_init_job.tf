@@ -91,7 +91,8 @@ resource "google_cloud_run_v2_job" "db_init" {
 # Pour un déclenchement manuel : deploy.sh db_init
 resource "null_resource" "run_db_init_job" {
   triggers = {
-    job_updated = google_cloud_run_v2_job.db_init.id
+    job_updated   = google_cloud_run_v2_job.db_init.id
+    image_version = var.image_db_init
   }
 
   provisioner "local-exec" {

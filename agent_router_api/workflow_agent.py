@@ -149,12 +149,24 @@ class StateGraphAgent(BaseAgent):
                 yield event
 
 
-def _build_classifier_agent() -> LlmAgent:
+def _build_classifier_agent(instruction: str = None) -> LlmAgent:
     """Construit le LlmAgent classificateur de domaine (léger, économique)."""
+    if not instruction:
+        try:
+            local_path = os.path.join(os.path.dirname(__file__), "agent_router_api.classifier.txt")
+            if os.path.exists(local_path):
+                with open(local_path, "r", encoding="utf-8") as f:
+                    instruction = f.read().strip()
+        except Exception as e:
+            logger.warning("[Workflow] Impossible de lire le fichier prompt local classifier : %s", e)
+
+    if not instruction:
+        instruction = _CLASSIFIER_INSTRUCTION
+
     return LlmAgent(
         name="query_domain_classifier",
         model=_CLASSIFIER_MODEL,
-        instruction=_CLASSIFIER_INSTRUCTION,
+        instruction=instruction,
         generate_content_config=types.GenerateContentConfig(
             http_options=types.HttpOptions(
                 retry_options=types.HttpRetryOptions(initial_delay=0.5, attempts=2),
@@ -241,16 +253,17 @@ async def ask_missions_agent_with_hr_alignment(query: str, user_id: str = "") ->
     return final_res
 
 
-def build_workflow_agent(hr_tool, ops_tool, missions_tool) -> StateGraphAgent:
+def build_workflow_agent(hr_tool, ops_tool, missions_tool, classifier_instruction: str = None) -> StateGraphAgent:
     """Construit le WorkflowAgent DAG Zenika (StateGraphAgent ADK v2).
 
     Args:
         hr_tool       : outil A2A ask_hr_agent (Python callable ADK tool)
         ops_tool      : outil A2A ask_ops_agent
         missions_tool : outil A2A ask_missions_agent (ou wrapper d'alignement)
+        classifier_instruction : prompt d'instruction du classificateur
     """
 
-    classifier = _build_classifier_agent()
+    classifier = _build_classifier_agent(classifier_instruction)
 
     router_model = os.getenv("GEMINI_ROUTER_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
 

@@ -146,7 +146,7 @@ async def get_user_cv(user_id: int, skip: int = Query(
         0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db),
         token_payload: dict = Depends(verify_jwt)):
 
-    if token_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(token_payload.get("sub")):
+    if token_payload.get("role") not in ("admin", "rh", "service_account") and int(user_id) != token_payload.get("user_id"):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : consultation du CV non autorisée."
@@ -174,7 +174,7 @@ async def get_user_missions(user_id: int, skip: int = Query(
         0, ge=0), limit: int = 50, db: AsyncSession = Depends(get_db),
         token_payload: dict = Depends(verify_jwt)):
 
-    if token_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(token_payload.get("sub")):
+    if token_payload.get("role") not in ("admin", "rh", "service_account") and int(user_id) != token_payload.get("user_id"):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : consultation du CV non autorisée."
@@ -193,7 +193,7 @@ async def get_user_cv_details(
         user_id: int, request: Request, db: AsyncSession = Depends(get_db),
         token_payload: dict = Depends(verify_jwt)):
 
-    if token_payload.get("role") not in ("admin", "rh", "service_account") and str(user_id) != str(token_payload.get("sub")):
+    if token_payload.get("role") not in ("admin", "rh", "service_account") and int(user_id) != token_payload.get("user_id"):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : consultation du CV non autorisée."

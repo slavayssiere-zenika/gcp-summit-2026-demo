@@ -1,6 +1,7 @@
 019b00c8fd44f5e1b0328d229502bc0656fc6f82  ./items_api/tests/test_edge_cases.py
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
+0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0c87a9f3df77345a515fe4d1742db280c54dab51  ./items_api/tests/test_categories_router.py
 0d47ba30f6729c89bad2723b3fd9fa63687dffd6  ./items_api/tests/test_mcp_tools.py
@@ -17,11 +18,9 @@
 2bd8c24e5562379cc4f9487e6094e51d24df261c  ./shared/schemas/staffing.py
 2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
-35086d0147fdbe4f6a39c8a90639749e79ec5c35  ./shared/observability.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 41e0e4221f06a736821aa131c336afc0c8febad4  ./items_api/tests/test_crud_router_bulk.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
-43298ed4007e0eefc4c31d97f9b27de674e08690  ./items_api/conftest.py
 45cde23ef201606abbbb48fc7c0be68398370b35  ./items_api/tests/test_crud_router_basic.py
 4ab0948ac29ad61a98cb7e06af91c2ce276917cf  ./items_api/pytest.ini
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
@@ -49,8 +48,10 @@
 9f19e7af6b6f4b26bc3152960ff2e4dc7e02edc2  ./items_api/tests/integration/test_pg_integration.py
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 ac188d18c1e4338f8234cfbabd7052794efd3dc7  ./items_api/src/items/router.py
+ae7b411edb5aa9a4839c34dc0b5d7a47547314e4  ./items_api/conftest.py
 b5ea1e24445f0cf7c8729088857507631a520425  ./items_api/mcp_app.py
 ba2a006fe4ff2b2a621ee7d426bed249b86235e0  ./items_api/Dockerfile
+c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 c76daa835f1d5c1a227d5cfa9d77681ba8af0cfb  ./items_api/pyproject.toml
@@ -59,7 +60,6 @@ ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 ccda1ccddd939f6d912ff9bbfb0348fb0ce9ee60  ./items_api/tests/test_integration.py
 cd03a13db0c71e59f21b4e9c0e0b00d98b8a6fc1  ./items_api/tests/test_delete_user_items.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./items_api/.dockerignore
-cfba8089c339a84374833155e1d72df74b6dd385  ./shared/pyproject.toml
 d576a5f708b56c5893ea070c53e9645f230ad80e  ./items_api/tests/test_zero_trust.py
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 d7498a2d4f497ed22ac3366d3cdd54aa61bd3c39  ./items_api/mcp_server.py

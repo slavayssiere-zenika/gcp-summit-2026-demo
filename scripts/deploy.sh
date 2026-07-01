@@ -551,7 +551,7 @@ compute_service_hash() {
   # shared/ est inclus dans le hash des services backend Python uniquement.
   # Les services non-Python (db_migrations, db_init) ne dépendent pas de shared/
   # et ne doivent pas être invalidés par des changements dans shared/.
-  local SHARED_EXEMPT_SERVICES=("frontend" "db_migrations" "db_init")
+  local SHARED_EXEMPT_SERVICES=("frontend" "db_migrations" "db_init" "grafana")
   local is_exempt=false
   for exempt in "${SHARED_EXEMPT_SERVICES[@]}"; do
     if [ "$SERVICE" == "$exempt" ]; then
@@ -828,14 +828,26 @@ run_service_tests() {
 
   local PYTEST_EXIT=0
   echo -e "${GREY}   (Exécution des tests en cours...)${RESET}"
-  OTEL_TRACES_EXPORTER=none \
-  OTEL_METRICS_EXPORTER=none \
-  OTEL_LOGS_EXPORTER=none \
-  SECRET_KEY="testsecret" \
-  PYTHONPATH="$PYTHONPATH_VAL" \
-  uv run --project "./${SERVICE}" --with-requirements scripts/test_requirements.txt pytest "./${SERVICE}" -x \
-    --cov="./${SERVICE}" --cov-report=term-missing:skip-covered \
-    2>&1 | tee "$TMP_OUTPUT" | grep --line-buffered -E "(test_.*\.py|\[[ 0-9]+%\]|===.*===|^FAILED|^ERROR)" | awk '{print "   " $0; fflush()}' || PYTEST_EXIT=${PIPESTATUS[0]}
+  local PYTEST_CMD="./test_env/bin/pytest"
+  if [ -f "$PYTEST_CMD" ]; then
+    OTEL_TRACES_EXPORTER=none \
+    OTEL_METRICS_EXPORTER=none \
+    OTEL_LOGS_EXPORTER=none \
+    SECRET_KEY="testsecret" \
+    PYTHONPATH="$PYTHONPATH_VAL" \
+    "$PYTEST_CMD" "./${SERVICE}" -x \
+      --cov="./${SERVICE}" --cov-report=term-missing:skip-covered \
+      2>&1 | tee "$TMP_OUTPUT" | grep --line-buffered -E "(test_.*\.py|\[[ 0-9]+%\]|===.*===|^FAILED|^ERROR)" | awk '{print "   " $0; fflush()}' || PYTEST_EXIT=${PIPESTATUS[0]}
+  else
+    OTEL_TRACES_EXPORTER=none \
+    OTEL_METRICS_EXPORTER=none \
+    OTEL_LOGS_EXPORTER=none \
+    SECRET_KEY="testsecret" \
+    PYTHONPATH="$PYTHONPATH_VAL" \
+    uv run --project "./${SERVICE}" --with-requirements scripts/test_requirements.txt pytest "./${SERVICE}" -x \
+      --cov="./${SERVICE}" --cov-report=term-missing:skip-covered \
+      2>&1 | tee "$TMP_OUTPUT" | grep --line-buffered -E "(test_.*\.py|\[[ 0-9]+%\]|===.*===|^FAILED|^ERROR)" | awk '{print "   " $0; fflush()}' || PYTEST_EXIT=${PIPESTATUS[0]}
+  fi
 
   # Écriture dans le log persistant (jamais cat direct — évite la verbosité terminal)
   local LOG_FILE="${LOG_DIR}/${SERVICE}_tests.log"
@@ -1418,7 +1430,7 @@ ${RED}=== Synchronisation des System Prompts (Grounding) ===${RESET}"
 # Main logic
 # ==============================================================================
 # Liste des services applicatifs (déployés par 'all')
-APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "analytics_mcp" "monitoring_mcp")
+APP_MICROSERVICES=("users_api" "items_api" "competencies_api" "cv_api" "prompts_api" "drive_api" "missions_api" "analytics_mcp" "monitoring_mcp" "grafana")
 # Liste de tous les services possibles pour la validation
 VALID_SERVICES=("db_migrations" "db_init" "sync_prompts" "agent_router_api" "agent_hr_api" "agent_ops_api" "agent_missions_api" "frontend" "${APP_MICROSERVICES[@]}")
 
@@ -1680,7 +1692,8 @@ else
     # (frontend exclu : pas de test Locust dessus)
     any_api_changed=false
     for task in "${ALL_TASKS[@]}"; do
-      if [[ " ${APP_MICROSERVICES[*]} agent_router_api agent_hr_api agent_ops_api agent_missions_api " == *" $task "* ]]; then
+      # Grafana est exclu de la performance gate
+      if [[ " ${APP_MICROSERVICES[*]} agent_router_api agent_hr_api agent_ops_api agent_missions_api " == *" $task "* ]] && [ "$task" != "grafana" ]; then
         if [[ " ${DEPLOYS_SKIPPED[*]} " != *" $task "* ]]; then
           any_api_changed=true
           break

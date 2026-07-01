@@ -45,6 +45,7 @@ Rapport généré le [date_actuelle] UTC.
 - **Requêtes totales** : [total_requests]
 - **Requêtes API Router** : [router_requests]
 - **Requêtes Agent (/query)** : [agent_queries]
+- **Scans / Tentatives bloqués** : [blocked_scans] (401/403/404)
 
 ## 📥 Activité Données
 - **Nouveaux CVs ingérés** : [nb_cv_ingested]

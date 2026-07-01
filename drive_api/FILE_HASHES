@@ -3,6 +3,7 @@
 05e792604b1568e36e4a21765ce9c12faca3ade1  ./drive_api/src/services/folder_service.py
 07bf401b8f0fe0983c5701cca568678f071afc30  ./drive_api/tests/integration/test_pubsub_integration.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
+0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
 0e67206eb9bb4bdd2a227d7f16449b8c6430782d  ./shared/tests/zero_trust.py
@@ -22,7 +23,6 @@
 2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 30a8fe7bf38ce5dce641687c3c19c5a84792b1a6  ./drive_api/uv.lock
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
-35086d0147fdbe4f6a39c8a90639749e79ec5c35  ./shared/observability.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 39e3d62eefc91585a02a1a32c2f007233f9a8de7  ./drive_api/tests/test_folder_service.py
 3e15580b13782fb9fa467fb11298c15018ad975c  ./drive_api/tests/test_tree_resolution.py
@@ -64,13 +64,13 @@ b0167d55f0089a515e4757323bb65cdac08fee4d  ./drive_api/src/routers/ingestion_rout
 b26d6463303bc02b6cab2e6b1ea6f7185db78d6b  ./drive_api/tests/test_google_api_client.py
 b67c09fb08180db54db57a4f2b57c8e110abd8e2  ./drive_api/pyproject.toml
 c15122ff12a1f6a39fbfb26d89edb41a2ded1359  ./drive_api/main.py
+c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 ccb2c3c82b1e3a7ff2f55aa38b06ebe8aaeb0d8f  ./drive_api/src/discovery_service.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./drive_api/.dockerignore
-cfba8089c339a84374833155e1d72df74b6dd385  ./shared/pyproject.toml
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 d793c1b58ebe389c5388a3e044e2b9e3399d6e3b  ./drive_api/src/models.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./drive_api/src/__init__.py

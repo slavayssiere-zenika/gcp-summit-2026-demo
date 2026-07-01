@@ -10,6 +10,7 @@ Tools exposés :
 import logging
 import os
 import re
+import urllib.parse
 from datetime import datetime
 import redis
 from sqlalchemy import text
@@ -56,7 +57,7 @@ async def get_redis_invalidation_state_internal(pattern: str = "*") -> dict:
         return {"error": str(e)}
 
 
-async def execute_read_only_query_internal(query: str, db_name: str = "zenika") -> dict:
+async def execute_read_only_query_internal(query: str, db_name: str = "postgres") -> dict:
     """Exécute une requête SQL SELECT (lecture seule) sur AlloyDB/PostgreSQL.
 
     Rejette les requêtes DDL/DML (INSERT, UPDATE, DELETE, DROP...) avant exécution.
@@ -76,6 +77,10 @@ async def execute_read_only_query_internal(query: str, db_name: str = "zenika") 
     try:
 
         db_url = os.getenv("DATABASE_URL", f"postgresql+asyncpg://postgres:postgres@alloydb:5432/{db_name}")
+        # Parse db_url and swap the database name with db_name
+        parsed = urllib.parse.urlparse(db_url)
+        db_url = parsed._replace(path=f"/{db_name}").geturl()
+
         use_iam = os.getenv("USE_IAM_AUTH", "false").lower() == "true"
         instance_uri = os.getenv("ALLOYDB_INSTANCE_URI")
 

@@ -77,13 +77,14 @@ def client():
 def wipe_db():
     Base.metadata.drop_all(bind=sync_engine)
     Base.metadata.create_all(bind=sync_engine)
+    asyncio.run(async_engine.dispose())
     asyncio.run(_fake_redis_client.flushdb())
     yield
 
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_gemini_alias_globally():
-    """Mocke _generate_aliases_for_competency pour tous les tests.
+    """Mocke _generate_aliases_for_competency et _fetch_prompt_dynamic pour tous les tests.
 
     Sans cette fixture, le client google-genai est instancié sans clé API,
     ce qui provoque un AttributeError lors du teardown asyncio
@@ -99,5 +100,13 @@ def mock_gemini_alias_globally():
         "src.competencies.suggestions_router._generate_aliases_for_competency",
         new_callable=AsyncMock,
         return_value=None,
+    ), patch(
+        "src.competencies.ai_scoring._fetch_prompt_dynamic",
+        new_callable=AsyncMock,
+        return_value="Dummy prompt content for testing",
+    ), patch(
+        "src.competencies.helpers._fetch_prompt_dynamic",
+        new_callable=AsyncMock,
+        return_value="Dummy prompt content for testing",
     ):
         yield

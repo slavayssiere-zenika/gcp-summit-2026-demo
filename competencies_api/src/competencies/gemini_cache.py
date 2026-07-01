@@ -14,6 +14,7 @@ Contraintes :
   - TTL défaut : 3600s (1h) — renouvelé automatiquement si < 5 min restantes.
 """
 
+import hashlib
 import logging
 import os
 from typing import Optional
@@ -59,7 +60,9 @@ def _is_vertex_available(client) -> bool:
         return False
 
 
-async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
+async def get_or_create_scoring_cache(
+    client, model: str, system_instruction: str = None
+) -> Optional[str]:
     """Retourne le nom d'un CachedContent Gemini pour le scoring system prompt.
 
     Crée le cache si inexistant ou si le TTL restant est < 5 min.
@@ -68,6 +71,7 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
     Args:
         client: Instance genai.Client en mode Vertex AI.
         model: Nom du modèle Gemini (ex: 'gemini-3.1-flash-001').
+        system_instruction: Prompt système dynamique à mettre en cache.
 
     Returns:
         Nom du cache (str) ou None si indisponible.
@@ -76,7 +80,12 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
         logger.debug("[gemini_cache] Context caching non disponible (API key mode) — skip")
         return None
 
-    redis_key = f"competencies:gemini_cache:{model}"
+    if not system_instruction:
+        system_instruction = SCORING_SYSTEM_PROMPT
+
+    # R2 — Clé de cache incluant le hash du prompt pour renouvellement automatique
+    prompt_hash = hashlib.md5(system_instruction.encode("utf-8")).hexdigest()
+    redis_key = f"competencies:gemini_cache:{model}:{prompt_hash}"
     cache_entry = await get_cache(redis_key)
 
     if cache_entry:
@@ -102,11 +111,10 @@ async def get_or_create_scoring_cache(client, model: str) -> Optional[str]:
 
     # Création du CachedContent
     try:
-
         cache = await client.aio.caches.create(
             model=model,
             config=types.CreateCachedContentConfig(
-                system_instruction=SCORING_SYSTEM_PROMPT,
+                system_instruction=system_instruction,
                 ttl=f"{GEMINI_CACHE_TTL_S}s",
                 display_name=f"zenika-scoring-system-prompt-{model}",
             ),
