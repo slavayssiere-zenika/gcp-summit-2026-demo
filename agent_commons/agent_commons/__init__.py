@@ -37,8 +37,15 @@ try:
         gemini_base = os.getenv("GEMINI_API_BASE_URL")
         vertex_base = os.getenv("VERTEX_API_BASE_URL")
 
+        # Normalisation : si vertexai est passé en positional (args[0]), le déplacer
+        # dans kwargs pour éviter le doublon quand le SDK le passe aussi via kwargs.
+        # Depuis google-adk >= 1.x, Client(**kwargs) est appelé avec vertexai dans kwargs.
+        if args and isinstance(args[0], bool):
+            kwargs.setdefault("vertexai", args[0])
+            args = args[1:]
+
         # In google-genai SDK, vertexai can be passed as vertexai=True or as the first positional argument
-        is_vertex = kwargs.get("vertexai") or (len(args) > 0 and args[0] is True)
+        is_vertex = kwargs.get("vertexai", False)
         base_url = vertex_base if (is_vertex and vertex_base) else gemini_base
 
         # Zero-Trust Production Guardrail (bypasses local mocks in GCP environments)

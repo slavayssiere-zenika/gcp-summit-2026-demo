@@ -42,7 +42,7 @@ requires-dist = [
     { name = "google-cloud-run", specifier = ">=0.10.0" },
     { name = "google-cloud-trace", specifier = ">=1.11.0" },
     { name = "httpx", specifier = ">=0.25.0" },
-    { name = "mcp", specifier = ">=1.0.0" },
+    { name = "mcp", specifier = ">=1.27.1" },
     { name = "opentelemetry-api", specifier = ">=1.41.0,<2.0.0" },
     { name = "opentelemetry-exporter-gcp-trace", specifier = ">=1.12.0" },
     { name = "opentelemetry-exporter-otlp" },

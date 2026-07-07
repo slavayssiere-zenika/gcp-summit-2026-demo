@@ -81,20 +81,45 @@ def map_user_to_response(user: User) -> dict:
 
 @router.get("/duplicates", response_model=List[DuplicateCandidate])
 async def get_duplicates(request: Request, db: AsyncSession = Depends(get_db), payload: dict = Depends(verify_jwt)):
+    """Détecte les doublons de comptes utilisateurs.
+
+    Scope élargi (BUGFIX) :
+    - Inclut les profils anonymes (is_anonymous=True) : un profil ingéré depuis Drive
+      sans first_name/last_name peut doubler un compte Google OAuth actif.
+    - Utilise full_name comme fallback quand first_name ou last_name est absent,
+      en normalisant et triant les mots (couvre les inversions prénom/nom).
+    """
     if payload.get("role") not in ["admin", "rh"]:
         raise HTTPException(status_code=403, detail="Privilèges requis (Admin ou RH).")
 
-    users = (await db.execute(select(User).filter(User.is_active.is_(True)))).scalars().all()
-    grouped = {}
+    # Scope élargi : actifs ET anonymes ingérés (les deux peuvent se doubler)
+    stmt = select(User).filter(
+        (User.is_active.is_(True)) | (User.is_anonymous.is_(True))
+    )
+    users = (await db.execute(stmt)).scalars().all()
+
+    grouped: dict = {}
     for u in users:
         if u.first_name and u.last_name:
+            # Cas nominal : prénom + nom explicites
             key = (normalize_for_matching(u.first_name), normalize_for_matching(u.last_name))
-            if key not in grouped:
-                grouped[key] = []
-            grouped[key].append(u)
+        elif u.full_name and u.full_name.strip():
+            # Fallback : full_name (profils ingérés anonymes)
+            # On trie les mots normalisés pour absorber les inversions prénom/nom
+            words = sorted(
+                w for w in normalize_for_matching(u.full_name).split()
+                if len(w) >= 2  # écarte les initiales isolées
+            )
+            if not words:
+                continue
+            key = tuple(words)
+        else:
+            continue  # pas assez d'info pour dédupliquer
+
+        grouped.setdefault(key, []).append(u)
 
     duplicates = []
-    for key, group in grouped.items():
+    for group in grouped.values():
         if len(group) > 1:
             duplicates.append(DuplicateCandidate(users=[map_user_to_response(u) for u in group]))
 

@@ -27,13 +27,37 @@ OTel Tracing (ADK Reasoning Observability):
   When no exporter is configured (``OTEL_TRACES_EXPORTER=none`` in local/mock
   environments), OpenTelemetry produces no-op spans with zero overhead and zero
   network calls.  The instrumentation is therefore unconditional and safe everywhere.
+
+AutoTracingPlugin (ADK 2.2+):
+  ``build_runner_plugins()`` retourne une liste de plugins ADK à injecter dans
+  ``Runner(plugins=...)``.  Elle active le ``AutoTracingPlugin`` natif ADK qui
+  instrumente automatiquement par monkey-patching toutes les fonctions Python
+  accessibles depuis l'InvocationContext (agent, tools, MCP clients…).
+
+  Le plugin est no-op automatique quand le tracer OTel est un ``NoOpTracer``
+  (ex: ``OTEL_TRACES_EXPORTER=none`` en local) — aucun overhead, aucun effet
+  de bord.  Il coexiste avec le traçage custom de ``run_agent_and_collect``
+  (spans ``agent.<name>.run`` + child spans ``agent.tool_call:*``) en
+  produisant en complément des spans au niveau fonction pour le debugging fin.
+
+  Activation contrôlée par la variable d'environnement :
+    ADK_AUTO_TRACING=true  (défaut : false — opt-in explicite)
+  Cette variable protège contre tout overhead inattendu en pré-prod.
 """
 
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, List
 
+try:
+    from google.adk.plugins.auto_tracing_plugin import AutoTracingPlugin
+    HAS_AUTO_TRACING = True
+except ImportError:
+    HAS_AUTO_TRACING = False
+
+from google.adk.plugins.base_plugin import BasePlugin
+from google.adk.events import Event
 from google.genai import types
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
@@ -52,6 +76,37 @@ _SPAN_ATTR_MAX_LEN: int = int(os.getenv("AGENT_OTEL_ATTR_MAX_LEN", "512"))
 #: Maximum number of tool calls before a TOOL_BUDGET warning step is injected.
 #: Configurable at deploy time via the A2A_MAX_TOOL_CALLS environment variable.
 MAX_TOOL_CALLS_WARNING: int = int(os.getenv("A2A_MAX_TOOL_CALLS", "12"))
+
+
+def build_runner_plugins() -> List[BasePlugin]:
+    """Construit la liste de plugins ADK à injecter dans Runner(plugins=...).
+
+    Active ``AutoTracingPlugin`` (ADK 2.2+) si la variable d'environnement
+    ``ADK_AUTO_TRACING=true`` est définie.  Le plugin instrumente par
+    monkey-patching toutes les fonctions Python accessibles depuis l'agent
+    (tools, MCP clients, guardrails…) avec des spans OTel.
+
+    Comportement en environnement sans exporteur OTel
+    (``OTEL_TRACES_EXPORTER=none``) : le plugin détecte un ``NoOpTracer``
+    et ne modifie aucune fonction — zéro overhead, zéro effet de bord.
+
+    Returns:
+        Liste (possiblement vide) de ``BasePlugin`` à passer au ``Runner``.
+    """
+    plugins: List[BasePlugin] = []
+    if os.getenv("ADK_AUTO_TRACING", "false").lower() == "true":
+        if HAS_AUTO_TRACING:
+            logger.info(
+                "[runner] AutoTracingPlugin activé (ADK_AUTO_TRACING=true) — "
+                "instrumentation OTel auto des fonctions agent en scope."
+            )
+            plugins.append(AutoTracingPlugin())
+        else:
+            logger.warning(
+                "[runner] ADK_AUTO_TRACING=true demandé mais AutoTracingPlugin est "
+                "introuvable dans cette version de google-adk. Instrumentation auto ignorée."
+            )
+    return plugins
 
 
 async def run_agent_and_collect(
@@ -103,7 +158,22 @@ async def run_agent_and_collect(
     thoughts: list[str] = []
     total_input_tokens = 0
     total_output_tokens = 0
-    display_type: str | None = None  # Capturé depuis render_ui_widgets ADK
+    display_type: str | None = None
+
+    # P1 — Support de la mémoire Redis
+    memory_service = getattr(runner, "memory", None)
+    memory_context = ""
+    if memory_service and hasattr(memory_service, "search_memory"):
+        try:
+            mem_res = await memory_service.search_memory(app_name=agent_name, user_id=user_id, query=query)
+            if mem_res.memories:
+                memory_context = "\n".join(
+                    [m.content for m in mem_res.memories])
+                logger.info("%s [Memory] Loaded %d past turns.",
+                            agent_prefix, len(mem_res.memories))
+        except Exception as e:
+            logger.warning(
+                "%s [Memory] Failed to load memory: %s", agent_prefix, e)
 
     # P2-2 — Tool budget tracking
     tool_call_count: int = 0
@@ -112,7 +182,16 @@ async def run_agent_and_collect(
     # OTel — child spans ouverts par tool_call, fermés à la function_response.
     _active_tool_spans: dict[str, Any] = {}
 
-    new_message = types.Content(role="user", parts=[types.Part(text=query)])
+    # Événements capturés pour la mémoire en fin de run (P1)
+    all_events: List[Event] = []
+
+    # Construction du message (on injecte la mémoire dans le prompt si présente)
+    full_query = query
+    if memory_context:
+        full_query = f"Context from past interactions:\n{memory_context}\n\nUser Query: {query}"
+
+    new_message = types.Content(
+        role="user", parts=[types.Part(text=full_query)])
 
     span_name = f"agent.{agent_name}.run"
     with _tracer.start_as_current_span(span_name) as run_span:
@@ -128,7 +207,22 @@ async def run_agent_and_collect(
                 session_id=session_id,
                 new_message=new_message,
             ):
-                has_content = hasattr(event, "content") and event.content is not None
+                all_events.append(event)
+                # 1. Extraction de l'usage (UsageMetadata est sur chaque event ADK ou son .response)
+                u = getattr(event, "usage_metadata", None)
+                if u is None and hasattr(event, "response"):
+                    u = getattr(event.response, "usage_metadata", None)
+
+                if u:
+                    it = getattr(u, "prompt_token_count", 0) or 0
+                    ot = getattr(u, "candidates_token_count", 0) or 0
+                    if isinstance(it, int):
+                        total_input_tokens = max(total_input_tokens, it)
+                    if isinstance(ot, int):
+                        total_output_tokens = max(total_output_tokens, ot)
+
+                has_content = hasattr(
+                    event, "content") and event.content is not None
 
                 # ----------------------------------------------------------------
                 # 1. Exhaustive metadata extraction from parts
@@ -143,20 +237,25 @@ async def run_agent_and_collect(
                             # OTel — pensée LLM enregistrée comme événement sur le span run
                             run_span.add_event(
                                 "agent.thought",
-                                {"thought": str(thought_val)[:_SPAN_ATTR_MAX_LEN]},
+                                {"thought": str(thought_val)[
+                                    :_SPAN_ATTR_MAX_LEN]},
                             )
 
                         # b) Tool Calls
-                        tcall = getattr(part, "tool_call", None) or getattr(part, "function_call", None)
+                        tcall = getattr(part, "tool_call", None) or getattr(
+                            part, "function_call", None)
                         if tcall:
-                            calls = tcall if isinstance(tcall, list) else [tcall]
+                            calls = tcall if isinstance(
+                                tcall, list) else [tcall]
                             for call in calls:
                                 name = getattr(call, "name", "unknown")
                                 args = getattr(call, "args", {})
                                 sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
                                 if sig not in seen_steps:
-                                    logger.info("%s Captured Tool Call: %s", agent_prefix, name)
-                                    steps.append({"type": "call", "tool": name, "args": args})
+                                    logger.info(
+                                        "%s Captured Tool Call: %s", agent_prefix, name)
+                                    steps.append(
+                                        {"type": "call", "tool": name, "args": args})
                                     seen_steps.add(sig)
                                     # P2-2: budget counter
                                     tool_call_count += 1
@@ -185,10 +284,13 @@ async def run_agent_and_collect(
                                         })
                                         budget_warning_injected = True
                                     # OTel — ouvre un child span pour cet appel d'outil
-                                    tool_span = _tracer.start_span(f"agent.tool_call:{name}")
+                                    tool_span = _tracer.start_span(
+                                        f"agent.tool_call:{name}")
                                     tool_span.set_attribute("tool.name", name)
-                                    args_str = json.dumps(args, sort_keys=True, default=str)
-                                    tool_span.set_attribute("tool.args", args_str[:_SPAN_ATTR_MAX_LEN])
+                                    args_str = json.dumps(
+                                        args, sort_keys=True, default=str)
+                                    tool_span.set_attribute(
+                                        "tool.args", args_str[:_SPAN_ATTR_MAX_LEN])
                                     _active_tool_spans[name] = tool_span
 
                         # c) Tool Results
@@ -213,13 +315,15 @@ async def run_agent_and_collect(
                             sig = f"result:{json.dumps(res_data, sort_keys=True)}"
                             if sig not in seen_steps:
                                 last_tool_data = res_data
-                                steps.append({"type": "result", "data": res_data})
+                                steps.append(
+                                    {"type": "result", "data": res_data})
                                 seen_steps.add(sig)
                                 # OTel — ferme le child span de l'outil correspondant
                                 res_tool_name = getattr(fres, "name", None)
                                 if res_tool_name and res_tool_name in _active_tool_spans:
                                     ts = _active_tool_spans.pop(res_tool_name)
-                                    res_str = json.dumps(res_data, default=str)[:_SPAN_ATTR_MAX_LEN]
+                                    res_str = json.dumps(res_data, default=str)[
+                                        :_SPAN_ATTR_MAX_LEN]
                                     ts.set_attribute("tool.result", res_str)
                                     ts.set_status(Status(StatusCode.OK))
                                     ts.end()
@@ -244,8 +348,10 @@ async def run_agent_and_collect(
                         payload = getattr(widget, "payload", {}) or {}
                         res_uri = payload.get("resource_uri", "")
                         if res_uri.startswith("ui://"):
-                            display_type = res_uri[5:]  # ex: "consultants", "profile", "evaluations"
-                            logger.info("%s Captured render_ui_widgets: %s", agent_prefix, display_type)
+                            # ex: "consultants", "profile", "evaluations"
+                            display_type = res_uri[5:]
+                            logger.info(
+                                "%s Captured render_ui_widgets: %s", agent_prefix, display_type)
 
                     for action in event.actions:
                         tc = getattr(action, "tool_call", None)
@@ -254,8 +360,10 @@ async def run_agent_and_collect(
                             args = getattr(tc, "args", {})
                             sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
                             if sig not in seen_steps:
-                                logger.info("%s Captured Tool Call (actions): %s", agent_prefix, name)
-                                steps.append({"type": "call", "tool": name, "args": args})
+                                logger.info(
+                                    "%s Captured Tool Call (actions): %s", agent_prefix, name)
+                                steps.append(
+                                    {"type": "call", "tool": name, "args": args})
                                 seen_steps.add(sig)
 
                 if hasattr(event, "get_function_calls"):
@@ -264,15 +372,18 @@ async def run_agent_and_collect(
                         args = getattr(fc, "args", {})
                         sig = f"call:{name}:{json.dumps(args, sort_keys=True)}"
                         if sig not in seen_steps:
-                            steps.append({"type": "call", "tool": name, "args": args})
+                            steps.append(
+                                {"type": "call", "tool": name, "args": args})
                             seen_steps.add(sig)
 
                 # ----------------------------------------------------------------
                 # 2. Text response aggregation (model role only, no thoughts/tool calls)
                 # ----------------------------------------------------------------
-                role_raw = getattr(event.content, "role", "") if has_content else ""
+                role_raw = getattr(event.content, "role",
+                                   "") if has_content else ""
                 role_val = role_raw.lower() if role_raw is not None else ""
-                is_assistant = role_val in ["assistant", "model", f"assistant_zenika_{agent_name}"]
+                is_assistant = role_val in [
+                    "assistant", "model", f"assistant_zenika_{agent_name}"]
 
                 if has_content and is_assistant:
                     if isinstance(event.content, str):
@@ -286,33 +397,24 @@ async def run_agent_and_collect(
                             ):
                                 response_parts.append(part.text)
 
-                # ----------------------------------------------------------------
-                # 3. Usage tracking (FinOps)
-                # ----------------------------------------------------------------
-                u = (
-                    getattr(event.response, "usage_metadata", None)
-                    if hasattr(event, "response")
-                    else getattr(event, "usage_metadata", None)
-                )
-                if u:
-                    it = getattr(u, "prompt_token_count", 0) or (
-                        u.get("prompt_token_count", 0) if isinstance(u, dict) else 0
-                    )
-                    ot = getattr(u, "candidates_token_count", 0) or (
-                        u.get("candidates_token_count", 0) if isinstance(u, dict) else 0
-                    )
-                    total_input_tokens = max(total_input_tokens, it)
-                    total_output_tokens = max(total_output_tokens, ot)
-
-        except Exception as exc:
-            # OTel — marque le span run en erreur avant de relancer l'exception
-            run_span.record_exception(exc)
-            run_span.set_status(Status(StatusCode.ERROR, str(exc)))
-            raise
         finally:
+            # P1 — Sauvegarde en mémoire du tour de conversation
+            if memory_service and hasattr(memory_service, "add_events_to_memory") and all_events:
+                try:
+                    await memory_service.add_events_to_memory(
+                        app_name=agent_name,
+                        user_id=user_id,
+                        events=all_events,
+                        session_id=session_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "%s [Memory] Failed to save memory: %s", agent_prefix, e)
+
             # OTel — ferme tous les child spans d'outils encore ouverts (ex: timeout)
             for ts in list(_active_tool_spans.values()):
-                ts.set_status(Status(StatusCode.ERROR, "span closed without response"))
+                ts.set_status(
+                    Status(StatusCode.ERROR, "span closed without response"))
                 ts.end()
             _active_tool_spans.clear()
 
@@ -320,7 +422,8 @@ async def run_agent_and_collect(
         run_span.set_attribute("agent.tool_call_count", tool_call_count)
         run_span.set_attribute("agent.thought_count", len(thoughts))
         run_span.set_attribute("agent.total_input_tokens", total_input_tokens)
-        run_span.set_attribute("agent.total_output_tokens", total_output_tokens)
+        run_span.set_attribute(
+            "agent.total_output_tokens", total_output_tokens)
         run_span.set_attribute("agent.budget_warning", budget_warning_injected)
         run_span.set_status(Status(StatusCode.OK))
 

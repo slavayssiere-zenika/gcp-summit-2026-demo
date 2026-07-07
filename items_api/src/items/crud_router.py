@@ -291,12 +291,22 @@ async def _create_items_bulk_inner(
     user_role = auth_payload.get("role", "")
     allowed_ids = auth_payload.get("allowed_category_ids", [])
 
-    all_category_ids = set()
+    # 1. Déduplication préventive du payload (Règle SRE : unique (user_id, name))
+    unique_payload_items = []
+    seen_in_payload = set()
     for item in payload.items:
-        all_category_ids.update(item.category_ids)
+        key = (item.user_id, item.name)
+        if key not in seen_in_payload:
+            unique_payload_items.append(item)
+            seen_in_payload.add(key)
 
-    if not all_category_ids:
+    if not unique_payload_items:
         return []
+
+    # 2. Collecte de toutes les catégories nécessaires pour validation globale
+    all_category_ids = set()
+    for item in unique_payload_items:
+        all_category_ids.update(item.category_ids)
 
     categories = (await db.execute(select(Category).filter(Category.id.in_(all_category_ids)))).scalars().all()
     cat_map = {c.id: c for c in categories}
@@ -304,29 +314,28 @@ async def _create_items_bulk_inner(
     if len(categories) != len(all_category_ids):
         raise HTTPException(status_code=400, detail="One or more category IDs are invalid")
 
+    # 3. Vérification des droits (RBAC)
     if user_role not in ("admin", "rh", "service_account"):
         forbidden_ids = [cid for cid in all_category_ids if cid not in allowed_ids]
         if forbidden_ids:
             raise HTTPException(status_code=403, detail=f"User does not have rights for categories: {forbidden_ids}")
 
-    user_ids = {item.user_id for item in payload.items}
-    names = {item.name for item in payload.items}
+    # 4. Traitement unitaire dans une boucle (Règle SRE : isolation des sessions)
+    # On privilégie la robustesse à la performance pure ici suite aux incidents prd.
+    results = []
+    for item in unique_payload_items:
+        try:
+            # Idempotence : vérifier si l'item existe déjà
+            existing = (await db.execute(
+                select(Item).options(_sil(Item.categories))
+                .filter(Item.user_id == item.user_id, Item.name == item.name)
+            )).scalars().first()
 
-    existing_items = (await db.execute(
-        select(Item).options(_sil(Item.categories))
-        .filter(Item.user_id.in_(user_ids), Item.name.in_(names))
-    )).scalars().all()
+            if existing:
+                results.append(existing)
+                continue
 
-    existing_map = {(i.user_id, i.name): i for i in existing_items}
-
-    new_items = []
-    result_item_ids = []
-
-    for item in payload.items:
-        key = (item.user_id, item.name)
-        if key in existing_map:
-            result_item_ids.append(existing_map[key].id)
-        else:
+            # Création unitaire
             db_item = Item(
                 name=item.name,
                 description=item.description,
@@ -335,68 +344,43 @@ async def _create_items_bulk_inner(
                 categories=[cat_map[cid] for cid in item.category_ids]
             )
             db.add(db_item)
-            new_items.append(db_item)
-
-    if new_items:
-        try:
             await db.commit()
-            for db_item in new_items:
-                await db.refresh(db_item)
-                result_item_ids.append(db_item.id)
+            # Rechargement explicite avec selectinload pour charger .categories en mémoire
+            # avant la fermeture de la session. Sans ça, enrich_item() accède à
+            # item.categories hors contexte de session → MissingGreenlet (SQLAlchemy 2.x).
+            db_item = (await db.execute(
+                select(Item).options(selectinload(Item.categories)).filter(Item.id == db_item.id)
+            )).scalars().first()
+            results.append(db_item)
 
-            await clear_namespace("items:list:")
-            await clear_namespace("items:search:")
-        except IntegrityError as e:
+        except IntegrityError:
             await db.rollback()
-            for db_item in new_items:
-                db.expunge(db_item)
-            _log.getLogger(__name__).warning(
-                f"Conflit d'intégrité (Bulk), fallback séquentiel idempotent. Details: {e.orig}")
+            # En cas de conflit (ex: race condition), on tente de récupérer l'existant
+            existing = (await db.execute(
+                select(Item).options(_sil(Item.categories))
+                .filter(Item.user_id == item.user_id, Item.name == item.name)
+            )).scalars().first()
+            if existing:
+                results.append(existing)
+            else:
+                _log.getLogger(__name__).warning(
+                    f"Conflit d'intégrité sur '{item.name}' mais introuvable après rollback."
+                )
+        except Exception as e:
+            try:
+                await db.rollback()
+            except Exception as rollback_err:
+                _log.getLogger(__name__).error(f"Échec critique du rollback pour '{item.name}': {rollback_err}")
+            _log.getLogger(__name__).error(f"Erreur lors de la création bulk de '{item.name}': {e}")
+            # On continue pour ne pas bloquer le reste du payload
 
-            result_item_ids = []
-            for item in payload.items:
-                existing = (await db.execute(
-                    select(Item).filter(Item.user_id == item.user_id, Item.name == item.name)
-                )).scalars().first()
+    # 5. Invalidation du cache et enrichissement final
+    await clear_namespace("items:list:")
+    await clear_namespace("items:search:")
 
-                if existing:
-                    result_item_ids.append(existing.id)
-                else:
-                    db_item = Item(
-                        name=item.name,
-                        description=item.description,
-                        metadata_json=item.metadata_json,
-                        user_id=item.user_id,
-                        categories=[cat_map[cid] for cid in item.category_ids]
-                    )
-                    db.add(db_item)
-                    try:
-                        await db.commit()
-                        await db.refresh(db_item)
-                        result_item_ids.append(db_item.id)
-                    except IntegrityError:
-                        await db.rollback()
-                        db.expunge(db_item)
-                        existing = (await db.execute(
-                            select(Item).filter(Item.user_id == item.user_id, Item.name == item.name)
-                        )).scalars().first()
-                        if existing:
-                            result_item_ids.append(existing.id)
-
-            await clear_namespace("items:list:")
-            await clear_namespace("items:search:")
-        except Exception:
-            await db.rollback()
-            raise HTTPException(status_code=500, detail="Erreur inattendue lors de la création en masse")
-
-    final_items = (
-        await db.execute(
-            select(Item).options(selectinload(Item.categories))
-            .filter(Item.id.in_(result_item_ids))
-        )
-    ).scalars().all()  # noqa: E501
-    # Parallelisation asyncio.gather — evite N awaits sequentiels pour 5 items
-    return list(await asyncio.gather(*[enrich_item(db_item, request) for db_item in final_items]))
+    # Enrichissement parallèle via asyncio.gather (borné par _ENRICH_SEM)
+    # pour éviter N appels HTTP séquentiels vers users_api.
+    return list(await asyncio.gather(*[enrich_item(it, request) for it in results]))
 
 
 @router.put("/{item_id}", response_model=ItemResponse)

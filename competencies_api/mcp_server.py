@@ -145,7 +145,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="assign_competency_to_user",
-            description="Assign a competency to a specific user",
+            description=(
+                "Assigne UNE compétence à UN utilisateur. "
+                "🚨 INTERDIT EN BOUCLE — pour assigner plusieurs compétences d'un coup, "
+                "utiliser `assign_competencies_bulk` qui gère un batch en une seule transaction."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -169,11 +173,18 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_user_competencies",
-            description="List all competencies assigned to a user",
+            description=(
+                "Retourne les compétences assignées à UN SEUL utilisateur. "
+                "🚨 INTERDIT EN BOUCLE — NE JAMAIS appeler ce tool dans un for/while sur une liste d'users. "
+                "Chaque appel consomme une connexion DB ; une boucle sur N users provoque un QueuePool exhaustion fatal. "
+                "✅ POUR TRAITER UNE LISTE D'USERS : utiliser `batch_evaluate_competencies_users(user_ids=[...])` "
+                "qui traite tous les utilisateurs en une seule requête SQL. "
+                "Ce tool est réservé aux profils individuels (coaching, fiche consultant unique)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "integer", "description": "The user ID"},
+                    "user_id": {"type": "integer", "description": "The user ID (UN SEUL — ne pas appeler en boucle)"},
                     "skip": {"type": "integer", "description": "Number of items to skip", "default": 0},
                     "limit": {"type": "integer", "description": "Maximum number of items to return", "default": 100}
                 },

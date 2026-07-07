@@ -20,23 +20,27 @@ from google.cloud import pubsub_v1
 logger = logging.getLogger(__name__)
 
 
-async def get_redis_invalidation_state_internal(pattern: str = "*") -> dict:
+async def get_redis_invalidation_state_internal(pattern: str = "*", db_number: int = 0) -> dict:
     """Inspecte les clés Redis correspondant au pattern donné (SCAN sans destructivité).
 
     Args:
         pattern: Pattern SCAN Redis (ex: 'items:list:*', 'session:*', '*').
+        db_number: Numéro de la base Redis (0-15).
 
     Returns:
         Dict {status, matched_keys_count, keys_sample, redis_url}.
     """
     try:
 
-        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        redis_url = os.getenv("REDIS_URL", f"redis://redis:6379/{db_number}")
+        # Si REDIS_URL est défini, on remplace le numéro de DB par celui demandé
+        if "REDIS_URL" in os.environ:
+            parsed = urllib.parse.urlparse(redis_url)
+            redis_url = parsed._replace(path=f"/{db_number}").geturl()
+
         r = redis.from_url(redis_url, socket_timeout=2.0)  # noqa: RedisSyncCache — outil d'inspection synchrone (non-mutant)
 
         keys = []
-        # FIX Gap 2: cursor doit être int 0, pas la string "0".
-        # redis-py retourne un int — comparer string vs int provoque une boucle infinie.
         cursor = 0
         while True:
             cursor, data = r.scan(cursor=cursor, match=pattern, count=100)
@@ -70,13 +74,17 @@ async def execute_read_only_query_internal(query: str, db_name: str = "postgres"
         Dict {status, rows, count} ou {error}.
     """
     query_lower = query.lower().strip()
-    forbidden_keywords = ["insert", "update", "delete", "drop", "alter", "create", "truncate", "grant", "revoke"]
-    if any(kw in query_lower for kw in forbidden_keywords):
-        return {"error": "Only read-only SELECT queries are allowed."}
+    # Règle renforcée : on ne bloque que si le mot clé est isolé (regex word boundary)
+    forbidden_keywords = ["insert", "update", "delete",
+                          "drop", "alter", "create", "truncate", "grant", "revoke"]
+    for kw in forbidden_keywords:
+        if re.search(rf"\b{kw}\b", query_lower):
+            return {"error": f"Only read-only SELECT queries are allowed. Forbidden keyword detected: {kw}"}
 
     try:
 
-        db_url = os.getenv("DATABASE_URL", f"postgresql+asyncpg://postgres:postgres@alloydb:5432/{db_name}")
+        db_url = os.getenv(
+            "DATABASE_URL", f"postgresql+asyncpg://postgres:postgres@alloydb:5432/{db_name}")
         # Parse db_url and swap the database name with db_name
         parsed = urllib.parse.urlparse(db_url)
         db_url = parsed._replace(path=f"/{db_name}").geturl()
@@ -88,7 +96,8 @@ async def execute_read_only_query_internal(query: str, db_name: str = "postgres"
             from google.cloud.alloydb.connector import AsyncConnector, IPTypes
             db_user = "postgres"
             if db_url.startswith("postgresql"):
-                m = re.match(r"postgresql(?:\+asyncpg)?://([^:]+)(?::[^@]*)?@[^/]+", db_url)
+                m = re.match(
+                    r"postgresql(?:\+asyncpg)?://([^:]+)(?::[^@]*)?@[^/]+", db_url)
                 if m:
                     db_user = m.group(1)
 
@@ -103,17 +112,20 @@ async def execute_read_only_query_internal(query: str, db_name: str = "postgres"
                     enable_iam_auth=True,
                     ip_type=IPTypes.PRIVATE
                 )
-            engine = create_async_engine("postgresql+asyncpg://", async_creator=getconn)
+            engine = create_async_engine(
+                "postgresql+asyncpg://", async_creator=getconn)
         else:
             if db_url.startswith("postgresql://"):
-                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+                db_url = db_url.replace(
+                    "postgresql://", "postgresql+asyncpg://", 1)
             engine = create_async_engine(db_url)
 
         async with engine.connect() as conn:
             result = await conn.execute(text(query))
             rows = result.mappings().all()
             formatted_rows = [
-                {k: str(v) if isinstance(v, datetime) else (str(v) if v is not None else None) for k, v in row.items()}
+                {k: str(v) if isinstance(v, datetime) else (
+                    str(v) if v is not None else None) for k, v in row.items()}
                 for row in rows
             ]
 
@@ -138,7 +150,8 @@ async def inspect_pubsub_dlq_internal(subscription_id: str = "cv-ingestion-dlq-s
 
         project_id = os.getenv("GCP_PROJECT_ID", "")
         subscriber = pubsub_v1.SubscriberClient()
-        subscription_path = subscriber.subscription_path(project_id, subscription_id)
+        subscription_path = subscriber.subscription_path(
+            project_id, subscription_id)
 
         # FIX Gap 1: ack_deadline_seconds=600 pour éviter la disparition temporaire
         # des messages durant l'inspection (défaut 10s trop court en prod).

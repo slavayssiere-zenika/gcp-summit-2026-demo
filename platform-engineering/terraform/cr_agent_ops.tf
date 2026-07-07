@@ -202,6 +202,14 @@ resource "google_cloud_run_v2_service" "agent_ops_api" {
         name  = "ENABLE_OUTPUT_SCHEMA"
         value = var.enable_output_schema
       }
+      # ── ADK 2.2+ AutoTracingPlugin ───────────────────────────────────────────
+      # Active l'instrumentation OTel automatique par monkey-patching de toutes
+      # les fonctions Python accessibles depuis l'InvocationContext (tools, MCP,
+      # guardrails…). No-op si OTEL_TRACES_EXPORTER=none.
+      env {
+        name  = "ADK_AUTO_TRACING"
+        value = "true"
+      }
       env {
         name  = "APP_VERSION"
         value = var.agent_ops_api_version

@@ -471,10 +471,10 @@ onUnmounted(() => {
           <!-- Panel de Validation Interactive (Human-in-the-Loop) -->
           <div v-if="treeStatus === 'waiting_for_user'" class="interactive-validation-box fade-in">
              <div class="interactive-header">
-                <span class="step-badge">Étape Actuelle : {{ currentInteractiveStep.toUpperCase() }}</span>
-                <h4>Validation Requise</h4>
+                <span class="step-badge">{{ t('admin_reanalysis.current_step', { step: currentInteractiveStep.toUpperCase() }) }}</span>
+                <h4>{{ t('admin_reanalysis.validation_required') }}</h4>
                 <p class="interactive-desc">
-                  L'IA a terminé l'étape <strong>{{ currentInteractiveStep }}</strong>. Veuillez examiner les résultats générés ci-dessous avant de passer à l'étape suivante.
+                  {{ t('admin_reanalysis.step_done_desc', { step: currentInteractiveStep }) }}
                 </p>
              </div>
 
@@ -482,7 +482,7 @@ onUnmounted(() => {
              <div class="artifact-visualizer">
                 <!-- 1. Pour Map ou Deduplicate -->
                 <div v-if="currentInteractiveStep === 'map' || currentInteractiveStep === 'deduplicate'" class="step-details">
-                   <h5>Piliers et Compétences Mappées ({{ Object.keys(treeArtifacts.map_result || {}).length }} piliers)</h5>
+                   <h5>{{ t('admin_reanalysis.pillars_mapped', { count: Object.keys(treeArtifacts.map_result || {}).length }) }}</h5>
                    <div class="pillars-grid">
                       <div v-for="(skills, pillar) in treeArtifacts.map_result || {}" :key="pillar" class="pillar-card">
                          <div class="pillar-title">{{ pillar }}</div>
@@ -496,8 +496,8 @@ onUnmounted(() => {
 
                 <!-- 2. Pour Reduce (Arbre de Compétences final) -->
                 <div v-else-if="currentInteractiveStep === 'reduce'" class="step-details">
-                   <h5>Arbre Hiérarchique Structuré (Reduce)</h5>
-                   <p class="sub-desc" style="font-size: 0.82rem; color: #64748b; margin-bottom: 0.5rem;">Voici la structure imbriquée générée pour les catégories et compétences :</p>
+                   <h5>{{ t('admin_reanalysis.structured_tree') }}</h5>
+                   <p class="sub-desc" style="font-size: 0.82rem; color: #64748b; margin-bottom: 0.5rem;">{{ t('admin_reanalysis.structured_tree_desc') }}</p>
                    <div class="json-box">
                       <pre>{{ JSON.stringify(treeArtifacts.res_tree, null, 2) }}</pre>
                    </div>
@@ -505,17 +505,17 @@ onUnmounted(() => {
 
                 <!-- 3. Pour Sweep (Fusions et compétences orphelines) -->
                 <div v-else-if="currentInteractiveStep === 'sweep'" class="step-details">
-                   <h5>Rattrapage des Compétences Orphelines (Sweep)</h5>
+                   <h5>{{ t('admin_reanalysis.orphan_catchup') }}</h5>
                    
                    <div v-if="treeArtifacts.missing_competencies && treeArtifacts.missing_competencies.length > 0" class="sweep-section">
-                      <h6 style="font-size: 0.85rem; font-weight: 700; color: #475569; margin: 0 0 0.5rem 0;">Compétences Orphelines Détectées ({{ treeArtifacts.missing_competencies.length }})</h6>
+                      <h6 style="font-size: 0.85rem; font-weight: 700; color: #475569; margin: 0 0 0.5rem 0;">{{ t('admin_reanalysis.orphans_detected', { count: treeArtifacts.missing_competencies.length }) }}</h6>
                       <div class="skills-list" style="margin-bottom: 1rem;">
                          <span v-for="skill in treeArtifacts.missing_competencies" :key="skill" class="skill-pill orphan">{{ skill }}</span>
                       </div>
                    </div>
 
                    <div v-if="treeArtifacts.sweep_result && treeArtifacts.sweep_result.length > 0" class="sweep-section" style="margin-top: 1rem;">
-                      <h6 style="font-size: 0.85rem; font-weight: 700; color: #475569; margin: 0 0 0.5rem 0;">Suggestions de Rattrapage / Fusions</h6>
+                      <h6 style="font-size: 0.85rem; font-weight: 700; color: #475569; margin: 0 0 0.5rem 0;">{{ t('admin_reanalysis.suggestions_catchup') }}</h6>
                       <div class="sweep-cards">
                          <div v-for="(suggestion, idx) in treeArtifacts.sweep_result || []" :key="idx" class="sweep-card">
                             <div class="sweep-card-header">

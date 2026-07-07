@@ -110,11 +110,13 @@ class TestJwtPropagationContract:
             captured.append(auth_header_var.get(None))
             return ("OK", [], [], 10, 20, None, "text_only")
 
-        with patch("agent.get_session_service") as mock_svc:
+        with patch("agent.get_session_service") as mock_svc, \
+             patch("agent.get_memory_service") as mock_mem:
             mock_svc.return_value = MagicMock(
                 create_session=AsyncMock(),
                 get_session=AsyncMock(return_value=None),
             )
+            mock_mem.return_value = MagicMock()
             with patch("agent.get_cached_tools", new_callable=AsyncMock, return_value=[]):
                 with patch("agent.create_agent", new_callable=AsyncMock) as mock_agent:
                     mock_agent.return_value = MagicMock(model="test-model")

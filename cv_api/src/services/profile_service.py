@@ -73,18 +73,18 @@ class ProfileService:
         if not profiles:
             return 0, []
 
-        is_anon = False
+        user_enrich = {}
         async with httpx.AsyncClient(timeout=5.0) as http_client:
             try:
                 u_res = await http_client.get(f"{USERS_API_URL.rstrip('/')}/{user_id}", headers=headers_downstream, timeout=10.0)
                 if u_res.status_code == 200:
                     try:
                         u_data = UserItem.model_validate(u_res.json())
-                        is_anon = u_data.is_anonymous or False
+                        user_enrich = u_data.model_dump()
                     except ValidationError as ve:
                         logger.error(f"Rupture de contrat API users pour {user_id}", extra={"error": str(ve)})
             except Exception as e:
-                logger.warning(f"Failed to fetch user {user_id} for is_anonymous check: {e}")
+                logger.warning(f"Failed to fetch user {user_id} for enrichment: {e}")
 
         responses = [
             CVProfileResponse(
@@ -92,7 +92,10 @@ class ProfileService:
                 source_url=p.source_url,
                 source_tag=p.source_tag,
                 imported_by_id=p.imported_by_id,
-                is_anonymous=is_anon,
+                is_anonymous=user_enrich.get("is_anonymous", False),
+                full_name=user_enrich.get("full_name"),
+                email=user_enrich.get("email"),
+                username=user_enrich.get("username"),
                 processing_errors=p.processing_errors or []
             ) for p in profiles
         ]

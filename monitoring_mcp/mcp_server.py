@@ -125,7 +125,8 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Pattern de recherche de clés (ex: 'items:list:*', 'session:*').", "default": "*"}  # noqa: E501
+                    "pattern": {"type": "string", "description": "Pattern de recherche de clés (ex: 'items:list:*', 'session:*').", "default": "*"},  # noqa: E501
+                    "db_number": {"type": "integer", "description": "Numéro de la base Redis (0-15).", "default": 0}
                 },
             },
         ),
@@ -244,7 +245,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             )
 
         elif name == "get_redis_invalidation_state":
-            data = await get_redis_invalidation_state_internal(arguments.get("pattern", "*"))
+            data = await get_redis_invalidation_state_internal(
+                arguments.get("pattern", "*"),
+                arguments.get("db_number", 0)
+            )
 
         elif name == "execute_read_only_query":
             data = await execute_read_only_query_internal(

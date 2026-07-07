@@ -579,7 +579,7 @@ const lastLog = computed(() => {
               >
                 <Loader2 v-if="isScoringLoading" :size="16" class="spin" />
                 <RefreshCcw v-else :size="16" />
-                Forcer un recalcul total
+                {{ t('admin_bulk.force_recalculate') }}
               </button>
             </div>
             
@@ -588,7 +588,7 @@ const lastLog = computed(() => {
               <div class="progress-header">
                 <span class="progress-title">{{ t('admin_bulk.scoring_running') }}</span>
                 <span class="progress-stats">
-                  {{ scoringStatus.processed }} / {{ scoringStatus.total_users }} consultants
+                  {{ scoringStatus.processed }} / {{ scoringStatus.total_users }} {{ t('admin_bulk.consultants') }}
                 </span>
               </div>
               <div class="progress-bar-bg">
@@ -598,14 +598,14 @@ const lastLog = computed(() => {
                 ></div>
               </div>
               <div class="progress-details">
-                <span class="text-success">✅ {{ scoringStatus.success }} succès</span>
-                <span v-if="scoringStatus.error_count > 0" class="text-danger">❌ {{ scoringStatus.error_count }} erreurs</span>
-                <button class="btn btn-ghost btn-cancel-sm" @click="cancelBulkScoring">Annuler</button>
+                <span class="text-success">✅ {{ t('admin_bulk.success_count', { count: scoringStatus.success }) }}</span>
+                <span v-if="scoringStatus.error_count > 0" class="text-danger">❌ {{ t('admin_bulk.error_count', { count: scoringStatus.error_count }) }}</span>
+                <button class="btn btn-ghost btn-cancel-sm" @click="cancelBulkScoring">{{ t('common.cancel') }}</button>
               </div>
             </div>
             <div v-else-if="scoringStatus.status === 'completed'" class="scoring-feedback scoring-ok">
               <span class="scoring-count">{{ t('admin_bulk.scoring_done') }}</span>
-              {{ scoringStatus.success }} succès, {{ scoringStatus.error_count }} erreurs.
+              {{ t('admin_bulk.success_count', { count: scoringStatus.success }) }}, {{ t('admin_bulk.error_count', { count: scoringStatus.error_count }) }}.
             </div>
             <div v-else-if="scoringStatus.status === 'error'" class="scoring-feedback bg-danger">
               <span class="scoring-count">{{ t('admin_bulk.scoring_error') }}</span>

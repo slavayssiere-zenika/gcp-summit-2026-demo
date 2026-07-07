@@ -147,11 +147,24 @@ async def _resolve_competency_ids(
 async def _post_missions_bulk(hc: httpx.AsyncClient, user_id: int, missions: list, headers: dict):
     if not missions:
         return
+
     items_payload = []
+    seen_titles: set[str] = set()
+    dedup_count = 0
     for m in missions:
-        title = m.get("title") or m.get("company") or "Mission sans titre"
+        title = (m.get("title") or m.get("company") or "Mission sans titre")[:255]
+        if title in seen_titles:
+            # Doublon de titre pour le même user_id : ignoré pour éviter
+            # l'InvalidRequestError de session SQLAlchemy côté items-api.
+            dedup_count += 1
+            logger.debug(
+                "[bulk_reanalyse] Mission dupliquée ignorée user=%s title='%s'",
+                user_id, title,
+            )
+            continue
+        seen_titles.add(title)
         items_payload.append({
-            "name": title[:255],
+            "name": title,
             "description": m.get("description", "")[:2000],
             "user_id": user_id,
             "category_ids": [],
@@ -163,6 +176,16 @@ async def _post_missions_bulk(hc: httpx.AsyncClient, user_id: int, missions: lis
                 "source": "bulk_reanalyse",
             },
         })
+
+    if dedup_count:
+        logger.warning(
+            "[bulk_reanalyse] %d mission(s) dupliquée(s) ignorées pour user=%s",
+            dedup_count, user_id,
+        )
+
+    if not items_payload:
+        return
+
     try:
         inject(headers)
         await hc.post(

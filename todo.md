@@ -46,4 +46,9 @@
 - [ ] **[ADR12-8] Agent Generalist** : Créer `agent_general_api` (ex: `gemini-flash`).
 - [ ] **[ADR12-9] Parallélisation des appels A2A multi-domaine** : Exécuter `agent_hr_api` et `agent_ops_api` en parallèle (`asyncio.gather`) depuis `agent_router_api` quand la requête est multi-domaine. Fusionner les `A2AResponse` en un résultat cohérent.
 - [ ] **[ADR12-10] Négociation A2A** : Protocole de ré-affectation dynamique si un sous-agent retourne `{"status": "uncertain", "confidence": < 0.5}` — le router peut réassigner à un agent plus spécialisé ou demander une clarification.
-- [ ] **[ADK-Tracing] Observabilité Avancée des Agents** : ~~ADK Tracing OTel dans `agent_commons/runner.py`~~ ✅ Réalisé. Prochaine étape : Dashboard Cloud Trace custom montrant le ratio `thought_count / tool_call_count` par agent comme signal de qualité du raisonnement.
+- [x] **[ADK-Tracing] Observabilité Avancée des Agents** : ADK Tracing OTel dans `agent_commons/runner.py` via `AutoTracingPlugin` ✅ Réalisé.
+- [x] **P0 : Structured Output (Ops & Router)** : Utilisation de `AssistantResponse` et `OpsResponse` pour garantir des sorties UI déterministes.
+- [x] **P1 : Long-term Memory (Redis)** : Implémentation de `RedisMemoryService` (TTL 24h) isolée par `user_id` dans tous les agents. Intégration dans le runner universel.
+- [ ] **P2 : Evaluation Pipeline (Shadow Logging)** : Capture des traces `all_events` pour stockage "Shadow" (en préparation du `GEPARootAgentOptimizer`).
+- [ ] **P3 : A2A Handoff (TransferToAgentTool)** : Étude de la migration vers le protocole natif ADK pour les délégations.
+- [ ] **[ADK-SRE] Dashboard Cloud Trace custom** : Montrer le ratio `thought_count / tool_call_count` par agent comme signal de qualité du raisonnement.

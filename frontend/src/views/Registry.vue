@@ -2,6 +2,9 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { Terminal, Database, Cpu, ChevronRight, Activity, Code2, Box, Cloud, Briefcase, Network, FileText, MessageSquare } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface Parameter {
   name: string
@@ -50,8 +53,8 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
   <div class="registry-container">
     <header class="registry-header">
       <div class="title-group">
-        <h1>MCP Technical Registry</h1>
-        <p>Vue consolidée des descripteurs techniques de tous les microservices intégrés.</p>
+        <h1>{{ t('registry.title') }}</h1>
+        <p>{{ t('registry.subtitle') }}</p>
       </div>
       <div class="stats-bar">
         <div class="stat-item">
@@ -67,12 +70,12 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
 
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      Chargement du registre technique...
+      {{ t('common.loading') }}
     </div>
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button @click="fetchRegistry">Réessayer</button>
+      <button @click="fetchRegistry">{{ t('registry.retry') }}</button>
     </div>
 
     <div v-else class="registry-layout">
@@ -118,20 +121,20 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
             <p class="tool-desc">{{ tool.description }}</p>
 
             <div class="params-section">
-              <div class="params-header">Descripteur d'arguments :</div>
+              <div class="params-header">{{ t('registry.args_descriptor') }}</div>
               <div class="params-table">
                 <div class="param-row header">
-                  <span>Nom</span>
-                  <span>Type</span>
-                  <span>Requis</span>
-                  <span>Défaut</span>
+                  <span>{{ t('registry.col_name') }}</span>
+                  <span>{{ t('registry.col_type') }}</span>
+                  <span>{{ t('registry.col_required') }}</span>
+                  <span>{{ t('registry.col_default') }}</span>
                 </div>
                 <div v-for="param in tool.parameters" :key="param.name" class="param-row">
                   <span class="code-text">{{ param.name }}</span>
                   <span class="type-text">{{ param.type }}</span>
                   <span class="status-cell">
-                    <span v-if="param.required" class="required-badge">Yes</span>
-                    <span v-else class="optional-badge">No</span>
+                    <span v-if="param.required" class="required-badge">{{ t('registry.yes') }}</span>
+                    <span v-else class="optional-badge">{{ t('registry.no') }}</span>
                   </span>
                   <span class="code-text dimmed">{{ param.default || '-' }}</span>
                 </div>
@@ -139,7 +142,7 @@ const currentService = () => services.value.find(s => s.id === selectedService.v
             </div>
 
             <div class="technical-snippet">
-              <div class="snippet-header">JSON Spec</div>
+              <div class="snippet-header">{{ t('registry.json_spec') }}</div>
               <pre><code>{
   "method": "{{ tool.name }}",
   "params": {

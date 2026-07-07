@@ -9,10 +9,10 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 467 | ⚠️ |
+| `main.py` | 469 | ⚠️ |
 | `conftest.py` | 21 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 301 | ✅ |
+| `agent.py` | 327 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -27,6 +27,7 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `GEMINI_OPS_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `ENABLE_OUTPUT_SCHEMA` | Comportement | `false` |
+| `ADK_AUTO_TRACING` | Comportement | `true` |
 | `PORT` | Infra | `8080` |
 | `PYTHONUNBUFFERED` | Comportement | `1` |
 | `LOG_LEVEL` | Comportement | `INFO` |
@@ -68,12 +69,12 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 - `GET /users/me/items/`
 - `GET /users/me`
 - `POST /login`
+- `GET /dev-ui/config`
+- `GET /`
+- `GET /dev-ui`
 - `GET /version`
 - `GET /list-apps`
 - `GET /apps/{app_name}/app-info`
-- `GET /debug/trace/{event_id}`
-- `GET /dev/build_graph/{app_name}`
-- `GET /debug/trace/session/{session_id}`
 
 ## MCP APIs consommées
 - `ANALYTICS_MCP_URL`

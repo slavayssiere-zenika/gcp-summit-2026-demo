@@ -144,7 +144,10 @@ async def test_bg_bulk_scoring_vertex_success(mock_update_progress, mock_set_sch
         mock_bucket.list_blobs.return_value = [mock_blob]
 
         with patch("src.competencies.scoring_pipeline._parse_scoring_results_gcs") as mock_parse:
-            mock_parse.return_value = ([(1, 10, "Python", 4.0, "Good")], {1: {"total_tokens": 10}})
+            mock_parse.return_value = (
+                [(1, 10, "Python", 4.0, "Good")],
+                {1: {"prompt_token_count": 10, "candidates_token_count": 5, "scores_count": 1}}
+            )
 
             with patch("src.competencies.scoring_pipeline._apply_scoring_results", new_callable=AsyncMock) as mock_apply:
                 mock_apply.return_value = (1, 0, "")

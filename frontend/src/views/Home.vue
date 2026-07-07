@@ -367,8 +367,8 @@ onUnmounted(() => {
               <div v-else-if="(msg.displayType === 'consultants' || msg.displayType === 'consultant') && msg.parsedData && msg.parsedData.length > 0" class="consultant-list">
                 <ConsultantCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :consultant="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
-                  <span class="show-more-count">Showing {{ getPaginatedData(msg).length }} of {{ msg.parsedData.length }}</span>
-                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                  <span class="show-more-count">{{ t('chat.show_more_count', { shown: getPaginatedData(msg).length, total: msg.parsedData.length }) }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">{{ t('chat.show_more') }}</button>
                 </div>
               </div>
 
@@ -376,8 +376,8 @@ onUnmounted(() => {
               <div v-else-if="(msg.displayType === 'candidates' || msg.displayType === 'candidate') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
                 <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :profile="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
-                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
-                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                  <span class="show-more-count">{{ t('chat.show_more_count', { shown: getPaginatedData(msg).length, total: msg.parsedData.length }) }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">{{ t('chat.show_more') }}</button>
                 </div>
               </div>
 
@@ -385,8 +385,8 @@ onUnmounted(() => {
               <div v-else-if="(msg.displayType === 'profile' || msg.displayType === 'profiles') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
                 <CandidateProfileCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :profile="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
-                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
-                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                  <span class="show-more-count">{{ t('chat.show_more_count', { shown: getPaginatedData(msg).length, total: msg.parsedData.length }) }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">{{ t('chat.show_more') }}</button>
                 </div>
               </div>
 
@@ -394,8 +394,8 @@ onUnmounted(() => {
               <div v-else-if="(msg.displayType === 'missions' || msg.displayType === 'mission') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
                 <MissionCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.title || idx" :mission="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
-                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
-                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                  <span class="show-more-count">{{ t('chat.show_more_count', { shown: getPaginatedData(msg).length, total: msg.parsedData.length }) }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">{{ t('chat.show_more') }}</button>
                 </div>
               </div>
 
@@ -403,8 +403,8 @@ onUnmounted(() => {
               <div v-else-if="(msg.displayType === 'availabilities' || msg.displayType === 'availability') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
                 <ConsultantAvailabilityCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.user_id || idx" :availability="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
-                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
-                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                  <span class="show-more-count">{{ t('chat.show_more_count', { shown: getPaginatedData(msg).length, total: msg.parsedData.length }) }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">{{ t('chat.show_more') }}</button>
                 </div>
               </div>
 
@@ -412,8 +412,8 @@ onUnmounted(() => {
               <div v-else-if="(msg.displayType === 'items' || msg.displayType === 'item') && msg.parsedData && msg.parsedData.length > 0" class="generic-grid">
                 <ItemCard v-for="(obj, idx) in getPaginatedData(msg)" :key="obj.id || obj.name || idx" :item="obj" />
                 <div v-if="hasMoreItems(msg)" class="show-more-bar">
-                  <span class="show-more-count">{{ getPaginatedData(msg).length }} / {{ msg.parsedData.length }}</span>
-                  <button class="show-more-btn" @click="loadMore(msg)">Show more ↓</button>
+                  <span class="show-more-count">{{ t('chat.show_more_count', { shown: getPaginatedData(msg).length, total: msg.parsedData.length }) }}</span>
+                  <button class="show-more-btn" @click="loadMore(msg)">{{ t('chat.show_more') }}</button>
                 </div>
               </div>
 
@@ -590,19 +590,19 @@ onUnmounted(() => {
           <div class="modal-header">
             <h3 id="imp-modal-title">
               <Lightbulb size="20" style="color: var(--zenika-red);" />
-              Demander une amélioration
+              {{ t('chat.improvement_title') }}
             </h3>
-            <button class="modal-close" @click="showImprovementModal = false" aria-label="Fermer">✕</button>
+            <button class="modal-close" @click="showImprovementModal = false" :aria-label="t('common.close')">✕</button>
           </div>
           <div class="modal-body">
             <p style="margin-bottom: 0.75rem; font-size: 0.9rem; color: #475569;">
-              Quelle amélioration souhaitez-vous demander ou quel problème rencontrez-vous ?
+              {{ t('chat.improvement_placeholder') }}
             </p>
-            <label for="improvement-textarea" style="display: block; font-weight: 600; font-size: 0.8rem; color: #334155; margin-bottom: 6px;">Votre description :</label>
+            <label for="improvement-textarea" style="display: block; font-weight: 600; font-size: 0.8rem; color: #334155; margin-bottom: 6px;">{{ t('chat.improvement_label') }}</label>
             <textarea
               id="improvement-textarea"
               v-model="improvementComment"
-              placeholder="Décrivez ici ce que vous souhaitez voir amélioré, ou le dysfonctionnement..."
+              :placeholder="t('chat.improvement_placeholder')"
               rows="4"
               style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 0.75rem; font-family: inherit; font-size: 0.9rem; margin-bottom: 0.5rem; outline: none; transition: border-color 0.2s;"
               @keydown.enter.ctrl.prevent="sendImprovementRequest"
@@ -612,8 +612,8 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="modal-actions">
-            <BaseButton @click="showImprovementModal = false" variant="ghost">Annuler</BaseButton>
-            <BaseButton @click="sendImprovementRequest" :loading="isSendingImprovement" :disabled="!improvementComment.trim()">Envoyer</BaseButton>
+            <BaseButton @click="showImprovementModal = false" variant="ghost">{{ t('common.cancel') }}</BaseButton>
+            <BaseButton @click="sendImprovementRequest" :loading="isSendingImprovement" :disabled="!improvementComment.trim()">{{ t('common.send') }}</BaseButton>
           </div>
         </div>
       </div>

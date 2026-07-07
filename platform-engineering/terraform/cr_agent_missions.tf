@@ -167,6 +167,11 @@ resource "google_cloud_run_v2_service" "agent_missions_api" {
         name  = "ENABLE_OUTPUT_SCHEMA"
         value = var.enable_output_schema
       }
+      # ADK 2.2+ AutoTracingPlugin — instrumentation OTel auto (no-op si TRACE_EXPORTER=none).
+      env {
+        name  = "ADK_AUTO_TRACING"
+        value = "true"
+      }
       # HITL_PENDING_TTL_SECONDS : durée de vie des demandes HITL en Redis (30 min).
       env {
         name  = "HITL_PENDING_TTL_SECONDS"

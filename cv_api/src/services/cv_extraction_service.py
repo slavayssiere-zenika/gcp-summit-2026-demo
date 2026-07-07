@@ -243,6 +243,15 @@ class CVExtractionService:
             )
             parsed_data = response.text
             structured_cv = json.loads(parsed_data)
+
+            # --- Validation Zero-Trust sur current_role ---
+            # Si le LLM extrait un email de service account ou technique (hallucination de batch), on le rejette.
+            current_role = str(structured_cv.get("current_role", "")).lower()
+            if "@" in current_role and (".iam" in current_role or "gserviceaccount" in current_role):
+                logger.warning(f"[CVExtractionService] Rejet d'un current_role suspect (email service account): {current_role}")
+                structured_cv["current_role"] = None
+            # ---------------------------------------------
+
             safe_meta = response.usage_metadata if hasattr(
                 response, 'usage_metadata') else None
             return structured_cv, safe_meta

@@ -464,7 +464,7 @@ async def list_tools() -> list[Tool]:
                 "Surveiller la progression via get_bulk_cv_reanalyse_status. "
                 "NE JAMAIS appeler sans confirmation explicite de l'administrateur — opération irréversible."
             ),
-            inputSchema={"type": "object", "properties": {}}
+            inputSchema={"type": "object", "properties": {"cv_ids": {"type": "array", "items": {"type": "integer"}, "description": "Optionnel — Liste dIDs de CVs à retraiter. Si vide, traite tout le corpus."}}}
         ),
         Tool(
             name="get_bulk_cv_reanalyse_status",
@@ -560,7 +560,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 elif name == "reindex_mission_chunks":
                     return await handle_reindex_mission_chunks(client, arguments, headers, API_BASE_URL)
                 elif name == "start_bulk_cv_reanalyse":
-                    return await handle_start_bulk_cv_reanalyse(client, headers, API_BASE_URL)
+                    return await handle_start_bulk_cv_reanalyse(client, arguments, headers, API_BASE_URL)
                 elif name == "get_bulk_cv_reanalyse_status":
                     return await handle_get_bulk_cv_reanalyse_status(client, headers, API_BASE_URL)
                 elif name == "cancel_bulk_cv_reanalyse":

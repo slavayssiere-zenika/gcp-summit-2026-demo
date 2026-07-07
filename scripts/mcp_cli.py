@@ -53,22 +53,27 @@ TOKEN_TTL = 3300  # 55 minutes (JWT expire en 1h)
 
 MCP_ENDPOINTS = {
     "analytics": f"{BASE_URL}/mcp/analytics",
-    "monitoring": f"{BASE_URL}/mcp/monitoring",  # à adapter selon lb.tf si besoin
+    # à adapter selon lb.tf si besoin
+    "monitoring": f"{BASE_URL}/mcp/monitoring",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Authentification
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _gcloud_email() -> str:
     """Récupère l'email du compte gcloud actif."""
     result = subprocess.run(
-        [GCLOUD_BIN, "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"],
+        [GCLOUD_BIN, "auth", "list", "--filter=status:ACTIVE",
+            "--format=value(account)"],
         capture_output=True, text=True, timeout=10,
     )
-    email = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
+    email = result.stdout.strip().splitlines()[
+        0] if result.stdout.strip() else ""
     if not email:
-        print("❌ Aucun compte gcloud actif. Lancez : gcloud auth login", file=sys.stderr)
+        print("❌ Aucun compte gcloud actif. Lancez : gcloud auth login",
+              file=sys.stderr)
         sys.exit(1)
     return email
 
@@ -85,7 +90,8 @@ def _gcloud_admin_password() -> str:
     )
     if result.returncode == 0 and result.stdout.strip():
         return result.stdout.strip()
-    print(f"❌ Secret '{secret_name}' introuvable dans '{project}'.", file=sys.stderr)
+    print(
+        f"❌ Secret '{secret_name}' introuvable dans '{project}'.", file=sys.stderr)
     sys.exit(1)
 
 
@@ -95,19 +101,22 @@ def _login_admin() -> str:
     admin_email = os.getenv("ZENIKA_ADMIN_EMAIL", "admin@zenika.com")
     password = _gcloud_admin_password()
 
-    print(f"🔐 Authentification sur {BASE_URL} en tant que : {admin_email}", file=sys.stderr)
+    print(
+        f"🔐 Authentification sur {BASE_URL} en tant que : {admin_email}", file=sys.stderr)
     resp = httpx.post(
         f"{BASE_URL}/auth/login",
         json={"email": admin_email, "password": password},
         timeout=15.0,
     )
     if resp.status_code != 200:
-        print(f"❌ Login échoué [{resp.status_code}]: {resp.text[:300]}", file=sys.stderr)
+        print(
+            f"❌ Login échoué [{resp.status_code}]: {resp.text[:300]}", file=sys.stderr)
         sys.exit(1)
 
     token = resp.json().get("access_token")
     if not token:
-        print(f"❌ Réponse login sans access_token : {resp.text[:300]}", file=sys.stderr)
+        print(
+            f"❌ Réponse login sans access_token : {resp.text[:300]}", file=sys.stderr)
         sys.exit(1)
 
     return token
@@ -161,10 +170,12 @@ def mcp_list_tools(service: str, token: str) -> list:
     """Liste les tools disponibles sur un service MCP."""
     base = MCP_ENDPOINTS.get(service)
     if not base:
-        print(f"❌ Service inconnu : {service}. Choix : {list(MCP_ENDPOINTS)}", file=sys.stderr)
+        print(
+            f"❌ Service inconnu : {service}. Choix : {list(MCP_ENDPOINTS)}", file=sys.stderr)
         sys.exit(1)
 
-    resp = httpx.get(f"{base}/tools", headers={"Authorization": f"Bearer {token}"}, timeout=15.0)
+    resp = httpx.get(
+        f"{base}/tools", headers={"Authorization": f"Bearer {token}"}, timeout=15.0)
     if resp.status_code != 200:
         print(f"❌ [{resp.status_code}] {resp.text[:400]}", file=sys.stderr)
         sys.exit(1)
@@ -180,7 +191,8 @@ def mcp_call_tool(service: str, tool_name: str, arguments: dict, token: str) -> 
 
     resp = httpx.post(
         f"{base}/call",
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
         json={"name": tool_name, "arguments": arguments},
         timeout=30.0,
     )
@@ -217,7 +229,7 @@ def cmd_tools(args, token: str):
     tools = mcp_list_tools(service, token)
     print(f"\n📦 Tools disponibles sur '{service}' ({len(tools)}) :")
     for t in tools:
-        print(f"  • {t['name']:40s} — {t.get('description','')[:70]}")
+        print(f"  • {t['name']:40s} — {t.get('description', '')[:70]}")
 
 
 def cmd_call(args, token: str):
@@ -237,7 +249,8 @@ def cmd_call(args, token: str):
 
 def cmd_finops(args, token: str):
     period = getattr(args, "period", "daily") or "daily"
-    raw = mcp_call_tool("analytics", "get_finops_report", {"period": period}, token)
+    raw = mcp_call_tool("analytics", "get_finops_report",
+                        {"period": period}, token)
     data = _extract_result(raw)
     print(f"\n💰 Rapport FinOps ({period}) :")
     _print_json(data)
@@ -250,18 +263,21 @@ def cmd_errors(args, token: str):
                         {"hours_lookback": hours, "limit": limit}, token)
     data = _extract_result(raw)
     errors = data if isinstance(data, list) else data.get("errors", data)
-    print(f"\n🚨 Erreurs 5xx récentes (dernières {hours}h, max {limit}) : {len(errors) if isinstance(errors, list) else '?'}")
+    print(
+        f"\n🚨 Erreurs 5xx récentes (dernières {hours}h, max {limit}) : {len(errors) if isinstance(errors, list) else '?'}")
     _print_json(errors)
 
 
 def cmd_redis(args, token: str):
     pattern = getattr(args, "pattern", "*") or "*"
-    raw = mcp_call_tool("monitoring", "get_redis_invalidation_state", {"pattern": pattern}, token)
+    raw = mcp_call_tool("monitoring", "get_redis_invalidation_state", {
+                        "pattern": pattern}, token)
     _print_json(_extract_result(raw))
 
 
 def cmd_dlq(args, token: str):
-    sub = getattr(args, "sub", "cv-ingestion-dlq-sub") or "cv-ingestion-dlq-sub"
+    sub = getattr(
+        args, "sub", "cv-ingestion-dlq-sub") or "cv-ingestion-dlq-sub"
     limit = getattr(args, "limit", 10) or 10
     raw = mcp_call_tool("monitoring", "inspect_pubsub_dlq",
                         {"subscription_id": sub, "limit": limit}, token)
@@ -274,7 +290,8 @@ def cmd_dlq(args, token: str):
 def cmd_query(args, token: str):
     sql = args.sql
     db = args.db
-    raw = mcp_call_tool("monitoring", "execute_read_only_query", {"query": sql, "db_name": db}, token)
+    raw = mcp_call_tool("monitoring", "execute_read_only_query", {
+                        "query": sql, "db_name": db}, token)
     _print_json(_extract_result(raw))
 
 
@@ -285,8 +302,10 @@ def cmd_health(args, token: str):
     print(f"\n🏥 Health Check global ({len(components)} composants) :")
     for c in components:
         status = c.get("status", "?")
-        icon = {"healthy": "✅", "unhealthy": "❌", "degraded": "⚠️", "unreachable": "🔌"}.get(status, "❓")
-        print(f"  {icon} {c.get('component', c.get('name', '?')):40s} [{status}]")
+        icon = {"healthy": "✅", "unhealthy": "❌",
+                "degraded": "⚠️", "unreachable": "🔌"}.get(status, "❓")
+        print(
+            f"  {icon} {c.get('component', c.get('name', '?')):40s} [{status}]")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -299,33 +318,40 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--no-cache", action="store_true", help="Forcer un nouveau login (ignorer le cache JWT)")
-    parser.add_argument("--env", default="prd", choices=["prd", "dev", "uat"], help="Environnement cible")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Forcer un nouveau login (ignorer le cache JWT)")
+    parser.add_argument("--env", default="prd",
+                        choices=["prd", "dev", "uat"], help="Environnement cible")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
     # tools
     p_tools = sub.add_parser("tools", help="Lister les tools d'un service MCP")
-    p_tools.add_argument("service", nargs="?", default="analytics", choices=["analytics", "monitoring"],
+    p_tools.add_argument("service", nargs="?", default="analytics", choices=["analytics", "monitoring", "cv", "items", "competencies", "missions", "prompts"],
                          help="Service MCP cible")
     p_tools.set_defaults(func=cmd_tools)
 
     # call
     p_call = sub.add_parser("call", help="Invoquer un tool MCP")
-    p_call.add_argument("service", choices=["analytics", "monitoring"], help="Service MCP cible")
+    p_call.add_argument("service", choices=["analytics", "monitoring", "cv",
+                        "items", "competencies", "missions", "prompts"], help="Service MCP cible")
     p_call.add_argument("tool", help="Nom du tool MCP")
-    p_call.add_argument("--args", default="{}", help="Arguments JSON (ex: '{\"period\": \"weekly\"}')")
+    p_call.add_argument("--args", default="{}",
+                        help="Arguments JSON (ex: '{\"period\": \"weekly\"}')")
     p_call.set_defaults(func=cmd_call)
 
     # finops
     p_finops = sub.add_parser("finops", help="Rapport FinOps IA")
-    p_finops.add_argument("period", nargs="?", default="daily", choices=["daily", "weekly", "monthly"])
+    p_finops.add_argument("period", nargs="?", default="daily", choices=[
+                          "daily", "weekly", "monthly"])
     p_finops.set_defaults(func=cmd_finops)
 
     # errors
     p_errors = sub.add_parser("errors", help="Erreurs HTTP 5xx récentes")
-    p_errors.add_argument("--hours", type=int, default=1, help="Fenêtre temporelle en heures")
-    p_errors.add_argument("--limit", type=int, default=10, help="Nombre max d'erreurs")
+    p_errors.add_argument("--hours", type=int, default=1,
+                          help="Fenêtre temporelle en heures")
+    p_errors.add_argument("--limit", type=int, default=10,
+                          help="Nombre max d'erreurs")
     p_errors.set_defaults(func=cmd_errors)
 
     # redis
@@ -334,19 +360,24 @@ def main():
     p_redis.set_defaults(func=cmd_redis)
 
     # dlq
-    p_dlq = sub.add_parser("dlq", help="Inspecter la Dead Letter Queue Pub/Sub")
-    p_dlq.add_argument("--sub", default="cv-ingestion-dlq-sub", help="ID de la souscription DLQ")
-    p_dlq.add_argument("--limit", type=int, default=10, help="Nombre max de messages")
+    p_dlq = sub.add_parser(
+        "dlq", help="Inspecter la Dead Letter Queue Pub/Sub")
+    p_dlq.add_argument("--sub", default="cv-ingestion-dlq-sub",
+                       help="ID de la souscription DLQ")
+    p_dlq.add_argument("--limit", type=int, default=10,
+                       help="Nombre max de messages")
     p_dlq.set_defaults(func=cmd_dlq)
 
     # query
     p_query = sub.add_parser("query", help="Requête SQL SELECT sur AlloyDB")
     p_query.add_argument("sql", help="Requête SQL SELECT")
-    p_query.add_argument("--db", default="postgres", help="Nom de la base de données (ex: competencies, users...)")
+    p_query.add_argument("--db", default="postgres",
+                         help="Nom de la base de données (ex: competencies, users...)")
     p_query.set_defaults(func=cmd_query)
 
     # health
-    p_health = sub.add_parser("health", help="Health check global de tous les composants")
+    p_health = sub.add_parser(
+        "health", help="Health check global de tous les composants")
     p_health.set_defaults(func=cmd_health)
 
     args = parser.parse_args()
@@ -354,12 +385,19 @@ def main():
     # Override BASE_URL selon l'environnement
     global BASE_URL, MCP_ENDPOINTS
     if args.env == "dev":
-        BASE_URL = os.getenv("ZENIKA_DEV_URL", "https://dev.zenika.slavayssiere.fr")
+        BASE_URL = os.getenv(
+            "ZENIKA_DEV_URL", "https://dev.zenika.slavayssiere.fr")
     elif args.env == "uat":
-        BASE_URL = os.getenv("ZENIKA_UAT_URL", "https://uat.zenika.slavayssiere.fr")
+        BASE_URL = os.getenv(
+            "ZENIKA_UAT_URL", "https://uat.zenika.slavayssiere.fr")
     MCP_ENDPOINTS = {
         "analytics": f"{BASE_URL}/mcp/analytics",
         "monitoring": f"{BASE_URL}/monitoring-mcp/mcp",
+        "cv": f"{BASE_URL}/cv-api/mcp",
+        "items": f"{BASE_URL}/items-api/mcp",
+        "competencies": f"{BASE_URL}/competencies-api/mcp",
+        "missions": f"{BASE_URL}/missions-api/mcp",
+        "prompts": f"{BASE_URL}/prompts-api/mcp",
     }
 
     # Authentification

@@ -20,11 +20,11 @@ Les routes statiques (search, suggestions, stats, bulk_tree) DOIVENT être
 enregistrées AVANT les routes wildcard (/{competency_id}).
 """
 
+import difflib
 import logging
+import re
 from typing import List
 
-from shared.cache import clear_namespace, delete_cache, get_cache, set_cache
-from shared.database import get_db
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -34,14 +34,15 @@ from fastapi import (
     Request,
     Response,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-import re
-
 from sqlalchemy.orm import aliased
+
 from shared.auth.jwt import verify_jwt
+from shared.cache import clear_namespace, delete_cache, get_cache, set_cache
+from shared.database import get_db
 from src.competencies.helpers import (
     _generate_aliases_for_competency,
     check_grammatical_conflict,
@@ -49,7 +50,6 @@ from src.competencies.helpers import (
     trigger_taxonomy_cache_invalidation,
 )
 from src.competencies.models import Competency, CompetencySuggestion, user_competency
-from sqlalchemy import or_
 from src.competencies.schemas import (
     CompetencyCount,
     CompetencyCreate,
@@ -312,15 +312,24 @@ async def create_competency(
 
     name_clean = competency.name.strip()
 
-    # 1. Déduplication floue contre les compétences existantes et leurs aliases
-    comp_result = await db.execute(select(Competency))
-    existing_competencies = comp_result.scalars().all()
-
-    import difflib
+    # 1. Déduplication floue : recherche SQL ciblée (BUGFIX perf : évite de charger
+    #    TOUTES les compétences en mémoire — était la cause du QueuePool exhaustion).
+    #    On recherche les candidats dont le nom OU les aliases contiennent un mot-clé
+    #    significatif du nom proposé. Fallback : le check grammatical suivant couvre le reste.
+    name_words = [w for w in re.split(r'\W+', name_clean) if len(w) >= 4]
     cleaned_name = clean_generic_suffixes(name_clean)
+    if name_words:
+        conditions = [Competency.name.ilike(f"%{w}%") for w in name_words[:3]]
+        alias_conds = [Competency.aliases.ilike(f"%{w}%") for w in name_words[:3]]
+        filter_expr = or_(*conditions, *alias_conds)
+        comp_result = await db.execute(
+            select(Competency).filter(filter_expr).limit(50)
+        )
+        existing_competencies = comp_result.scalars().all()
+    else:
+        existing_competencies = []
+
     FUZZY_THRESHOLD = 0.6
-    # Longueur minimale du nom canonique pour le check de containment :
-    # évite les faux positifs sur des mots trop courts ("Cloud", "Data", "Java").
     CONTAINMENT_MIN_LEN = 6
 
     def _auto_alias(comp, new_name: str) -> None:

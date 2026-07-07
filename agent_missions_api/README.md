@@ -12,7 +12,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 | `main.py` | 332 | ✅ |
 | `conftest.py` | 18 | ✅ |
 | `metrics.py` | 20 | ✅ |
-| `agent.py` | 375 | ✅ |
+| `agent.py` | 380 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -36,6 +36,7 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 | `GEMINI_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `GEMINI_MISSIONS_MODEL` | Comportement | `gemini-3.1-flash-lite-preview` |
 | `ENABLE_OUTPUT_SCHEMA` | Comportement | `false` |
+| `ADK_AUTO_TRACING` | Comportement | `true` |
 | `HITL_PENDING_TTL_SECONDS` | Comportement | `1800` |
 | `HITL_RESPONSE_TTL_SECONDS` | Comportement | `86400` |
 | `MISSIONS_MCP_URL` | Infra | `http://missions_mcp:8000` |
@@ -67,12 +68,12 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 - `GET /users/me/items/`
 - `GET /users/me`
 - `POST /login`
+- `GET /dev-ui/config`
+- `GET /`
+- `GET /dev-ui`
 - `GET /version`
 - `GET /list-apps`
 - `GET /apps/{app_name}/app-info`
-- `GET /debug/trace/{event_id}`
-- `GET /dev/build_graph/{app_name}`
-- `GET /debug/trace/session/{session_id}`
 
 ## MCP APIs consommées
 - `COMPETENCIES_MCP_URL`

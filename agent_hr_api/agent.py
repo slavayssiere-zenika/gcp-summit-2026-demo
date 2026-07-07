@@ -25,7 +25,8 @@ from agent_commons.guardrails import (check_empty_candidate_guardrail,
 from agent_commons.mcp_client import MCPHttpClient, auth_header_var
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.runner import run_agent_and_collect
+from agent_commons.runner import run_agent_and_collect, build_runner_plugins
+from agent_commons.memory import RedisMemoryService
 from agent_commons.session import (RedisSessionService, get_hr_candidates_pool,
                                    store_hr_candidates_pool)
 from agent_commons.ui_tools import render_ui_widgets
@@ -98,9 +99,11 @@ _HR_TOOLS_CACHE: dict = {}
 HR_TOOLS: list = []
 
 # ---------------------------------------------------------------------------
-# Session service (lazy init)
+# Session service + Memory service (lazy init)
+# DB Redis isolée par agent : HR=3, Router=2, Ops=11
 # ---------------------------------------------------------------------------
 _session_service = None
+_memory_service = None
 
 
 def get_session_service() -> RedisSessionService:
@@ -108,6 +111,15 @@ def get_session_service() -> RedisSessionService:
     if _session_service is None:
         _session_service = RedisSessionService(redis_key_prefix="adk:hr:sessions")
     return _session_service
+
+
+def get_memory_service() -> RedisMemoryService:
+    global _memory_service
+    if _memory_service is None:
+        _memory_service = RedisMemoryService(
+            redis_url=os.getenv("REDIS_URL", "redis://redis:6379/3")
+        )
+    return _memory_service
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +210,13 @@ async def run_agent_query(
 
     app_logger.info("[HR] Initializing Agent and Runner (session: %s)...", ephemeral_session_id[:8])
     agent = await create_agent(ephemeral_session_id)
-    runner = Runner(app_name="zenika_hr_assistant", agent=agent, session_service=session_service)
+    runner = Runner(
+        app_name="zenika_hr_assistant",
+        agent=agent,
+        session_service=session_service,
+        memory_service=get_memory_service(),
+        plugins=build_runner_plugins(),
+    )
     await session_service.create_session(
         app_name="zenika_hr_assistant", user_id=user_id, session_id=ephemeral_session_id
     )

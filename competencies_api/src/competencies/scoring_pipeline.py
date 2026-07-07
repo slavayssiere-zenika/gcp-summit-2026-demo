@@ -404,11 +404,21 @@ async def bg_bulk_scoring_vertex(
                 )
                 return
 
-        # ── Étape 7 : Lire les résultats GCS ─────────────────────────────────────
+        # ── Étapes 7+8 : Streaming GCS → parse → apply (sans tout garder en RAM) ─
+        # Ancien comportement : raw_lines = liste complète (16k lignes ≈ 1 GiB RAM) → OOM.
+        # Nouveau comportement : on flush en DB tous les GCS_APPLY_BATCH_SIZE scores,
+        # le pic mémoire est O(batch_size) et non O(N_total).
+        GCS_APPLY_BATCH_SIZE = 500  # flush DB tous les 500 scores
         await bulk_scoring_manager.update_progress(
-            status="applying", new_log=f"Lecture des résultats GCS ({dest_uri})..."
+            status="applying",
+            new_log=f"Lecture + apply streamés depuis GCS ({dest_uri}) — batch={GCS_APPLY_BATCH_SIZE}..."
         )
-        raw_lines: list[str] = []
+        nb_success = 0
+        nb_errors = 0
+        sample_err = ""
+        nb_parsed = 0
+        pending: list[tuple[int, int, str, float, str]] = []
+        user_usage: dict[int, dict] = {}
         try:
             gcs_client2 = gcs_storage.Client()
             bucket2 = gcs_client2.bucket(BATCH_GCS_BUCKET)
@@ -418,17 +428,47 @@ async def bg_bulk_scoring_vertex(
             for out_blob in blobs:
                 if not out_blob.name.endswith(".jsonl"):
                     continue
+                # Lire un blob à la fois (pas d'accumulation cross-blob)
                 content = await asyncio.to_thread(out_blob.download_as_text)
-                raw_lines.extend(content.splitlines())
+                batch_rows, blob_usage = _parse_scoring_results_gcs(
+                    content.splitlines(), scoring_index
+                )
+                # Fusionner les usages tokens par user
+                for uid, u in blob_usage.items():
+                    if uid not in user_usage:
+                        user_usage[uid] = {"prompt_token_count": 0, "candidates_token_count": 0}
+                    user_usage[uid]["prompt_token_count"] += u["prompt_token_count"]
+                    user_usage[uid]["candidates_token_count"] += u["candidates_token_count"]
+                    user_usage[uid]["scores_count"] = user_usage[uid].get("scores_count", 0) + u.get("scores_count", 0)
+                pending.extend(batch_rows)
+                nb_parsed += len(batch_rows)
+                # Flush dès qu'on atteint le batch_size
+                while len(pending) >= GCS_APPLY_BATCH_SIZE:
+                    flush = pending[:GCS_APPLY_BATCH_SIZE]
+                    pending = pending[GCS_APPLY_BATCH_SIZE:]
+                    s, e, err = await _apply_scoring_results(flush)
+                    nb_success += s
+                    nb_errors += e
+                    if err and not sample_err:
+                        sample_err = err
+                del content  # libère la RAM du blob immédiatement
         except Exception as e:
             await bulk_scoring_manager.update_progress(
-                status="error", error=f"GCS read: {e}"
+                status="error", error=f"GCS read/apply: {e}"
             )
             return
-
-        results, user_usage = _parse_scoring_results_gcs(raw_lines, scoring_index)
+        # Flush du reste (<GCS_APPLY_BATCH_SIZE)
+        if pending:
+            s, e, err = await _apply_scoring_results(pending)
+            nb_success += s
+            nb_errors += e
+            if err and not sample_err:
+                sample_err = err
         await bulk_scoring_manager.update_progress(
-            new_log=f"Résultats parsés : {len(results)} scores valides sur {len(jsonl_lines)} soumis."
+            new_log=(
+                f"Résultats parsés : {nb_parsed} scores valides sur {len(jsonl_lines)} soumis "
+                f"({nb_success} écrits, {nb_errors} erreurs)."
+            )
         )
 
         # ── Étape 7.5 : Log FinOps ────────────────────────────────────────────────
@@ -445,18 +485,14 @@ async def bg_bulk_scoring_vertex(
                     usage_metadata=usage,
                     metadata={
                         "user_id": uid,
-                        "scores_count": sum(1 for r in results if r[0] == uid),
+                        "scores_count": usage.get("scores_count", 0),
                     },
                     auth_token=service_token,
                     is_batch=True,
                 )
             )
 
-        # ── Étape 8 : Apply en DB ─────────────────────────────────────────────────
-        await bulk_scoring_manager.update_progress(
-            new_log=f"Écriture en DB de {len(results)} scores..."
-        )
-        nb_success, nb_errors, sample_err = await _apply_scoring_results(results)
+        # Étape 8 : déjà exécutée en streaming dans l'étape 7+8 ci-dessus.
 
         # Scores minimaux (1.0) pour les users sans mission
         if skipped_no_mission > 0:

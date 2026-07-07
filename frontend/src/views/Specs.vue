@@ -3,6 +3,9 @@ import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import markdownit from 'markdown-it'
 import { BookOpen, AlertCircle, RefreshCw, Cpu, Database, Network, KeyRound, FileText, MessageSquare, Activity, Users, Briefcase } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const md = markdownit({
   html: true,
@@ -85,9 +88,9 @@ onMounted(() => {
     <div class="header-section">
       <div class="title-wrapper">
         <BookOpen class="icon-title" size="32" />
-        <h2>Specs & Manifestes API</h2>
+        <h2>{{ t('specs.title') }}</h2>
       </div>
-      <p class="subtitle">Architecture Documentaire des microservices Zenika</p>
+      <p class="subtitle">{{ t('specs.subtitle') }}</p>
     </div>
 
     <!-- Navigation Tab Bar -->
@@ -98,7 +101,7 @@ onMounted(() => {
         class="tab-btn"
         :class="{ active: activeTabId === tab.id }"
         @click="selectTab(tab.id)"
-        :aria-label="'Afficher les spécifications de ' + tab.name"
+        :aria-label="t('specs.tab_title', { name: tab.name })"
       >
         <component :is="tab.icon" size="18" class="tab-icon" />
         {{ tab.name }}
@@ -110,10 +113,10 @@ onMounted(() => {
       <div class="card-header">
         <div class="card-title">
           <component :is="activeTab.icon" size="20" class="mini-icon" />
-          <h3>Spécifications : {{ activeTab.name }}</h3>
+          <h3>{{ t('specs.tab_title', { name: activeTab.name }) }}</h3>
           <span v-if="versions[activeTabId]" class="version-badge">{{ versions[activeTabId] }}</span>
         </div>
-        <button class="icon-btn" @click="fetchSpec" :disabled="loading" title="Actualiser le manifeste">
+        <button class="icon-btn" @click="fetchSpec" :disabled="loading" :title="t('common.retry')">
           <RefreshCw size="18" :class="{ 'spin': loading }" />
         </button>
       </div>
@@ -121,13 +124,13 @@ onMounted(() => {
       <div class="reader-body">
         <div v-if="loading" class="loading-state">
           <div class="spinner"></div>
-          <span>Téléchargement des Blueprints...</span>
+          <span>{{ t('specs.loading') }}</span>
         </div>
 
         <div v-else-if="error" class="error-msg">
           <AlertCircle size="48" class="err-icon" />
           <p>{{ error }}</p>
-          <button class="retry-btn" @click="fetchSpec">Réessayer</button>
+          <button class="retry-btn" @click="fetchSpec">{{ t('specs.retry') }}</button>
         </div>
 
         <div v-else class="markdown-content" v-html="content"></div>

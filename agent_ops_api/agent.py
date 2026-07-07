@@ -35,10 +35,11 @@ from agent_commons.guardrails import (
 from agent_commons.mcp_client import MCPHttpClient, auth_header_var
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.runner import run_agent_and_collect
+from agent_commons.runner import run_agent_and_collect, build_runner_plugins
 from agent_commons.session import RedisSessionService
 from agent_commons.ui_tools import render_ui_widgets
-from shared.schemas.staffing import MissionAnalysis
+from agent_commons.memory import RedisMemoryService
+from shared.schemas.agents import OpsResponse
 from agent_commons.prompt_loader import (
     fetch_agent_prompt,
     get_or_create_gemini_context_cache,
@@ -49,9 +50,9 @@ app_logger = logging.getLogger(__name__)
 
 
 def _output_schema_kwargs() -> dict:
-    """Active output_schema=MissionAnalysis si ENABLE_OUTPUT_SCHEMA=true (opt-in)."""
+    """Active output_schema=OpsResponse si ENABLE_OUTPUT_SCHEMA=true (opt-in)."""
     if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
-        return {"output_schema": MissionAnalysis, "output_key": "ops_result"}
+        return {"output_schema": OpsResponse, "output_key": "ops_result"}
     return {}
 
 
@@ -100,6 +101,18 @@ def get_session_service() -> RedisSessionService:
     if _session_service is None:
         _session_service = RedisSessionService(redis_key_prefix="adk:ops:sessions")
     return _session_service
+
+
+_memory_service = None
+
+
+def get_memory_service() -> RedisMemoryService:
+    global _memory_service
+    if _memory_service is None:
+        _memory_service = RedisMemoryService(
+            redis_url=os.getenv("REDIS_URL", "redis://redis:6379/11")
+        )
+    return _memory_service
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +240,17 @@ async def run_agent_query(
 
     ephemeral_session_id = str(uuid.uuid4())
     session_service = get_session_service()
+    memory_service = get_memory_service()
 
     app_logger.info("[Ops] Initializing Agent and Runner (session: %s)...", ephemeral_session_id[:8])
     agent = await create_agent(ephemeral_session_id, prompt_key=prompt_key)
-    runner = Runner(app_name="zenika_ops_assistant", agent=agent, session_service=session_service)
+    runner = Runner(
+        app_name="zenika_ops_assistant",
+        agent=agent,
+        session_service=session_service,
+        memory_service=memory_service,
+        plugins=build_runner_plugins(),
+    )
     await session_service.create_session(
         app_name="zenika_ops_assistant", user_id=user_id, session_id=ephemeral_session_id
     )
@@ -270,22 +290,28 @@ async def run_agent_query(
     # --- Guardrail P0-2 : métriques chiffrées sans données FinOps réelles ---
     response_text, steps = check_ops_metrics_guardrail(response_text, steps, "[Ops]")
 
-    # --- ENABLE_OUTPUT_SCHEMA : display_type depuis MissionAnalysis (source de vérité) ---
-    # Quand output_schema=MissionAnalysis est actif, le LLM renseigne display_type dans
-    # la réponse JSON structurée. On l'utilise en priorité sur render_ui_widgets.
+    # --- ENABLE_OUTPUT_SCHEMA : display_type depuis OpsResponse (source de vérité) ---
     if os.getenv("ENABLE_OUTPUT_SCHEMA", "false").lower() == "true":
         try:
-            ops_result = getattr(updated_session, "state", {}).get("ops_result")
-            if ops_result and isinstance(ops_result, dict) and ops_result.get("display_type"):
-                schema_display_type = ops_result["display_type"]
-                if schema_display_type != display_type:
-                    app_logger.info(
-                        "[Ops] display_type override: render_ui_widgets=%r → output_schema=%r",
-                        display_type, schema_display_type,
-                    )
-                display_type = schema_display_type
+            updated_session = await session_service.get_session(
+                app_name="zenika_ops_assistant", user_id=user_id, session_id=ephemeral_session_id
+            )
+            if updated_session and hasattr(updated_session, "state"):
+                ops_result = updated_session.state.get("ops_result")
+                if ops_result and isinstance(ops_result, dict):
+                    # Mapping OpsResponse -> AgentQueryResponse format
+                    # summary devient la réponse textuelle principale
+                    response_text = ops_result.get("summary", response_text)
+
+                    # Fusion des données structurées pour le frontend
+                    last_tool_data = {
+                        "data": ops_result.get("data", {}),
+                        "recommendations": ops_result.get("recommendations", []),
+                        "cost_estimate": ops_result.get("cost_estimate")
+                    }
+                    app_logger.info("[Ops] ✅ Response mapped from OpsResponse structure.")
         except Exception as e:
-            app_logger.warning("[Ops] Impossible de lire ops_result.display_type : %s", e)
+            app_logger.warning("[Ops] Impossible de lire ops_result : %s", e)
 
     return {
         "response": response_text,

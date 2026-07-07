@@ -348,9 +348,9 @@ onMounted(() => {
 
     <div v-if="activeTab === 'doublons'" class="glass-panel mt-4">
       <div class="panel-header d-flex-between">
-        <h3>Doublons Détectés ({{ duplicates.length }})</h3>
-        <button @click="fetchDuplicates" class="action-btn-secondary" :disabled="isLoading" aria-label="Rafraîchir les doublons">
-          <RotateCw :class="{ 'spin': isLoading }" size="16" /> Rafraîchir
+        <h3>{{ t('admin_dedup.detected_duplicates', { count: duplicates.length }) }}</h3>
+        <button @click="fetchDuplicates" class="action-btn-secondary" :disabled="isLoading" :aria-label="t('admin_dedup.refresh')">
+          <RotateCw :class="{ 'spin': isLoading }" size="16" /> {{ t('admin_dedup.refresh') }}
         </button>
       </div>
 
@@ -367,7 +367,7 @@ onMounted(() => {
                  <RouterLink :to="'/user/' + user.id" class="text-link">
                    <strong>{{ user.full_name }}</strong>
                  </RouterLink>
-                 <br/><span class="text-xs text-muted">ID: {{ user.id }} | Email: {{ user.email }} | Actif: {{ user.is_active }} | Créé: {{ new Date(user.created_at).toLocaleDateString() }}</span>
+                  <br/><span class="text-xs text-muted">{{ t('admin_dedup.id') }}: {{ user.id }} | {{ t('admin_dedup.email') }}: {{ user.email }} | {{ t('admin_dedup.active') }}: {{ user.is_active }} | {{ t('admin_dedup.created') }}: {{ new Date(user.created_at).toLocaleDateString() }}</span>
               </div>
            </div>
         </div>
@@ -393,7 +393,7 @@ onMounted(() => {
            </div>
            <button @click="performMerge(candidate)" class="action-btn validate-btn" 
                    :disabled="!candidate.source_id || !candidate.target_id || candidate.source_id === candidate.target_id || isLoading">
-              Lancer la Fusion
+              {{ t('admin_dedup.launch_merge') }}
            </button>
         </div>
       </div>
@@ -403,9 +403,9 @@ onMounted(() => {
     <!-- The new glass-panel for anonymes -->
     <div v-if="activeTab === 'anonymes'" class="glass-panel mt-4">
       <div class="panel-header d-flex-between">
-        <h3>Profils Anonymes ({{ anonymousUsers.length }})</h3>
-        <button @click="fetchAnonymousUsers" class="action-btn-secondary" :disabled="isLoadingAnon" aria-label="Rafraîchir les profils anonymes">
-          <RotateCw :class="{ 'spin': isLoadingAnon }" size="16" /> Rafraîchir
+        <h3>{{ t('admin_dedup.anonymous_profiles', { count: anonymousUsers.length }) }}</h3>
+        <button @click="fetchAnonymousUsers" class="action-btn-secondary" :disabled="isLoadingAnon" :aria-label="t('admin_dedup.refresh')">
+          <RotateCw :class="{ 'spin': isLoadingAnon }" size="16" /> {{ t('admin_dedup.refresh') }}
         </button>
       </div>
 
@@ -420,7 +420,7 @@ onMounted(() => {
              <RouterLink :to="'/user/' + user.id" class="text-link">
                <strong>{{ user.full_name }}</strong>
              </RouterLink>
-             <br/><span class="text-xs text-muted">ID: {{ user.id }} | Email: {{ user.email }} | Créé: {{ new Date(user.created_at).toLocaleDateString() }}</span>
+             <br/><span class="text-xs text-muted">{{ t('admin_dedup.id') }}: {{ user.id }} | {{ t('admin_dedup.email') }}: {{ user.email }} | {{ t('admin_dedup.created') }}: {{ new Date(user.created_at).toLocaleDateString() }}</span>
            </div>
            <button class="action-btn-secondary" style="border-color: var(--zenika-red); color: var(--zenika-red);" 
                    @click="selectedAnonForMerge = user.id" 
@@ -459,7 +459,7 @@ onMounted(() => {
             <hr style="margin: 1rem 0; border: none; border-top: 1px dashed rgba(227, 25, 55, 0.2);" />
             
             <div class="control-group">
-               <label for="anon-create-first-name">Ou transformer ce profil anonyme en nouveau collaborateur complet :</label>
+               <label for="anon-create-first-name">{{ t('admin_dedup.anon_transform_desc') }}</label>
                <div style="display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex:1;"><input id="anon-create-first-name" type="text" v-model="createAnonForm.first_name" :placeholder="t('admin_dedup.placeholder_firstname')" class="form-select" style="width:100%;" aria-label="Prénom"></div>
                   <div style="flex:1;"><input id="anon-create-last-name" type="text" v-model="createAnonForm.last_name" :placeholder="t('admin_dedup.placeholder_lastname')" class="form-select" style="width:100%;" aria-label="Nom de famille"></div>

@@ -213,6 +213,12 @@ resource "google_project_iam_member" "monitoring_trace_user" {
   member  = "serviceAccount:${google_service_account.monitoring_sa.email}"
 }
 
+resource "google_project_iam_member" "monitoring_viewer" {
+  project = var.project_id
+  role    = "roles/monitoring.viewer"
+  member  = "serviceAccount:${google_service_account.monitoring_sa.email}"
+}
+
 resource "google_project_iam_member" "monitoring_alloydb_client" {
   project = var.project_id
   role    = "roles/alloydb.client"

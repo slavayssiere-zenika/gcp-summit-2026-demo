@@ -715,6 +715,89 @@ check_docker_available() {
     exit 1
   fi
   echo -e "${GREEN}✅ [DOCKER] Démon disponible — tests d'intégration activés.${RESET}"
+
+  # Vérifie la RAM disponible dans la VM Docker.
+  # Un manque de RAM provoque un OOM kill du conteneur postgres (exit 137)
+  # sans message d'erreur exploitable — la détection précoce évite 120s de timeout.
+  # Seuil : 1500 MB minimum (postgres ~256 MB + overhead conteneur + ryuk).
+  local DOCKER_RAM_MIN_MB=1500
+  local available_mb
+  available_mb=$(docker run --rm alpine sh -c 'free -m | awk "/^Mem:/{print \$7}"' 2>/dev/null || echo "0")
+  if [ "${available_mb:-0}" -lt "$DOCKER_RAM_MIN_MB" ] 2>/dev/null; then
+    echo -e "${RED}❌ [DOCKER] RAM insuffisante dans la VM Docker : ${available_mb} MB disponibles (minimum requis : ${DOCKER_RAM_MIN_MB} MB).${RESET}"
+    echo -e "${RED}   Exit 137 (OOM kill) probable lors des testcontainers postgres/pgvector.${RESET}"
+    echo -e "${YELLOW}   Conteneurs consommateurs de RAM (top 5) :${RESET}"
+    docker stats --no-stream --format "   {{.Name}}: {{.MemUsage}}" 2>/dev/null \
+      | sort -t'/' -k1 -rh | head -5 || true
+    echo -e "${YELLOW}   → Arrêtez les conteneurs non essentiels ou augmentez la RAM Docker Desktop.${RESET}"
+    exit 1
+  fi
+  echo -e "${GREEN}✅ [DOCKER] RAM disponible : ${available_mb} MB — testcontainers opérationnel.${RESET}"
+
+  # Vérifie l'espace disque disponible dans la VM Docker.
+  # Un manque d'espace bloque Testcontainers (initdb: No space left on device).
+  # On libère d'abord le build cache (reclaimable, n'affecte pas les images :latest)
+  # pour maximiser l'espace avant les tests d'intégration et les builds.
+  echo -e "${GREY}[*] [DOCKER] Libération du build cache BuildKit (précaution espace disque)...${RESET}"
+  local _freed
+  _freed=$(docker builder prune --force 2>&1 | grep -oE 'Total:.*' | head -1 || echo "")
+  [ -n "$_freed" ] && echo -e "${GREEN}   → ${_freed}${RESET}" || echo -e "${GREY}   → Cache déjà vide.${RESET}"
+
+  # Vérifie l'espace réellement disponible (en kB) — df -k est portable et précis.
+  # On teste toutes les images utilisées par les testcontainers du projet :
+  #   - postgres:15          → users_api, items_api, competencies_api, missions_api
+  #   - pgvector/pgvector:pg16 → cv_api (nécessite l'extension vector)
+  # Seuil : 500 MB minimum (postgres initdb ~100 MB + pgvector HNSW index)
+  local TESTCONTAINER_IMAGES=("postgres:15" "pgvector/pgvector:pg16")
+  local DISK_MIN_KB=524288  # 512 MB en kB
+  local disk_ok=true
+  local failed_image=""
+  local avail_kb=0
+  for img in "${TESTCONTAINER_IMAGES[@]}"; do
+    avail_kb=$(docker run --rm --entrypoint="" "$img" \
+      sh -c 'df -k /var/lib/postgresql | awk "NR==2{print \$4}"' 2>/dev/null || echo "0")
+    if [ "${avail_kb:-0}" -lt "$DISK_MIN_KB" ] 2>/dev/null; then
+      disk_ok=false
+      failed_image="$img"
+      break
+    fi
+  done
+
+  if [ "$disk_ok" = "false" ]; then
+    local avail_mb=$(( ${avail_kb:-0} / 1024 ))
+    echo -e "${YELLOW}⚠️  [DOCKER] Espace disque insuffisant : ${avail_mb} MB disponibles sur image ${failed_image} (minimum : $(( DISK_MIN_KB / 1024 )) MB).${RESET}"
+
+    # Niveau 1 : system prune --volumes (conteneurs stoppés + dangling images + volumes)
+    echo -e "${YELLOW}   [Niveau 1] docker system prune --volumes...${RESET}"
+    docker system prune --volumes -f > /dev/null 2>&1 || true
+
+    # Re-check après niveau 1
+    avail_kb=$(docker run --rm --entrypoint="" "postgres:15" \
+      sh -c 'df -k /var/lib/postgresql | awk "NR==2{print \$4}"' 2>/dev/null || echo "0")
+    if [ "${avail_kb:-0}" -lt "$DISK_MIN_KB" ] 2>/dev/null; then
+      # Niveau 2 : image prune -a (toutes les images inutilisées — libère les images taguées non référencées)
+      # Safe ici : deploy.sh va rebuilder toutes les images modifiées de toute façon.
+      echo -e "${YELLOW}   [Niveau 2] docker image prune -a (libère toutes les images non utilisées par un conteneur actif)...${RESET}"
+      local freed2
+      freed2=$(docker image prune -a -f 2>&1 | grep -oE 'Total:.*' | head -1 || echo "")
+      [ -n "$freed2" ] && echo -e "${GREEN}   → ${freed2}${RESET}" || echo -e "${GREY}   → Rien à libérer.${RESET}"
+
+      # Re-check final
+      avail_kb=$(docker run --rm --entrypoint="" "postgres:15" \
+        sh -c 'df -k /var/lib/postgresql | awk "NR==2{print \$4}"' 2>/dev/null || echo "0")
+      if [ "${avail_kb:-0}" -lt "$DISK_MIN_KB" ] 2>/dev/null; then
+        echo -e "${RED}❌ [DOCKER] Espace toujours insuffisant après prune complet (dispo: $(( avail_kb / 1024 )) MB).${RESET}"
+        echo -e "${RED}   → Augmentez la taille du disque Docker Desktop (Settings → Resources → Disk image size).${RESET}"
+        exit 1
+      fi
+    fi
+
+    avail_mb=$(( ${avail_kb:-0} / 1024 ))
+    echo -e "${GREEN}✅ [DOCKER] Espace libéré avec succès : ${avail_mb} MB disponibles. Reprise du déploiement.${RESET}"
+  else
+    local avail_mb=$(( ${avail_kb:-0} / 1024 ))
+    echo -e "${GREEN}✅ [DOCKER] Espace disque disponible : ${avail_mb} MB — testcontainers opérationnel.${RESET}"
+  fi
 }
 
 # ==============================================================================
@@ -1125,13 +1208,45 @@ build_and_push_standard() {
       fi
       
       echo -e "${GREEN}✅ [SMOKE TEST] Démarrage et boucle de sondes validés avec succès (statut HTTP: ${HTTP_STATUS}).${RESET}"
-      docker rm -f "$SMOKE_CONTAINER" >/dev/null
+      docker rm -f "$SMOKE_CONTAINER" > /dev/null
     fi
+
+    # ── Hash sauvegardé après tests + build + smoke test réussis ──────────────
+    # Le hash est découplé du push GCP : un service testé et buildé avec succès
+    # ne sera PAS rebuilié au prochain run, même si la perf gate ou le push GCP
+    # échouent pour des raisons d'infrastructure (RAM, disque, réseau).
+    # Par design : si un fichier source change (ex: fix perf), le hash changera
+    # et le rebuild se déclenchera naturellement.
+    save_service_hash "$SERVICE"
+    echo -e "${GREEN}✅ [HASH] Hash sauvegardé — $SERVICE ne sera pas rebuilié si aucun fichier source ne change.${RESET}"
   fi
 
   if [[ "$MODE" == "deploy" || "$MODE" == "both" ]]; then
     if [[ " ${DEPLOYS_SKIPPED[*]} " == *" $SERVICE "* ]]; then
-      return 0
+      # Service skippé en Phase 1 (hash identique) — vérifier que l'image existe bien dans AR.
+      # Si elle est absente (ex: docker image prune -a ou premier run), on pousse quand même.
+      local AR_TAG
+      AR_TAG=$(get_service_tag "$SERVICE" "none")
+      local AR_IMAGE="${DOCKER_REPO}/${SERVICE}:${AR_TAG}"
+      if gcloud artifacts docker images describe "${AR_IMAGE}" \
+           --project="$PROJECT_ID" --location="${REGION%%"-"*}" > /dev/null 2>&1; then
+        echo -e "${YELLOW}--- Skipped $SERVICE (hash identique + image ${AR_TAG} confirmée dans AR) ---${RESET}"
+        return 0
+      else
+        # Vérifier que l'image existe localement avant de tenter le push.
+        # Si docker image prune -a l'a supprimée et que le service était skippé en Phase 1
+        # (pas de rebuild), l'image n'existe plus localement → push impossible.
+        local LOCAL_IMAGE_TAG="${IMAGE_NAME}:${AR_TAG}"
+        if ! docker image inspect "${LOCAL_IMAGE_TAG}" > /dev/null 2>&1; then
+          echo -e "${YELLOW}⚠️  [AR] Image ${AR_TAG} absente du registry ET de l'hôte local (prunée).${RESET}"
+          echo -e "${YELLOW}   → Hash réinitialisé pour forcer un rebuild au prochain run.${RESET}"
+          rm -f "${SERVICE}/HASH" "${SERVICE}/FILE_HASHES"
+          DEPLOYS_FAILED+=("${SERVICE} (image locale absente après prune — relancer deploy.sh)")
+          CURRENT_DEPLOYING_SERVICE=""
+          return 1
+        fi
+        echo -e "${YELLOW}⚠️  [AR] Image ${AR_TAG} absente du registry malgré hash identique — push forcé.${RESET}"
+      fi
     fi
 
     TAG=$(get_service_tag "$SERVICE" "none")
@@ -1741,6 +1856,18 @@ else
       # Phase 3 du run précédent les a buildées et taguées :latest localement.
       # L'image Locust est buildée par _build_locust_image() dans local_up.py.
       # La variable GEMINI_API_BASE_URL est passée au conteneur cv_api via docker-compose.perf-override.yml.
+
+      # Libération du build cache Docker avant le démarrage de l'environnement perf.
+      # Les builds de Phase 1 génèrent plusieurs GB de cache BuildKit qui peuvent saturer
+      # la VM Docker Desktop et empêcher postgres de démarrer (exit 1 / No space left).
+      # Le build cache est entièrement reclaimable — les images :latest restent intactes.
+      echo -e "${GREY}[*] Libération du build cache Docker pré-Locust (évite OOM postgres)...${RESET}"
+      _cache_freed=$(docker builder prune --force 2>&1 | grep -oE 'Total:.*' | head -1 || echo "")
+      if [ -n "$_cache_freed" ]; then
+        echo -e "${GREEN}✅ Build cache libéré : ${_cache_freed}${RESET}"
+      else
+        echo -e "${GREY}[*] Build cache déjà vide ou non disponible.${RESET}"
+      fi
 
       GEMINI_API_BASE_URL=http://mock_gemini:8099 \
       COMPOSE_FILE=docker-compose.yml:docker-compose.perf-override.yml \

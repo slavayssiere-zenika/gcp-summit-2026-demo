@@ -202,7 +202,17 @@ async def bg_bulk_reanalyse(service_token: str, cv_ids_filter: list[int] | None 
                         if not candidates:
                             continue
                         text = _clean_llm_json(candidates[0].get("content", {}).get("parts", [{}])[0].get("text", ""))
-                        results.append((cv_id, user_id, json.loads(text), record.get(
+                        structured_cv = json.loads(text)
+
+                        # --- Validation Zero-Trust sur current_role ---
+                        # Si le LLM extrait un email de service account ou technique (hallucination de batch), on le rejette.
+                        current_role = str(structured_cv.get("current_role", "")).lower()
+                        if "@" in current_role and (".iam" in current_role or "gserviceaccount" in current_role):
+                            logger.warning(f"[bulk_reanalyse] Rejet d'un current_role suspect (email service account): {current_role}")
+                            structured_cv["current_role"] = None
+                        # ---------------------------------------------
+
+                        results.append((cv_id, user_id, structured_cv, record.get(
                             "response", {}).get("usageMetadata", {})))
                     except Exception as e:
                         logger.warning("[bulk_reanalyse] Skipping malformed GCS result line: %s", e)

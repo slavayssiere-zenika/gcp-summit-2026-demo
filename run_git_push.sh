@@ -90,4 +90,4 @@ fi
 echo "[+] SÉCURITÉ AR : Aucun token GCP ni wheel buildé détecté — commit autorisé."
 
 # Etape 11: git commit
-git commit -m "Fix silent exceptions and update APIs"
+git commit -m "Refactor agents and remove deprecated folders"

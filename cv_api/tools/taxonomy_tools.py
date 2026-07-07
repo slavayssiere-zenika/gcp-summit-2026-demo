@@ -74,9 +74,9 @@ async def handle_reindex_cv_embeddings(client: httpx.AsyncClient, arguments: dic
     except Exception as e:
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 
-async def handle_start_bulk_cv_reanalyse(client: httpx.AsyncClient, headers: dict, api_base_url: str) -> list[TextContent]:
+async def handle_start_bulk_cv_reanalyse(client: httpx.AsyncClient, arguments: dict, headers: dict, api_base_url: str) -> list[TextContent]:
     try:
-        response = await client.post(f"{api_base_url}/bulk-reanalyse/start", headers=headers, timeout=30.0)
+        response = await client.post(f"{api_base_url}/bulk-reanalyse/start", json=arguments, headers=headers, timeout=15.0)
         response.raise_for_status()
         return [TextContent(type="text", text=json.dumps(response.json(), indent=2))]
     except httpx.HTTPStatusError as e:

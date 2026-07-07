@@ -9,10 +9,10 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 246 | ✅ |
+| `main.py` | 248 | ✅ |
 | `conftest.py` | 20 | ✅ |
 | `metrics.py` | 45 | ✅ |
-| `agent.py` | 394 | ✅ |
+| `agent.py` | 527 | ⚠️ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -51,6 +51,7 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 | `A2A_CB_OPEN_DURATION_S` | Comportement | `30` |
 | `AGENT_CARD_CACHE_TTL_S` | Comportement | `300` |
 | `PROMPT_CACHE_TTL_S` | Comportement | `3600` |
+| `ADK_AUTO_TRACING` | Comportement | `true` |
 
 ## Redis
 **DB 2** — namespace `session:*` (historique) + `semantic:*` (cache sémantique)
@@ -70,12 +71,12 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 - `GET /users/me/items/`
 - `GET /users/me`
 - `POST /login`
+- `GET /dev-ui/config`
+- `GET /`
+- `GET /dev-ui`
 - `GET /version`
 - `GET /list-apps`
 - `GET /apps/{app_name}/app-info`
-- `GET /debug/trace/{event_id}`
-- `GET /dev/build_graph/{app_name}`
-- `GET /debug/trace/session/{session_id}`
 
 ## Sous-agents consommés (A2A)
 - `agent_hr_api` — RH, CVs, compétences

@@ -1182,41 +1182,59 @@ def _print_analysis_report(detail_rows: list, agg_rows: list, failures: list) ->
     print(f"\n{sep}")
 
 
-def wait_for_services(max_wait_s: int = 90) -> None:
+def wait_for_services(max_wait_s: int = 300) -> bool:
     """Attend que les services critiques soient prêts (healthcheck par polling).
 
     Poll users_api, cv_api et items_api toutes les 3s jusqu'au succès ou timeout.
+    Retourne True si tous les services sont prêts, False sinon.
+
+    Stratégie : docker exec curl à l'intérieur du conteneur (plus fiable que
+    localhost sur macOS Docker Desktop où le port forwarding VPNKit peut ne pas
+    être disponible depuis le processus appelant).
+
+    Le timeout par défaut est de 300s pour absorber les cold-starts Docker
+    (ex: images non cachées après docker system prune).
     """
-    health_endpoints = [
-        ("users_api", "http://localhost:8000/health"),
-        ("cv_api", "http://localhost:8004/health"),
-        ("items_api", "http://localhost:8001/health"),
+    # (container_name, internal_url)
+    health_targets = [
+        ("users_api", "http://127.0.0.1:8000/health"),
+        ("cv_api", "http://127.0.0.1:8004/health"),
+        ("items_api", "http://127.0.0.1:8001/health"),
     ]
     log(f"Attente de la disponibilité des services (max {max_wait_s}s)...")
     start = time.monotonic()
-    pending = list(health_endpoints)
+    pending = list(health_targets)
     while pending and (time.monotonic() - start) < max_wait_s:
         still_pending = []
-        for name, url in pending:
+        for container, url in pending:
             try:
-                with urllib.request.urlopen(url, timeout=3) as r:
-                    if r.status == 200:
-                        log(f"  {name} prêt ✅")
-                        continue
+                result = subprocess.run(
+                    ["docker", "exec", container, "curl", "-sf", "--max-time", "3", url],
+                    capture_output=True, timeout=5,
+                )
+                if result.returncode == 0:
+                    log(f"  {container} prêt ✅")
+                    continue
             except Exception:
                 pass
-            still_pending.append((name, url))
+            still_pending.append((container, url))
         pending = still_pending
         if pending:
-            names = ", ".join(n for n, _ in pending)
-            log(f"  En attente : {names} — retry dans 3s...")
+            names = ", ".join(c for c, _ in pending)
+            elapsed = int(time.monotonic() - start)
+            log(f"  En attente : {names} — retry dans 3s... ({elapsed}s écoulées)")
             time.sleep(3)
     elapsed = int(time.monotonic() - start)
     if pending:
-        names = ", ".join(n for n, _ in pending)
-        log(f"  ⚠️  Services toujours indisponibles après {max_wait_s}s : {names}")
-    else:
-        log(f"  ✅ Tous les services sont prêts ({elapsed}s écoulées).")
+        names = ", ".join(c for c, _ in pending)
+        log(
+            f"  ❌ Services toujours indisponibles après {max_wait_s}s : {names}\n"
+            f"     Cause probable : cold-start Docker (images non cachées) ou OOM.\n"
+            f"     → Vérifiez 'docker ps' et 'docker logs <conteneur>' pour diagnostiquer."
+        )
+        return False
+    log(f"  ✅ Tous les services sont prêts ({elapsed}s écoulées).")
+    return True
 
 
 def archive_results(csv_prefix: str = "perf_stats") -> None:
@@ -1343,7 +1361,14 @@ def main() -> None:
         compose_up(["mock_gemini", "pubsub-emulator"], profile=_profile)
 
     if parsed.full or parsed.perf or parsed.stress:
-        wait_for_services(max_wait_s=90)
+        services_ready = wait_for_services(max_wait_s=300)
+        if not services_ready:
+            log(
+                "\n❌ Abandon du test de performance : les services ne sont pas prêts.\n"
+                "   Lancez 'docker ps' pour diagnostiquer l'état des conteneurs."
+            )
+            _close_session_log()
+            sys.exit(1)
         run_seed(perf=True, skip_if_present=not parsed.erase)
 
         if parsed.full:

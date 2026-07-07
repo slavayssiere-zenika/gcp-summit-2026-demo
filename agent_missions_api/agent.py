@@ -22,7 +22,7 @@ from agent_commons.guardrails import (check_hallucination_guardrail,
 from agent_commons.mcp_client import MCPHttpClient, auth_header_var
 from agent_commons.mcp_proxy import get_cached_tools
 from agent_commons.metadata import extract_metadata_from_session
-from agent_commons.runner import run_agent_and_collect
+from agent_commons.runner import run_agent_and_collect, build_runner_plugins
 from agent_commons.session import (RedisSessionService,
                                    get_missions_context,
                                    store_missions_context)
@@ -192,7 +192,12 @@ async def run_agent_query(
             app_logger.warning("[MISSIONS] Impossible de lire le contexte mission Redis: %s", e)
 
     agent = await create_agent(ephemeral_session_id)
-    runner = Runner(app_name="zenika_missions_assistant", agent=agent, session_service=session_service)
+    runner = Runner(
+        app_name="zenika_missions_assistant",
+        agent=agent,
+        session_service=session_service,
+        plugins=build_runner_plugins(),
+    )
     await session_service.create_session(
         app_name="zenika_missions_assistant", user_id=user_id, session_id=ephemeral_session_id
     )

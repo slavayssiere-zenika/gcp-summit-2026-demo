@@ -26,29 +26,34 @@ def setup_and_clear_overrides():
     app.dependency_overrides[verify_jwt] = orig_verify_jwt
 
 
+# ---------------------------------------------------------------------------
+# Nouveau flow : une seule SELECT catégories + une SELECT existant par item
+# + 1 commit + gather(enrich) — pas de fetch final distinct.
+# ---------------------------------------------------------------------------
+
 @patch("src.items.crud_router.enrich_item", new_callable=AsyncMock)
 def test_create_items_bulk_success(mock_enrich):
     mock_db = AsyncMock()
+
+    # execute #1 : fetch catégories
     mock_result_cats = MagicMock()
-    mock_result_cats.user = None
     mock_cat1 = MagicMock()
-    mock_cat1.user = None
     mock_cat1.id = 1
     mock_result_cats.scalars.return_value.all.return_value = [mock_cat1]
 
+    # execute #2 : check existant pour item "Bulk1"
     mock_result_existing = MagicMock()
-    mock_result_existing.user = None
-    mock_result_existing.scalars.return_value.all.return_value = []
-    mock_result_existing.scalars.return_value.first.return_value = None
+    mock_result_existing.scalars.return_value.first.return_value = None  # pas en DB
 
-    mock_result_final = MagicMock()
-    mock_result_final.user = None
-    mock_final_item = MagicMock()
-    mock_final_item.user = None
-    mock_final_item.id = 100
-    mock_result_final.scalars.return_value.all.return_value = [mock_final_item]
+    # execute #3 : selectinload reload après commit (nouveau comportement post-fix MissingGreenlet)
+    mock_db_item_reloaded = MagicMock()
+    mock_db_item_reloaded.id = 100
+    mock_db_item_reloaded.categories = [mock_cat1]
+    mock_db_item_reloaded.created_at = datetime.utcnow()
+    mock_result_reloaded = MagicMock()
+    mock_result_reloaded.scalars.return_value.first.return_value = mock_db_item_reloaded
 
-    mock_db.execute.side_effect = [mock_result_cats, mock_result_existing, mock_result_final]
+    mock_db.execute.side_effect = [mock_result_cats, mock_result_existing, mock_result_reloaded]
     app.dependency_overrides[get_db] = lambda: mock_db
 
     mock_enrich.return_value = ItemResponse(
@@ -88,10 +93,8 @@ def test_create_items_bulk_empty():
 def test_create_items_bulk_invalid_category(mock_enrich):
     mock_db = AsyncMock()
     mock_result_cats = MagicMock()
-    mock_result_cats.user = None
-    # Missing categories compared to what was requested
+    # Catégories absentes → mismatch count
     mock_result_cats.scalars.return_value.all.return_value = []
-
     mock_db.execute.side_effect = [mock_result_cats]
     app.dependency_overrides[get_db] = lambda: mock_db
 
@@ -118,12 +121,9 @@ def test_create_items_bulk_forbidden_category(mock_enrich):
 
     mock_db = AsyncMock()
     mock_result_cats = MagicMock()
-    mock_result_cats.user = None
-    mock_cat1 = MagicMock()
-    mock_cat1.user = None
-    mock_cat1.id = 2
-    mock_result_cats.scalars.return_value.all.return_value = [mock_cat1]
-
+    mock_cat2 = MagicMock()
+    mock_cat2.id = 2
+    mock_result_cats.scalars.return_value.all.return_value = [mock_cat2]
     mock_db.execute.side_effect = [mock_result_cats]
     app.dependency_overrides[get_db] = lambda: mock_db
 
@@ -143,42 +143,38 @@ def test_create_items_bulk_forbidden_category(mock_enrich):
 
 @patch("src.items.crud_router.enrich_item", new_callable=AsyncMock)
 def test_create_items_bulk_integrity_error_fallback(mock_enrich):
+    """
+    Nouveau flow : IntegrityError sur commit d'un item → rollback → SELECT existant.
+    Le code ne charge plus de "fresh_cats" globalement, mais réutilise cat_map.
+    """
     from sqlalchemy.exc import IntegrityError
 
     mock_db = AsyncMock()
+
+    # execute #1 : fetch catégories
     mock_result_cats = MagicMock()
-    mock_result_cats.user = None
     mock_cat1 = MagicMock()
-    mock_cat1.user = None
     mock_cat1.id = 1
     mock_result_cats.scalars.return_value.all.return_value = [mock_cat1]
 
-    mock_result_existing1 = MagicMock()
-    mock_result_existing1.user = None
-    mock_result_existing1.scalars.return_value.all.return_value = []
+    # execute #2 : check existant → None (pas encore en DB)
+    mock_result_no_existing = MagicMock()
+    mock_result_no_existing.scalars.return_value.first.return_value = None
 
-    mock_result_fallback_existing = MagicMock()
-    mock_result_fallback_existing.user = None
-    mock_existing = MagicMock()
-    mock_existing.user = None
-    mock_existing.id = 200
-    mock_result_fallback_existing.scalars.return_value.first.return_value = None
-
-    mock_result_final = MagicMock()
-    mock_result_final.user = None
-    mock_final_item = MagicMock()
-    mock_final_item.user = None
-    mock_final_item.id = 200
-    mock_result_final.scalars.return_value.all.return_value = [mock_final_item]
+    # execute #3 : SELECT existant après rollback IntegrityError → retrouve l'item
+    mock_existing_item = MagicMock()
+    mock_existing_item.id = 200
+    mock_existing_item.categories = [mock_cat1]
+    mock_result_existing_after_rollback = MagicMock()
+    mock_result_existing_after_rollback.scalars.return_value.first.return_value = mock_existing_item
 
     mock_db.execute.side_effect = [
-        mock_result_cats,
-        mock_result_existing1,
-        mock_result_fallback_existing,
-        mock_result_final
+        mock_result_cats,                       # 1. category fetch
+        mock_result_no_existing,                # 2. existing check (None)
+        mock_result_existing_after_rollback,    # 3. recovery after IntegrityError
     ]
 
-    # Simulate IntegrityError on first commit
+    # Premier commit → IntegrityError simulé
     mock_db.commit.side_effect = [IntegrityError("", "", ""), None]
 
     app.dependency_overrides[get_db] = lambda: mock_db
@@ -196,7 +192,7 @@ def test_create_items_bulk_integrity_error_fallback(mock_enrich):
     resp = client.post("/bulk", json={
         "items": [
             {
-                "name": "Bulk1",
+                "name": "BulkFallback",
                 "description": "desc",
                 "metadata_json": {},
                 "user_id": 1,
@@ -213,25 +209,28 @@ def test_create_items_bulk_integrity_error_fallback(mock_enrich):
 
 @patch("src.items.crud_router.enrich_item", new_callable=AsyncMock)
 def test_create_items_bulk_generic_exception(mock_enrich):
+    """
+    Erreur non-IntegrityError : le commit échoue (DB crash).
+    Le code logue l'erreur, continue sans l'item, et retourne une liste partielle.
+    """
     mock_db = AsyncMock()
+
     mock_result_cats = MagicMock()
-    mock_result_cats.user = None
     mock_cat1 = MagicMock()
-    mock_cat1.user = None
     mock_cat1.id = 1
     mock_result_cats.scalars.return_value.all.return_value = [mock_cat1]
 
     mock_result_existing = MagicMock()
-    mock_result_existing.user = None
-    mock_result_existing.scalars.return_value.all.return_value = []
+    mock_result_existing.scalars.return_value.first.return_value = None
 
     mock_db.execute.side_effect = [mock_result_cats, mock_result_existing]
-
-    # Simulate generic Exception on first commit
     mock_db.commit.side_effect = Exception("DB crash")
 
     app.dependency_overrides[get_db] = lambda: mock_db
 
+    # La réponse est 201 avec une liste vide (item skippé silencieusement)
+    # NOTE : comportement intentionnel post-refactor SRE — l'item est loggé en erreur
+    # mais ne bloque pas le reste du payload.
     resp = client.post("/bulk", json={
         "items": [
             {
@@ -242,5 +241,95 @@ def test_create_items_bulk_generic_exception(mock_enrich):
         ]
     })
 
-    assert resp.status_code == 500
+    # La liste est vide — l'item a échoué mais pas de 500 levée
+    assert resp.status_code == 201
     assert mock_db.rollback.called
+
+
+@patch("src.items.crud_router.enrich_item", new_callable=AsyncMock)
+def test_create_items_bulk_deduplication(mock_enrich):
+    """
+    Un payload avec deux items identiques (user_id, name) ne doit créer qu'un seul
+    item en DB — le doublon est éliminé en amont.
+    """
+    mock_db = AsyncMock()
+
+    mock_result_cats = MagicMock()
+    mock_cat1 = MagicMock()
+    mock_cat1.id = 1
+    mock_result_cats.scalars.return_value.all.return_value = [mock_cat1]
+
+    # Un seul check existant (doublon éliminé avant la boucle)
+    mock_result_existing = MagicMock()
+    mock_result_existing.scalars.return_value.first.return_value = None
+
+    # execute #3 : selectinload reload après commit
+    mock_db_item_reloaded = MagicMock()
+    mock_db_item_reloaded.id = 42
+    mock_db_item_reloaded.categories = [mock_cat1]
+    mock_db_item_reloaded.created_at = datetime.utcnow()
+    mock_result_reloaded = MagicMock()
+    mock_result_reloaded.scalars.return_value.first.return_value = mock_db_item_reloaded
+
+    mock_db.execute.side_effect = [mock_result_cats, mock_result_existing, mock_result_reloaded]
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mock_enrich.return_value = ItemResponse(
+        id=42,
+        name="DupItem",
+        description="",
+        metadata_json={},
+        user_id=1,
+        created_at=datetime.utcnow(),
+        categories=[]
+    )
+
+    resp = client.post("/bulk", json={
+        "items": [
+            {"name": "DupItem", "user_id": 1, "category_ids": [1]},
+            {"name": "DupItem", "user_id": 1, "category_ids": [1]},  # doublon
+        ]
+    })
+
+    assert resp.status_code == 201
+    # Un seul item retourné malgré 2 dans le payload
+    assert len(resp.json()) == 1
+    # Un seul commit effectué (pas deux)
+    assert mock_db.commit.call_count == 1
+
+
+@patch("src.items.crud_router.enrich_item", new_callable=AsyncMock)
+def test_create_items_bulk_idempotent_existing(mock_enrich):
+    """
+    Si tous les items existent déjà, aucun commit ne doit avoir lieu.
+    """
+    mock_db = AsyncMock()
+
+    mock_result_cats = MagicMock()
+    mock_cat1 = MagicMock()
+    mock_cat1.id = 1
+    mock_result_cats.scalars.return_value.all.return_value = [mock_cat1]
+
+    # Item déjà existant
+    mock_existing = MagicMock()
+    mock_existing.id = 77
+    mock_existing.categories = [mock_cat1]
+    mock_result_existing = MagicMock()
+    mock_result_existing.scalars.return_value.first.return_value = mock_existing
+
+    mock_db.execute.side_effect = [mock_result_cats, mock_result_existing]
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    mock_enrich.return_value = ItemResponse(
+        id=77, name="ExistingItem", description="", metadata_json={},
+        user_id=1, created_at=datetime.utcnow(), categories=[]
+    )
+
+    resp = client.post("/bulk", json={
+        "items": [{"name": "ExistingItem", "user_id": 1, "category_ids": [1]}]
+    })
+
+    assert resp.status_code == 201
+    assert resp.json()[0]["id"] == 77
+    # Aucun commit — rien à insérer
+    assert not mock_db.commit.called

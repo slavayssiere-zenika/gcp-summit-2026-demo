@@ -9,12 +9,13 @@ The key difference between the original files was the Redis key prefix
 This is now configurable via the ``redis_key_prefix`` constructor argument.
 """
 
+import json as _json
 import logging
 import os
 import pickle
 
 import redis
-from google.adk.runners import InMemorySessionService
+from google.adk.sessions import InMemorySessionService
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ class RedisSessionService(InMemorySessionService):
         ttl_seconds: int = 30 * 24 * 60 * 60,
     ) -> None:
         super().__init__()
-        _redis_url = redis_url or os.getenv("REDIS_URL", "redis://redis:6379/1")
+        _redis_url = redis_url or os.getenv(
+            "REDIS_URL", "redis://redis:6379/1")
         self.r = redis.from_url(_redis_url)
         self._prefix = redis_key_prefix
         self.ttl = ttl_seconds
@@ -104,9 +106,9 @@ class RedisSessionService(InMemorySessionService):
 # que les questions de suivi ("parmi ceux-là, qui...") n'exigent pas un nouvel
 # appel RAG. TTL 1h — stocké dans le namespace hr:candidates:{session_id}.
 
-import json as _json
 
-HR_CANDIDATES_POOL_TTL = int(os.getenv("HR_CANDIDATES_POOL_TTL", "3600"))  # 1h par défaut
+HR_CANDIDATES_POOL_TTL = int(
+    os.getenv("HR_CANDIDATES_POOL_TTL", "3600"))  # 1h par défaut
 
 
 def store_hr_candidates_pool(r: redis.Redis, session_id: str, candidates: list) -> None:
@@ -120,7 +122,8 @@ def store_hr_candidates_pool(r: redis.Redis, session_id: str, candidates: list) 
     try:
         key = f"hr:candidates:{session_id}"
         r.set(key, _json.dumps(candidates), ex=HR_CANDIDATES_POOL_TTL)
-        logger.debug("HR candidates pool stored for session %s (%d entries)", session_id, len(candidates))
+        logger.debug("HR candidates pool stored for session %s (%d entries)",
+                     session_id, len(candidates))
     except Exception as e:
         logger.error("HR candidates pool store fail [%s]: %s", session_id, e)
 
@@ -157,7 +160,8 @@ def clear_hr_candidates_pool(r: redis.Redis, session_id: str) -> None:
 # requises, statut) pour que les questions de suivi n'exigent pas un nouvel appel
 # get_mission à chaque tour. TTL 1h — stocké dans le namespace missions:context:{session_id}.
 
-MISSIONS_CONTEXT_TTL = int(os.getenv("MISSIONS_CONTEXT_TTL", "3600"))  # 1h par défaut
+MISSIONS_CONTEXT_TTL = int(
+    os.getenv("MISSIONS_CONTEXT_TTL", "3600"))  # 1h par défaut
 
 
 def store_missions_context(r: redis.Redis, session_id: str, mission_data: dict) -> None:
@@ -204,4 +208,3 @@ def clear_missions_context(r: redis.Redis, session_id: str) -> None:
         r.delete(f"missions:context:{session_id}")
     except Exception as e:
         logger.error("Missions context clear fail [%s]: %s", session_id, e)
-

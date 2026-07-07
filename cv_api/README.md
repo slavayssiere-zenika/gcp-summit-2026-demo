@@ -34,7 +34,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 |---|---|---|
 | `main.py` | 142 | ✅ |
 | `mcp_server.py` | 588 | ⚠️ |
-| `conftest.py` | 88 | ✅ |
+| `conftest.py` | 99 | ✅ |
 | `metrics.py` | 19 | ✅ |
 | `src/cvs/router.py` | 47 | ✅ |
 | `src/cvs/routers/admin_router.py` | 205 | ✅ |

@@ -21,12 +21,47 @@ const { t } = useI18n()
 
 const router = useRouter()
 const searchQuery = ref('')
+const searchSuggestions = ref<any[]>([])
+const showSuggestions = ref(false)
+const isSearching = ref(false)
+
 const handleSearch = () => {
   if (searchQuery.value) {
     router.push({ path: '/', query: { q: searchQuery.value } })
     searchQuery.value = ''
+    showSuggestions.value = false
   }
 }
+
+const fetchSuggestions = async () => {
+  if (searchQuery.value.length < 3) {
+    searchSuggestions.value = []
+    return
+  }
+  isSearching.value = true
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+    const res = await axios.get(`/api/users/search?query=${searchQuery.value}&limit=5`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    searchSuggestions.value = res.data.items || []
+    showSuggestions.value = searchSuggestions.value.length > 0
+  } catch (e) {
+    console.error('Search failed', e)
+  } finally {
+    isSearching.value = false
+  }
+}
+
+const selectSuggestion = (user: any) => {
+  router.push(`/user/${user.id}`)
+  searchQuery.value = ''
+  showSuggestions.value = false
+}
+
+watch(searchQuery, () => {
+  fetchSuggestions()
+})
 
 const handleLogout = async () => {
   await authService.logout()
@@ -159,6 +194,40 @@ onUnmounted(() => {
       </button>
 
       <div class="nav-links" :class="{ 'is-open': isMobileMenuOpen }" v-if="router.currentRoute.value.path !== '/warming'">
+        <!-- Quick Search -->
+        <div v-if="authService.state.isAuthenticated" class="header-search">
+          <div class="search-input-wrapper">
+            <input
+              type="text"
+              v-model="searchQuery"
+              @keyup.enter="handleSearch"
+              @focus="showSuggestions = searchQuery.length >= 3"
+              @blur="setTimeout(() => showSuggestions = false, 200)"
+              :placeholder="t('nav.search_placeholder')"
+              :aria-label="t('nav.search_aria')"
+            />
+            <div v-if="isSearching" class="search-spinner"></div>
+          </div>
+          <Transition name="slide-fade">
+            <div v-if="showSuggestions" class="search-results-dropdown glass-card">
+              <div
+                v-for="user in searchSuggestions"
+                :key="user.id"
+                class="search-result-item"
+                @click="selectSuggestion(user)"
+              >
+                <div class="result-avatar">
+                  <UserIcon size="14" />
+                </div>
+                <div class="result-info">
+                  <div class="result-name">{{ user.full_name || user.username }}</div>
+                  <div class="result-role">{{ user.role }}</div>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+
         <div class="nav-pills" v-if="authService.state.isAuthenticated">
 
           <!-- Agent IA -->
@@ -766,27 +835,125 @@ body {
 
 .header-search {
   position: relative;
-  margin-right: 1rem;
+  margin-right: 1.5rem;
+  z-index: 1001;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .header-search input {
   background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0.6rem 1.2rem;
+  padding-right: 2.5rem;
+  border-radius: 24px;
   font-size: 0.85rem;
-  width: 200px;
-  transition: all 0.2s;
+  width: 220px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   color: var(--text-primary);
 }
 
 .header-search input:focus {
   background: #fff;
-  width: 260px;
+  width: 320px;
   outline: none;
-  border-color: var(--zenika-red);
-  box-shadow: 0 0 0 4px rgba(227, 25, 55, 0.15), 0 4px 10px rgba(227, 25, 55, 0.1);
+  border-color: var(--gemini-purple);
+  box-shadow: 0 0 0 4px rgba(142, 117, 255, 0.1), var(--shadow-md);
   transform: translateY(-1px);
+}
+
+.search-spinner {
+  position: absolute;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0,0,0,0.1);
+  border-top-color: var(--gemini-purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1002;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.search-result-item:hover {
+  background: rgba(142, 117, 255, 0.08);
+  transform: translateX(4px);
+}
+
+.result-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--gemini-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.result-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.result-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-role {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+/* Transitions */
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+.slide-fade-leave-active {
+  transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1);
+}
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .content {

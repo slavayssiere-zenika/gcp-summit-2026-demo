@@ -17,7 +17,7 @@ from testcontainers.redis import RedisContainer
 @pytest.fixture(scope="session")
 def postgres_container():
     """Démarre un conteneur PostgreSQL 16 pour toute la session."""
-    with PostgresContainer("postgres:16-alpine") as pg:
+    with PostgresContainer("postgres:15") as pg:
         yield pg
 
 

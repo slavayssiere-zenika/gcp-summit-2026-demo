@@ -70,7 +70,9 @@ def _make_event(
         u = MagicMock()
         u.prompt_token_count = usage.get("input", 0)
         u.candidates_token_count = usage.get("output", 0)
-        event.response.usage_metadata = u
+        event.usage_metadata = u
+        if event.response:
+            event.response.usage_metadata = u
 
     return event
 
@@ -85,7 +87,7 @@ async def test_create_agent_standard_mode():
             with patch("agent.Agent") as mock_agent_cls:
                 mock_agent_cls.return_value = MagicMock(model="gemini-test")
                 from agent import create_agent
-                result = await create_agent(session_id="sess-1")
+                await create_agent(session_id="sess-1")
 
     mock_agent_cls.assert_called_once()
     call_kwargs = mock_agent_cls.call_args.kwargs
@@ -101,7 +103,7 @@ async def test_create_agent_workflow_mode():
             with patch("agent.build_workflow_agent") as mock_wf:
                 mock_wf.return_value = MagicMock()
                 from agent import create_agent
-                result = await create_agent(session_id="sess-wf")
+                await create_agent(session_id="sess-wf")
 
     mock_wf.assert_called_once()
     # Vérifie que ask_missions_agent a été renommé
@@ -140,7 +142,8 @@ async def test_run_agent_query_sets_auth_header_var(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = empty_run
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     await run_agent_query("Hello", auth_token="Bearer test-token-abc")
@@ -163,7 +166,8 @@ async def test_run_agent_query_creates_session_when_not_found(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = empty_run
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=svc)
 
     await run_agent_query("Hello", session_id="new-session")
@@ -185,7 +189,8 @@ async def test_run_agent_query_captures_bool_thought(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Bonjour")
@@ -205,7 +210,8 @@ async def test_run_agent_query_captures_string_thought(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
@@ -230,7 +236,8 @@ async def test_run_agent_query_captures_tool_calls(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
@@ -257,7 +264,8 @@ async def test_run_agent_query_deduplicates_tool_calls(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
@@ -283,7 +291,8 @@ async def test_run_agent_query_unwraps_mcp_result_json(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
@@ -321,7 +330,8 @@ async def test_run_agent_query_aggregates_a2a_metadata(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
@@ -329,7 +339,8 @@ async def test_run_agent_query_aggregates_a2a_metadata(mocker):
     # thoughts sous-agent agrégés
     assert "[hr_agent] Analyse RH" in result["thoughts"]
     # steps préfixés
-    prefixed_steps = [s for s in result["steps"] if s.get("source") == "hr_agent"]
+    prefixed_steps = [s for s in result["steps"]
+                      if s.get("source") == "hr_agent"]
     assert len(prefixed_steps) >= 1
     assert "hr_agent:get_user" in prefixed_steps[0]["tool"]
     # usage agrégé
@@ -345,7 +356,8 @@ async def test_run_agent_query_warns_zero_tool_calls_a2a(mocker):
     """Sous-agent A2A sans tool calls → warning GUARDRAIL ajouté aux steps."""
     from agent import run_agent_query, a2a_metadata_var
 
-    a2a_data = {"response": "Réponse hallucination possible", "agent": "hr_agent"}
+    a2a_data = {"response": "Réponse hallucination possible",
+                "agent": "hr_agent"}
     fres = MagicMock()
     fres.response = a2a_data
     event = _make_event(role="tool", function_response=fres)
@@ -363,13 +375,14 @@ async def test_run_agent_query_warns_zero_tool_calls_a2a(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
-    warnings = [s for s in result["steps"] if "GUARDRAIL" in str(s.get("tool") or "")]
+    warnings = [s for s in result["steps"]
+                if "GUARDRAIL" in str(s.get("tool") or "")]
     assert len(warnings) == 1
-
 
 
 # ── Usage metadata ────────────────────────────────────────────────────────────
@@ -388,7 +401,8 @@ async def test_run_agent_query_tracks_usage_metadata(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     result = await run_agent_query("Test")
@@ -403,13 +417,15 @@ async def test_run_agent_query_ops003_context_overflow(mocker):
     from agent import run_agent_query
 
     async def overflow_run(*args, **kwargs):
-        raise Exception("400 INVALID_ARGUMENT: input token count exceeds the maximum allowed")
+        raise Exception(
+            "400 INVALID_ARGUMENT: input token count exceeds the maximum allowed")
         yield
 
     mock_runner = MagicMock()
     mock_runner.run_async = overflow_run
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
 
     mock_svc = AsyncMock()
     mock_svc.get_session.return_value = MagicMock()
@@ -419,8 +435,10 @@ async def test_run_agent_query_ops003_context_overflow(mocker):
     result = await run_agent_query("Long query", session_id="sess-overflow")
 
     assert "⚠️" in result["response"]
-    assert "mémoire" in result["response"].lower() or "contexte" in result["response"].lower()
-    overflow_steps = [s for s in result["steps"] if "CONTEXT_OVERFLOW" in s.get("tool", "")]
+    assert "mémoire" in result["response"].lower(
+    ) or "contexte" in result["response"].lower()
+    overflow_steps = [s for s in result["steps"]
+                      if "CONTEXT_OVERFLOW" in s.get("tool", "")]
     assert len(overflow_steps) == 1
     assert "technical_detail" in overflow_steps[0]["args"]
 
@@ -437,7 +455,8 @@ async def test_run_agent_query_ops003_other_exception_reraises(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = boom_run
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     with pytest.raises(RuntimeError, match="Unhandled critical error"):
@@ -460,11 +479,12 @@ async def test_run_agent_query_schedules_finops_logging(mocker):
     mock_runner = MagicMock()
     mock_runner.run_async = gen
     mocker.patch("agent.Runner", return_value=mock_runner)
-    mocker.patch("agent.create_agent", new=AsyncMock(return_value=MagicMock(model="test")))
+    mocker.patch("agent.create_agent", new=AsyncMock(
+        return_value=MagicMock(model="test")))
     mocker.patch("agent.get_session_service", return_value=_make_session_svc())
 
     create_task_calls = []
-    original_create_task = asyncio.create_task
+    asyncio.create_task
 
     def mock_create_task(coro, **kwargs):
         create_task_calls.append(coro)
@@ -474,7 +494,7 @@ async def test_run_agent_query_schedules_finops_logging(mocker):
 
     mocker.patch("asyncio.create_task", side_effect=mock_create_task)
 
-    result = await run_agent_query("Test", user_id="user@zenika.com")
+    await run_agent_query("Test", user_id="user@zenika.com")
 
     # create_task doit avoir été appelé pour le FinOps logging
     assert len(create_task_calls) >= 1

@@ -55,6 +55,8 @@ ENV A2A_CB_FAILURE_THRESHOLD=5
 ENV A2A_CB_OPEN_DURATION_S=30
 ENV AGENT_CARD_CACHE_TTL_S=300
 ENV PROMPT_CACHE_TTL_S=3600
+# ADK 2.2+ AutoTracingPlugin — instrumentation OTel auto des fonctions agent.
+ENV ADK_AUTO_TRACING=true
 EXPOSE 8080
 
 RUN useradd -m appuser && chown -R appuser /app

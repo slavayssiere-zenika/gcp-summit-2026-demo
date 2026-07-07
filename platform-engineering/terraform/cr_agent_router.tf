@@ -196,6 +196,12 @@ resource "google_cloud_run_v2_service" "agent_router_api" {
         name  = "ENABLE_WORKFLOW_AGENT"
         value = "false"
       }
+      # ADK 2.2+ AutoTracingPlugin — instrumentation OTel auto par monkey-patching.
+      # No-op si OTEL_TRACES_EXPORTER=none. Coexiste avec le traçage custom runner.py.
+      env {
+        name  = "ADK_AUTO_TRACING"
+        value = "true"
+      }
       # A2A Circuit Breaker — isole les sous-agents défaillants
       env {
         name  = "A2A_CB_FAILURE_THRESHOLD"

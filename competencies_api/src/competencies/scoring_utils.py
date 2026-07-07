@@ -300,9 +300,11 @@ def _parse_scoring_results_gcs(
                 user_usage[user_id] = {
                     "prompt_token_count": 0,
                     "candidates_token_count": 0,
+                    "scores_count": 0,
                 }
             user_usage[user_id]["prompt_token_count"] += inp
             user_usage[user_id]["candidates_token_count"] += out
+            user_usage[user_id]["scores_count"] += 1
 
             if not candidates:
                 continue

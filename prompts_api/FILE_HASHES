@@ -1,5 +1,4 @@
 040a1867c8d586dbab15dab114cd807c5d9a0b60  ./shared/testing/prompt_evaluator.py
-08963e2a730873fb9195ce10ee489240fa3b1827  ./prompts_api/pyproject.toml
 08b829438f929f090e429cfeaff2bdfa415dd0d4  ./prompts_api/tests/test_prompts.py
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
@@ -20,6 +19,7 @@
 2ea040abdb2bd92c6efaaa140ed8074696683b30  ./shared/auth/jwt.py
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
+37b0a7d3c396ea756855f72012ef0310cc9fb705  ./prompts_api/pyproject.toml
 38c2c5112fc991da2c274aa601874c2b6daf1e22  ./prompts_api/src/prompts/models.py
 3be4a688db926964c2b2dd9295800dacf997cb74  ./prompts_api/main.py
 4222bd33d13dc110749ffb379178020aee22d85f  ./prompts_api/mcp_app.py
@@ -28,6 +28,7 @@
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f5d052a2b92dfd739b3c445e6b9ab7dc657972e  ./prompts_api/tests/test_main.py
 506327ac2be0555eb017271c6aefbe2746a5cd0e  ./prompts_api/tests/test_edge_cases.py
+50c0bb549fea7acc1368f6645ce02385e577c60a  ./prompts_api/uv.lock
 5164b94a97c3bf0caca0d8cecc132161144c57a0  ./prompts_api/conftest.py
 542a20730206b4332d17fc2e6647cb695c36517b  ./shared/tests/test_auth.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
@@ -46,15 +47,16 @@
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a8cbc996aafc753daaccb833eb8c77deaef87dc4  ./prompts_api/tests/integration/test_pg_integration.py
+afdcf83b3ade57eb536e165ab486dfb026382e45  ./shared/pyproject.toml
 b16a154497f0b765e14876ebb07310d0b8a17c74  ./prompts_api/prompts_api.sre_triage.playbook.txt
 b5d8daf33bb5ea8f1cfc38513dd158c10828c298  ./prompts_api/tests/integration/conftest.py
-c3835eef565ade276f2b36a934f9c4f94d63ee13  ./shared/pyproject.toml
 c486340b4dfe8c484005b6201efd76295c6e59e4  ./prompts_api/tests/test_schemas.py
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./prompts_api/.dockerignore
+d327cedade7fa13f9aae366f87f467b02efbd187  ./shared/schemas/agents.py
 d45b279060113ec95429f7621749a5f212273feb  ./prompts_api/mcp_server.py
 d6949e3e4830fc14deb196af421eec4f91f60fbe  ./shared/mcp_server_utils.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./prompts_api/src/__init__.py
@@ -65,6 +67,5 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
-ecc776f86f45cb1af7fa2226cc050d73d53d0de5  ./prompts_api/uv.lock
 ed0d3a1d28cb4269b80c9adcbda930e4a8f19932  ./prompts_api/src/prompts/auth.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py

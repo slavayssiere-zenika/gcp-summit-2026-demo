@@ -83,6 +83,24 @@ describe('agentApi', () => {
       const [, , { headers }] = (axios.post as any).mock.calls[0]
       expect(headers['Authorization']).toBeUndefined()
     })
+
+    it('doit gérer les réponses structurées avec display_type et data', async () => {
+      const structuredData = {
+        response: 'Voici les résultats',
+        display_type: 'consultant_card',
+        data: { consultants: [1, 2, 3] },
+        thoughts: 'Raisonnement...',
+        usage: { total_input_tokens: 100, total_output_tokens: 50, estimated_cost_usd: 0.01 }
+      }
+      ;(axios.post as any).mockResolvedValueOnce({ data: structuredData })
+
+      const result = await agentApi.query('Test structuré')
+
+      expect(result.response).toBe('Voici les résultats')
+      expect(result.display_type).toBe('consultant_card')
+      expect(result.data).toEqual({ consultants: [1, 2, 3] })
+      expect(result.usage.total_input_tokens).toBe(100)
+    })
   })
 
   // ── history ───────────────────────────────────────────────────────────────
