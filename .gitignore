@@ -11,6 +11,8 @@ otelcol-contrib
 *.tar.gz
 output.log
 *.patch
+*.log
+traceback.txt
 
 # =========================
 # Terraform Gitignore
@@ -64,6 +66,8 @@ test_*.py.antigravity_env
 # Temp / Scratch
 # =========================
 .tmp/
+test_dir/
+fake_bin/
 scratch_*.py
 refactor_*.py
 fix_*.py
@@ -92,6 +96,8 @@ logs/
 # =========================
 vtmp/
 *.db
+*.csv
+*.json
 
 
 talk/credentials.json
