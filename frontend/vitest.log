@@ -5,62 +5,63 @@
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/sebastien.lavayssiere/Code/test-open-code/frontend[39m
 
-(node:16218) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59783) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16222) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59785) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16216) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59784) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16212) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59778) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16217) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59786) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16214) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59780) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16213) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59779) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16221) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+ [32m✓[39m src/components/agent/__tests__/EvaluationCard.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 131[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/EvaluationTable.spec.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/SystemHealthCard.spec.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 202[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/ConsultantCard.spec.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 171[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/ConsultantAvailabilityCard.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 202[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/MissionCard.spec.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 223[2mms[22m[39m
+ [32m✓[39m src/views/__tests__/AdminReanalysis.stateMachine.spec.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 168[2mms[22m[39m
+ [32m✓[39m src/views/__tests__/Login.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 357[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/CVImportMonitor.spec.ts [2m([22m[2m1 test[22m[2m)[22m[32m 274[2mms[22m[39m
+ [32m✓[39m src/views/__tests__/MissionsList.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 569[2mms[22m[39m
+ [32m✓[39m src/views/__tests__/Competencies.spec.ts [2m([22m[2m1 test[22m[2m)[22m[33m 437[2mms[22m[39m
+     [33m[2m✓[22m[39m doit envoyer le bon format { user_ids: [...] } pour la requête bulk lors de la sélection d'une compétence [33m 435[2mms[22m[39m
+(node:59801) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/stores/__tests__/chatStore.spec.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 54[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/CompetencyList.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 51[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/MissionCard.spec.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 39[2mms[22m[39m
- [32m✓[39m src/components/__tests__/CompetencyNode.spec.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 122[2mms[22m[39m
- [32m✓[39m src/components/__tests__/CVImportMonitor.spec.ts [2m([22m[2m1 test[22m[2m)[22m[32m 49[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/ConsultantAvailabilityCard.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 105[2mms[22m[39m
- [32m✓[39m src/components/ui/__tests__/ToastNotification.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 22[2mms[22m[39m
- [32m✓[39m src/components/ui/__tests__/PageHeader.spec.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 25[2mms[22m[39m
- [32m✓[39m src/views/__tests__/Login.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 102[2mms[22m[39m
- [32m✓[39m src/views/__tests__/Competencies.spec.ts [2m([22m[2m1 test[22m[2m)[22m[32m 75[2mms[22m[39m
- [32m✓[39m src/views/__tests__/MissionsList.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 191[2mms[22m[39m
- [32m✓[39m src/components/__tests__/StarRating.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 102[2mms[22m[39m
-(node:16246) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(node:59804) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:16247) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+ [32m✓[39m src/stores/__tests__/uxStore.spec.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+(node:59802) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/components/agent/__tests__/EvaluationTable.spec.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 40[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/CompetencyBadge.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 43[2mms[22m[39m
- [32m✓[39m src/utils/__tests__/apiContract.spec.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 8[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/ItemCard.spec.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 36[2mms[22m[39m
- [32m✓[39m src/components/ui/__tests__/BaseButton.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 41[2mms[22m[39m
- [32m✓[39m src/views/__tests__/AdminReanalysis.stateMachine.spec.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 49[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/EvaluationCard.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 55[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/ConsultantCard.spec.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 36[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/FinopsBadge.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 22[2mms[22m[39m
- [32m✓[39m src/components/agent/__tests__/SystemHealthCard.spec.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 42[2mms[22m[39m
-(node:16290) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+ [32m✓[39m src/components/agent/__tests__/CompetencyBadge.spec.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 117[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/CompetencyList.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 129[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/StarRating.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 222[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/BaseButton.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 142[2mms[22m[39m
+ [32m✓[39m src/components/__tests__/CompetencyNode.spec.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 328[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/ToastNotification.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 125[2mms[22m[39m
+(node:59811) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/stores/__tests__/uxStore.spec.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 79[2mms[22m[39m
- [32m✓[39m src/services/__tests__/auth.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32m✓[39m src/types/__tests__/agentQueryResponse.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32m✓[39m src/types/__tests__/index.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 2[2mms[22m[39m
- [32m✓[39m src/services/__tests__/agentApi.spec.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-(node:16297) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+ [32m✓[39m src/components/agent/__tests__/ItemCard.spec.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 111[2mms[22m[39m
+ [32m✓[39m src/stores/__tests__/onboardingStore.spec.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/PageHeader.spec.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 96[2mms[22m[39m
+ [32m✓[39m src/components/agent/__tests__/FinopsBadge.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 94[2mms[22m[39m
+(node:59850) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/utils/__tests__/treeify.spec.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32m✓[39m src/stores/__tests__/onboardingStore.spec.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/stores/__tests__/chatStore.spec.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 68[2mms[22m[39m
+ [32m✓[39m src/utils/__tests__/apiContract.spec.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/types/__tests__/agentQueryResponse.spec.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/services/__tests__/agentApi.spec.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/services/__tests__/auth.spec.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/types/__tests__/index.spec.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/utils/__tests__/treeify.spec.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m29 passed[39m[22m[90m (29)[39m
 [2m      Tests [22m [1m[32m262 passed[39m[22m[90m (262)[39m
-[2m   Start at [22m 17:29:04
-[2m   Duration [22m 8.22s[2m (transform 8.72s, setup 7.68s, import 11.65s, tests 1.41s, environment 44.75s)[22m
+[2m   Start at [22m 13:42:57
+[2m   Duration [22m 13.75s[2m (transform 9.99s, setup 10.00s, import 17.22s, tests 4.38s, environment 75.94s)[22m
 

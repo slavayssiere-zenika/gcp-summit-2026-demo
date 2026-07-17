@@ -108,6 +108,13 @@ test_env/bin/python scripts/generate_pipeline_docs.py
 test_env/bin/python scripts/generate_readmes.py
 ```
 
+6b. **Mise à jour du graphe de dépendances (Graphify)**
+   Regénère la cartographie du dépôt et le rapport de structure interactive.
+// turbo
+```bash
+/Users/sebastien.lavayssiere/.local/bin/graphify .
+```
+
 7. **Formater le code Terraform**
    Applique le formatage standard HashiCorp sur les fichiers d'infrastructure du dossier bootstrap.
 // turbo

@@ -96,4 +96,4 @@ Sous-agent spécialisé RH : recherche sémantique de consultants, gestion des c
 - `log_ai_consumption` DOIT être appelé avec `service="agent_hr_api"` pour le tracking FinOps
 
 ## Dernière modification
-2026-05-20 — v0.3.16 — fix A2AResponse validation by replacing invalid step type 'error' with 'warning' in exception handler.
+2026-07-17 — v0.3.60 — Mise à jour des dépendances partagées, intégration de la gestion de packages UV et nettoyage général du dépôt.

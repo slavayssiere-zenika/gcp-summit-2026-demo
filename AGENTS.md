@@ -131,6 +131,11 @@ Avant tout PR / déploiement, vérifiez chaque point selon le type de service :
 
     > **🚨 RÈGLE ANTI-HALLUCINATION IA** : Si tu t'apprêtes à appeler `browser_subagent` pour naviguer sur la plateforme ou valider une interface, tu **DOIS immédiatement t'arrêter** et retourner le message : *"Je ne peux pas utiliser le navigateur pour valider l'interface. L'application est protégée par JWT — la session browser sera bloquée sur la page de login. Veuillez valider visuellement vous-même ou me décrire ce que vous observez."*
 
+14. **Utilisation de Graphify pour la cartographie de code et l'analyse d'impact (OBLIGATOIRE)** :
+    - Avant de démarrer toute tâche complexe (audit de conformité, diagnostic de bug multi-services, refactoring architectural, modification de schémas partagés dans `shared/`), l'agent **DOIT** lire le graphe généré dans `graphify-out/graph.json` ou consulter `graphify-out/GRAPH_REPORT.md` s'ils existent pour comprendre l'impact et les liaisons inter-services.
+    - Si le graphe n'existe pas ou s'il est obsolète par rapport aux modifications récentes du code, l'agent **DOIT** le rafraîchir en lançant la commande `graphify .`.
+    - L'agent **ne doit JAMAIS** committer les fichiers générés par Graphify ; le dossier `graphify-out/` doit impérativement rester dans le fichier `.gitignore`.
+
 ---
 
 ## 🏗️ 2. ARCHITECTURE & STACK

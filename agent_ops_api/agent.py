@@ -149,6 +149,7 @@ async def create_agent(session_id: str | None = None, prompt_key: str | None = N
 
     # AGENTS.md §1.4 : variable dédiée per-agent. GEMINI_MODEL est le fallback legacy.
     model = os.getenv("GEMINI_OPS_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
+    app_logger.info("[Ops] Loading tools from MCP sidecars...")
     tools_loaded = await get_cached_tools(_OPS_CLIENTS_MAP, "[Ops]", ttl=300, _cache=_OPS_TOOLS_CACHE)
 
     # Intégration du serveur Cloud Trace natif Vertex AI via AgentRegistry
@@ -157,13 +158,15 @@ async def create_agent(session_id: str | None = None, prompt_key: str | None = N
     cloudtrace_toolset = None
     if _AGENT_REGISTRY_AVAILABLE and os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true":
         try:
+            app_logger.info("[Ops] Connecting to Vertex AI Agent Registry (Cloud Trace)...")
             registry = AgentRegistry(project_id=GCP_PROJECT_ID, location=GCP_LOCATION)
             cloudtrace_toolset = registry.get_mcp_toolset(CLOUDTRACE_MCP_SERVER)
             app_logger.info("[Ops] ✅ Cloud Trace MCP toolset chargé depuis Vertex AI Agent Registry.")
         except Exception as e:
             app_logger.warning("[Ops] ⚠️ Cloud Trace MCP toolset non disponible : %s", e)
 
-    tools_loaded = await get_cached_tools(_OPS_CLIENTS_MAP, "[OPS]", ttl=300, _cache=_OPS_TOOLS_CACHE)
+    # Fix global reference for /mcp/registry [STAFF-008]
+    global OPS_TOOLS
     OPS_TOOLS = tools_loaded + [render_ui_widgets]
     if cloudtrace_toolset is not None:
         OPS_TOOLS.append(cloudtrace_toolset)

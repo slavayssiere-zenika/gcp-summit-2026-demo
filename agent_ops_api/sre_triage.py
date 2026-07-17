@@ -611,10 +611,24 @@ async def run_sre_triage(
         request.threshold_5xx,
     )
 
-    result = await run_agent_query(
-        query, session_id=None, auth_token=auth_token, user_id=user_id,
-        prompt_key="agent_ops_api.sre_triage.system_instruction",
-    )
+    try:
+        logger.info("[SRE Triage] Calling run_agent_query...")
+        result = await run_agent_query(
+            query, session_id=None, auth_token=auth_token, user_id=user_id,
+            prompt_key="agent_ops_api.sre_triage.system_instruction",
+        )
+        logger.info("[SRE Triage] Agent execution COMPLETED.")
+    except Exception as e:
+        logger.error("[SRE Triage] CRITICAL FAILURE during agent execution: %s", e, exc_info=True)
+        # On retourne un rapport d'erreur minimal pour éviter de planter l'appelant (Cloud Scheduler)
+        return SreTriageReport(
+            triggered_at=triggered_at,
+            services_inspected=request.services,
+            hours=request.hours,
+            threshold_5xx=request.threshold_5xx,
+            response=f"Erreur lors de l'exécution de l'agent : {str(e)}",
+            severity="CRITICAL",
+        )
 
     report = SreTriageReport(
         triggered_at=triggered_at,

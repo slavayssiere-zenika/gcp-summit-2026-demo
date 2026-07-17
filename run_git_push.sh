@@ -48,6 +48,10 @@ test_env/bin/python3 scripts/generate_pipeline_docs.py
 # Etape 6: readmes
 test_env/bin/python3 scripts/generate_readmes.py
 
+# Etape 6b: graphify (mise à jour du graphe de dépendances)
+echo "=== Graphify : mise à jour du graphe de dépendances ==="
+/Users/sebastien.lavayssiere/.local/bin/graphify . || echo "⚠️ Graphify non disponible ou erreur de génération"
+
 # Etape 7: terraform fmt
 terraform -chdir=bootstrap fmt -recursive || true
 terraform -chdir=platform-engineering/terraform fmt -recursive
@@ -90,4 +94,4 @@ fi
 echo "[+] SÉCURITÉ AR : Aucun token GCP ni wheel buildé détecté — commit autorisé."
 
 # Etape 11: git commit
-git commit -m "Refactor agents and remove deprecated folders"
+git commit -m "Implement SRE triage and security features"

@@ -5,6 +5,11 @@ description: Assistant expert de mise en production (Analyse versions, changelog
 Ce workflow guide l'agent pour vérifier et préparer de manière experte une release en production.
 Toutes les étapes d'audit expertes définies ci-dessous sont **BLOQUANTES**. En cas d'échec sur l'une des vérifications de sécurité ou de conformité, l'agent doit l'imposer à l'utilisateur et proposer une correction immédiate avant de continuer.
 
+> [!IMPORTANT]
+> **Règle de Fraîcheur Temporelle** : Au début de chaque nouvelle invocation du workflow, même si l'historique ou le résumé de la session précédente indique que les versions ou les analyses ont été faites, l'agent **DOIT impérativement et systématiquement ré-exécuter en temps réel** les vérifications physiques (lecture des fichiers `VERSION` locaux, `git status`, etc.) pour s'assurer de l'absence de dérive ou de nouvelles modifications locales avant de passer aux étapes de plan ou de déploiement.
+
+
+
 ### Étape 0 : Lecture des README.md (OBLIGATOIRE)
 
 Avant toute analyse de versions ou de code, lire le `README.md` des services dont la version a changé dans `prd.yaml`. C'est la source de vérité sur l'architecture et les dépendances du service.

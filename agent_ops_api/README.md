@@ -9,10 +9,10 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 ## Fichiers clés
 | Fichier | Lignes | État |
 |---|---|---|
-| `main.py` | 469 | ⚠️ |
+| `main.py` | 470 | ⚠️ |
 | `conftest.py` | 21 | ✅ |
 | `metrics.py` | 19 | ✅ |
-| `agent.py` | 327 | ✅ |
+| `agent.py` | 330 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -95,4 +95,4 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 - Toutes les réponses A2A doivent inclure le flag `degraded: True` si une API aval est indisponible
 
 ## Dernière modification
-- 2026-06-16 — v0.2.50 — Mise à jour dépendances partagées et SRE Triage
+- 2026-07-17 — v0.2.64 — Amélioration de la résilience lors de l'exécution des requêtes de l'agent SRE Triage, mise à jour des dépendances et nettoyage du dépôt.

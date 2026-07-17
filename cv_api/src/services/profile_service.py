@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 import httpx
 from typing import List, Dict, Any, Optional
 from sqlalchemy.future import select
@@ -61,7 +62,9 @@ class ProfileService:
                 full_name=user_enrich_map.get(p.user_id, {}).get("full_name"),
                 email=user_enrich_map.get(p.user_id, {}).get("email"),
                 username=user_enrich_map.get(p.user_id, {}).get("username"),
-                processing_errors=p.processing_errors or []
+                processing_errors=p.processing_errors or [],
+                extraction_reliability_score=p.extraction_reliability_score if hasattr(p, "extraction_reliability_score") and isinstance(p.extraction_reliability_score, int) else None,
+                created_at=p.created_at.isoformat() if hasattr(p, "created_at") and isinstance(p.created_at, datetime) else None
             ) for p in paginated_profiles
         ]
         return total, responses
@@ -96,7 +99,9 @@ class ProfileService:
                 full_name=user_enrich.get("full_name"),
                 email=user_enrich.get("email"),
                 username=user_enrich.get("username"),
-                processing_errors=p.processing_errors or []
+                processing_errors=p.processing_errors or [],
+                extraction_reliability_score=p.extraction_reliability_score if hasattr(p, "extraction_reliability_score") and isinstance(p.extraction_reliability_score, int) else None,
+                created_at=p.created_at.isoformat() if hasattr(p, "created_at") and isinstance(p.created_at, datetime) else None
             ) for p in profiles
         ]
         return total, responses

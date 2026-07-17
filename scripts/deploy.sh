@@ -1229,7 +1229,7 @@ build_and_push_standard() {
       AR_TAG=$(get_service_tag "$SERVICE" "none")
       local AR_IMAGE="${DOCKER_REPO}/${SERVICE}:${AR_TAG}"
       if gcloud artifacts docker images describe "${AR_IMAGE}" \
-           --project="$PROJECT_ID" --location="${REGION%%"-"*}" > /dev/null 2>&1; then
+           --project="$PROJECT_ID" > /dev/null 2>&1; then
         echo -e "${YELLOW}--- Skipped $SERVICE (hash identique + image ${AR_TAG} confirmée dans AR) ---${RESET}"
         return 0
       else

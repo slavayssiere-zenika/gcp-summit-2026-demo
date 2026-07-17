@@ -136,7 +136,7 @@ resource "google_cloud_run_v2_service" "grafana" {
       }
       env {
         name  = "GF_AUTH_GOOGLE_ALLOWED_DOMAINS"
-        value = "zenika.ca zenika.com"
+        value = "zenika.ca zenika.com zenika.fr"
       }
       # Assignation dynamique du rôle d'administrateur pour l'email de la variable admin_user
       env {
@@ -172,5 +172,14 @@ resource "google_compute_backend_service" "grafana_backend" {
   backend {
     group = google_compute_region_network_endpoint_group.grafana_neg.id
   }
+}
+
+# 4. Autorisation d'invocation pour le Load Balancer (allUsers)
+resource "google_cloud_run_v2_service_iam_member" "grafana_invoker" {
+  project  = google_cloud_run_v2_service.grafana.project
+  location = google_cloud_run_v2_service.grafana.location
+  name     = google_cloud_run_v2_service.grafana.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 

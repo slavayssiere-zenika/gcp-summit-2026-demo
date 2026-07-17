@@ -942,7 +942,7 @@ The JSON object must contain the following top-level keys:
 9.  **"missions"**: (array of objects) A list of professional experiences or projects. Each object must contain:
     *   **"title"**: (string) The job title or mission name.
     *   **"company"**: (string) The company name where the mission took place.
-    *   **"description"**: (string) A brief description of the mission.
+    *   **"description"**: (string) A detailed and professional description of the mission (at least 3-4 sentences), highlighting the context, key achievements, and the consultant''s specific contributions.
     *   **"start_date"**: (string) The start date of the mission. Use format "YYYY-MM" if month is known, or "YYYY" if only year is known. Return `null` if not found.
     *   **"end_date"**: (string) The end date of the mission. Use format "YYYY-MM" if month is known, "YYYY" if only year is known, or "present" if it is the current mission. Return `null` if not found.
     *   **"duration"**: (string) The explicit duration if written in the CV (e.g., "2 ans", "18 mois", "6 months"). Return `null` if not explicitly stated (do NOT compute it from dates).

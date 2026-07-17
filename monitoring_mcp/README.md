@@ -62,4 +62,4 @@ POST /mcp/call  →  mcp_server.py (dispatcher)
 - La sanity check timeout est à 90s — cold start AlloyDB IAM peut dépasser 35s.
 
 ## Dernière modification
-`2026-04-29` — Refactoring complet : décomposition du God Module (~887L) en dispatcher (~210L) + 4 modules `tools/` spécialisés.
+2026-07-16 — v0.1.40 — Mise à jour des dépendances partagées, tuning des requêtes de base de données dans les tools d'observabilité.

@@ -31,10 +31,10 @@ resource "google_compute_security_policy" "waf" {
       expr {
         # RE2 regex (syntaxe Cloud Armor CEL) — groupe NON-capturant (?:...) obligatoire.
         # Les groupes capturants (...) sont rejetés avec "Capture Groups are not allowed".
-        # Couvre : /auth/, /api/, /monitoring-mcp/, /cv-api/, /items-api/, /drive-api/
+        # Couvre : /auth/, /api/, /mcp/, /monitoring-mcp/, /analytics-mcp/, /cv-api/, /items-api/, /drive-api/, /login/
         # CRITIQUE pour Pub/Sub : les push vers /cv-api/pubsub/import-cv arrivent avec
         # des payloads base64 qui déclenchent faussement les règles OWASP → 403 silencieux.
-        expression = "request.path.matches('^/(?:auth|api|mcp|monitoring-mcp|analytics-mcp|cv-api|items-api|drive-api)/.*')"
+        expression = "request.path.matches('^/(?:auth|api|mcp|monitoring-mcp|analytics-mcp|cv-api|items-api|drive-api|login)/.*')"
       }
     }
     description = "Allow legitimate API & Pub/Sub push paths — exempted from OWASP signatures (rate-limit still applies)"

@@ -14,7 +14,7 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 | `conftest.py` | 75 | ✅ |
 | `src/routers/dlq_router.py` | 397 | ✅ |
 | `src/routers/files_router.py` | 397 | ✅ |
-| `src/routers/folders_router.py` | 120 | ✅ |
+| `src/routers/folders_router.py` | 161 | ✅ |
 | `src/routers/ingestion_router.py` | 156 | ✅ |
 | `src/routers/sync_router.py` | 181 | ✅ |
 
@@ -63,7 +63,7 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 - `GET /folders`
 - `POST /folders/reset-sync`
 - `POST /folders/rebuild-tree`
-- `POST /folders/invalidate-cache`
+- `GET /folders/by-name/{name}`
 
 ## MCP tools exposés
 - `add_drive_folder`, `delete_dlq_message`, `delete_drive_folder`, `get_dlq_status`, `get_drive_file_state`, `get_drive_status`, `get_folder_ingestion_kpis`, `get_ingestion_kpis`, `list_drive_files`, `list_drive_folders`, `replay_dlq`, `reset_drive_folder_sync`, `retry_drive_errors`, `run_quality_gate_batch`, `trigger_drive_sync`, `update_drive_file`

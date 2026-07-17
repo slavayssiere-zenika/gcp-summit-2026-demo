@@ -5,6 +5,7 @@
 09832aac856b6eff1534f7e1d8b59d0a8d2ff460  ./shared/auth/context.py
 0a24587fdab7e57e1c611a6fe4e0816bc08c6d4d  ./shared/observability.py
 0accb343213983150acef8b7eb20123986b4b2ef  ./shared/schemas/cv_profiles.py
+0b549747d18dacb9430a0f1e232ea0db451b0218  ./drive_api/src/routers/folders_router.py
 0b5e28f5c9516da28712920bb89a21e968ce6976  ./drive_api/pyproject.toml
 0dbee16cbddd338edb2a076084c12b6ea5e44732  ./shared/tests/test_observability.py
 0e67206eb9bb4bdd2a227d7f16449b8c6430782d  ./shared/tests/zero_trust.py
@@ -33,7 +34,6 @@
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 52e8b7f67b63d39c9d1adbf8f78dd4b6252852b4  ./drive_api/tests/test_dlq_router.py
 542a20730206b4332d17fc2e6647cb695c36517b  ./shared/tests/test_auth.py
-58c11bde8cc19c8b2a272ad44171bd92dd1ca970  ./drive_api/src/routers/folders_router.py
 59c174a543c5e01e9248c6a410ec394d774d0d26  ./drive_api/tests/test_zero_trust.py
 617ac9af70b52585bd07fc700fe7cad01eea4659  ./drive_api/tests/test_drive_service_offboarding.py
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py

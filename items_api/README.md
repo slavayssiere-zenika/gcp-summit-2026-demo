@@ -49,4 +49,4 @@ _Aucun tool MCP détecté dans `mcp_server.py`._
 - Cache Redis DB1 — ne pas confondre avec `agent_router_api` qui utilisait historiquement DB1 aussi (corrigé en DB2)
 
 ## Dernière modification
-2026-06-16 — v0.1.33 — Update shared dependencies and CRUD router
+2026-07-16 — v0.1.53 — Mise à jour des dépendances partagées, refactorisation du CRUD router et ajout de tests d'intégration pour les mises à jour bulk d'items.

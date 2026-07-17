@@ -6,26 +6,32 @@ import json
 
 client = TestClient(app, raise_server_exceptions=False)
 
+
 @pytest.fixture
 def override_verify_jwt():
     def _override():
         return {"sub": "user@example.com", "role": "admin"}
-    from mcp_app import verify_jwt
+    from mcp_app import verify_jwt, verify_jwt_or_oidc
     app.dependency_overrides[verify_jwt] = _override
+    app.dependency_overrides[verify_jwt_or_oidc] = _override
     yield
     app.dependency_overrides.pop(verify_jwt, None)
+    app.dependency_overrides.pop(verify_jwt_or_oidc, None)
+
 
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy", "service": "analytics-mcp"}
 
+
 @patch('mcp_server.client', MagicMock())
 def test_ready_success():
-    with patch('asyncio.to_thread', new_callable=AsyncMock) as mock_thread:
+    with patch('asyncio.to_thread', new_callable=AsyncMock):
         response = client.get("/ready")
         assert response.status_code == 200
         assert response.json()["status"] == "healthy"
+
 
 @patch('mcp_server.client', None)
 def test_ready_no_client():
@@ -33,16 +39,17 @@ def test_ready_no_client():
     assert response.status_code == 503
     assert response.json()["status"] == "unhealthy"
 
+
 def test_get_version():
     response = client.get("/version")
     assert response.status_code == 200
     assert "version" in response.json()
 
+
 def test_get_spec():
     with patch('builtins.open', mock_open(read_data="test spec")):
         response = client.get("/spec")
         assert response.status_code == 200
-
 
 
 def test_get_tools(override_verify_jwt):
@@ -52,31 +59,37 @@ def test_get_tools(override_verify_jwt):
         mock_tool.description = "desc"
         mock_tool.inputSchema = {}
         mock_list_tools.return_value = [mock_tool]
-        
-        response = client.get("/mcp/tools", headers={"Authorization": "Bearer token"})
+
+        response = client.get(
+            "/mcp/tools", headers={"Authorization": "Bearer token"})
         assert response.status_code == 200
         assert len(response.json()) == 1
         assert response.json()[0]["name"] == "test_tool"
+
 
 @patch('mcp_app.call_tool', new_callable=AsyncMock)
 def test_execute_tool(mock_call_tool, override_verify_jwt):
     mock_res = MagicMock()
     mock_res.model_dump.return_value = {"text": "success"}
     mock_call_tool.return_value = [mock_res]
-    
-    response = client.post("/mcp/call", json={"name": "test_tool", "arguments": {}}, headers={"Authorization": "Bearer token"})
+
+    response = client.post(
+        "/mcp/call", json={"name": "test_tool", "arguments": {}}, headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json()["result"][0]["text"] == "success"
+
 
 @patch('redis.from_url')
 def test_get_aiops_metrics_cache_hit(mock_redis_from_url, override_verify_jwt):
     mock_redis = MagicMock()
     mock_redis.get.return_value = json.dumps({"dashboard": "data"})
     mock_redis_from_url.return_value = mock_redis
-    
-    response = client.get("/metrics/aiops", headers={"Authorization": "Bearer token"})
+
+    response = client.get(
+        "/metrics/aiops", headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json() == {"dashboard": "data"}
+
 
 @patch('mcp_app.bq_client')
 @patch('httpx.AsyncClient.post', new_callable=AsyncMock)
@@ -88,14 +101,16 @@ def test_detect_finops_anomalies(mock_post, mock_bq_client, override_verify_jwt)
             self.user_email = email
             self.total_tokens = total
 
-    mock_query_job.result.return_value = [MockRow("bad_user@example.com", 600000)]
+    mock_query_job.result.return_value = [
+        MockRow("bad_user@example.com", 600000)]
     mock_bq_client.query.return_value = mock_query_job
 
     mock_post_res = MagicMock()
     mock_post_res.status_code = 200
     mock_post.return_value = mock_post_res
 
-    response = client.post("/admin/finops/detect", headers={"Authorization": "Bearer token"})
+    response = client.post("/admin/finops/detect",
+                           headers={"Authorization": "Bearer token"})
     assert response.status_code == 200
     assert response.json()["anomalies_detected"] == 1
     assert response.json()["details"][0]["email"] == "bad_user@example.com"

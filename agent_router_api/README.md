@@ -89,10 +89,10 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 - Reset automatique si le context window déborde (INVALID_ARGUMENT 400)
 
 ## Gotchas connus
-- **`main.py` en zone bloquante (808L)** — ne pas ajouter de logique métier directement
+- `main.py` — Orchestrateur léger et sécurisé de routes
 - Le cache sémantique HNSW nécessite un index Redis de type TAG (pas TEXT) pour la compatibilité GCP Memorystore
 - Les appels A2A vers les sous-agents doivent tous utiliser le pattern httpx timeout/retry standard (30s, 3 retries, backoff exponentiel)
 - Les erreurs non-critiques (FinOps, monitoring) doivent être en mode dégradé (`asyncio.create_task`) pour ne pas bloquer la réponse
 
 ## Dernière modification
-2026-05-20 — v0.5.18 — import cleanup, startup discovery optimization, and timeout robustifications in A2A calls.
+2026-07-17 — v0.5.63 — Mise à jour des dépendances partagées, automatisation du tracing OpenTelemetry et nettoyage général du dépôt.

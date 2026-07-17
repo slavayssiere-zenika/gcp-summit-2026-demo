@@ -429,30 +429,31 @@ async def sre_triage(
       - hours          : fenêtre temporelle 1-24h (défaut: 1)
       - threshold_5xx  : seuil minimum d'erreurs 5xx (défaut: 5)
     """
-    invoker = scheduler_payload.get("sub", "scheduler@system")
-    app_logger.info(
-        "[SRE Triage] Requête reçue — invoker=%s, services=%s, hours=%d",
-        invoker, body.services or "ALL", body.hours,
-    )
-
-    # Génère un JWT système robuste signé avec SECRET_KEY (HS256) pour propager aux autres microservices.
-    # Évite les erreurs d'audience OIDC lors des appels inter-services/MCP.
-    payload = {
-        "sub": invoker,
-        "role": "admin",
-        "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())
-    }
-    system_token = "Bearer " + jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-    auth_header_var.set(system_token)
-
     try:
+        invoker = scheduler_payload.get("sub", "scheduler@system")
+        app_logger.info(
+            "[SRE Triage] Requête reçue — invoker=%s, services=%s, hours=%d",
+            invoker, body.services or "ALL", body.hours,
+        )
+
+        # Génère un JWT système robuste signé avec SECRET_KEY (HS256) pour propager aux autres microservices.
+        # Évite les erreurs d'audience OIDC lors des appels inter-services/MCP.
+        payload = {
+            "sub": invoker,
+            "role": "admin",
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())
+        }
+        system_token = "Bearer " + jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+        auth_header_var.set(system_token)
+
         report = await run_sre_triage(
             request=body,
             auth_token=system_token,
             user_id=invoker,
         )
         app_logger.info(
-            "[SRE Triage] Rapport généré — tokens_in=%d, tokens_out=%d",
+            "[SRE Triage] Rapport généré — severity=%s, tokens_in=%d, tokens_out=%d",
+            report.severity,
             report.usage.get("total_input_tokens", 0),
             report.usage.get("total_output_tokens", 0),
         )

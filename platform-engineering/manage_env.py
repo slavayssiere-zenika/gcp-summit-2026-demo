@@ -2711,20 +2711,65 @@ def _sanity_checks(env, base_domain, project_id, config, extra_domains, extra_pr
         init_pricing_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "analytics_mcp", "init_pricing.py")
         if os.path.exists(init_pricing_path):
-            # Setup env variables expected by init_pricing
-            os.environ["GCP_PROJECT_ID"] = project_id
-            os.environ["BQ_LOCATION"] = config.get(
-                "bq_location", "europe-west1")
-            os.environ["FINOPS_DATASET_ID"] = f"finops_{env}"
-
-            analytics_dir = os.path.dirname(init_pricing_path)
+            # Find a Python interpreter that has google-cloud-bigquery installed
             import sys
-            if analytics_dir not in sys.path:
-                sys.path.insert(0, analytics_dir)
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            candidates = [
+                os.path.join(root_dir, "analytics_mcp", ".venv", "bin", "python3"),
+                os.path.join(root_dir, "platform-engineering", ".venv", "bin", "python3"),
+                os.path.join(root_dir, "test_env", "bin", "python3"),
+                sys.executable,
+                "python3"
+            ]
 
-            from init_pricing import init_pricing_table
-            init_pricing_table()
-            print("  [+] FinOps Pricing seeded successfully.")
+            chosen_python = None
+            for cand in candidates:
+                if cand != "python3" and not os.path.exists(cand):
+                    continue
+                try:
+                    res = subprocess.run(
+                        [cand, "-c", "from google.cloud import bigquery"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if res.returncode == 0:
+                        chosen_python = cand
+                        break
+                except Exception:
+                    continue
+
+            if chosen_python is None:
+                chosen_python = sys.executable or "python3"
+                print(f"  [!] No venv with google-cloud-bigquery found. Using fallback: {chosen_python}")
+
+            # Run init_pricing.py as a subprocess with appropriate environment variables
+            run_env = os.environ.copy()
+            run_env["GCP_PROJECT_ID"] = project_id
+            run_env["BQ_LOCATION"] = config.get("bq_location", "europe-west1")
+            run_env["FINOPS_DATASET_ID"] = f"finops_{env}"
+
+            print(f"  [*] Executing init_pricing.py using {chosen_python}...")
+            res = subprocess.run(
+                [chosen_python, init_pricing_path],
+                env=run_env,
+                capture_output=True,
+                text=True
+            )
+            if res.returncode == 0:
+                print("  [+] FinOps Pricing seeded successfully.")
+                if res.stdout.strip():
+                    for line in res.stdout.splitlines():
+                        print(f"    {line}")
+            else:
+                print(f"  [-] init_pricing.py failed with exit code {res.returncode}")
+                if res.stdout.strip():
+                    print("  Stdout:")
+                    for line in res.stdout.splitlines():
+                        print(f"    {line}")
+                if res.stderr.strip():
+                    print("  Stderr:")
+                    for line in res.stderr.splitlines():
+                        print(f"    {line}")
+                raise RuntimeError("init_pricing.py subprocess failed")
         else:
             print(f"  [-] init_pricing.py not found at {init_pricing_path}")
     except Exception as e:

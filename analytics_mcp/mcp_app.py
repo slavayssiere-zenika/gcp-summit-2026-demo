@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import asyncio
 import json
 import logging
@@ -8,6 +8,8 @@ import httpx
 import redis
 import uvicorn
 from auth import verify_jwt
+from shared.auth.jwt import VerifyJwtOrOidc, SECRET_KEY, ALGORITHM
+import jwt
 from fastapi import (APIRouter, BackgroundTasks, Depends, FastAPI,
                      HTTPException, Request, Response)
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,8 +56,9 @@ app.add_middleware(
 )
 
 # Routers
+verify_jwt_or_oidc = VerifyJwtOrOidc()
 mcp_router = APIRouter(dependencies=[Depends(verify_jwt)])
-api_router = APIRouter(dependencies=[Depends(verify_jwt)])
+api_router = APIRouter(dependencies=[Depends(verify_jwt_or_oidc)])
 
 
 class ToolCallRequest(BaseModel):
@@ -153,14 +156,14 @@ async def execute_tool(request: ToolCallRequest, http_request: Request):
 
 
 @api_router.post("/admin/finops/detect")
-async def detect_finops_anomalies(http_request: Request, token_payload: dict = Depends(verify_jwt)):
+async def detect_finops_anomalies(http_request: Request, token_payload: dict = Depends(verify_jwt_or_oidc)):
     """
     Exécute la Requête BigQuery pour détecter les anomalies de consommation,
     et déclenche le Kill-Switch si le seuil est dépassé.
-    Réservé aux administrateurs (action sensible : suspension automatique de comptes).
+    Réservé aux administrateurs et au scheduler système.
     """
-    # M2 : Seul un admin peut déclencher le Kill-Switch FinOps
-    if token_payload.get("role") != "admin":
+    # M2 : Seul un admin ou le scheduler système peut déclencher le Kill-Switch FinOps
+    if token_payload.get("role") not in ("admin", "scheduler"):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : le Kill-Switch FinOps est réservé aux administrateurs."
@@ -185,8 +188,15 @@ async def detect_finops_anomalies(http_request: Request, token_payload: dict = D
     query_job = bq_client.query(query, job_config=job_config)
     results = query_job.result()
 
-    auth_header = http_request.headers.get("Authorization")
-    headers = {"Authorization": auth_header} if auth_header else {}
+    # Génération d'un JWT système d'administration valide pour authentifier les appels de suspension
+    # auprès de users_api (Zero-Trust)
+    system_payload = {
+        "sub": token_payload.get("sub", "scheduler@system"),
+        "role": "admin",
+        "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())
+    }
+    system_token = "Bearer " + jwt.encode(system_payload, SECRET_KEY, algorithm=ALGORITHM)
+    headers = {"Authorization": system_token}
     inject(headers)  # Propagate OTel trace context
 
     suspended_users = []

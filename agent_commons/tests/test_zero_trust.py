@@ -166,3 +166,36 @@ class TestAgentSchemaContracts:
         assert "response" in fields or "content" in fields, (
             "AgentResponse doit avoir un champ 'response' ou 'content'"
         )
+
+
+# ─── Section 5 : Smoke Tests de Production — auto-tracing et initialisation ───
+
+class TestProductionSmokeInitialization:
+    """Vérifie que l'agent et le SDK Google GenAI s'initialisent correctement
+    avec la configuration de production (Auto-Tracing actif)."""
+
+    def test_genai_client_initialization_with_auto_tracing(self):
+        """L'initialisation de genai.Client doit réussir même si ADK_AUTO_TRACING=true.
+        Cela valide que le monkeypatch d'agent_commons résout l'erreur de rebinding
+        de méthode statique induit par l'ADK."""
+        import os
+        from google import genai
+
+        # Configurer l'environnement de production
+        original_tracing = os.environ.get("ADK_AUTO_TRACING")
+        os.environ["ADK_AUTO_TRACING"] = "true"
+
+        try:
+            # S'assurer que le module agent_commons a bien été importé et appliqué
+            import agent_commons  # noqa: F401
+
+            # L'initialisation du client avec une clé factice doit se faire sans
+            # lever d'erreur d'arguments (TypeError sur vertexai)
+            client = genai.Client(api_key="smoke-test-key")
+            assert client is not None, "genai.Client doit être initialisé avec succès"
+        finally:
+            # Restaurer l'environnement initial
+            if original_tracing is None:
+                os.environ.pop("ADK_AUTO_TRACING", None)
+            else:
+                os.environ["ADK_AUTO_TRACING"] = original_tracing

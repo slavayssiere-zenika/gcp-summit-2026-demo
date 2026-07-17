@@ -147,8 +147,8 @@ resource "google_compute_url_map" "default" {
 
     route_rules {
       priority = 10
-      match_rules { prefix_match = "/api/users/" }
-      service = google_compute_backend_service.users_backend.id
+      match_rules { prefix_match = "/competencies-api/" }
+      service = google_compute_backend_service.competencies_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -158,8 +158,8 @@ resource "google_compute_url_map" "default" {
 
     route_rules {
       priority = 11
-      match_rules { prefix_match = "/api/items/" }
-      service = google_compute_backend_service.items_backend.id
+      match_rules { prefix_match = "/missions-api/" }
+      service = google_compute_backend_service.missions_backend.id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -169,7 +169,7 @@ resource "google_compute_url_map" "default" {
 
     route_rules {
       priority = 12
-      match_rules { prefix_match = "/api/prompts/" }
+      match_rules { prefix_match = "/prompts-api/" }
       service = google_compute_backend_service.prompts_backend.id
       route_action {
         url_rewrite {
@@ -180,6 +180,39 @@ resource "google_compute_url_map" "default" {
 
     route_rules {
       priority = 13
+      match_rules { prefix_match = "/api/users/" }
+      service = google_compute_backend_service.users_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 14
+      match_rules { prefix_match = "/api/items/" }
+      service = google_compute_backend_service.items_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 15
+      match_rules { prefix_match = "/api/prompts/" }
+      service = google_compute_backend_service.prompts_backend.id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    route_rules {
+      priority = 16
       match_rules { prefix_match = "/api/competencies/" }
       service = google_compute_backend_service.competencies_backend.id
       route_action {
@@ -190,7 +223,7 @@ resource "google_compute_url_map" "default" {
     }
 
     route_rules {
-      priority = 14
+      priority = 17
       match_rules { prefix_match = "/api/cv/" }
       service = google_compute_backend_service.cv_backend.id
       route_action {
@@ -201,7 +234,7 @@ resource "google_compute_url_map" "default" {
     }
 
     route_rules {
-      priority = 15
+      priority = 18
       match_rules { prefix_match = "/api/missions/" }
       service = google_compute_backend_service.missions_backend.id
       route_action {
@@ -212,7 +245,7 @@ resource "google_compute_url_map" "default" {
     }
 
     route_rules {
-      priority = 16
+      priority = 19
       match_rules { prefix_match = "/api/drive/" }
       service = google_compute_backend_service.drive_backend.id
       route_action {

@@ -146,4 +146,4 @@ Les deux services ont `roles/storage.objectAdmin` sur ce bucket via leurs servic
 - `POST /assign/bulk` dans `competencies_api` DOIT être appelé après chaque analyse batch réussie
 
 ## Dernière modification
-2026-06-16 — v0.1.63 — Mise à jour des dépendances partagées et de l'analytics router
+2026-07-17 — v0.1.80 — Mise à jour des dépendances partagées, mise à jour des helpers et services de traitement bulk Vertex AI Batch.

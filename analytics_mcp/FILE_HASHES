@@ -18,10 +18,8 @@
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 35b387084a7d024a9a4a6ba30d6f62879e843b17  ./analytics_mcp/mcp_server.py
 3a6c326298eabc6070c6ff2dfae1be0a70f2d6fd  ./analytics_mcp/pytest.ini
-3cddf64634d081af840c26f3279174e9a09187f6  ./analytics_mcp/mcp_app.py
 3eacd50c4a803cd957c9697c269c327215261965  ./analytics_mcp/tests/test_mcp_server.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
-4b1640af1a4075863383f9205980edb1cf7375ad  ./analytics_mcp/tests/test_mcp_app.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 536aafca2ef27b6df93f3fa32e86f15685da5639  ./analytics_mcp/uv.lock
 542a20730206b4332d17fc2e6647cb695c36517b  ./shared/tests/test_auth.py
@@ -29,6 +27,7 @@
 61f2905aa73b4a79a44a38d8401de5be52a722e6  ./shared/schemas/users.py
 63b3724277ff70750e58d21bc5e9df0dea2fb3fa  ./shared/fastapi_utils.py
 6467b2834a7d90389b8b5b338679c47f8b8354c0  ./analytics_mcp/tests/test_finops_tools.py
+65d0304ad67f342324c4499e6120c3747a931ef5  ./analytics_mcp/tests/test_mcp_app.py
 691bf7b830ce05f8460b2e88ea35f05744dc60c7  ./analytics_mcp/conftest.py
 69209a4cc33ecd1aedec911e9f3c14666554c1a8  ./analytics_mcp/Dockerfile
 69c83abcfafb946076c74da166b28a1da96290f3  ./shared/database.py
@@ -61,6 +60,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
+ea32ff49079b9cc8400116d39863bd7c75900710  ./analytics_mcp/mcp_app.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f88469d234e9d3869831b9473bdfb8b92516463f  ./analytics_mcp/tests/test_zero_trust.py

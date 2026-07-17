@@ -1,3 +1,124 @@
+## Mise à jour automatique - 2026-07-17 13:44:49
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 2954  | 703  |  76% |
+| agent_hr_api     | 1570  | 102  |  94% |
+| agent_missions_api | 1927  | 90   |  95% |
+| agent_ops_api    | 2306  | 258  |  89% |
+| agent_router_api | 3691  | 552  |  85% |
+| analytics_mcp    | 1117  | 206  |  82% |
+| competencies_api | 5824  | 956  |  84% |
+| cv_api           | 10532 | 1581 |  85% |
+| drive_api        | 3551  | 451  |  87% |
+| items_api        | 2186  | 128  |  94% |
+| missions_api     | 2231  | 281  |  87% |
+| monitoring_mcp   | 1366  | 187  |  86% |
+| platform-engineering | 2338  | 1580 |  32% |
+| prompts_api      | 1355  | 250  |  82% |
+| scratch          | N/A   | N/A  | N/A  |
+| scripts          | N/A   | N/A  | N/A  |
+| shared           | 3020  | 277  |  91% |
+| tests            | 578   | 36   |  94% |
+| users_api        | 2041  | 347  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Aucun commit local en attente
+
+#### Fichiers (non commités)
+- `agents/workflows/git-push.md` (M)
+- `.agents/workflows/go-to-prod.md` (M)
+- `.gitignore` (M)
+- `AGENTS.md` (M)
+- `agent_commons/agent_commons/__init__.py` (M)
+- `agent_commons/tests/test_zero_trust.py` (M)
+- `agent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/README.md` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/README.md` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/README.md` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/agent.py` (M)
+- `agent_ops_api/main.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/sre_triage.py` (M)
+- `agent_ops_api/uv.lock` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/README.md` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/VERSION` (M)
+- `analytics_mcp/mcp_app.py` (M)
+- `analytics_mcp/tests/test_mcp_app.py` (M)
+- `big_picture.mmd` (D)
+- `big_picture.png` (D)
+- `big_picture.svg` (D)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/README.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/schemas.py` (M)
+- `cv_api/src/services/profile_service.py` (M)
+- `docs/architecture.mmd` (D)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/routers/folders_router.py` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/README.md` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/components/ConsultantDashboard.vue` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/README.md` (M)
+- `items_api/VERSION` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/prompts_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/README.md` (M)
+- `monitoring_mcp/VERSION` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/cr_grafana.tf` (M)
+- `platform-engineering/terraform/lb.tf` (M)
+- `platform-engineering/terraform/waf.tf` (M)
+- `platform-engineering/uv.lock` (M)
+- `prompts_api/spec.md` (M)
+- `run_git_push.sh` (M)
+- `scripts/deploy.sh` (M)
+- `.agents/skills/` (??)
+- `agent_commons/agent_commons.egg-info/` (??)
+- `agent_commons/build/` (??)
+- `agent_commons/tests/test_adk_genai_patch.py` (??)
+- `agent_ops_api/tests/test_adk_genai_patch.py` (??)
+- `docs/quarkus_auth_integration.md` (??)
+
+---
+
 ## Mise à jour automatique - 2026-07-07 17:30:12
 
 ### Couverture de Code

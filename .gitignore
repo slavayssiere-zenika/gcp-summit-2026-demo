@@ -159,3 +159,8 @@ locust/results/
 platform-engineering/.rag_model_state.json
 platform-engineering/.db_init_state.json
 platform-engineering/.lb_routes_state.json
+
+# =========================
+# Graphify
+# =========================
+graphify-out/

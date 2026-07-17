@@ -1,17 +1,19 @@
 """folders_router.py — Gestion des dossiers Google Drive cibles.
 Shared imports for drive_api sub-routers."""
 
+import asyncio
 import logging
 from shared.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth.jwt import verify_jwt
-from shared.cache import delete_cache, set_cache
+from shared.cache import delete_cache, set_cache, get_cache
 from src.drive_service import DriveService
 from src.models import DriveSyncStatus
 from src.schemas import FolderCreate, FolderResponse, FolderStats, FolderUpdate, PaginatedFoldersResponse
 from src.services.folder_service import FolderService
+from src.google_auth import get_drive_service
 import shared.database as shared_db
 
 logger = logging.getLogger(__name__)
@@ -105,6 +107,45 @@ async def rebuild_folder_tree(
 
     background_tasks.add_task(run_rebuild)
     return {"status": "success", "message": "Reconstruction de l'arbre lancée en arrière-plan"}
+
+
+@router.get("/folders/by-name/{name}")
+async def get_folder_by_name(name: str):
+    """
+    Retourne l'ID Google Drive du dossier d'un consultant à partir de son nom.
+    """
+    cache_key = f"drive:folder_id_by_name:{name.lower()}"
+    folder_id = await get_cache(cache_key)
+
+    if not folder_id:
+        try:
+            drive_service = get_drive_service()
+            q = f"mimeType = 'application/vnd.google-apps.folder' and name = '{name}' and trashed = false"
+            results = await asyncio.to_thread(
+                lambda: drive_service.files().list(
+                    q=q,
+                    spaces="drive",
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True,
+                    fields="files(id)",
+                    pageSize=1
+                ).execute()
+            )
+            files = results.get("files", [])
+            if files:
+                folder_id = files[0].get("id")
+                await set_cache(cache_key, folder_id, 86400 * 30)
+        except Exception as e:
+            logger.warning(f"Failed to query Google Drive for folder name '{name}': {e}")
+
+    if not folder_id:
+        raise HTTPException(status_code=404, detail=f"Dossier Drive pour '{name}' introuvable.")
+
+    return {
+        "folder_name": name,
+        "google_folder_id": folder_id,
+        "url": f"https://drive.google.com/drive/folders/{folder_id}"
+    }
 
 
 @router.post("/folders/invalidate-cache")

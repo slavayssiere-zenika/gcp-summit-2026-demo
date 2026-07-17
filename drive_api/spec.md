@@ -51,10 +51,10 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 ## 📡 Schema OpenAPI Auto-Généré
 
 - **GET** `/metrics` : Metrics
-- **POST** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **PUT** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
 - **DELETE** `/mcp/{path}` : Proxy Mcp
+- **POST** `/mcp/{path}` : Proxy Mcp
 - **GET** `/spec` : Get Spec
 - **GET** `/health` : Health
 - **GET** `/ready` : Ready
@@ -65,6 +65,7 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **DELETE** `/folders/{folder_id}` : Delete Folder
 - **POST** `/folders/reset-sync` : Reset Folder Sync
 - **POST** `/folders/rebuild-tree` : Rebuild Folder Tree
+- **GET** `/folders/by-name/{name}` : Get Folder By Name
 - **POST** `/folders/invalidate-cache` : Invalidate Drive Cache
 - **GET** `/status` : Get Status
 - **GET** `/files` : List Files

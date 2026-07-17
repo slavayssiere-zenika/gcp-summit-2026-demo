@@ -20,6 +20,7 @@
 3289649ce2e28a207b8bad7564e105211395936f  ./shared/schemas/mcp.py
 35b165f0e82c0d800e2eee5504f1c958fa176641  ./shared/middlewares.py
 422ad3e9990bc280f368b6e8376ddad07544ff63  ./shared/tests/test_mcp_server_utils.py
+449ddb9dc53e000b2a86b02fdd7f56be25c6b382  ./items_api/src/items/crud_router.py
 45cde23ef201606abbbb48fc7c0be68398370b35  ./items_api/tests/test_crud_router_basic.py
 4ab0948ac29ad61a98cb7e06af91c2ce276917cf  ./items_api/pytest.ini
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
@@ -53,7 +54,6 @@ b5ea1e24445f0cf7c8729088857507631a520425  ./items_api/mcp_app.py
 ba2a006fe4ff2b2a621ee7d426bed249b86235e0  ./items_api/Dockerfile
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
 c6a40b198ec0b2f822b511ea8e7f0b4135713221  ./shared/semaphore_utils.py
-c84b1fd2b6caa486a6a3db97c306835e395eb5fd  ./items_api/src/items/crud_router.py
 ca0fee0fe2842902852d49f3761a4bfccebbe7e8  ./shared/schemas/missions.py
 ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 ccda1ccddd939f6d912ff9bbfb0348fb0ce9ee60  ./items_api/tests/test_integration.py

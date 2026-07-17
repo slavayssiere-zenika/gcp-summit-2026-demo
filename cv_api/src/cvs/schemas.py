@@ -114,6 +114,8 @@ class CVProfileResponse(BaseModel):
     email: Optional[str] = None
     username: Optional[str] = None
     processing_errors: List[str] = []
+    extraction_reliability_score: Optional[int] = None
+    created_at: Optional[str] = None
 
 
 class CVFullProfileResponse(BaseModel):

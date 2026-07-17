@@ -28,7 +28,8 @@ import {
   Check,
   Eye,
   EyeOff,
-  Copy
+  Copy,
+  Folder
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import CompetencyEvaluationPanel from './CompetencyEvaluationPanel.vue'
@@ -44,6 +45,8 @@ const activeTab = ref<'overview' | 'experience' | 'skills' | 'docs' | 'settings'
 // State
 const user = ref<any>(null)
 const cvProfile = ref<any>(null)
+const cvProfiles = ref<any[]>([])
+const driveFolderLink = ref<string | null>(null)
 const missions = ref<any[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -178,8 +181,20 @@ const fetchData = async () => {
     ])
 
     user.value = userRes.data
-    cvProfile.value = cvRes.data.items?.[0] || cvRes.data || null
+    cvProfiles.value = cvRes.data.items || []
+    cvProfile.value = cvProfiles.value[0] || cvRes.data || null
     missions.value = missionsRes.data.items || []
+
+    if (user.value?.full_name) {
+      try {
+        const driveRes = await axios.get(`/api/drive/folders/by-name/${encodeURIComponent(user.value.full_name)}`)
+        driveFolderLink.value = driveRes.data.url || null
+      } catch (err) {
+        console.warn('Failed to retrieve drive folder link for', user.value.full_name, err)
+        const searchName = encodeURIComponent(user.value.full_name)
+        driveFolderLink.value = `https://drive.google.com/drive/u/0/search?q=name%20contains%20%27${searchName}%27`
+      }
+    }
     
     if (user.value.unavailability_periods) {
       unavailabilityPeriods.value = [...user.value.unavailability_periods]
@@ -358,24 +373,43 @@ const formatDate = (dateStr: string) => {
 
         <!-- Tab: Docs -->
         <section v-if="activeTab === 'docs'" class="tab-content docs-grid">
-          <div v-if="cvProfile" class="glass-card doc-card">
-            <div class="doc-icon"><FileText size="24" /></div>
+          <!-- Carte Dossier Google Drive -->
+          <div v-if="driveFolderLink" class="glass-card doc-card drive-folder-card">
+            <div class="doc-icon"><Folder size="24" class="drive-folder-icon" /></div>
             <div class="doc-info">
-              <div class="doc-name">{{ t('profile.section_cv') }}</div>
+              <div class="doc-name">{{ t('profile.google_drive_folder') || 'Dossier Google Drive' }}</div>
               <div class="doc-meta">
-                <span class="reliability" :class="{ high: cvProfile.extraction_reliability_score > 80 }">
-                  <ShieldCheck size="12" /> {{ t('extractionquality.col_reliability') || 'Fiabilité' }} {{ cvProfile.extraction_reliability_score }}%
-                </span>
-                <span class="date"><Clock size="12" /> {{ formatDate(cvProfile.updated_at) }}</span>
+                <span class="folder-path">{{ user?.full_name || 'Dossier Consultant' }}</span>
               </div>
             </div>
-            <a :href="cvProfile.source_url" target="_blank" class="doc-link">
+            <a :href="driveFolderLink" target="_blank" class="doc-link drive-link">
               <ExternalLink size="18" />
             </a>
           </div>
-          <div v-else class="empty-state glass-card">
+
+          <!-- Liste des CVs -->
+          <template v-if="cvProfiles && cvProfiles.length > 0">
+            <div v-for="profile in cvProfiles" :key="profile.source_url" class="glass-card doc-card">
+              <div class="doc-icon"><FileText size="24" /></div>
+              <div class="doc-info">
+                <div class="doc-name">{{ profile.source_tag || t('profile.section_cv') }}</div>
+                <div class="doc-meta">
+                  <span v-if="profile.extraction_reliability_score !== null && profile.extraction_reliability_score !== undefined" class="reliability" :class="{ high: profile.extraction_reliability_score > 80 }">
+                    <ShieldCheck size="12" /> {{ t('extractionquality.col_reliability') || 'Fiabilité' }} {{ profile.extraction_reliability_score }}%
+                  </span>
+                  <span v-if="profile.created_at" class="date"><Clock size="12" /> {{ formatDate(profile.created_at) }}</span>
+                </div>
+              </div>
+              <a :href="profile.source_url" target="_blank" class="doc-link">
+                <ExternalLink size="18" />
+              </a>
+            </div>
+          </template>
+
+          <div v-else-if="!driveFolderLink" class="empty-state glass-card">
             <FileText size="32" />
             <p>{{ t('dashboard.no_doc') }}</p>
+          </div>
         </section>
 
         <!-- Tab: Settings (Personal Configuration) -->
@@ -881,6 +915,25 @@ const formatDate = (dateStr: string) => {
   background: var(--zenika-red);
   color: white;
   transform: scale(1.1);
+}
+
+.drive-folder-card {
+  border: 1px dashed rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.03) !important;
+}
+.drive-folder-card .doc-icon {
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+.drive-folder-icon {
+  color: #10b981;
+}
+.folder-path {
+  font-weight: 500;
+  color: #059669;
+}
+.drive-link:hover {
+  background: #10b981 !important;
+  color: white !important;
 }
 
 /* Utility */
