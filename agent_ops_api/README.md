@@ -95,4 +95,4 @@ Sous-agent spécialisé Ops : gestion des missions, items, catalogue de services
 - Toutes les réponses A2A doivent inclure le flag `degraded: True` si une API aval est indisponible
 
 ## Dernière modification
-- 2026-07-17 — v0.2.64 — Amélioration de la résilience lors de l'exécution des requêtes de l'agent SRE Triage, mise à jour des dépendances et nettoyage du dépôt.
+- 2026-07-17 — v0.2.65 — Amélioration de la résilience de l'agent SRE Triage, intégration renforcée des audits de sécurité et mise à jour des dépendances partagées.

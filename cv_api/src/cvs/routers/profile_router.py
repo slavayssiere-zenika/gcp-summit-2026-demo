@@ -17,7 +17,8 @@ from shared.auth.jwt import verify_jwt
 from src.cvs.models import CVProfile
 from src.cvs.schemas import (CVFullProfileResponse, CVImportRequest,
                              CVProfileResponse, CVResponse, UserMergeRequest,
-                             ExtractedMission)
+                             ExtractedMission, MissionCreateRequest,
+                             MissionUpdateRequest)
 from src.services.bulk_service import bg_retry_apply
 from shared.cache import delete_cache
 from src.services.cv_import_service import process_cv_core, process_cv_direct
@@ -146,7 +147,8 @@ async def get_user_cv(user_id: int, skip: int = Query(
         0, ge=0), limit: int = 50, request: Request = None, db: AsyncSession = Depends(get_db),
         token_payload: dict = Depends(verify_jwt)):
 
-    if token_payload.get("role") not in ("admin", "rh", "service_account") and int(user_id) != token_payload.get("user_id"):
+    if (token_payload.get("role") not in ("admin", "rh", "service_account")
+            and int(user_id) != token_payload.get("user_id")):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : consultation du CV non autorisée."
@@ -174,14 +176,20 @@ async def get_user_missions(user_id: int, skip: int = Query(
         0, ge=0), limit: int = 50, db: AsyncSession = Depends(get_db),
         token_payload: dict = Depends(verify_jwt)):
 
-    if token_payload.get("role") not in ("admin", "rh", "service_account") and int(user_id) != token_payload.get("user_id"):
+    if (token_payload.get("role") not in ("admin", "rh", "service_account")
+            and int(user_id) != token_payload.get("user_id")):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : consultation du CV non autorisée."
         )
     total, items = await ProfileService.get_user_missions(user_id, skip, limit, db)
     if total == 0 and not items:
-        profiles = (await db.execute(select(CVProfile).filter(CVProfile.user_id == user_id).order_by(CVProfile.created_at.desc()))).scalars().all()
+        stmt = (
+            select(CVProfile)
+            .filter(CVProfile.user_id == user_id)
+            .order_by(CVProfile.created_at.desc())
+        )
+        profiles = (await db.execute(stmt)).scalars().all()
         if not profiles:
             raise HTTPException(status_code=404, detail="Aucun profil CV trouvé pour cet utilisateur.")
 
@@ -193,7 +201,8 @@ async def get_user_cv_details(
         user_id: int, request: Request, db: AsyncSession = Depends(get_db),
         token_payload: dict = Depends(verify_jwt)):
 
-    if token_payload.get("role") not in ("admin", "rh", "service_account") and int(user_id) != token_payload.get("user_id"):
+    if (token_payload.get("role") not in ("admin", "rh", "service_account")
+            and int(user_id) != token_payload.get("user_id")):
         raise HTTPException(
             status_code=403,
             detail="Accès refusé : consultation du CV non autorisée."
@@ -305,7 +314,10 @@ async def remediate_anonymous_profiles(
                 "dry_run": True,
                 "candidates_to_fix": total,
                 "profiles": candidates,
-                "message": f"{total} profil(s) incorrectement anonymes détectés. Relancez avec dry_run=false pour les corriger."
+                "message": (
+                    f"{total} profil(s) incorrectement anonymes détectés. "
+                    "Relancez avec dry_run=false pour les corriger."
+                )
             }
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
@@ -316,3 +328,47 @@ async def remediate_anonymous_profiles(
         "status": "accepted",
         "message": "Remédiation lancée en arrière-plan. Consultez les logs Cloud Run pour le détail.",
     }
+
+
+@router.post("/user/{user_id}/missions",
+             response_model=ExtractedMission,
+             status_code=201)
+async def add_user_mission(user_id: int,
+                           mission_data: MissionCreateRequest,
+                           db: AsyncSession = Depends(get_db),
+                           token_payload: dict = Depends(verify_jwt)):
+    if token_payload.get("role") not in ("admin", "rh") and int(user_id) != token_payload.get("user_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé."
+        )
+    return await ProfileService.add_user_mission(user_id, mission_data, db)
+
+
+@router.put("/user/{user_id}/missions/{index}",
+            response_model=ExtractedMission)
+async def update_user_mission(user_id: int,
+                              index: int,
+                              mission_data: MissionUpdateRequest,
+                              db: AsyncSession = Depends(get_db),
+                              token_payload: dict = Depends(verify_jwt)):
+    if token_payload.get("role") not in ("admin", "rh") and int(user_id) != token_payload.get("user_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé."
+        )
+    return await ProfileService.update_user_mission(user_id, index, mission_data, db)
+
+
+@router.delete("/user/{user_id}/missions/{index}")
+async def delete_user_mission(user_id: int,
+                              index: int,
+                              db: AsyncSession = Depends(get_db),
+                              token_payload: dict = Depends(verify_jwt)):
+    if token_payload.get("role") not in ("admin", "rh") and int(user_id) != token_payload.get("user_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé."
+        )
+    await ProfileService.delete_user_mission(user_id, index, db)
+    return {"success": True, "message": "Mission supprimée avec succès."}

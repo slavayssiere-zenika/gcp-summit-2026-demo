@@ -1,6 +1,6 @@
 {
   "_comment": "Genere par seed_data.py — source de verite pour locustfile.py. Ne pas editer.",
-  "_generated_at": "2026-07-17T09:08:30.005172+00:00",
+  "_generated_at": "2026-07-20T08:54:27.159107+00:00",
   "user_ids": [
     10,
     11,

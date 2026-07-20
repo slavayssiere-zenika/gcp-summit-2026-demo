@@ -41,7 +41,7 @@ Analyse multimodale des CVs via Gemini/Vertex AI, extraction d'informations stru
 | `src/cvs/routers/analytics_router.py` | 467 | ✅ |
 | `src/cvs/routers/bulk_router.py` | 312 | ✅ |
 | `src/cvs/routers/data_quality_router.py` | 56 | ✅ |
-| `src/cvs/routers/profile_router.py` | 318 | ✅ |
+| `src/cvs/routers/profile_router.py` | 374 | ✅ |
 
 ## Variables d'environnement
 | Var | Type | Valeur dev |
@@ -146,4 +146,4 @@ Les deux services ont `roles/storage.objectAdmin` sur ce bucket via leurs servic
 - `POST /assign/bulk` dans `competencies_api` DOIT être appelé après chaque analyse batch réussie
 
 ## Dernière modification
-2026-07-17 — v0.1.80 — Mise à jour des dépendances partagées, mise à jour des helpers et services de traitement bulk Vertex AI Batch.
+2026-07-17 — v0.1.81 — Support des mécanismes de sécurité et du triage SRE de la plateforme, mise à jour des dépendances partagées et des services Vertex AI Batch.

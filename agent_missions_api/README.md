@@ -86,4 +86,4 @@ Sous-agent spécialisé gestion documentaire des missions : analyse, résumé et
 - `SECRET_KEY` est injecté via `secret_key_ref` dans Terraform (pas de valeur dans le Dockerfile)
 
 ## Dernière modification
-2026-07-17 — v0.4.62 — Mise à jour des dépendances partagées, intégration de UV et nettoyage du dépôt.
+2026-07-17 — v0.4.63 — Support des mécanismes de sécurité et du triage SRE de la plateforme, gestion des packages avec UV et mise à jour des dépendances partagées.

@@ -42,6 +42,7 @@
 712fcb045ee7401b514b015c7375e4a5c1c27a76  ./competencies_api/tests/test_assign_bulk_contract.py
 7249e623ced35e2a3303828e1b3d4d3bf52f54fc  ./competencies_api/tests/integration/test_pg_integration.py
 75edc91f04397a412bd0b1bd1c791297696a711c  ./competencies_api/mcp_server.py
+766bec3a247e6cc5f9f7e72de037128da4e2fdfa  ./shared/tests/test_boundaries.py
 787f5784e22694a5437f39947110cfe1c43076a1  ./competencies_api/requirements.txt
 7e29fd5eb44e093180cd932ad0ba5b384395554f  ./competencies_api/tests/test_analytics_queries.py
 7e62a0b27ac0c216250930b945d07af55861c20d  ./competencies_api/src/competencies/helpers.py
@@ -58,16 +59,13 @@
 929204da1fc13cf127f7115f1436cc0c84d75700  ./competencies_api/tests/test_schemas.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
-9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 9c9044377e84ad6ec3ecc14a28a8c7388a00d9a2  ./shared/schemas/auth.py
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 9df0159f50c3e853cc742fc23e03e190a226ba4e  ./competencies_api/src/competencies/scoring_router.py
 9ee3ab88fad6a408214f8a1c222c453a41b36ace  ./competencies_api/src/competencies/gemini_cache.py
 a10dd1767824fcd79f4315de8063a3970b62132b  ./competencies_api/tests/test_competencies_extra.py
-a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a4684b663bcebeb5867ff4d539a68fd0d35bdaf7  ./competencies_api/tests/test_deduplication_resolution.py
 a688f95df66bbca991631907c83382a7da5019d4  ./competencies_api/pyproject.toml
-afdcf83b3ade57eb536e165ab486dfb026382e45  ./shared/pyproject.toml
 b215a06b3bfe36adb30c7bb59a3350b6ea123be5  ./competencies_api/tests/test_integration.py
 b2c5d728ff056a0c388a918bd7b0e5860b7e9f32  ./competencies_api/scripts/cleanup_corrupted_competencies_api.py
 b594aae4305a722a28cf443781e6101f567c96dc  ./competencies_api/tests/test_bulk_endpoints.py
@@ -88,10 +86,12 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./competencies_api/tools/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
 da48c499b493f258b49a2fa403786c09d4555d6d  ./competencies_api/src/competencies/evaluations_router.py
+db25f2e52249175c770104a09596493901850d88  ./shared/tests/test_zero_trust.py
 dc4b7f39976cc8687791877d0b69f51d199f7949  ./competencies_api/tests/test_scoring_pipeline.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 e757ab6b090bc976eee4713b3a63a5cd1c7b7aff  ./competencies_api/main.py
+ea191ded8b0e19deb43d7e7402e581d8da97f3fa  ./shared/pyproject.toml
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
 ec0d97863df482a6183c16b7fa89cbe6d7467b05  ./competencies_api/tests/test_scheduler_control.py
 efdfbc84f76dbefc8af11d4d9313799f66fe2268  ./competencies_api/src/competencies/tree_router.py

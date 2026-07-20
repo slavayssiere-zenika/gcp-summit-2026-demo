@@ -29,7 +29,9 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Folder
+  Folder,
+  Pencil,
+  Trash
 } from 'lucide-vue-next'
 import { authService } from '../services/auth'
 import CompetencyEvaluationPanel from './CompetencyEvaluationPanel.vue'
@@ -48,6 +50,22 @@ const cvProfile = ref<any>(null)
 const cvProfiles = ref<any[]>([])
 const driveFolderLink = ref<string | null>(null)
 const missions = ref<any[]>([])
+const showMissionModal = ref(false)
+const isEditingMission = ref(false)
+const editingMissionIndex = ref<number | null>(null)
+const isSavingMission = ref(false)
+const newTechTag = ref('')
+const missionForm = ref({
+  title: '',
+  company: '',
+  description: '',
+  start_date: '',
+  end_date: '',
+  duration: '',
+  mission_type: 'build',
+  competencies: [] as string[],
+  is_sensitive: false
+})
 const loading = ref(true)
 const error = ref<string | null>(null)
 const userTagsMap = ref<Record<string, string>>({})
@@ -160,6 +178,84 @@ const removeAvailability = async (index: number) => {
   } catch (e) { console.error(e) }
 }
 
+const openAddMissionModal = () => {
+  isEditingMission.value = false
+  editingMissionIndex.value = null
+  missionForm.value = {
+    title: '',
+    company: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    duration: '',
+    mission_type: 'build',
+    competencies: [],
+    is_sensitive: false
+  }
+  showMissionModal.value = true
+}
+
+const openEditMissionModal = (index: number, mission: any) => {
+  isEditingMission.value = true
+  editingMissionIndex.value = index
+  missionForm.value = {
+    title: mission.title || '',
+    company: mission.company || '',
+    description: mission.description || '',
+    start_date: mission.start_date || '',
+    end_date: mission.end_date || '',
+    duration: mission.duration || '',
+    mission_type: mission.mission_type || 'build',
+    competencies: Array.isArray(mission.competencies) ? [...mission.competencies] : [],
+    is_sensitive: !!mission.is_sensitive
+  }
+  showMissionModal.value = true
+}
+
+const addTechTag = () => {
+  const tag = newTechTag.value.trim()
+  if (tag && !missionForm.value.competencies.includes(tag)) {
+    missionForm.value.competencies.push(tag)
+  }
+  newTechTag.value = ''
+}
+
+const removeTechTag = (index: number) => {
+  missionForm.value.competencies.splice(index, 1)
+}
+
+const saveMission = async () => {
+  isSavingMission.value = true
+  try {
+    if (isEditingMission.value && editingMissionIndex.value !== null) {
+      const res = await axios.put(`/api/cv/user/${props.userId}/missions/${editingMissionIndex.value}`, missionForm.value)
+      missions.value[editingMissionIndex.value] = res.data
+    } else {
+      const res = await axios.post(`/api/cv/user/${props.userId}/missions`, missionForm.value)
+      missions.value = [res.data, ...missions.value]
+    }
+    showMissionModal.value = false
+  } catch (err) {
+    console.error('Failed to save mission:', err)
+    alert("Une erreur est survenue lors de l'enregistrement de la mission.")
+  } finally {
+    isSavingMission.value = false
+  }
+}
+
+const deleteMission = async (index: number) => {
+  if (!confirm("Êtes-vous sûr de vouloir supprimer cette mission ?")) {
+    return
+  }
+  try {
+    await axios.delete(`/api/cv/user/${props.userId}/missions/${index}`)
+    missions.value.splice(index, 1)
+  } catch (err) {
+    console.error('Failed to delete mission:', err)
+    alert("Une erreur est survenue lors de la suppression de la mission.")
+  }
+}
+
 const copyJwt = async () => {
   try {
     await navigator.clipboard.writeText(jwtToken.value)
@@ -185,12 +281,32 @@ const fetchData = async () => {
     cvProfile.value = cvProfiles.value[0] || cvRes.data || null
     missions.value = missionsRes.data.items || []
 
-    if (user.value?.full_name) {
+    let folderFound = false
+    if (cvProfiles.value.length > 0) {
+      const firstCv = cvProfiles.value.find((cv: any) => cv.source_url)
+      if (firstCv && firstCv.source_url) {
+        const fileIdMatch = firstCv.source_url.match(/\/d\/([a-zA-Z0-9-_]{25,50})/) || firstCv.source_url.match(/id=([a-zA-Z0-9-_]{25,50})/)
+        if (fileIdMatch) {
+          const fileId = fileIdMatch[1]
+          try {
+            const driveRes = await axios.get(`/api/drive/folders/by-file/${fileId}`)
+            if (driveRes.data && driveRes.data.url) {
+              driveFolderLink.value = driveRes.data.url
+              folderFound = true
+            }
+          } catch (err) {
+            console.warn('Failed to retrieve exact drive folder for CV file', fileId, err)
+          }
+        }
+      }
+    }
+
+    if (!folderFound && user.value?.full_name) {
       try {
         const driveRes = await axios.get(`/api/drive/folders/by-name/${encodeURIComponent(user.value.full_name)}`)
         driveFolderLink.value = driveRes.data.url || null
       } catch (err) {
-        console.warn('Failed to retrieve drive folder link for', user.value.full_name, err)
+        console.warn('Failed to retrieve fallback drive folder link for', user.value.full_name, err)
         const searchName = encodeURIComponent(user.value.full_name)
         driveFolderLink.value = `https://drive.google.com/drive/u/0/search?q=name%20contains%20%27${searchName}%27`
       }
@@ -339,12 +455,29 @@ const formatDate = (dateStr: string) => {
 
         <!-- Tab: Experience -->
         <section v-if="activeTab === 'experience'" class="tab-content experience-timeline">
+          <div v-if="!props.readonly" class="timeline-actions">
+            <button @click="openAddMissionModal" class="btn-add-mission">
+              <Plus size="16" />
+              <span>Ajouter une mission</span>
+            </button>
+          </div>
+
           <div v-if="missions.length" class="timeline-container">
             <div v-for="(mission, idx) in missions" :key="idx" class="mission-card glass-card">
               <div class="mission-header">
                 <div class="m-title-row">
                   <h4>{{ mission.title }}</h4>
-                  <span class="m-duration">{{ mission.duration || t('dashboard.not_available') }}</span>
+                  <div class="m-actions-wrapper">
+                    <span class="m-duration">{{ mission.duration || t('dashboard.not_available') }}</span>
+                    <div v-if="!props.readonly" class="m-actions">
+                      <button @click="openEditMissionModal(idx, mission)" class="action-btn edit-btn" title="Modifier">
+                        <Pencil size="14" />
+                      </button>
+                      <button @click="deleteMission(idx)" class="action-btn delete-btn" title="Supprimer">
+                        <Trash size="14" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div class="m-company">{{ mission.company || 'Client Zenika' }}</div>
               </div>
@@ -392,7 +525,7 @@ const formatDate = (dateStr: string) => {
             <div v-for="profile in cvProfiles" :key="profile.source_url" class="glass-card doc-card">
               <div class="doc-icon"><FileText size="24" /></div>
               <div class="doc-info">
-                <div class="doc-name">{{ profile.source_tag || t('profile.section_cv') }}</div>
+                <div class="doc-name">{{ profile.file_name || profile.source_tag || t('profile.section_cv') }}</div>
                 <div class="doc-meta">
                   <span v-if="profile.extraction_reliability_score !== null && profile.extraction_reliability_score !== undefined" class="reliability" :class="{ high: profile.extraction_reliability_score > 80 }">
                     <ShieldCheck size="12" /> {{ t('extractionquality.col_reliability') || 'Fiabilité' }} {{ profile.extraction_reliability_score }}%
@@ -499,6 +632,89 @@ const formatDate = (dateStr: string) => {
         </section>
       </template>
     </main>
+    <!-- Modal: Mission CRUD -->
+    <div v-if="showMissionModal" class="modal-overlay glass-blur" @click.self="showMissionModal = false">
+      <div class="modal-card glass-card animate-zoom">
+        <div class="modal-header">
+          <h3>{{ isEditingMission ? "Modifier la mission" : "Ajouter une mission" }}</h3>
+          <button @click="showMissionModal = false" class="close-btn">
+            <XCircle size="20" />
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label class="form-label">Titre de la mission *</label>
+              <input type="text" v-model="missionForm.title" class="form-input" placeholder="ex: Architecte Cloud & DevOps" required />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Entreprise / Client *</label>
+              <input type="text" v-model="missionForm.company" class="form-input" placeholder="ex: Zenika" required />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Type de mission</label>
+              <select v-model="missionForm.mission_type" class="form-input">
+                <option value="build">Build / Projet</option>
+                <option value="run">Run / Support</option>
+                <option value="conseil">Conseil / Audit</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Date de début</label>
+              <input type="text" v-model="missionForm.start_date" class="form-input" placeholder="ex: 2024-01" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Date de fin</label>
+              <input type="text" v-model="missionForm.end_date" class="form-input" placeholder="ex: 2025-06" />
+            </div>
+
+            <div class="form-group full-width">
+              <label class="form-label">Durée</label>
+              <input type="text" v-model="missionForm.duration" class="form-input" placeholder="ex: 1 an et 6 mois" />
+            </div>
+
+            <div class="form-group full-width">
+              <label class="form-label">Description de la mission *</label>
+              <textarea v-model="missionForm.description" class="form-input text-area" rows="4" placeholder="Décrivez les réalisations, l'architecture et vos responsabilités..." required></textarea>
+            </div>
+
+            <div class="form-group full-width">
+              <label class="form-label">Technologies & Compétences</label>
+              <div class="tag-input-row">
+                <input type="text" v-model="newTechTag" class="form-input" placeholder="ex: Kubernetes" @keydown.enter.prevent="addTechTag" />
+                <button type="button" @click="addTechTag" class="btn-action-primary">
+                  <Plus size="16" />
+                </button>
+              </div>
+              <div class="tags-manager">
+                <span v-for="(tech, tIdx) in missionForm.competencies" :key="tech" class="tech-tag-managed">
+                  {{ tech }}
+                  <button type="button" @click="removeTechTag(tIdx)" class="remove-tag-btn">×</button>
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group full-width checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="missionForm.is_sensitive" />
+                <span>Mission confidentielle / sensible</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showMissionModal = false" class="btn-cancel">Annuler</button>
+          <button @click="saveMission" :disabled="!missionForm.title || !missionForm.company || !missionForm.description || isSavingMission" class="btn-submit">
+            <span v-if="isSavingMission">Enregistrement...</span>
+            <span v-else>Enregistrer</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1159,6 +1375,324 @@ const formatDate = (dateStr: string) => {
 .token-box.visible {
   filter: none;
   color: #10b981;
+}
+
+
+/* Missions CRUD Styling */
+.timeline-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.btn-add-mission {
+  background: var(--zenika-red);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-add-mission:hover {
+  background: #c21a1a;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.m-actions-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.m-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #f1f5f9;
+}
+
+.edit-btn:hover {
+  color: var(--primary-color, #3b82f6);
+}
+
+.delete-btn:hover {
+  color: var(--zenika-red);
+}
+
+/* Modal Styling */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.glass-blur {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 650px;
+  max-height: 90vh;
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.animate-zoom {
+  animation: zoomIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h3 {
+  font-weight: 800;
+  font-size: 1.2rem;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: var(--zenika-red);
+}
+
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: span 2;
+}
+
+.form-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-input {
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  outline: none;
+  color: var(--text-primary);
+  transition: all 0.2s ease-in-out;
+}
+
+.form-input:focus {
+  border-color: var(--zenika-red);
+  box-shadow: 0 0 0 3px rgba(224, 46, 36, 0.15);
+}
+
+.form-input.text-area {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.tag-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tag-input-row .form-input {
+  flex-grow: 1;
+}
+
+.btn-action-primary {
+  background: #f1f5f9;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+
+.btn-action-primary:hover {
+  background: #cbd5e1;
+}
+
+.tags-manager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tech-tag-managed {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.remove-tag-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-tag-btn:hover {
+  color: var(--zenika-red);
+}
+
+.checkbox-group {
+  margin-top: 4px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.checkbox-label input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--zenika-red);
+}
+
+.modal-footer {
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-cancel {
+  background: none;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: #f1f5f9;
+}
+
+.btn-submit {
+  background: var(--zenika-red);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: #c21a1a;
+}
+
+.btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {

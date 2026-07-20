@@ -116,6 +116,31 @@ class CVProfileResponse(BaseModel):
     processing_errors: List[str] = []
     extraction_reliability_score: Optional[int] = None
     created_at: Optional[str] = None
+    file_name: Optional[str] = None
+
+
+class MissionCreateRequest(BaseModel):
+    title: str
+    company: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration: Optional[str] = None
+    mission_type: Optional[str] = "build"
+    competencies: List[str] = []
+    is_sensitive: Optional[bool] = False
+
+
+class MissionUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    company: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration: Optional[str] = None
+    mission_type: Optional[str] = None
+    competencies: Optional[List[str]] = None
+    is_sensitive: Optional[bool] = None
 
 
 class CVFullProfileResponse(BaseModel):

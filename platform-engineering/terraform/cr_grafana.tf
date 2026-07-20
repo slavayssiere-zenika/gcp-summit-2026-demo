@@ -172,6 +172,10 @@ resource "google_compute_backend_service" "grafana_backend" {
   backend {
     group = google_compute_region_network_endpoint_group.grafana_neg.id
   }
+  log_config {
+    enable      = true
+    sample_rate = 1.0
+  }
 }
 
 # 4. Autorisation d'invocation pour le Load Balancer (allUsers)

@@ -94,4 +94,4 @@ fi
 echo "[+] SÉCURITÉ AR : Aucun token GCP ni wheel buildé détecté — commit autorisé."
 
 # Etape 11: git commit
-git commit -m "Implement SRE triage and security features"
+git commit -m "Fix ADK session patching and profile CRUD"

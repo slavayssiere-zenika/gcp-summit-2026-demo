@@ -18,6 +18,7 @@
 0f7f5ec4004cb525f4719df4f127706442bd22e9  ./shared/tests/test_edge_cases.py
 0ff1fc29dc334c8c2a8cfc15abd038c858aea761  ./cv_api/tests/test_import_router.py
 143b1aabecac97946daabc09c2ca43da60350d2d  ./cv_api/src/cvs/routers/search_router.py
+1658fc9e5f424a590904d1d9d2148a8476f487dc  ./cv_api/tests/test_profile_missions_crud.py
 170b105364ae729901916cc029955145283cc91a  ./cv_api/tests/test_taxonomy_state_machine.py
 1a3c003113063e5991861d87cc3b66e6ca2ed821  ./cv_api/cv_api.generate_taxonomy_tree_deduplicate.txt
 1bbda0a81944e0c55706f834715c3ac41144cc87  ./cv_api/tests/test_bulk_reanalyse.py
@@ -45,6 +46,7 @@
 4366294cded3310742c3f982444f021b0f7e85fc  ./cv_api/cv_api.search_filter_extraction.txt
 466d5eca341047657256acf480cf6aa1074e378c  ./cv_api/tests/integration/test_profile_router_extended.py
 4aab7be54ceec3874fe6c06db239536620ef19a4  ./cv_api/scripts/update_prompts_p3.py
+4adb7f8ef136a1e679afe1eae02f247302baac7a  ./cv_api/src/cvs/schemas.py
 4f215bb277d55f042f0958b3744b274a85562527  ./shared/__init__.py
 4f3e8d86d53d5c0e4696e2f13ceefa6e7462af90  ./cv_api/tests/test_bulk_contract.py
 52a55f0671c267a3bc7097d6a944473ed81ff2d2  ./cv_api/src/services/cv_storage_service.py
@@ -67,6 +69,7 @@
 70d5c4e4f1eaac31d72469dd316bb621b3a85e93  ./cv_api/tests/test_cv_storage_service.py
 72e16df0a63579830fd4ff9473b30a2c8da54e8a  ./cv_api/tests/test_zero_trust.py
 7403f35d8010b809d0fae721eb4191092dcd221a  ./cv_api/tests/test_data_quality_publisher.py
+766bec3a247e6cc5f9f7e72de037128da4e2fdfa  ./shared/tests/test_boundaries.py
 76c77293f0e59e31a7922cceccc684980b600f0f  ./cv_api/src/cvs/routers/_shared.py
 76cb35e3dbefabc4fe0c88e4a7f334ffaab54584  ./cv_api/mcp_server.py
 78eec5b5d8dfd79acfb3ceae4e9721ea356fc8bb  ./cv_api/my_pytest.log
@@ -84,27 +87,23 @@
 8ba27dd067f1c1d5aaae691c50168cacd7d2b70f  ./cv_api/src/services/search_service.py
 8ce287ae3a67dd1ee4b95d6686bb2e8542c60a0f  ./cv_api/src/services/bulk_helpers.py
 914a3db7f99a7b52e27b95a6d1c0ecccecd2da22  ./cv_api/tools/taxonomy_tools.py
-934f3d824c6c1ac7b4229e0d177199c556edde77  ./cv_api/src/services/profile_service.py
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 949a0164206b6802063dea41efc82a446065d901  ./cv_api/output.log
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9bd32c72062ca983f3f81610b4519c93170b52cc  ./cv_api/tests/integration/test_pgvector_integration.py
-9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 9c9044377e84ad6ec3ecc14a28a8c7388a00d9a2  ./shared/schemas/auth.py
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 a12c040895d6a330e393032555d6ad69363a1183  ./cv_api/tests/test_jwt_propagation.py
 a1ca318d96f33ed28530b545380203dd30e1c308  ./cv_api/tests/test_cv_extraction_service.py
 a24a8af9d1017e1554874da94aba3b8a02adebc9  ./cv_api/src/cvs/routers/analytics_router.py
-a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
 a41644d411e42100afd33fce57998fb0a8b70b34  ./cv_api/cv_api.generate_taxonomy_tree_reduce.txt
+a47b204d096dac4c4c44d46aa613cde0ab585b60  ./cv_api/src/cvs/routers/profile_router.py
 a47d7b0cb568178eb3a4fff0998230cfad077aec  ./cv_api/src/gemini_retry.py
 aafc4bf31029dde38b2a21cd0cd6aec3b1fe468c  ./cv_api/src/services/taxonomy_batch_service.py
 ab2b717174e4365c65d1f79cb02681a3c3eba6a5  ./cv_api/src/services/data_quality_publisher.py
 ae9eb2e1ae88ad6e91ace2a86b322ad20dd6c27d  ./cv_api/src/cvs/models.py
-afdcf83b3ade57eb536e165ab486dfb026382e45  ./shared/pyproject.toml
 b5a9df2b6c870f1dcf42c1140f78c3d3f3d7b14a  ./cv_api/src/cvs/routers/data_quality_router.py
 b63fa6c5a8cba4c7781489c8304ba5bf9473c971  ./cv_api/src/cvs/routers/admin_router.py
-b7303acfbfe457ab8488cf8977a1570d1b096e6f  ./cv_api/src/cvs/routers/profile_router.py
 c33701cef519850bc0a988b80d619ef58bcb71b9  ./cv_api/tests/test_mcp_tools.py
 c4d87fb07ebf38da9e12ef4bd395c3cc9c08c69c  ./cv_api/eval/golden_queries.json
 c5012773f2b80f6188977add4ddbdda936a358f3  ./shared/exception_handler.py
@@ -117,6 +116,7 @@ ca997aa43e99a30a9b55e38c292ad660acc4cccf  ./shared/tests/test_middleware.py
 caf38ec7965f4d0403bf7ca749067462e177d57c  ./cv_api/src/services/bulk_service.py
 cb0d6612be16cd8326808c1a3bf9b050d4defc02  ./cv_api/scripts/audit_taxonomy_drops.py
 cda1f5bb21408e07a42f4204255f95723c578ba6  ./cv_api/.dockerignore
+cf07e8582b74be6f411ee2f84ec0d1800f8a2666  ./cv_api/src/services/profile_service.py
 cf754c709729d1a99b9ed4a3ea5f123577c6126f  ./cv_api/src/cvs/routers/taxonomy_quality.py
 d15ac4b634324fda338b9592c4e5651012c29639  ./cv_api/tests/test_embedding_service.py
 d31c0f8308ed390558f137fb91752f6ca572328d  ./cv_api/get_status.py
@@ -133,6 +133,7 @@ da39a3ee5e6b4b0d3255bfef95601890afd80709  ./cv_api/tests/integration/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./cv_api/tools/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
+db25f2e52249175c770104a09596493901850d88  ./shared/tests/test_zero_trust.py
 dc9a7d2d4d11c81e6db14af3a7a997151e8b239b  ./cv_api/tests/test_bulk_service_more.py
 df176d4ac07f5039003800ba85cca905b530e4c4  ./cv_api/eval/rag_quality_eval.py
 e0768995ee9efea3a67230592640701e14d67469  ./cv_api/src/services/config.py
@@ -142,7 +143,7 @@ e3edafca8d2ce49a50b8172812cdd18aa3a78f00  ./cv_api/eval/golden_queries_prd.json
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 e8100cce6a37984b9fc12cac17ccfcf9b69913bd  ./cv_api/tests/test_profile_router.py
 e8bc9b7b8b420cb76b3b944d6d09df0efb38b166  ./cv_api/main.py
-e921691d0061780211e29545765cd68a7e2d4976  ./cv_api/src/cvs/schemas.py
+ea191ded8b0e19deb43d7e7402e581d8da97f3fa  ./shared/pyproject.toml
 eb6d244c38ce05cc2700270ae992b635300daede  ./cv_api/src/gemini_cache.py
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
 eba7ea2661189933f56a0ae6183888211beaff4a  ./cv_api/tests/test_task_state.py

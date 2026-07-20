@@ -66,9 +66,12 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **GET** `/users/tag/{tag}` : Get Users By Tag
 - **GET** `/user/{user_id}` : Get User Cv
 - **GET** `/user/{user_id}/missions` : Get User Missions
+- **POST** `/user/{user_id}/missions` : Add User Mission
 - **GET** `/user/{user_id}/details` : Get User Cv Details
 - **POST** `/internal/users/merge` : Merge Users
 - **POST** `/internal/remediate-anonymous-profiles` : Remediate Anonymous Profiles
+- **PUT** `/user/{user_id}/missions/{index}` : Update User Mission
+- **DELETE** `/user/{user_id}/missions/{index}` : Delete User Mission
 - **GET** `/search` : Search Candidates
 - **POST** `/search` : Search Candidates Post
 - **GET** `/user/{user_id}/similar` : Find Similar Consultants
@@ -101,6 +104,6 @@ L'intégralité des routes (hors santé et documentation OpenAPI) exigent dorén
 - **POST** `/admin/clear-processing-errors` : Clear Processing Errors
 - **DELETE** `/admin/purge-data` : Purge Data
 - **DELETE** `/mcp/{path}` : Proxy Mcp
-- **PUT** `/mcp/{path}` : Proxy Mcp
-- **GET** `/mcp/{path}` : Proxy Mcp
 - **POST** `/mcp/{path}` : Proxy Mcp
+- **GET** `/mcp/{path}` : Proxy Mcp
+- **PUT** `/mcp/{path}` : Proxy Mcp

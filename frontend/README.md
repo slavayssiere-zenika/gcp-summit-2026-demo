@@ -60,4 +60,4 @@ src/
 - Toutes les pages admin (`Admin*.vue`) nécessitent le rôle `admin` dans le JWT
 
 ## Dernière modification
-2026-07-17 — v0.1.43 — Intégration de l'observabilité Grafana et mise à jour du tableau de bord consultant et des traductions locales.
+2026-07-17 — v0.1.44 — Alignement complet avec la mise à jour des traductions, l'intégration Grafana et le tableau de bord de la console SRE.

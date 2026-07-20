@@ -32,9 +32,13 @@ def test_adk_genai_patch_validation_in_agent_ops():
     tracer = trace.get_tracer("test-tracer")
     plugin = AutoTracingPlugin(tracer=tracer)
 
-    current_method = BaseApiClient._ensure_httpx_ssl_ctx
+    current_httpx = BaseApiClient._ensure_httpx_ssl_ctx
+    current_aiohttp = BaseApiClient._ensure_aiohttp_ssl_ctx
+    current_websocket = BaseApiClient._ensure_websocket_ssl_ctx
 
-    plugin._rebind(BaseApiClient, "_ensure_httpx_ssl_ctx", current_method)
+    plugin._rebind(BaseApiClient, "_ensure_httpx_ssl_ctx", current_httpx)
+    plugin._rebind(BaseApiClient, "_ensure_aiohttp_ssl_ctx", current_aiohttp)
+    plugin._rebind(BaseApiClient, "_ensure_websocket_ssl_ctx", current_websocket)
 
     # 4. Tenter l'instanciation du client
     # Si le patch fonctionne, cela réussit. S'il ne fonctionne pas, cela lève un TypeError.

@@ -3,7 +3,7 @@ import os
 import pickle
 
 import redis
-from google.adk.runners import InMemorySessionService
+from google.adk.sessions import InMemorySessionService
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 | `conftest.py` | 75 | ✅ |
 | `src/routers/dlq_router.py` | 397 | ✅ |
 | `src/routers/files_router.py` | 397 | ✅ |
-| `src/routers/folders_router.py` | 161 | ✅ |
+| `src/routers/folders_router.py` | 203 | ✅ |
 | `src/routers/ingestion_router.py` | 156 | ✅ |
 | `src/routers/sync_router.py` | 181 | ✅ |
 
@@ -74,4 +74,4 @@ Synchronisation avec Google Drive : ingestion de CVs et documents depuis des dos
 - `router.py` est en zone bloquante : toute nouvelle feature DOIT passer par un `services/` layer
 
 ## Dernière modification
-2026-06-15 — v0.1.30 — Amélioration ingestion, découverte et KPIs, et ajout du routeur DLQ
+2026-07-17 — v0.1.47 — Support des mécanismes de sécurité et du triage SRE de la plateforme, gestion des packages et mise à jour des dépendances partagées.

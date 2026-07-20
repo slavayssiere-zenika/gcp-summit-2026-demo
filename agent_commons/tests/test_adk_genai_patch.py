@@ -132,3 +132,86 @@ def test_ensure_httpx_ssl_ctx_bound_instance_call():
         # Le premier argument 'self' doit être éliminé de l'appel à l'original
         mock_original.assert_called_once_with(mock_options)
 
+
+def test_ensure_aiohttp_ssl_ctx_direct_static_call():
+    """Vérifie que la fonction _patched_ensure_aiohttp_ssl_ctx gère correctement
+    un appel statique standard (sans instance 'self' passée en premier argument).
+    """
+    import agent_commons  # noqa: F401
+    from google.genai._api_client import BaseApiClient
+    from google.genai.types import HttpOptions
+    from unittest.mock import MagicMock, patch
+
+    mock_original = MagicMock()
+    mock_options = MagicMock(spec=HttpOptions)
+    mock_options.__class__.__name__ = "HttpOptions"
+
+    with patch("agent_commons._original_ensure_aiohttp_ssl_ctx", mock_original):
+        # Appel statique standard
+        BaseApiClient._ensure_aiohttp_ssl_ctx(mock_options)
+        mock_original.assert_called_once_with(mock_options)
+
+
+def test_ensure_aiohttp_ssl_ctx_bound_instance_call():
+    """Vérifie que la fonction _patched_ensure_aiohttp_ssl_ctx gère correctement
+    un appel "bound" (où l'instance 'self' de BaseApiClient est passée par erreur
+    en premier argument suite au rebinding d'auto-tracing de l'ADK).
+    """
+    import agent_commons  # noqa: F401
+    from google.genai._api_client import BaseApiClient
+    from google.genai.types import HttpOptions
+    from unittest.mock import MagicMock, patch
+
+    mock_original = MagicMock()
+    mock_base_api_client_instance = MagicMock(spec=BaseApiClient)
+    mock_base_api_client_instance.__class__.__name__ = "BaseApiClient"
+    mock_options = MagicMock(spec=HttpOptions)
+    mock_options.__class__.__name__ = "HttpOptions"
+
+    with patch("agent_commons._original_ensure_aiohttp_ssl_ctx", mock_original):
+        # Simulation d'un appel bound : _ensure_aiohttp_ssl_ctx(self, options)
+        agent_commons._patched_ensure_aiohttp_ssl_ctx(mock_base_api_client_instance, mock_options)
+        # Le premier argument 'self' doit être éliminé de l'appel à l'original
+        mock_original.assert_called_once_with(mock_options)
+
+
+def test_ensure_websocket_ssl_ctx_direct_static_call():
+    """Vérifie que la fonction _patched_ensure_websocket_ssl_ctx gère correctement
+    un appel statique standard (sans instance 'self' passée en premier argument).
+    """
+    import agent_commons  # noqa: F401
+    from google.genai._api_client import BaseApiClient
+    from google.genai.types import HttpOptions
+    from unittest.mock import MagicMock, patch
+
+    mock_original = MagicMock()
+    mock_options = MagicMock(spec=HttpOptions)
+    mock_options.__class__.__name__ = "HttpOptions"
+
+    with patch("agent_commons._original_ensure_websocket_ssl_ctx", mock_original):
+        # Appel statique standard
+        BaseApiClient._ensure_websocket_ssl_ctx(mock_options)
+        mock_original.assert_called_once_with(mock_options)
+
+
+def test_ensure_websocket_ssl_ctx_bound_instance_call():
+    """Vérifie que la fonction _patched_ensure_websocket_ssl_ctx gère correctement
+    un appel "bound" (où l'instance 'self' de BaseApiClient est passée par erreur
+    en premier argument suite au rebinding d'auto-tracing de l'ADK).
+    """
+    import agent_commons  # noqa: F401
+    from google.genai._api_client import BaseApiClient
+    from google.genai.types import HttpOptions
+    from unittest.mock import MagicMock, patch
+
+    mock_original = MagicMock()
+    mock_base_api_client_instance = MagicMock(spec=BaseApiClient)
+    mock_base_api_client_instance.__class__.__name__ = "BaseApiClient"
+    mock_options = MagicMock(spec=HttpOptions)
+    mock_options.__class__.__name__ = "HttpOptions"
+
+    with patch("agent_commons._original_ensure_websocket_ssl_ctx", mock_original):
+        # Simulation d'un appel bound : _ensure_websocket_ssl_ctx(self, options)
+        agent_commons._patched_ensure_websocket_ssl_ctx(mock_base_api_client_instance, mock_options)
+        # Le premier argument 'self' doit être éliminé de l'appel à l'original
+        mock_original.assert_called_once_with(mock_options)

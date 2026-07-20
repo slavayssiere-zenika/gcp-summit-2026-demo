@@ -27,6 +27,7 @@
 69c83abcfafb946076c74da166b28a1da96290f3  ./shared/database.py
 6c565a474f5c49967207424d225af4a7f399363b  ./monitoring_mcp/auth.py
 73feb63914c405a3f7ba7bfff76eb7a98201234d  ./monitoring_mcp/tests/test_mcp_server.py
+766bec3a247e6cc5f9f7e72de037128da4e2fdfa  ./shared/tests/test_boundaries.py
 7ef119cb93657314e4e2459d77669c3c6be4d04c  ./monitoring_mcp/mcp_app.py
 7fff1026747804534f56d370a61c95feee06f92f  ./shared/tests/test_fastapi_utils.py
 803fc56ce3f5fb14cf2235615f3aed4e19c8bf50  ./shared/testing/jwt_helpers.py
@@ -34,13 +35,10 @@
 948ee8bbaa6d0fe14ea8455023e1411a61ba598d  ./shared/cache.py
 95d2a8cf20bf466017b709b9ab67c2e1ca5f92a8  ./shared/schemas/__init__.py
 9adb97c217fd640e33dc55a7bab64c2b6e772386  ./monitoring_mcp/tests/test_mcp_app.py
-9c59a90707a79a53f59e5d4562a74e7814f0ddff  ./shared/tests/test_zero_trust.py
 9c9044377e84ad6ec3ecc14a28a8c7388a00d9a2  ./shared/schemas/auth.py
 9d900a7e4d0a08fb333c14b3eaec9f658d498c92  ./shared/tests/test_database.py
 9d909c35df033f48abe9f7e0a957629bdd75e8dc  ./monitoring_mcp/tools/infra_tools.py
 9f8e9d8add9514b7186a55881f255aaa52d873b4  ./monitoring_mcp/tests/test_auth.py
-a36959fa26d7ac7d847e0cf28ce51547282de396  ./shared/tests/test_boundaries.py
-afdcf83b3ade57eb536e165ab486dfb026382e45  ./shared/pyproject.toml
 b2ca28ebd1dde4470f9b271fd6ba9fd5595d92e7  ./monitoring_mcp/tools/data_tools.py
 bf37b98f378ed433e38611651373d1a0db5822e9  ./monitoring_mcp/tests/test_data_tools.py
 c128db52f78a03a5df8ddfa3284126f82ecf74fc  ./monitoring_mcp/tools/gcp_monitoring_tools.py
@@ -58,10 +56,12 @@ d7bcb1c4b06369cd70a8f20718a66451d6c91084  ./monitoring_mcp/tools/logs_tools.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./monitoring_mcp/tools/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/auth/__init__.py
 da39a3ee5e6b4b0d3255bfef95601890afd80709  ./shared/tests/__init__.py
+db25f2e52249175c770104a09596493901850d88  ./shared/tests/test_zero_trust.py
 de45efef4eadb85510555fd2d8bb307c583892e2  ./monitoring_mcp/tests/test_gcp_monitoring.py
 e30cdd5a24bf296fd4e4b3bf3b1bbd24296e55d2  ./shared/bulk_task_state.py
 e5ac454013a9b219a72b8928517e4f4b108e5f61  ./shared/tests/test_prompt_evaluation.py
 e92e665b9ac531ac693a8e133a6e00bef283b573  ./monitoring_mcp/tests/test_pipeline_tools.py
+ea191ded8b0e19deb43d7e7402e581d8da97f3fa  ./shared/pyproject.toml
 eb713ea4488e3e1dbc85ac855e1be6f764a72c97  ./shared/tests/test_exception_handler.py
 f18307f5a635d410229a303a098968fe86efaddb  ./shared/tests/test_contract_schemas.py
 f88469d234e9d3869831b9473bdfb8b92516463f  ./monitoring_mcp/tests/test_zero_trust.py

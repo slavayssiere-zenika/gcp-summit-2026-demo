@@ -983,6 +983,61 @@ def build_image_urls(registry: str, versions: dict) -> dict:
     return images
 
 
+def _validate_registry_images_exist(images: dict, project_id: str) -> None:
+    """
+    Vérifie de manière préventive (pre-flight) que toutes les images de microservices
+    requises existent dans Google Artifact Registry.
+
+    Lève une DeploymentError si une ou plusieurs images sont introuvables.
+    """
+    logger.info(
+        "[*] Pre-Flight: Validation de l'existence des images dans Artifact Registry...")
+    missing_images = []
+    gcloud_bin = os.environ.get("GCLOUD_BIN", "gcloud")
+
+    # Trier pour avoir un affichage ordonné et déterministe
+    sorted_items = sorted(images.items())
+
+    for tf_name, image_url in sorted_items:
+        if tf_name == "image_registry" or not image_url or not isinstance(image_url, str):
+            continue
+
+        # S'assurer qu'il s'agit bien d'une URL de notre registre Artifact Registry
+        if "docker.pkg.dev" not in image_url:
+            logger.info(
+                f"    - Contrôle de {tf_name} ({image_url}) skippé (hors Artifact Registry)")
+            continue
+
+        logger.info(f"    - Contrôle de {tf_name} ({image_url})...")
+
+        # Commande gcloud compacte pour vérifier l'existence de l'image avec son tag exact
+        cmd = [gcloud_bin, "artifacts", "docker",
+               "images", "describe", image_url, "--quiet"]
+        try:
+            res = subprocess.run(cmd, capture_output=True,
+                                 text=True, check=False)
+            if res.returncode != 0:
+                missing_images.append((tf_name, image_url, res.stderr.strip()))
+        except Exception as exc:
+            missing_images.append(
+                (tf_name, image_url, f"Erreur système d'exécution gcloud : {exc}"))
+
+    if missing_images:
+        print(
+            "\n🚨 [PRE-FLIGHT GATE] ÉCHEC : IMAGES INTROUVABLES DANS LE REGISTRY ! 🚨")
+        for tf_name, url, err in missing_images:
+            print(f"  ❌ {tf_name} : {url}")
+            if err:
+                print(f"     Détail erreur : {err}")
+        print()
+        raise DeploymentError(
+            "Certaines images de microservices sont introuvables dans l'Artifact Registry. "
+            "Veuillez exécuter deploy.sh pour compiler et pousser les images manquantes d'abord."
+        )
+    logger.info(
+        "🟢 [PRE-FLIGHT GATE] Toutes les images requises ont été confirmées dans Artifact Registry.")
+
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -2713,10 +2768,13 @@ def _sanity_checks(env, base_domain, project_id, config, extra_domains, extra_pr
         if os.path.exists(init_pricing_path):
             # Find a Python interpreter that has google-cloud-bigquery installed
             import sys
-            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            root_dir = os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__)))
             candidates = [
-                os.path.join(root_dir, "analytics_mcp", ".venv", "bin", "python3"),
-                os.path.join(root_dir, "platform-engineering", ".venv", "bin", "python3"),
+                os.path.join(root_dir, "analytics_mcp",
+                             ".venv", "bin", "python3"),
+                os.path.join(root_dir, "platform-engineering",
+                             ".venv", "bin", "python3"),
                 os.path.join(root_dir, "test_env", "bin", "python3"),
                 sys.executable,
                 "python3"
@@ -2739,7 +2797,8 @@ def _sanity_checks(env, base_domain, project_id, config, extra_domains, extra_pr
 
             if chosen_python is None:
                 chosen_python = sys.executable or "python3"
-                print(f"  [!] No venv with google-cloud-bigquery found. Using fallback: {chosen_python}")
+                print(
+                    f"  [!] No venv with google-cloud-bigquery found. Using fallback: {chosen_python}")
 
             # Run init_pricing.py as a subprocess with appropriate environment variables
             run_env = os.environ.copy()
@@ -2760,7 +2819,8 @@ def _sanity_checks(env, base_domain, project_id, config, extra_domains, extra_pr
                     for line in res.stdout.splitlines():
                         print(f"    {line}")
             else:
-                print(f"  [-] init_pricing.py failed with exit code {res.returncode}")
+                print(
+                    f"  [-] init_pricing.py failed with exit code {res.returncode}")
                 if res.stdout.strip():
                     print("  Stdout:")
                     for line in res.stdout.splitlines():
@@ -3663,6 +3723,10 @@ if __name__ == "__main__":
         CURRENT_PROJECT_ID = project_id
         base_domain = deploy_config.get(
             "base_domain", "slavayssiere-zenika.com")
+
+        # Pre-Flight Gate: Validation de l'existence de toutes les images cibles dans Artifact Registry
+        if args.action in ("deploy", "plan") and not args.extra_projects_only:
+            _validate_registry_images_exist(images, project_id)
 
         if args.action == "deploy":
             if args.extra_projects_only:

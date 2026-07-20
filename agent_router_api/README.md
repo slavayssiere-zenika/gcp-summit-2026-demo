@@ -95,4 +95,4 @@ Routeur intelligent : point d'entrée unique du frontend, gestion des sessions A
 - Les erreurs non-critiques (FinOps, monitoring) doivent être en mode dégradé (`asyncio.create_task`) pour ne pas bloquer la réponse
 
 ## Dernière modification
-2026-07-17 — v0.5.63 — Mise à jour des dépendances partagées, automatisation du tracing OpenTelemetry et nettoyage général du dépôt.
+2026-07-17 — v0.5.64 — Alignement et support des fonctionnalités de triage SRE, automatisation du tracing OpenTelemetry et mise en conformité de sécurité de la plateforme.

@@ -370,7 +370,7 @@ class TestZeroTrustBoundaries:
 
     def test_empty_whitelist_blocks_all_unprotected(self):
         """Whitelist vide → toute route non protégée est signalée."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.get("/health")
@@ -386,7 +386,7 @@ class TestZeroTrustBoundaries:
 
     def test_multi_method_route_without_jwt_fails(self):
         """Route GET+POST sans JWT → les deux méthodes apparaissent dans l'erreur."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.api_route("/resource", methods=["GET", "POST"])
@@ -400,7 +400,7 @@ class TestZeroTrustBoundaries:
 
     def test_multi_method_route_with_jwt_passes(self):
         """Route GET+POST avec JWT → pas d'erreur."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         verify_jwt = self._verify_jwt()
         router = APIRouter(dependencies=[Depends(verify_jwt)])
 
@@ -416,7 +416,7 @@ class TestZeroTrustBoundaries:
 
     def test_deep_mcp_subpath_is_skipped(self):
         """/mcp/tools/list/deep → ignoré même sans JWT."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.get("/mcp/tools/list/deep")
@@ -428,7 +428,7 @@ class TestZeroTrustBoundaries:
 
     def test_mcp_prefix_not_confused_with_other_paths(self):
         """/mcpadmin ne commence pas par /mcp/ → doit être bloqué (bug fix)."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.get("/mcpadmin")
@@ -445,7 +445,7 @@ class TestZeroTrustBoundaries:
 
     def test_whitelist_trailing_slash_matches_route(self):
         """/health/ dans la whitelist doit matcher /health."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.get("/health")
@@ -460,7 +460,7 @@ class TestZeroTrustBoundaries:
 
     def test_whitelist_exact_match_works(self):
         """/health sans trailing slash matche exactement."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.get("/health")
@@ -474,7 +474,7 @@ class TestZeroTrustBoundaries:
 
     def test_parametrized_route_without_jwt_fails(self):
         """/items/{id} sans JWT → signalé comme non protégé."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         app = FastAPI()
 
         @app.get("/items/{item_id}")
@@ -488,7 +488,7 @@ class TestZeroTrustBoundaries:
 
     def test_parametrized_route_with_jwt_passes(self):
         """/items/{id} avec JWT → pas d'erreur."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         verify_jwt = self._verify_jwt()
         router = APIRouter(dependencies=[Depends(verify_jwt)])
 
@@ -504,7 +504,7 @@ class TestZeroTrustBoundaries:
 
     def test_nested_depends_detected_as_protected(self):
         """verify_jwt utilisé comme dépendance d'une autre dépendance → route protégée."""
-        from tests.zero_trust import assert_zero_trust
+        from shared.tests.zero_trust import assert_zero_trust
         verify_jwt = self._verify_jwt()
 
         def require_admin(payload=Depends(verify_jwt)):

@@ -47,4 +47,4 @@ Service MCP natif (HTTP direct, pas de sidecar stdio) exposant : tracking FinOps
 - La table `model_pricing` a un schéma en drift avec Terraform — ne pas lancer `terraform apply` sur cette table sans plan review
 
 ## Dernière modification
-- 2026-06-08 — v0.1.23 — FinOps tools updates
+- 2026-07-17 — v0.1.45 — Support des mécanismes de sécurité, du triage SRE et de l'intégration globale de l'observabilité.

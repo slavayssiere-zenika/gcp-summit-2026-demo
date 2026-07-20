@@ -110,5 +110,41 @@ try:
         return _original_ensure_httpx_ssl_ctx(*args, **kwargs)
 
     BaseApiClient._ensure_httpx_ssl_ctx = _patched_ensure_httpx_ssl_ctx
+
+    # Correctif d'auto-tracing ADK pour BaseApiClient._ensure_aiohttp_ssl_ctx
+    _original_ensure_aiohttp_ssl_ctx = BaseApiClient._ensure_aiohttp_ssl_ctx
+
+    @staticmethod
+    def _patched_ensure_aiohttp_ssl_ctx(*args, **kwargs):
+        # Si le premier argument est une instance de BaseApiClient (ou n'est pas HttpOptions/dict),
+        # c'est que la méthode statique a été appelée comme méthode d'instance
+        # à cause du bug de rebinding d'auto-tracing de l'ADK.
+        if args and (
+            isinstance(args[0], BaseApiClient)
+            or args[0].__class__.__name__ == "BaseApiClient"
+            or not args[0].__class__.__name__ in ("HttpOptions", "dict")
+        ):
+            args = args[1:]
+        return _original_ensure_aiohttp_ssl_ctx(*args, **kwargs)
+
+    BaseApiClient._ensure_aiohttp_ssl_ctx = _patched_ensure_aiohttp_ssl_ctx
+
+    # Correctif d'auto-tracing ADK pour BaseApiClient._ensure_websocket_ssl_ctx
+    _original_ensure_websocket_ssl_ctx = BaseApiClient._ensure_websocket_ssl_ctx
+
+    @staticmethod
+    def _patched_ensure_websocket_ssl_ctx(*args, **kwargs):
+        # Si le premier argument est une instance de BaseApiClient (ou n'est pas HttpOptions/dict),
+        # c'est que la méthode statique a été appelée comme méthode d'instance
+        # à cause du bug de rebinding d'auto-tracing de l'ADK.
+        if args and (
+            isinstance(args[0], BaseApiClient)
+            or args[0].__class__.__name__ == "BaseApiClient"
+            or not args[0].__class__.__name__ in ("HttpOptions", "dict")
+        ):
+            args = args[1:]
+        return _original_ensure_websocket_ssl_ctx(*args, **kwargs)
+
+    BaseApiClient._ensure_websocket_ssl_ctx = _patched_ensure_websocket_ssl_ctx
 except ImportError:
     pass

@@ -148,6 +148,48 @@ async def get_folder_by_name(name: str):
     }
 
 
+@router.get("/folders/by-file/{google_file_id}")
+async def get_folder_by_file(google_file_id: str):
+    """
+    Retourne l'ID Google Drive et l'URL du dossier parent d'un fichier donné.
+    """
+    try:
+        drive_service = get_drive_service()
+        # Fetch the file metadata to get its parents
+        file_meta = await asyncio.to_thread(
+            lambda: drive_service.files().get(
+                fileId=google_file_id,
+                fields="parents,name",
+                supportsAllDrives=True
+            ).execute()
+        )
+        parents = file_meta.get("parents", [])
+        if not parents:
+            raise HTTPException(status_code=404, detail="Aucun dossier parent trouvé pour ce fichier.")
+
+        parent_id = parents[0]
+        # Get parent name
+        parent_meta = await asyncio.to_thread(
+            lambda: drive_service.files().get(
+                fileId=parent_id,
+                fields="name",
+                supportsAllDrives=True
+            ).execute()
+        )
+        parent_name = parent_meta.get("name", "Dossier Consultant")
+
+        return {
+            "google_folder_id": parent_id,
+            "folder_name": parent_name,
+            "url": f"https://drive.google.com/drive/folders/{parent_id}"
+        }
+    except Exception as e:
+        logger.error(f"Failed to resolve parent folder for file {google_file_id}: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/folders/invalidate-cache")
 async def invalidate_drive_cache(_: dict = Depends(_require_admin)):
     keys_deleted = await FolderService.invalidate_drive_cache()

@@ -118,6 +118,7 @@ export default {
     reason_autre: 'Autre',
     error_categories: 'Impossible de récupérer les catégories.',
     error_import: "Erreur lors de l'importation",
+    google_drive_folder: 'Dossier Google Drive',
   },
   user: {
     loading: 'Chargement du profil...',

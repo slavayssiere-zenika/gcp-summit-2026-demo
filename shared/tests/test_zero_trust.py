@@ -3,11 +3,10 @@ import os
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
-from fastapi.routing import APIRoute
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-xxxxxxxxx")
 
-from tests.zero_trust import assert_zero_trust  # noqa: E402
+from shared.tests.zero_trust import assert_zero_trust  # noqa: E402
 
 
 def make_verify_jwt():
@@ -86,7 +85,7 @@ class TestAssertZeroTrust:
         app = FastAPI()
 
         @app.get("/profile")
-        def profile(_ = Depends(verify_jwt)):
+        def profile(_=Depends(verify_jwt)):
             return {}
 
         PUBLIC = {"/health"}

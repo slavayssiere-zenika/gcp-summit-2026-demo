@@ -76,7 +76,7 @@ for api in "${apis[@]}"; do
     # Si Docker est absent, les tests d'intégration échoueront gracieusement (Testcontainers
     # lève une erreur au démarrage du conteneur — le test est marqué ERROR, pas FAILED)
     (cd "$api" && OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none \
-        OTEL_LOGS_EXPORTER=none SECRET_KEY="testsecret" PYTHONPATH=..:. \
+        OTEL_LOGS_EXPORTER=none SECRET_KEY="testsecret" PYTHONPATH=../agent_commons:..:. \
         ../test_env/bin/pytest --cov=. --cov-report=json > pytest.log 2>&1) &
     pids+=("$api:$!")
 done

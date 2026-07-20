@@ -1,3 +1,126 @@
+## Mise à jour automatique - 2026-07-20 11:20:04
+
+### Couverture de Code
+
+| Microservice     | Stmts | Miss | Cover |
+|------------------|-------|------|-------|
+| agent_commons    | 3016  | 693  |  77% |
+| agent_hr_api     | 1570  | 102  |  94% |
+| agent_missions_api | 1927  | 90   |  95% |
+| agent_ops_api    | 2310  | 244  |  89% |
+| agent_router_api | 3691  | 552  |  85% |
+| analytics_mcp    | 1117  | 206  |  82% |
+| competencies_api | 5824  | 956  |  84% |
+| cv_api           | 10731 | 1602 |  85% |
+| drive_api        | 3568  | 466  |  87% |
+| items_api        | 2186  | 128  |  94% |
+| missions_api     | 2231  | 281  |  87% |
+| monitoring_mcp   | 1366  | 187  |  86% |
+| platform-engineering | 2368  | 1609 |  32% |
+| prompts_api      | 1355  | 250  |  82% |
+| scratch          | N/A   | N/A  | N/A  |
+| scripts          | N/A   | N/A  | N/A  |
+| shared           | 3019  | 277  |  91% |
+| tests            | 578   | 36   |  94% |
+| users_api        | 2041  | 347  |  83% |
+
+### Modifications depuis le dernier push
+
+#### Commits non pushés
+- Implement SRE triage and security features
+
+#### Fichiers (non commités)
+- `gent_commons/agent_commons/__init__.py` (M)
+- `agent_commons/tests/test_adk_genai_patch.py` (M)
+- `agent_hr_api/FILE_HASHES` (M)
+- `agent_hr_api/HASH` (M)
+- `agent_hr_api/README.md` (M)
+- `agent_hr_api/VERSION` (M)
+- `agent_hr_api/session.py` (M)
+- `agent_hr_api/spec.md` (M)
+- `agent_missions_api/FILE_HASHES` (M)
+- `agent_missions_api/HASH` (M)
+- `agent_missions_api/README.md` (M)
+- `agent_missions_api/VERSION` (M)
+- `agent_missions_api/session.py` (M)
+- `agent_ops_api/FILE_HASHES` (M)
+- `agent_ops_api/HASH` (M)
+- `agent_ops_api/README.md` (M)
+- `agent_ops_api/VERSION` (M)
+- `agent_ops_api/session.py` (M)
+- `agent_ops_api/spec.md` (M)
+- `agent_ops_api/tests/test_adk_genai_patch.py` (M)
+- `agent_router_api/FILE_HASHES` (M)
+- `agent_router_api/HASH` (M)
+- `agent_router_api/README.md` (M)
+- `agent_router_api/VERSION` (M)
+- `agent_router_api/spec.md` (M)
+- `analytics_mcp/FILE_HASHES` (M)
+- `analytics_mcp/HASH` (M)
+- `analytics_mcp/README.md` (M)
+- `analytics_mcp/VERSION` (M)
+- `competencies_api/FILE_HASHES` (M)
+- `competencies_api/HASH` (M)
+- `competencies_api/VERSION` (M)
+- `cv_api/FILE_HASHES` (M)
+- `cv_api/HASH` (M)
+- `cv_api/README.md` (M)
+- `cv_api/VERSION` (M)
+- `cv_api/spec.md` (M)
+- `cv_api/src/cvs/routers/profile_router.py` (M)
+- `cv_api/src/cvs/schemas.py` (M)
+- `cv_api/src/services/profile_service.py` (M)
+- `drive_api/FILE_HASHES` (M)
+- `drive_api/HASH` (M)
+- `drive_api/README.md` (M)
+- `drive_api/VERSION` (M)
+- `drive_api/spec.md` (M)
+- `drive_api/src/routers/folders_router.py` (M)
+- `frontend/FILE_HASHES` (M)
+- `frontend/HASH` (M)
+- `frontend/README.md` (M)
+- `frontend/VERSION` (M)
+- `frontend/src/components/ConsultantDashboard.vue` (M)
+- `frontend/src/i18n/locales/en.ts` (M)
+- `frontend/src/i18n/locales/fr.ts` (M)
+- `frontend/vitest.log` (M)
+- `items_api/FILE_HASHES` (M)
+- `items_api/HASH` (M)
+- `items_api/VERSION` (M)
+- `locust/data/competencies_seed.sql` (M)
+- `locust/data/cv_seed.sql` (M)
+- `locust/data/items_seed.sql` (M)
+- `locust/data/seeded_ids.json` (M)
+- `locust/data/users_seed.sql` (M)
+- `missions_api/FILE_HASHES` (M)
+- `missions_api/HASH` (M)
+- `missions_api/VERSION` (M)
+- `missions_api/spec.md` (M)
+- `monitoring_mcp/FILE_HASHES` (M)
+- `monitoring_mcp/HASH` (M)
+- `monitoring_mcp/VERSION` (M)
+- `platform-engineering/envs/prd.yaml` (M)
+- `platform-engineering/manage_env.py` (M)
+- `platform-engineering/terraform/cr_grafana.tf` (M)
+- `platform-engineering/terraform/waf.tf` (M)
+- `prompts_api/FILE_HASHES` (M)
+- `prompts_api/HASH` (M)
+- `prompts_api/VERSION` (M)
+- `run_git_push.sh` (M)
+- `scripts/run_tests.sh` (M)
+- `shared/FILE_HASHES` (M)
+- `shared/HASH` (M)
+- `shared/VERSION` (M)
+- `shared/pyproject.toml` (M)
+- `shared/tests/test_boundaries.py` (M)
+- `shared/tests/test_zero_trust.py` (M)
+- `users_api/FILE_HASHES` (M)
+- `users_api/HASH` (M)
+- `users_api/VERSION` (M)
+- `cv_api/tests/test_profile_missions_crud.py` (??)
+
+---
+
 ## Mise à jour automatique - 2026-07-17 13:44:49
 
 ### Couverture de Code

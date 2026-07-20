@@ -34,10 +34,11 @@ resource "google_compute_security_policy" "waf" {
         # Couvre : /auth/, /api/, /mcp/, /monitoring-mcp/, /analytics-mcp/, /cv-api/, /items-api/, /drive-api/, /login/
         # CRITIQUE pour Pub/Sub : les push vers /cv-api/pubsub/import-cv arrivent avec
         # des payloads base64 qui déclenchent faussement les règles OWASP → 403 silencieux.
-        expression = "request.path.matches('^/(?:auth|api|mcp|monitoring-mcp|analytics-mcp|cv-api|items-api|drive-api|login)/.*')"
+        # EXEMPTION TOTALE pour Grafana : les domaines contenant 'grafana' sont exclus des règles OWASP (faux-positifs fréquents sur les cookies, statics et dashboards).
+        expression = "request.path.matches('^/(?:auth|api|mcp|monitoring-mcp|analytics-mcp|cv-api|items-api|drive-api|login)/.*') || request.headers['host'].contains('grafana')"
       }
     }
-    description = "Allow legitimate API & Pub/Sub push paths — exempted from OWASP signatures (rate-limit still applies)"
+    description = "Allow legitimate API, Pub/Sub push paths & Grafana host — exempted from OWASP signatures (rate-limit still applies)"
   }
 
   # ── Couche 2 : Règles OWASP signature-based ──────────────────────────────────
